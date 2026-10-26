@@ -38,9 +38,9 @@ function folderErrors(value: SetupErrors[string], count: number): { rows: string
 }
 
 function scanLabel(paths: string[]): string {
-  if (!paths.length) return '完成设置后扫描并补全资料';
-  if (paths.length === 1) return `完成设置后扫描并补全资料：${paths[0]}`;
-  return `完成设置后扫描这 ${paths.length} 个文件夹并补全资料`;
+  if (!paths.length) return 'Scan and fill in metadata after setup';
+  if (paths.length === 1) return `Scan and fill in metadata after setup: ${paths[0]}`;
+  return `Scan these ${paths.length} folders and fill in metadata after setup`;
 }
 
 const text = (value: SetupErrors[string]) => (Array.isArray(value) ? value.filter(Boolean).join(' ') : value ?? '');
@@ -178,13 +178,13 @@ export function SetupForm({ setup, onDone }: { setup: SetupQuestions; onDone: (d
                 <SourceSelect index={index} value={row.location} options={sources}
                   onChange={(location) => folders.edit(index, { location, cost: location === 'local' ? 'free' : '' })} />
                 <MediaReadPolicy index={index} cost={row.cost ?? ''}
-                  error={requireReadPolicy && !row.cost ? '请选择媒体读取策略' : undefined}
+                  error={requireReadPolicy && !row.cost ? 'Choose a media read policy' : undefined}
                   onChange={(cost) => folders.edit(index, { cost })} />
               </FolderRow>
             ))}
           </div>
           <Button ref={addButton} variant="secondary" leadingIcon={RiAddLine} className="self-start" onClick={folders.add}>
-            添加媒体库
+            Add library
           </Button>
           {cloud ? (
             <>
@@ -204,49 +204,49 @@ export function SetupForm({ setup, onDone }: { setup: SetupQuestions; onDone: (d
       <CardGroup labelledBy="setup-access-title">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 flex-col gap-0.5">
-            <GroupTitle id="setup-access-title">访问密码</GroupTitle>
-            <p id="setup-access-description" className="text-body-2-regular text-text-secondary">开启后，访问 Peach 需要先登录。</p>
+            <GroupTitle id="setup-access-title">Access password</GroupTitle>
+            <p id="setup-access-description" className="text-body-2-regular text-text-secondary">When on, accessing Peach requires signing in first.</p>
           </div>
           <Switch aria-labelledby="setup-access-title" aria-describedby="setup-access-description"
             isSelected={accessOn} onChange={setAccessOn} />
         </div>
-        <Help>未设置密码时，能连接到 Peach 的设备可直接进入。</Help>
+        <Help>Without a password, any device that can reach Peach can get in directly.</Help>
         {accessOn
-          ? <PasswordPair label="访问密码" password={password} confirmation={confirmation}
+          ? <PasswordPair label="Access password" password={password} confirmation={confirmation}
               onPassword={setPassword} onConfirmation={setConfirmation}
-              passwordError={announce(text(errors.access_password))} passwordHint="请输入 8–256 个字符。"
+              passwordError={announce(text(errors.access_password))} passwordHint="Enter 8–256 characters."
               confirmationInvalid={Boolean(errors.access_password)} />
           : null}
       </CardGroup>
 
       <CardGroup>
-        <Disclosure key={advancedOpenings} summary="高级设置" defaultOpen={advancedOpenings > 0}>
+        <Disclosure key={advancedOpenings} summary="Advanced settings" defaultOpen={advancedOpenings > 0}>
           <div className="flex flex-col gap-4">{others.filter(visible).map(field)}</div>
         </Disclosure>
       </CardGroup>
 
       <CardGroup labelledBy="setup-options-title">
-        <GroupTitle id="setup-options-title">完成设置后</GroupTitle>
+        <GroupTitle id="setup-options-title">After setup</GroupTitle>
         <div className="flex flex-col gap-1.5">
           <Checkbox isSelected={scanNow} onChange={setScanNow}>{scanLabel(filled)}</Checkbox>
-          <Help>读取已有 NFO 和封面，采集缺失资料。符合自动规则的资料会在处理完成后保存到数据库，其余资料留待确认。</Help>
+          <Help>Reads existing NFO files and covers and collects missing metadata. Metadata that matches the automatic rules is saved to the database once processing finishes; the rest is left for review.</Help>
         </div>
         <section aria-labelledby="setup-history-title" className="flex flex-col gap-1.5 border-t border-separator-border pt-4">
           <h3 id="setup-history-title" className="flex items-center gap-2 text-body-medium text-text-primary">
-            浏览器历史记录<span className="text-body-2-regular text-text-tertiary">可选</span>
+            Browser history<span className="text-body-2-regular text-text-tertiary">Optional</span>
           </h3>
-          <Checkbox isSelected={historyGuide} onChange={setHistoryGuide}>接下来导入浏览器历史记录</Checkbox>
-          <Help>用于生成口味分析。完成设置后选择读取这台电脑，或导入其他设备的记录；也可稍后从「口味」进入。</Help>
+          <Checkbox isSelected={historyGuide} onChange={setHistoryGuide}>Import browser history next</Checkbox>
+          <Help>Used for taste analysis. After setup, choose to read from this computer or import records from another device; you can also do it later from "Taste".</Help>
         </section>
       </CardGroup>
 
       {failure ? <ErrorText>{failure}</ErrorText> : null}
       {reporting ? <CardGroup>
-        <GroupTitle>版本统计与错误诊断</GroupTitle>
+        <GroupTitle>Version statistics and error diagnostics</GroupTitle>
         <ReportingChoices value={reporting} onChange={setReporting} />
-        <Help>馆藏与口味明细上传默认关闭，可在「应用与维护」查看并选择。</Help>
+        <Help>Uploading library and taste details is off by default; review and choose under "App and maintenance".</Help>
       </CardGroup> : null}
-      <Button type="submit" className="self-start" {...busyProps(busy)}>完成设置</Button>
+      <Button type="submit" className="self-start" {...busyProps(busy)}>Finish setup</Button>
     </form>
   );
 }

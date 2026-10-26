@@ -175,9 +175,9 @@ describe('设置面板与壳的接缝', () => {
     const current = await setup();
     const openConfiguration = vi.fn();
     current.host.openConfiguration = openConfiguration;
-    const panel = await open(current, 'JAV 与新作');
+    const panel = await open(current, 'JAV & new releases');
     expect([...panel.querySelectorAll('[role="tab"]')].map((tab) => tab.textContent))
-      .toEqual(['外观与导航', '浏览与播放', 'JAV 与新作', '搜索与推荐', '内容显示']);
+      .toEqual(['Appearance & navigation', 'Browsing & playback', 'JAV & new releases', 'Search & recommendations', 'Content display']);
     expect(panel.querySelector('#javImageSetting')?.closest('section')?.hidden).toBe(false);
     expect(panel.querySelector('#detailAutoplaySetting')?.closest('section')?.hidden).toBe(true);
     expect(panel.querySelector('#videoThumbnailSetting')).toBeNull();
@@ -226,7 +226,7 @@ describe('设置面板与壳的接缝', () => {
     const panel = await open(current);
     const contrast = panel.querySelector<HTMLInputElement>('#glassContrastSetting')!;
     expect([contrast.getAttribute('role'), panel.querySelector('label[for="glassContrastSetting"] b')?.textContent])
-      .toEqual(['switch', '增加对比度']);
+      .toEqual(['switch', 'Increase contrast']);
     await click(contrast);
     expect(current.setHighContrast.mock.calls).toEqual([[true]]);
     await close(current);
@@ -264,7 +264,7 @@ describe('设置面板与壳的接缝', () => {
     const dial = panel.querySelector('[data-glow-dial="speed"]');
     await close(current);
     expect(panel.hidden).toBe(true);
-    const again = await open(current, '浏览与播放');
+    const again = await open(current, 'Browsing & playback');
     expect(document.querySelectorAll('[data-settings-host]')).toHaveLength(1);
     expect(again).toBe(panel);
     expect(again.querySelector('#homeGlowControls')).toBe(glow);
@@ -305,10 +305,10 @@ describe('常驻组件', () => {
     trigger.focus();
     /* 不包 act：act 会把 flushSync 推到它结束时，看不出句柄自己同步没有。 */
     (globalThis as ActFlag).IS_REACT_ACT_ENVIRONMENT = false;
-    current.api.open('浏览与播放');
+    current.api.open('Browsing & playback');
     const panel = document.querySelector<HTMLElement>('#settingsPanel')!;
     expect([panel.hidden, panel.querySelector('#settingsTitle')?.textContent, current.api.isOpen()])
-      .toEqual([false, '浏览与播放', true]);
+      .toEqual([false, 'Browsing & playback', true]);
     expect([document.documentElement.style.overflow, document.body.classList.contains('settings-open')])
       .toEqual(['hidden', true]);
     expect(document.activeElement).toBe(trigger);
@@ -343,13 +343,13 @@ describe('常驻组件', () => {
     expect(current.r.managedTaken(host)).toBe(false);
     expect(current.r.managedEntries().map((entry) => entry.path), '别的面照画').toEqual(['batch-dock']);
     await act(async () => { dock.render({ count: 2, context: 'catalog', junkDismissed: false }) });
-    expect(dockRoot.querySelector('[data-selection-dock] [role="status"]')?.textContent).toBe('已选 2 项');
+    expect(dockRoot.querySelector('[data-selection-dock] [role="status"]')?.textContent).toBe('2 selected');
 
     /* 壳照旧经 Escape 收、经齿轮开：不抛、不重开、不再上报。 */
     await act(async () => { expect(() => current.api.close()).not.toThrow() });
     await settle();
     glyph.broken = false;
-    await act(async () => { expect(() => current.api.open('浏览与播放')).not.toThrow() });
+    await act(async () => { expect(() => current.api.open('Browsing & playback')).not.toThrow() });
     await settle();
     expect(reported, '确定性抛错只报那一次').toHaveBeenCalledTimes(1);
     expect(host.childNodes.length, '空到刷新为止，不自愈').toBe(0);

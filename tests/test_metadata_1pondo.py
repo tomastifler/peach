@@ -59,7 +59,7 @@ class OnePondoCodeTests(unittest.TestCase):
         with self.assertRaises(SourceFailure) as caught:
             OnePondoSource().query("ABW-358", session=Session(transport))
         self.assertEqual((caught.exception.reason, str(caught.exception)),
-                         (FailureReason.NOT_FOUND, "这个番号不是一本道的写法"))
+                         (FailureReason.NOT_FOUND, "This code is not in the 一本道 format"))
         self.assertEqual(transport.calls, [])
 
     def test_only_local_evidence_names_this_studio(self):
@@ -113,9 +113,9 @@ class OnePondoDetailTests(unittest.TestCase):
 
     def test_another_works_json_is_not_this_ones_data(self):
         # 番号同形的另一家片子问到这里时，官网回的作品号对不上，那份资料一个字都不能用。
-        for body, code, wording in ((details(movie="092415_001"), "112312_478", "一本道回的作品号对不上这个番号"),
-                                    ("null", "112312_478", "一本道回的作品号对不上这个番号"),
-                                    (details(), "ABW-358", "这个番号不是一本道的写法")):
+        for body, code, wording in ((details(movie="092415_001"), "112312_478", "The work ID returned by 一本道 does not match this code"),
+                                    ("null", "112312_478", "The work ID returned by 一本道 does not match this code"),
+                                    (details(), "ABW-358", "This code is not in the 一本道 format")):
             with self.subTest(code=code, body=body[:30]), self.assertRaises(SourceFailure) as caught:
                 parse_details(body, code)
             self.assertEqual((caught.exception.reason, str(caught.exception)), (FailureReason.NOT_FOUND, wording))
@@ -124,7 +124,7 @@ class OnePondoDetailTests(unittest.TestCase):
         with self.assertRaises(SourceFailure) as caught:
             parse_details("<html>维护中</html>", "112312_478")
         self.assertEqual((caught.exception.reason, str(caught.exception)),
-                         (FailureReason.PARSE_ERROR, "一本道返回的不是作品 JSON"))
+                         (FailureReason.PARSE_ERROR, "一本道 did not return work JSON"))
 
     def test_the_cover_falls_back_to_the_list_thumb_when_the_still_is_missing(self):
         found = parse_details(details(thumbs=False), "112312_478")
@@ -143,7 +143,7 @@ class OnePondoQueryTests(unittest.TestCase):
     def test_a_withdrawn_work_answers_404_and_reads_as_absent(self):
         with self.assertRaises(SourceFailure) as caught:
             OnePondoSource().query("112312_478", session=Session(serve({})))
-        self.assertEqual((caught.exception.kind, str(caught.exception)), ("not_found", "一本道站上没有这部片"))
+        self.assertEqual((caught.exception.kind, str(caught.exception)), ("not_found", "No such title on 一本道"))
 
 
 if __name__ == "__main__":

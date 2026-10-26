@@ -45,13 +45,13 @@ class ProcessingControlTests(unittest.TestCase):
         self.assertGreater(low['eta_seconds_max'], estimate['eta_seconds_max'])
         self.assertLess(high['eta_seconds_max'], estimate['eta_seconds_max'])
         self.assertTrue(estimate['eta_initial'])
-        self.assertIn('未含未知新增', estimate['eta_scope'])
+        self.assertIn('excluding unknown additions', estimate['eta_scope'])
 
     def test_new_directory_reports_counting_without_invented_time(self):
         estimate = initial_estimate(self.config, self.db, 'scan')
         self.assertIsNone(estimate['eta_seconds_min'])
         self.assertIsNone(estimate['eta_seconds_max'])
-        self.assertIn('统计', estimate['eta_basis'])
+        self.assertIn('Counting', estimate['eta_basis'])
 
     def test_progress_calibrates_range_and_paused_time_does_not_count(self):
         self.seed()
@@ -89,7 +89,7 @@ class ProcessingControlTests(unittest.TestCase):
             estimate.update(state)
         self.assertTrue(state['eta_initial'])
         self.assertEqual(state['eta_kind'], 'estimating')
-        self.assertEqual(state['eta_scope'], '整趟任务')
+        self.assertEqual(state['eta_scope'], 'Whole run')
         state['checked'] = 2
         with patch('peach.processing_control.time.monotonic', return_value=204):
             estimate.update(state)
@@ -107,7 +107,7 @@ class ProcessingControlTests(unittest.TestCase):
         state['checked'] = 8
         with patch('peach.processing_control.time.monotonic', return_value=108):
             estimate.update(state)
-        self.assertEqual(state['eta_scope'], '整趟任务')
+        self.assertEqual(state['eta_scope'], 'Whole run')
         self.assertTrue(state['eta_initial'])
         self.assertGreater(state['eta_seconds_min'], 40)
         state.update(checked=0, total=2, stage='采集缺失资料', estimate_pending={'metadata': 2})
@@ -218,9 +218,9 @@ class ProcessingControlTests(unittest.TestCase):
         contract = SimpleNamespace(library_processing_job=Mock())
         contract.library_processing_job.snapshot.return_value = {'job_id': 'current', 'status': 'running'}
         with patch('peach.web_library_processing.settings_file.active', return_value=self.config):
-            with self.assertRaisesRegex(ValueError, '任务已变化'):
+            with self.assertRaisesRegex(ValueError, 'The task has changed'):
                 w_library_processing(contract, {'action': 'pause', 'job_id': 'stale'})
-            with self.assertRaisesRegex(ValueError, '任务已变化'):
+            with self.assertRaisesRegex(ValueError, 'The task has changed'):
                 w_library_processing(contract, {'action': 'set_speed', 'job_id': 'stale', 'speed_mode': 'low'})
 
     def test_completed_timing_is_available_for_next_initial_estimate(self):

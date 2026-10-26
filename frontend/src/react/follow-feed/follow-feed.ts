@@ -22,13 +22,13 @@ import { queryClient } from '../query';
 /* ── 地址栏那一组 ── */
 
 /** 状态那一排。已看那一档不摆：看过就归档，要再翻出来是「全部」的事。 */
-export const FOLLOW_FILTERS = [['', '全部'], ['new', '未看'], ['saved', '已保存'], ['ignored', '已忽略']] as const;
+export const FOLLOW_FILTERS = [['', 'All'], ['new', 'Unseen'], ['saved', 'Saved'], ['ignored', 'Ignored']] as const;
 export type FollowStatus = (typeof FOLLOW_FILTERS)[number][0];
 
 /** 排序键与各自方向的说法；「换一批」按下去是 `rand`，没有自己的键。 */
-export const FOLLOW_FEED_SORTS = [['new', '更新时间'], ['hot', '热度'], ['dur', '时长']] as const;
+export const FOLLOW_FEED_SORTS = [['new', 'Updated'], ['hot', 'Popularity'], ['dur', 'Duration']] as const;
 export const FOLLOW_FEED_DIR_WORDS: Record<string, readonly [string, string]> = {
-  new: ['从新到旧', '从旧到新'], hot: ['从高到低', '从低到高'], dur: ['从长到短', '从短到长'],
+  new: ['newest first', 'oldest first'], hot: ['high to low', 'low to high'], dur: ['long to short', 'short to long'],
 };
 export const FOLLOW_RANDOM_SORT = 'rand';
 export type FollowSort = (typeof FOLLOW_FEED_SORTS)[number][0] | typeof FOLLOW_RANDOM_SORT;
@@ -360,7 +360,7 @@ export function videoItems(group: FollowGroup): FollowItem[] {
    去重后只剩一个媒体时，报的就是来源数。量词随媒体类型走：视频论「个」，图片论「张」，与详情里
    「第 1 张，共 11 张」同一套；图和视频混在一起时说「个媒体」，不说「项」——「项」在关注页数的是
    更新条目，读起来像又在数帖子。 */
-const UNITS: Record<string, string> = { video: '个视频', image: '张图片', mixed: '个媒体' };
+const UNITS: Record<string, string> = { video: 'videos', image: 'images', mixed: 'media items' };
 
 export interface FollowStack {
   isMix: boolean;
@@ -376,7 +376,7 @@ export function followStack({ cover = '', coverFace = null, stack = null, imageV
   const copies = stack?.copies || 0;
   const kind = stack?.kind || '';
   const label = media > 1 ? `${media} ${UNITS[kind] || UNITS.mixed}`
-    : copies > 1 ? `${copies} 个来源` : '';
+    : copies > 1 ? `${copies} sources` : '';
   /* 字形说的是点开以后看什么：视频起播是 play，图片是 pics。图和视频混在一起时，点开落在哪一种由
      视图决定，字形跟着视图走。 */
   const glyph = kind === 'image' || (kind !== 'video' && imageView) ? 'pics' : 'play';
@@ -401,8 +401,8 @@ export function backfillState(sources: readonly FollowSource[]): string {
   if (!pages.length) return '';
   const deepest = Math.max(...pages);
   const shallowest = Math.min(...pages);
-  if (deepest <= 1) return '每个来源都只抓了第 1 页';
-  return shallowest === deepest ? `每个来源都抓到第 ${deepest} 页` : `已抓到第 ${shallowest}–${deepest} 页`;
+  if (deepest <= 1) return 'Every source was fetched to page 1 only';
+  return shallowest === deepest ? `Every source was fetched to page ${deepest}` : `Fetched to pages ${shallowest}–${deepest}`;
 }
 
 /* ── 排序键 ── */
@@ -419,7 +419,7 @@ export function sortAriaLabel(key: string, label: string, current: string, dir: 
   const next = nextSort(key, current, dir);
   if (!next) return '';
   const words = FOLLOW_FEED_DIR_WORDS[next.sort];
-  return `按${label}${words ? words[next.dir === 'asc' ? 1 : 0] : ''}排序`;
+  return `Sort by ${label}${words ? ` (${words[next.dir === 'asc' ? 1 : 0]})` : ''}`;
 }
 
 /* ── 壳递进来的那几样 ── */
@@ -540,6 +540,7 @@ export interface FollowFeedProps {
 
 /** 当前按下的筛选条件，四个维度收成一张清单，顺序照筛选条从粗到细：创作者、来源、题材、标签。 */
 export interface FollowCondition { kind: '创作者' | '来源' | '题材' | '标签'; key: string; label: string }
+export const FOLLOW_KIND_LABELS: Record<FollowCondition['kind'], string> = { '创作者': 'Creator', '来源': 'Source', '题材': 'Topic', '标签': 'Tag' };
 
 export function followConditions(view: FollowView, names: {
   authors: ReadonlyMap<string, string>; providers: ReadonlyMap<string, string>; works: ReadonlyMap<string, string>;

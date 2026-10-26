@@ -79,7 +79,7 @@ class ThumbnailJobEndpointTests(unittest.TestCase):
             web_timeline_thumbnails.w_thumbnail_jobs(self.contract, {"mode": "coarse"})
         started = self.contract.thumbnail_job.start.call_args
         self.assertEqual((started.kwargs["initial"]["checked"], started.kwargs["initial"]["stage"]),
-                         (0, "采集缩略图"))
+                         (0, "Collecting thumbnails"))
         work = started.args[0]
 
         def generate(*_args, report, **_kwargs):
@@ -91,7 +91,7 @@ class ThumbnailJobEndpointTests(unittest.TestCase):
         updates = [call.kwargs for call in self.contract.thumbnail_job.update.call_args_list]
         self.assertEqual([(u["checked"], u["total"]) for u in updates], [(5, 12), (12, 12)])
         self.assertEqual(updates[-1]["status"], "complete")
-        self.assertEqual(task_runs.task_label("timeline-thumbnails"), "视频缩略图采集")
+        self.assertEqual(task_runs.task_label("timeline-thumbnails"), "Video thumbnail collection")
 
     def test_without_ffmpeg_the_density_cannot_be_turned_on(self):
         resolver = MagicMock()

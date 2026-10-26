@@ -158,7 +158,7 @@ class ImportedPerformerProfileTests(unittest.TestCase):
         self.assertEqual(result["failed"], 1)
         self.assertEqual(result["avatars"], 0)
         self.assertEqual([asset_id for asset_id, _message in issues], [1])
-        self.assertIn("头像未取得", issues[0][1])
+        self.assertIn("avatar not retrieved", issues[0][1])
         self.assertFalse((self.root / "avatars" / "performer-7.img").exists())
 
     def test_an_external_id_held_by_another_entity_counts_as_a_conflict(self):

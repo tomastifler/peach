@@ -69,7 +69,7 @@ def _openssl(*args: str, stdin: bytes | None = None) -> str:
     if result.returncode != 0:
         detail = result.stderr if isinstance(result.stderr, str) else result.stderr.decode(
             "utf-8", "replace")
-        raise RuntimeError(f"openssl {args[0]} 失败：{detail.strip()[:200]}")
+        raise RuntimeError(f"openssl {args[0]} failed: {detail.strip()[:200]}")
     return result.stdout if isinstance(result.stdout, str) else result.stdout.decode(
         "utf-8", "replace")
 
@@ -101,18 +101,18 @@ def reissue_reason(
 ) -> str | None:
     """需要重签就返回原因，不需要返回 None。"""
     if not files.cert.is_file() or not files.key.is_file():
-        return "服务器证书不存在"
+        return "Server certificate does not exist"
     have_names, have_addresses = subject_alt_names(files.cert)
     missing = (names - have_names) | (addresses - have_addresses)
     if missing:
-        return "证书未覆盖：" + "、".join(sorted(missing))
+        return "Certificate does not cover: " + ", ".join(sorted(missing))
     expiry = not_after(files.cert)
     if expiry is None:
-        return "读不出证书有效期"
+        return "Could not read the certificate validity period"
     stamp = now or datetime.now(timezone.utc)
     remaining = (expiry - stamp).days
     if remaining <= RENEW_BEFORE_DAYS:
-        return f"证书还有 {remaining} 天到期"
+        return f"Certificate expires in {remaining} days"
     return None
 
 
@@ -172,7 +172,7 @@ def create_local_ca(files: CertificateFiles, days: int = CA_DAYS) -> Path:
              "-addext", "basicConstraints=critical,CA:TRUE,pathlen:0",
              "-addext", "keyUsage=critical,keyCertSign,cRLSign",
              "-addext", "subjectKeyIdentifier=hash")
-    LOGGER.info("已生成本机 CA：%s", files.ca_cert)
+    LOGGER.info("Generated local CA: %s", files.ca_cert)
     return files.ca_cert
 
 
@@ -213,6 +213,6 @@ def ensure_certificate(
     reason = reissue_reason(files, names, wanted)
     if reason is None:
         return None
-    LOGGER.info("重签服务器证书：%s", reason)
+    LOGGER.info("Re-issuing server certificate: %s", reason)
     reissue(files, common_name, names, wanted)
     return reason

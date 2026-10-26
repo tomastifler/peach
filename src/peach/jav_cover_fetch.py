@@ -96,11 +96,11 @@ PLACEHOLDER = re.compile(r"now_?printing", re.I)
 #: 官方候选一张都量不出可用尺寸时的两种说法，下标是「有没有量到过偏小的图」。
 NO_USABLE_OFFICIAL = ("官方封面地址都没有取到图片", "官方封面只有缩略图或占位图")
 #: 占位图是来源自己说「没有图」：DMM 下架的作品两个版本都只剩这一张。
-PLACEHOLDER_REASON = "来源给的是「准备中」占位图"
+PLACEHOLDER_REASON = "The source returned a coming-soon placeholder image"
 #: 官方候选里取到的只有占位图、没有偏小的真图时的说法。
-OFFICIAL_PLACEHOLDER_ONLY = "官方封面地址只回「准备中」占位图，作品多半已从官方下架"
+OFFICIAL_PLACEHOLDER_ONLY = "The official cover URL only returns a coming-soon placeholder image; the work was most likely taken down by the official site"
 #: 韩国 MIB 的编号不在 JAV 目录站上，封面来源一律不问；记进日志算确认落空，不重探。
-MIB_NOT_JAV = "韩国 MIB 不适用 JAV 封面来源"
+MIB_NOT_JAV = "Korean MIB does not apply to JAV cover sources"
 #: 量尺寸只需要 JPEG 头部，别把整张 1 MB 的图拉下来。
 PROBE_BYTES = 64 * 1024
 # 瞬时 TLS EOF / 连接重置不能落成“官方没有封面”。按项目外网退避规则重试，
@@ -178,7 +178,7 @@ class DeadlineExceeded(RuntimeError):
 
 
 #: 候选一张都没连上时的说法。
-HOSTS_UNREACHABLE = "官方图片主机都连不上"
+HOSTS_UNREACHABLE = "The official image hosts are all unreachable"
 
 
 class CoverConnectError(Unavailable):
@@ -614,7 +614,7 @@ def dmm_evidence(transport: HttpTransport, code: str, *, deadline=None) -> Metad
     except SourceFailure as error:
         if error.kind == 'not_found':
             return MetadataEvidence()
-        raise Unavailable('DMM：' + str(error)) from error
+        raise Unavailable('DMM: ' + str(error)) from error
     found = [candidate for url in payload.get('cover_urls') or () for candidate in dmm_cdn_images(url)]
     found += content_id_images(str(payload.get('content_id') or ''))
     makers = frozenset(str(payload.get(field) or '').strip().casefold() for field in ('maker', 'label'))
@@ -831,7 +831,7 @@ def best_cover(transport: HttpTransport, code: str, delay: float, *,
                                             deadline=deadline, record=record)])
     if not asked:
         if diagnostics.get('source_unanswered'):
-            raise Unavailable('官方目录查询未完成，尚未取得封面候选')
+            raise Unavailable('The official catalog query did not finish; no cover candidates retrieved yet')
         raise NotFound("所有渠道都没有候选")
     measured = _measure(transport, asked, record, minimum_width=minimum_width,
                         delay=delay, deadline=deadline)
@@ -929,8 +929,8 @@ def _download_best(transport: HttpTransport, measured, record, *, minimum_width:
             continue
         return winner, actual_size, data
     if animated == len(measured):
-        raise NotFound("官方候选都是动图")
-    raise Unavailable("可用候选完整下载都失败")
+        raise NotFound("All official candidates are animated images")
+    raise Unavailable("Every usable candidate failed a full download")
 
 
 FIELDS = ("code", "result", "source", "width", "height", "kb", "url", "note")
@@ -993,16 +993,16 @@ def restore_logged_successes(transport: HttpTransport, log: Path, root: Path,
                 image.verify()
             expected = (int(row["width"]), int(row["height"]))
             if size != expected or size[0] < MIN_WIDTH:
-                raise Unavailable(f"尺寸变化：日志 {expected[0]}x{expected[1]}，当前 {size[0]}x{size[1]}")
+                raise Unavailable(f"Size changed: log {expected[0]}x{expected[1]}, now {size[0]}x{size[1]}")
             temporary.write_bytes(data)
             temporary.replace(target)
             restored += 1
-            print(f"[{index}/{len(successes)}] 恢复 {code}  {size[0]}x{size[1]}", flush=True)
+            print(f"[{index}/{len(successes)}] restored {code}  {size[0]}x{size[1]}", flush=True)
         # 与完整抓取同一条长跑边界：单张网络异常降级成失败记录，不能让余下恢复归零；
         # KeyboardInterrupt 等 BaseException 仍会正常中断。
         except Exception as exc:
             failed.append({"code": code, "error": f"{type(exc).__name__}: {exc}"[:120]})
-            print(f"[{index}/{len(successes)}] 未恢复 {code}：{type(exc).__name__} {exc}",
+            print(f"[{index}/{len(successes)}] not restored {code}: {type(exc).__name__} {exc}",
                   flush=True)
         finally:
             temporary.unlink(missing_ok=True)
@@ -1102,39 +1102,39 @@ def audit_state(database: Path, root: Path, log: Path) -> dict[str, object]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="按番号抓最高清的官方封套")
+    parser = argparse.ArgumentParser(description="Fetch the highest-resolution official cover jacket by code")
     parser.add_argument("--db", type=Path, default=DATABASE_PATH)
     parser.add_argument("--out", type=Path, default=COVER_DIR)
     parser.add_argument("--log", type=Path,
                         default=GENERATED_DIR / "cover-fetch-log.csv")
     parser.add_argument(
         "--metadata-root", type=Path, default=DEFAULT_METADATA_ROOT,
-        help="Javinizer-Go 原始快照目录；先离线复用成功证据，再补联网来源",
+        help="Javinizer-Go raw snapshot folder; reuse successful evidence offline first, then fill in with online sources",
     )
     parser.add_argument("--fc2-metadata-log", type=Path, default=DEFAULT_FC2_METADATA_LOG,
-                        help="fc2cmadb 文章封面证据，只对 --fc2-only 生效")
+                        help="fc2cmadb article cover evidence; only applies to --fc2-only")
     parser.add_argument("--limit", type=int, default=0)
-    parser.add_argument("--code", help="只处理一个已归一化番号，用于定点重试")
+    parser.add_argument("--code", help="Process only one normalized code, for targeted retries")
     parser.add_argument("--delay", type=float, default=1.5)
     parser.add_argument("--min-free", type=float, default=40.0,
-                        help="系统盘最低可用 GiB；运行中每隔一段时间复查")
+                        help="Minimum free GiB on the system disk; rechecked periodically while running")
     parser.add_argument("--disk-check-secs", type=float, default=20.0)
     parser.add_argument("--location",
-                        help="只抓指定来源的番号封套，例如 pikpak；封套仍按番号共享")
+                        help="Fetch cover jackets only for codes from the given source, for example pikpak; jackets are still shared by code")
     parser.add_argument("--retry-misses", action="store_true",
-                        help="连上轮确认没有封套的番号也重探一遍")
+                        help="Re-probe even the codes last round confirmed to have no jacket")
     parser.add_argument("--restore-successes", action="store_true",
-                        help="只按成功日志中的原 URL 恢复缺失封套，不重新探测来源")
+                        help="Restore missing jackets from the original URLs in the success log only; do not re-probe sources")
     parser.add_argument("--upgrade-existing", action="store_true",
-                        help="重探已有封套；只有候选像素更多时才原子替换")
+                        help="Re-probe existing jackets; replace atomically only when the candidate has more pixels")
     parser.add_argument("--upgrade-max-width", type=int, default=0,
-                        help="升级模式只重探不超过此宽度的已有封套；0 表示全部")
+                        help="In upgrade mode, re-probe only existing jackets no wider than this; 0 means all")
     parser.add_argument("--all-codes", action="store_true",
-                        help="连 FC2/日期番号一起试；默认只跑片商与素人形态")
+                        help="Also try FC2/date codes; by default only studio and amateur forms run")
     parser.add_argument("--fc2-only", action="store_true",
-                        help="只用 fc2cmadb 已存证据抓 FC2 官方 CDN 封面")
+                        help="Fetch FC2 official CDN covers using only the evidence stored by fc2cmadb")
     parser.add_argument("--audit", action="store_true",
-                        help="只读输出封面数量、缺失、损坏和尺寸分布，不联网不写文件")
+                        help="Read-only report of cover count, missing, broken and size distribution; no network, no file writes")
     return parser
 
 
@@ -1170,19 +1170,19 @@ def run(args: argparse.Namespace, handle: TaskRunHandle | None = None) -> int:
                          ensure_ascii=False, indent=2))
         return 0
     if args.upgrade_max_width < 0:
-        print("[stop] --upgrade-max-width 不能小于 0")
+        print("[stop] --upgrade-max-width cannot be less than 0")
         return 2
     if args.upgrade_max_width and not args.upgrade_existing:
-        print("[stop] --upgrade-max-width 只能与 --upgrade-existing 一起使用")
+        print("[stop] --upgrade-max-width can only be used with --upgrade-existing")
         return 2
     if args.upgrade_existing and args.retry_misses:
-        print("[stop] --upgrade-existing 与 --retry-misses 不能同时使用")
+        print("[stop] --upgrade-existing and --retry-misses cannot be used together")
         return 2
     if args.restore_successes and args.upgrade_existing:
-        print("[stop] --restore-successes 与 --upgrade-existing 不能同时使用")
+        print("[stop] --restore-successes and --upgrade-existing cannot be used together")
         return 2
     if args.fc2_only and args.all_codes:
-        print("[stop] --fc2-only 与 --all-codes 不能同时使用")
+        print("[stop] --fc2-only and --all-codes cannot be used together")
         return 2
     args.out.mkdir(parents=True, exist_ok=True)
     guard = DiskGuard(system_volume(), args.min_free, args.disk_check_secs)
@@ -1191,7 +1191,7 @@ def run(args: argparse.Namespace, handle: TaskRunHandle | None = None) -> int:
     except JobPolicyError as exc:
         print(f"[stop] {exc}")
         return exc.exit_code
-    print(f"系统盘可用 {free_gb:.1f} GiB，运行期阈值 {args.min_free:.1f} GiB")
+    print(f"Free space on the system disk: {free_gb:.1f} GiB, runtime threshold {args.min_free:.1f} GiB")
     if args.restore_successes:
         transport = HttpxTransport()
         try:
@@ -1203,8 +1203,8 @@ def run(args: argparse.Namespace, handle: TaskRunHandle | None = None) -> int:
             return exc.exit_code
         finally:
             transport.close()
-        print(f"成功日志 {result['logged']}，恢复 {result['restored']}，"
-              f"已存在 {result['skipped']}，失败 {len(result['failed'])} → {args.out}")
+        print(f"Success log: {result['logged']}, restored {result['restored']}, "
+              f"already present {result['skipped']}, failed {len(result['failed'])} → {args.out}")
         return 2 if result["failed"] else 0
 
     todo = pending(
@@ -1223,12 +1223,12 @@ def run(args: argparse.Namespace, handle: TaskRunHandle | None = None) -> int:
         todo = todo[:args.limit]
     selected = set(todo)
     if args.upgrade_existing:
-        width_note = (f"，当前宽度不超过 {args.upgrade_max_width}"
+        width_note = (f", current width at most {args.upgrade_max_width}"
                       if args.upgrade_max_width else "")
-        print(f"待重探已有封套 {len(todo)} 个{width_note}；只在像素更多时替换")
+        print(f"Existing jackets to re-probe: {len(todo)}{width_note}; replaced only when pixels increase")
     else:
-        print(f"待抓番号 {len(todo)} 个（本机已有的跳过，"
-              f"上轮确认没有的跳过 {len(skipped)} 个，--retry-misses 可重试）")
+        print(f"Codes to fetch: {len(todo)} (skipping those already on this machine, "
+              f"and {len(skipped)} confirmed missing last round; --retry-misses retries them)")
 
     transport = HostLimitedTransport(SourceTransport(SECRETS_DIR), args.delay)
     # 日志是整份重写：这轮只跑 pikpak 或只跑 --limit 时，未选中的旧记录也必须保留；
@@ -1285,20 +1285,20 @@ def run(args: argparse.Namespace, handle: TaskRunHandle | None = None) -> int:
                 transport = _renew_transport_after_error(transport, exc)
                 stats["miss"] += 1
                 if args.upgrade_existing:
-                    print(f"[{index}/{len(todo)}] 保留 {code}：重探失败 "
+                    print(f"[{index}/{len(todo)}] kept {code}: re-probe failed "
                           f"{type(exc).__name__} {exc}", flush=True)
                 else:
                     rows.append({"code": code, "result": "未取得", "source": "",
                                  "width": "", "height": "", "kb": "", "url": "",
                                  "note": f"{type(exc).__name__}: {exc}"[:80]})
-                    print(f"[{index}/{len(todo)}] 未取得 {code}："
+                    print(f"[{index}/{len(todo)}] not retrieved {code}: "
                           f"{type(exc).__name__} {exc}", flush=True)
             else:
                 if args.upgrade_existing and not candidate_improves(
                         winner, width * height,
                         baseline_quality, current_size[0] * current_size[1]):
                     stats["kept"] += 1
-                    print(f"[{index}/{len(todo)}] 保留 {code}  "
+                    print(f"[{index}/{len(todo)}] kept {code}  "
                           f"{current_size[0]}x{current_size[1]} >= {width}x{height}",
                           flush=True)
                 else:
@@ -1316,7 +1316,7 @@ def run(args: argparse.Namespace, handle: TaskRunHandle | None = None) -> int:
                         _replace_log_row(rows, code, row)
                     else:
                         rows.append(row)
-                    verb = "升级" if args.upgrade_existing else "取得"
+                    verb = "upgraded" if args.upgrade_existing else "fetched"
                     print(f"[{index}/{len(todo)}] {verb} {code}  {width}x{height} "
                           f"{len(data)//1024} KB  <- {winner.source}", flush=True)
             # 落空的行也要落盘。这句只放在取得分支里的话，连续落空时 CSV 整段不动；
@@ -1328,11 +1328,11 @@ def run(args: argparse.Namespace, handle: TaskRunHandle | None = None) -> int:
         _write_log(args.log, rows)
 
     if args.upgrade_existing:
-        print(f"\n升级 {stats['ok']}，保留 {stats['kept']}，"
-              f"重探失败但保留原图 {stats['miss']} → {args.out}")
+        print(f"\nUpgraded {stats['ok']}, kept {stats['kept']}, "
+              f"re-probe failed but kept the original {stats['miss']} → {args.out}")
     else:
-        print(f"\n取得 {stats['ok']}，未取得 {stats['miss']} → {args.out}")
-    print(f"逐条记录 → {args.log}")
+        print(f"\nFetched {stats['ok']}, not retrieved {stats['miss']} → {args.out}")
+    print(f"Per-item log → {args.log}")
     summary = dict(stats, planned=len(todo))
     if stopped is not None:
         # 磁盘闸门把这一趟拦下来了：活儿没干完，但也不是故障。活动页上要看得出
@@ -1346,12 +1346,12 @@ def run(args: argparse.Namespace, handle: TaskRunHandle | None = None) -> int:
 def main(argv: list[str] | None = None) -> int:
     """入口只负责把这一趟登记进任务中心，正文在 `run` 里。"""
     args = build_parser().parse_args(argv)
-    with cli_run("jav-covers", args.db, label="封面批量抓取") as handle:
+    with cli_run("jav-covers", args.db, label="Batch cover fetch") as handle:
         code = run(args, handle)
         if code:
             # 参数自检这类提前收工走不到 `run` 结尾的结算，在这里补上。
             handle.finish("cancelled", summary={"exit_code": code},
-                          error=f"提前收工，退出码 {code}")
+                          error=f"Finished early, exit code {code}")
         return code
 
 

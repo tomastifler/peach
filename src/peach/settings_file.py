@@ -134,13 +134,13 @@ def _selected_data_root(root: Path) -> Path:
         except FileNotFoundError:
             return root
         except (OSError, UnicodeError) as exc:
-            raise SettingsFileError(f"无法读取数据目录位置：{locator}：{exc}") from exc
+            raise SettingsFileError(f"Cannot read the data directory location: {locator}：{exc}") from exc
         selected = Path(text)
         if not text or not selected.is_absolute() or selected in visited:
-            raise SettingsFileError(f"数据目录位置无效或循环：{locator}")
+            raise SettingsFileError(f"Data directory location is invalid or circular: {locator}")
         visited.add(selected)
         root = selected
-    raise SettingsFileError("数据目录位置的跳转次数超过八次")
+    raise SettingsFileError("Data directory location redirects more than eight times")
 
 
 def discover_data_root(
@@ -267,7 +267,7 @@ class PeachConfig:
 # --------------------------------------------------------------------------- 读取
 
 def _fail(path: Path, detail: str) -> SettingsFileError:
-    return SettingsFileError(f"设置文件读不出来：{path}：{detail}")
+    return SettingsFileError(f"Settings file could not be read: {path}：{detail}")
 
 
 def _read_document(path: Path) -> dict:
@@ -278,25 +278,25 @@ def _read_document(path: Path) -> dict:
     try:
         text = raw.decode("utf-8")
     except UnicodeDecodeError as exc:
-        raise _fail(path, f"不是 UTF-8 编码（{exc}）") from exc
+        raise _fail(path, f"is not UTF-8 encoded ({exc})") from exc
     try:
         return tomllib.loads(text)
     except tomllib.TOMLDecodeError as exc:
         # tomllib 的消息自带 `at line N, column M`，直接转述比自己数行可靠。
-        raise _fail(path, f"TOML 语法错误：{exc}") from exc
+        raise _fail(path, f"TOML syntax error: {exc}") from exc
 
 
 def _table(document: dict, key: str, path: Path) -> dict:
     value = document.get(key, {})
     if not isinstance(value, dict):
-        raise _fail(path, f"`{key}` 必须是一个表（[{key}]）")
+        raise _fail(path, f"`{key}` must be a table ([{key}])")
     return value
 
 
 def _string(table: dict, key: str, default: str, path: Path, prefix: str) -> str:
     value = table.get(key, default)
     if not isinstance(value, str):
-        raise _fail(path, f"`{prefix}{key}` 必须是字符串")
+        raise _fail(path, f"`{prefix}{key}` must be a string")
     return value
 
 
@@ -304,14 +304,14 @@ def _integer(table: dict, key: str, default: int, path: Path, prefix: str) -> in
     value = table.get(key, default)
     # bool 是 int 的子类，端口写成 true 必须报错而不是静默变成 1。
     if isinstance(value, bool) or not isinstance(value, int):
-        raise _fail(path, f"`{prefix}{key}` 必须是整数")
+        raise _fail(path, f"`{prefix}{key}` must be an integer")
     return value
 
 
 def _boolean(table: dict, key: str, default: bool, path: Path, prefix: str) -> bool:
     value = table.get(key, default)
     if not isinstance(value, bool):
-        raise _fail(path, f"`{prefix}{key}` 必须是 true 或 false")
+        raise _fail(path, f"`{prefix}{key}` must be true or false")
     return value
 
 
@@ -319,7 +319,7 @@ def _string_map(table: dict, path: Path, prefix: str) -> dict[str, str]:
     result: dict[str, str] = {}
     for key, value in table.items():
         if not isinstance(value, str):
-            raise _fail(path, f"`{prefix}{key}` 必须是字符串")
+            raise _fail(path, f"`{prefix}{key}` must be a string")
         result[key] = value
     return result
 
@@ -336,11 +336,11 @@ def _root_map(table: dict, path: Path, prefix: str) -> dict[str, tuple[str, ...]
             result[key] = (value,) if value else ()
             continue
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-            raise _fail(path, f"`{prefix}{key}` 必须是字符串，或者字符串数组")
+            raise _fail(path, f"`{prefix}{key}` must be a string or an array of strings")
         if any(not item for item in value):
-            raise _fail(path, f"`{prefix}{key}` 的数组里不能有空串")
+            raise _fail(path, f"`{prefix}{key}` array cannot contain empty strings")
         if len(set(value)) != len(value):
-            raise _fail(path, f"`{prefix}{key}` 的数组里有重复的路径")
+            raise _fail(path, f"`{prefix}{key}` array contains duplicate paths")
         result[key] = tuple(value)
     return result
 
@@ -353,7 +353,7 @@ def _merge(
         _table(document, "directories", path), path, "directories.")
     unknown = sorted(set(directories) - set(DIRECTORY_KEYS))
     if unknown:
-        raise _fail(path, "`directories` 里有不认识的键：" + "、".join(unknown))
+        raise _fail(path, "`directories` contains unknown keys: " + ", ".join(unknown))
 
     media = _table(document, "media", path)
     stray = sorted(set(media) - {_LOCATIONS_KEY, _MOUNTS_KEY, "libraries", "library_icons", "costs"})
@@ -361,10 +361,10 @@ def _merge(
         # 第一阶段的 `[media] R = '/Volumes/Media'`。键空间从盘符换成了 location ID，
         # 把它当未知键忽略等于「所有来源都没挂」——整台机器安静地进脱盘模式。
         raise _fail(path, (
-            "`[media]` 下不再接受盘符键：" + "、".join(stray)
-            + "。改写成 `[media.mounts] <location-id> = <本机路径>`，"
-            "ID 取 `[media.locations]` 中已配置的来源键，"
-            "路径填写该来源的本机媒体目录，例如 "
+            "`[media]` no longer accepts drive-letter keys: " + ", ".join(stray)
+            + ". Rewrite as `[media.mounts] <location-id> = <local path>`, "
+            "taking the ID from a source key configured in `[media.locations]`, "
+            "and entering that source's local media directory as the path, for example "
             "`local = '/mnt/media'`"
         ))
     # 文件里写了 `[media.locations]` 就以它为准：`peach init` 的问答只声明用户给过的
@@ -374,7 +374,7 @@ def _merge(
         locations = _root_map(_table(media, _LOCATIONS_KEY, path), path, "media.locations.")
         empty = sorted(key for key, roots in locations.items() if not roots)
         if empty:
-            raise _fail(path, "`[media.locations]` 中这些媒体来源没有配置目录前缀：" + "、".join(empty))
+            raise _fail(path, "`[media.locations]` these media sources have no directory prefix configured: " + ", ".join(empty))
     else:
         locations = dict(DEFAULT_LOCATION_ROOTS)
     mounts = _root_map(_table(media, _MOUNTS_KEY, path), path, "media.mounts.")
@@ -382,16 +382,16 @@ def _merge(
     if unknown_mounts:
         # 打错一个 ID 却静默忽略，同样是安静地脱盘。
         raise _fail(path, (
-            "`[media.mounts]` 里有没在 `[media.locations]` 声明过的来源："
-            + "、".join(unknown_mounts)
+            "`[media.mounts]` has sources not declared in `[media.locations]`: "
+            + ", ".join(unknown_mounts)
         ))
     for key, points in mounts.items():
         # 媒体目录按顺序对应数据库路径前缀，数目不一致时拒绝保存。
         if points and len(points) != len(locations[key]):
             raise _fail(path, (
-                f"`[media.mounts] {key}` 配置了 {len(points)} 个媒体目录，"
-                f"但 `[media.locations] {key}` 配置了 {len(locations[key])} 个数据库路径前缀；"
-                "两边按顺序一一对应，要么数目相同，要么整项留空"
+                f"`[media.mounts] {key}` configures {len(points)} media directories, "
+                f"but `[media.locations] {key}` configures {len(locations[key])} database path prefixes; "
+                "the two correspond one-to-one in order, so either the counts match or leave the entry empty"
             ))
 
     server_table = _table(document, "server", path)
@@ -441,7 +441,7 @@ def _merge(
 
     media_costs = _string_map(_table(media, "costs", path), path, "media.costs.")
     if any(cost not in {"free", "metered"} for cost in media_costs.values()):
-        raise _fail(path, "`[media.costs]` 只接受 free 或 metered")
+        raise _fail(path, "`[media.costs]` only accepts free or metered")
     config = PeachConfig(
         data_root=data_root, path=path, present=present, data_root_found=found,
         directories=directories, mounts=mounts, locations=locations,
@@ -586,68 +586,68 @@ def _render_pairs(pairs: dict[str, object]) -> list[str]:
 def render(config: PeachConfig) -> str:
     """把设置渲染成带注释的 TOML。注释是给人读的，`load_config` 不依赖它们。"""
     lines = [
-        "# Peach 设置文件。优先级：环境变量 > 本文件 > 程序默认值；手动修改后重启服务生效。",
-        "# 本文件保存在 Peach 数据目录中；该目录由 PEACH_DATA_ROOT 或项目旁的 peach-data 决定。",
-        "# Docker：本文件位于 /data/config.toml；将 /data 放在数据卷中，重建容器时保留该卷。",
-        "# Docker 中的 /media 是容器内的媒体目录，宿主机目录由 Compose 挂载到这里。",
-        "# Docker 部署说明：https://github.com/peach-mitao/peach/blob/master/docs/DOCKER.md",
-        f"# 生成入口：peach init（Peach 数据目录：{config.data_root}）",
+        "# Peach settings file. Priority: environment variables > this file > built-in defaults; restart the service after manual edits.",
+        "# This file lives in the Peach data directory, which is determined by PEACH_DATA_ROOT or the peach-data folder next to the project.",
+        "# Docker: this file is /data/config.toml; keep /data on a volume and preserve that volume when rebuilding the container.",
+        "# /media in Docker is the media directory inside the container; Compose mounts the host directory there.",
+        "# Docker deployment guide: https://github.com/peach-mitao/peach/blob/master/docs/DOCKER.md",
+        f"# Generated by: peach init (Peach data directory: {config.data_root})",
         "",
         "[directories]",
-        "# Peach 数据目录下的子目录，例如 database、logs；省略时使用同名目录。",
-        "# 也可填写绝对路径。Docker 中相对目录位于 /data 下；其他目录需要单独挂载并保留数据。",
+        "# Subdirectories of the Peach data directory, e.g. database, logs; if omitted, the directory of the same name is used.",
+        "# Absolute paths are also accepted. In Docker, relative directories are under /data; other directories must be mounted separately and their data preserved.",
     ]
     lines += _render_pairs({key: config.directories[key]
                             for key in DIRECTORY_KEYS if key in config.directories})
     lines += [
         "",
         "[media.locations]",
-        "# 通常在网页的媒体目录中填写实际目录即可；Peach 保存时自动维护本表和 [media.mounts]。",
-        "# 以下说明供手动编辑配置参考；已有影片按本表查找文件，改成不匹配的值会使影片无法读取。",
-        "# local、115、pikpak 等键表示媒体来源；值是数据库中影片路径的目录前缀。",
-        "# Peach 数据库在所有系统上都保存 Windows 格式的路径，例如 R:\\media\\a.mp4。",
-        "# 因此 Docker / Linux / macOS 也使用本表；R:\\media 无需在这些系统上实际存在。",
-        "# 例：本表 local = 'R:\\media'，[media.mounts] local = '/media'。",
-        "# Peach 会把数据库中的 R:\\media\\a.mp4 转换为 /media/a.mp4，再读取文件。",
-        "# 本表必须匹配数据库中的路径；Docker / Linux / macOS 搬动实际目录时保留本表，修改 [media.mounts]。",
-        "# Windows 示例：local = ['D:\\Videos', 'E:\\Movies']，直接使用本机媒体目录。",
+        "# Usually you only need to enter the real directory in the media directory section of the web UI; Peach maintains this table and [media.mounts] automatically when saving.",
+        "# The notes below are for manual editing; existing videos are located using this table, so changing it to a mismatched value makes videos unreadable.",
+        "# Keys such as local, 115 and pikpak denote media sources; values are the directory prefixes of video paths in the database.",
+        "# The Peach database stores Windows-format paths on all systems, e.g. R:\\media\\a.mp4.",
+        "# Docker / Linux / macOS therefore use this table too; R:\\media does not need to exist on those systems.",
+        "# Example: this table has local = 'R:\\media' and [media.mounts] has local = '/media'.",
+        "# Peach converts R:\\media\\a.mp4 in the database to /media/a.mp4 and then reads the file.",
+        "# This table must match the paths in the database; when moving real directories on Docker / Linux / macOS, keep this table and change [media.mounts].",
+        "# Windows example: local = ['D:\\Videos', 'E:\\Movies'], using the local media directories directly.",
     ]
     lines += _render_roots(dict(config.locations))
     lines += [
         "",
         "[media.libraries]",
-        "# [media.locations] 中的目录前缀 -> 界面显示的媒体库名称；不写时取目录名。",
-        "# 多个目录使用相同名称时，在界面中显示为同一个媒体库。",
+        "# Directory prefix in [media.locations] -> media library name shown in the UI; the directory name is used if omitted.",
+        "# Directories sharing the same name are shown as one media library in the UI.",
     ]
     lines += [f"{_render_value(root)} = {_render_value(name)}" for root, name in config.library_names.items()]
     lines += [
         "",
         "[media.library_icons]",
-        "# [media.locations] 中的目录前缀 -> 媒体库图标。取值是 peach.media_libraries.LIBRARY_ICONS 里的图标名，",
-        "# 不认识的值忽略：只含一个来源的馆藏回落到该来源的图标，跨来源的用 database。",
+        "# Directory prefix in [media.locations] -> media library icon. The value is an icon name from peach.media_libraries.LIBRARY_ICONS;",
+        "# unknown values are ignored: a library with a single source falls back to that source's icon, and a multi-source library uses database.",
     ]
     lines += [f"{_render_value(root)} = {_render_value(icon)}" for root, icon in config.library_icons.items()]
-    lines += ["", "[media.costs]", "# [media.locations] 中的目录前缀 -> 代理流量保护。free 关闭，metered 开启。"]
+    lines += ["", "[media.costs]", "# Directory prefix in [media.locations] -> proxy traffic protection. free turns it off, metered turns it on."]
     lines += [f"{_render_value(root)} = {_render_value(cost)}" for root, cost in config.media_costs.items()]
     lines += [
         "",
         "[media.mounts]",
-        "# 与 [media.locations] 使用相同的媒体来源键；值是 Peach 实际读取文件的目录。",
-        "# Docker 填容器内路径，例如 local = '/media'；宿主机目录在 Compose 的 volumes 中配置。",
-        "# Linux / macOS 也使用本机绝对路径，例如 /mnt/media 或 /Volumes/Media。",
-        "# 一个来源有多个目录时，两表都写数组，目录数量和顺序必须相同。",
-        "# Docker / Linux / macOS 必须提供实际目录，否则无法读取该来源的媒体文件；媒体记录仍保留。",
-        "# Windows 直接读取 [media.locations] 中的目录，无需填写本表。",
+        "# Uses the same media source keys as [media.locations]; the value is the directory Peach actually reads files from.",
+        "# In Docker, enter the path inside the container, e.g. local = '/media'; configure the host directory in Compose volumes.",
+        "# Linux / macOS also use local absolute paths, e.g. /mnt/media or /Volumes/Media.",
+        "# When a source has several directories, write arrays in both tables; the count and order must match.",
+        "# Docker / Linux / macOS must provide the real directory, otherwise media files of that source cannot be read; media records are kept.",
+        "# Windows reads the directories in [media.locations] directly; this table is not needed.",
     ]
     lines += _render_roots(dict(config.mounts))
     lines += [
         "",
         "[server]",
-        "# Docker 服务固定监听 0.0.0.0:8900；宿主机访问地址与端口由 Compose 配置。",
-        "# 此处 host、port 用于直接运行 peach serve；Docker 入口参数优先。",
-        "# mdns_name 在局域网里必须唯一：两台机器同名会互相抢占。",
-        "# review_writer_origin 是允许修改数据库的设备的地址；只读设备通过它获取待确认资料。",
-        "# 留空表示本机不显示另一台设备的待确认资料。",
+        "# The Docker service always listens on 0.0.0.0:8900; the host address and port are configured in Compose.",
+        "# host and port here apply when running peach serve directly; Docker entry arguments take precedence.",
+        "# mdns_name must be unique on the LAN: two machines with the same name will compete for it.",
+        "# review_writer_origin is the address of the device allowed to modify the database; read-only devices use it to fetch pending review data.",
+        "# Leave empty to not show another device's pending review data on this machine.",
     ]
     lines += _render_pairs({
         "host": config.server.host,
@@ -659,11 +659,11 @@ def render(config: PeachConfig) -> str:
     lines += [
         "",
         "[replication]",
-        "# 两台电脑之间的数据库复制设置（ADR-0017）；只有一台允许修改数据库，另一台只读。",
-        "# 单机与独立 Docker 部署保持 enabled = false。",
-        "# 关闭时不启动同步观察器、不探测 SMB；桌面托盘不显示 Ledger 菜单项。",
-        "# shared_root 是两台电脑交换数据库副本的目录；留空时使用 Peach 数据目录旁的 peach-sync。",
-        "# smb_* 用于连接另一台电脑的共享目录；留空时不连接共享目录。",
+        "# Database replication settings between two computers (ADR-0017); only one may modify the database and the other is read-only.",
+        "# Keep enabled = false for single-machine and standalone Docker deployments.",
+        "# When disabled, the sync watcher is not started, SMB is not probed, and the desktop tray hides the Ledger menu items.",
+        "# shared_root is the directory where the two computers exchange database copies; if empty, peach-sync next to the Peach data directory is used.",
+        "# smb_* settings connect to the other computer's shared directory; leave empty to not connect.",
     ]
     lines += _render_pairs({
         "enabled": config.replication.enabled,
@@ -675,11 +675,11 @@ def render(config: PeachConfig) -> str:
     lines += [
         "",
         "[tunnel]",
-        "# Cloudflare Tunnel 默认关闭；打开前必须先设置访问密码。",
-        "# binary 留空时按内置包、PEACH_CLOUDFLARED 和 PATH 的顺序寻找 cloudflared。",
-        "# mode = \"quick\" 是随机地址的临时链接；\"named\" 用自建命名隧道，只在源码开发",
-        "# 环境可用，需要 hostname（Cloudflare 后台绑定的公开主机名）和 token（隧道令牌）。",
-        "# token 是凭据：这个文件是它唯一的存放处，不要复制到别处，也不要提交进 Git。",
+        "# Cloudflare Tunnel is off by default; an access password must be set before turning it on.",
+        "# If binary is empty, cloudflared is looked up in the bundled package, PEACH_CLOUDFLARED and PATH, in that order.",
+        "# mode = \"quick\" is a temporary link with a random address; \"named\" uses a self-built named tunnel and is only available in source",
+        "# development environments; it needs hostname (the public hostname bound in the Cloudflare dashboard) and token (the tunnel token).",
+        "# token is a credential: this file is its only storage place; do not copy it elsewhere or commit it to Git.",
     ]
     lines += _render_pairs({
         "enabled": config.tunnel.enabled,
@@ -695,7 +695,7 @@ def write(config: PeachConfig, *, force: bool = False) -> Path:
     """把设置写到 `config.path`。已存在且没给 `force` 就拒绝，不悄悄覆盖。"""
     path = config.path
     if path.exists() and not force:
-        raise SettingsFileError(f"设置文件已存在，加 --force 才覆盖：{path}")
+        raise SettingsFileError(f"Settings file already exists; add --force to overwrite: {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render(config), encoding="utf-8")
     return path

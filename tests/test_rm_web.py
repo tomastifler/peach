@@ -387,8 +387,8 @@ class WebDataTests(unittest.TestCase):
         # 同一来源的几个根各占一行，用序号区分；单根来源不带序号。
         self.assertEqual(
             [(row["kind"], row["label"]) for row in stats["storage_volumes"]],
-            [("system", "系统盘"), ("local", "资源盘 1"), ("local", "资源盘 2"),
-             ("115", "115 网盘"), ("pikpak", "PikPak 网盘")],
+            [("system", "System drive"), ("local", "Resource drive 1"), ("local", "Resource drive 2"),
+             ("115", "115 cloud drive"), ("pikpak", "PikPak cloud drive")],
         )
         self.assertEqual(stats["storage_summary"], {
             "volumes": 5, "online": 5, "measured": 5,
@@ -1561,7 +1561,7 @@ class WebDataTests(unittest.TestCase):
 
         related = rm_web.q_related(self.contract, 1, 10)
         self.assertEqual(related["items"][0]["id"], 2)
-        self.assertEqual(related["items"][0]["why"], "同创作者 · 同厂牌")
+        self.assertEqual(related["items"][0]["why"], "Same creator · Same studio")
         self.assertEqual(related["items"][0]["performer_entities"], [])
 
         reverse_related = rm_web.q_related(self.contract, 2, 10)

@@ -76,11 +76,11 @@ def integrity(db: Path) -> str:
     try:
         connection = sqlite3.connect(f"file:{db.as_posix()}?mode=ro", uri=True)
     except sqlite3.Error as exc:
-        return f"无法打开：{exc}"
+        return f"Cannot open: {exc}"
     try:
         return str(connection.execute("PRAGMA integrity_check").fetchone()[0])
     except sqlite3.Error as exc:
-        return f"检查失败：{exc}"
+        return f"Check failed: {exc}"
     finally:
         connection.close()
 
@@ -109,7 +109,7 @@ def plan(
         return BackupPlan(tuple(backups), (), "当前数据库不存在，不清退任何备份")
     check = integrity(live)
     if check != "ok":
-        return BackupPlan(tuple(backups), (), f"当前数据库 integrity_check 不是 ok：{check}")
+        return BackupPlan(tuple(backups), (), f"The current database integrity_check is not ok: {check}")
     moment = now or datetime.now()
     live_mtime = _live_mtime(live)
     recent = set(backups[-keep_recent:]) if keep_recent > 0 else set()
@@ -147,5 +147,5 @@ def prune(
         try:
             target.unlink(missing_ok=True)
         except OSError as exc:
-            log.warning("数据库备份未能删除 %s: %s", target, exc)
+            log.warning("Database backup could not be deleted %s: %s", target, exc)
     return decided

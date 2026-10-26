@@ -1,29 +1,29 @@
-# Stash 遗留：继承的缺陷与许可证边界
+# Stash Legacy: Inherited Defects and License Boundaries
 
-Peach 的代码不连 Stash，适配层与离线导入脚本都已删除（ADR-0021）。要不要卸载本机的 Stash
-进程和它的 generated 数据，是本机运维的事，与 Peach 无关。
+Peach's code does not connect to Stash; the adapter layer and the offline import script have both been removed (ADR-0021). Whether to uninstall the local Stash
+process and its generated data is a matter of local ops and has nothing to do with Peach.
 
-这份文档只回答两件事：从 Stash 导入的数据带着哪些缺陷，以及分发前必须处理的许可证边界。
+This document answers only two things: which defects the data imported from Stash carries, and the license boundary that must be handled before distribution.
 
-这些数据一律保留：`media_binding` 表、`asset.stash_scene_id` 列和 `source='stash:*'` 的断言都是
-溯源，不清理。
+All of this data is kept: the `media_binding` table, the `asset.stash_scene_id` column, and assertions with `source='stash:*'` are all
+provenance and are not cleaned up.
 
-## 从 Stash 继承的已知缺陷
+## Known Defects Inherited from Stash
 
-下面三条仍在影响账本，处理相关数据时要记着。
+The following three still affect the ledger and should be kept in mind when handling the related data.
 
-- Stash 的身份模型是平的：上传者、合集和演员塞进同一个自由文本字段（`演员:` 前缀）。导入
-  进来的断言因此需要 `scripts/merge_duplicate_identities.py` 这类工具收拾，规范实体才是真相。
-- `asset_tag` 的唯一键是 `(asset_id, tag)`，`INSERT OR IGNORE` 存不下同一断言的多个来源，
-  provenance 只能靠 `source` 列近似表达。
-- `asset.rating` 的量纲是 Stash 的 rating100（0–100），五颗星按 20 的倍数写；撤销写 NULL。
+- Stash's identity model is flat: uploaders, collections, and performers are packed into the same free-text field (the `演员:` prefix). The imported
+  assertions therefore need tools such as `scripts/merge_duplicate_identities.py` to clean up; the canonical entity is the truth.
+- The unique key of `asset_tag` is `(asset_id, tag)`, and `INSERT OR IGNORE` cannot store multiple sources of the same assertion,
+  so provenance can only be approximated through the `source` column.
+- The scale of `asset.rating` is Stash's rating100 (0–100); five stars are written as multiples of 20; revoking writes NULL.
 
-## 许可证边界
+## License Boundary
 
-Stash v0.31.1 是 AGPL-3.0。Peach 没有复制它的 Go 实现，只通过公开协议调用过它的独立进程。
+Stash v0.31.1 is AGPL-3.0. Peach did not copy its Go implementation and only called its independent process through the public protocol.
 
-分发前要先解决的是 FFmpeg：Peach 管理的那份是从本机既有构建复制来的 GPLv3/x264/x265 shared
-bundle，完整 `LICENSE.txt` 已保留，只供这个个人实例运行。它不进 Git；在处理完源码、许可证和
-通知义务之前，不能随 Peach 安装包分发。这一条归 ADR-0023 的发布准备阶段。
+What must be resolved before distribution is FFmpeg: the copy Peach manages is a GPLv3/x264/x265 shared
+bundle copied from an existing local build, with the full `LICENSE.txt` kept, solely for running this personal instance. It does not go into Git; until the source, license, and
+notice obligations are handled, it cannot be distributed with the Peach installer. This item belongs to ADR-0023's release preparation phase.
 
-官方依据：[Stash 架构](https://github.com/stashapp/stash/blob/develop/docs/ARCHITECTURE.md)、[Scene schema](https://github.com/stashapp/stash/blob/v0.31.1/graphql/schema/types/scene.graphql)、[AGPL-3.0](https://raw.githubusercontent.com/stashapp/stash/v0.31.1/LICENSE)、[FFmpeg 法律说明](https://www.ffmpeg.org/legal.html)。
+Official sources: [Stash architecture](https://github.com/stashapp/stash/blob/develop/docs/ARCHITECTURE.md), [Scene schema](https://github.com/stashapp/stash/blob/v0.31.1/graphql/schema/types/scene.graphql), [AGPL-3.0](https://raw.githubusercontent.com/stashapp/stash/v0.31.1/LICENSE), [FFmpeg legal notes](https://www.ffmpeg.org/legal.html).

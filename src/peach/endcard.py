@@ -51,7 +51,7 @@ def detect_endcard(text: str) -> EndcardDetection:
         confidence = 0.98 if creator_source else 0.9
         reason = "片尾明确写有 Full version available"
         if urls:
-            reason += "；来源 " + "、".join(urls)
+            reason += "; sources " + ", ".join(urls)
         return EndcardDetection(
             "incomplete_candidate", True, tuple(urls), handles, confidence, reason,
         )
@@ -59,6 +59,6 @@ def detect_endcard(text: str) -> EndcardDetection:
         evidence = [*urls, *(f"@{handle}" for handle in handles)]
         return EndcardDetection(
             "source_evidence", False, tuple(urls), handles, 0.72,
-            "画面出现来源/水印：" + "、".join(evidence),
+            "A source/watermark appears in the frame: " + ", ".join(evidence),
         )
     return EndcardDetection("none", False, (), (), 0.0, "")

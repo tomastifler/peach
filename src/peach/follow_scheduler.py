@@ -192,7 +192,7 @@ class FollowUpdateScheduler:
                 self._last_checked = int(result.get("checked") or 0)
                 self._last_added = sum(int(row.get("added") or 0) for row in rows)
                 if failures:
-                    self._last_error = f"{len(failures)} 个来源检查失败"
+                    self._last_error = f"{len(failures)} source checks failed"
             self._settle(failed=bool(failures))
         except Exception as error:  # the background job must never terminate the scheduler
             LOGGER.exception("automatic follow update failed")

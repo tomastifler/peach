@@ -15,7 +15,7 @@ export function SetupDoneView({ done }: { done: SetupDone }) {
   const entry = useRef<HTMLAnchorElement>(null);
 
   useEffect(() => {
-    document.title = 'Peach · 设置完成';
+    document.title = 'Peach · Setup complete';
     entry.current?.focus();
   }, []);
 
@@ -27,16 +27,16 @@ export function SetupDoneView({ done }: { done: SetupDone }) {
   }, [done.redirect]);
 
   return (
-    <AuthCard title="设置完成" lede="正在启动馆藏。">
+    <AuthCard title="Setup complete" lede="Starting your library.">
       <p className="text-body-regular text-text-primary">
-        {done.restored ? '已连接已有数据目录。' : done.scan_requested
-          ? '首次扫描已排队，在后台整理媒体库，期间可以照常使用 Peach。'
-          : '稍后在配置页开始扫描媒体库。'}
+        {done.restored ? 'Connected to the existing data folder.' : done.scan_requested
+          ? 'The first scan is queued and will organize your library in the background; you can keep using Peach meanwhile.'
+          : 'Start scanning your library later from the settings page.'}
       </p>
       <ButtonLink ref={entry} href={done.url} className="self-start">
-        {done.history_guide ? '导入浏览器历史记录' : '进入 Peach'}
+        {done.history_guide ? 'Import browser history' : 'Enter Peach'}
       </ButtonLink>
-      <Disclosure summary="运行信息">
+      <Disclosure summary="Runtime info">
         <FactList>
           {done.facts.map((fact) => (
             <Fact key={fact.term} term={fact.term}>

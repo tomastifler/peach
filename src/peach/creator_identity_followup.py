@@ -31,7 +31,7 @@ from .followups import Attempts, Followup, FollowupType, attempts_root, register
 
 #: 这类后继在任务中心的身份，也是活动页上那一行的名字来源。
 TASK_KEY = "creator-identity"
-TASK_LABEL = "查创作者身份"
+TASK_LABEL = "Look up creator identity"
 
 #: 这条后继写下的断言来源都以它开头，后面接 `@<任务行 id>`；撤回按它认。
 SOURCE = "script:creator-identity-wiki"
@@ -52,12 +52,12 @@ def parse_key(key: str) -> int:
     """把后继 key 拆回创作者 id。形状不对就抛——那说明排队的行不是这个版本写的。"""
     prefix, _, raw = str(key).partition(":")
     if prefix != TASK_KEY or not raw.isdigit():
-        raise ValueError(f"认不出这条查创作者身份后继：{key}")
+        raise ValueError(f"Unrecognised creator-identity follow-up: {key}")
     return int(raw)
 
 
 def _label(name: str) -> str:
-    return f"{TASK_LABEL}：{name}" if name else TASK_LABEL
+    return f"{TASK_LABEL}: {name}" if name else TASK_LABEL
 
 
 def _open(connection: sqlite3.Connection, where: str, params: tuple) -> list[tuple[int, str]]:
@@ -143,10 +143,10 @@ def _run(contract, key: str, handle) -> dict:
         current = _current(connection, entity_id)
         if current is None:
             # 实体被合并、删掉或改成厂牌了。这不是失败：那件事已经不存在了。
-            return {"outcome": "档案已不存在"}
+            return {"outcome": "record no longer exists"}
         name, open_ = current
         if not open_:
-            return {"name": name, "outcome": "已有身份"}
+            return {"name": name, "outcome": "identity already set"}
         keys = research.lookup_keys(name, research.filename_prefixes(connection, [entity_id])[entity_id])
     if handle is not None:
         handle.progress(label=_label(name), throttle=0)
@@ -160,14 +160,14 @@ def _run(contract, key: str, handle) -> dict:
         return {"name": name, "outcome": "未取得", "keys": keys}
     claims = [claim for claim in finding["claims"] if claim["status"] == "observed"]
     if not claims:
-        return {"name": name, "outcome": "两站都没有作品一览", "asked": finding["claims"][0]["evidence"]}
+        return {"name": name, "outcome": "neither site has a work list", "asked": finding["claims"][0]["evidence"]}
     with contract.database.write_transaction() as connection:
         if _current(connection, entity_id) != (name, True):
-            return {"name": name, "outcome": "已变"}
+            return {"name": name, "outcome": "changed"}
         for claim in claims:
             write_claim(connection, entity_id=entity_id, source=batch, **claim)
     contract.cache_bust()
-    return {"name": name, "outcome": "是厂牌或系列", "page": claims[0]["source_url"],
+    return {"name": name, "outcome": "is a studio or series", "page": claims[0]["source_url"],
             "evidence": claims[0]["evidence"]}
 
 

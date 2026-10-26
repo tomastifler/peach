@@ -37,7 +37,7 @@ class DesktopSettingsTests(unittest.TestCase):
     def test_shortcut_timeout_has_an_actionable_error_and_original_cause(self):
         failure = subprocess.TimeoutExpired(['powershell.exe'], 60)
         with patch('peach.desktop_startup.subprocess.run', side_effect=failure):
-            with self.assertRaisesRegex(OSError, '快捷方式操作超时.*60 秒') as raised:
+            with self.assertRaisesRegex(OSError, 'shortcut operation timed out.*60 s') as raised:
                 desktop_startup.shortcut('write', self.root / 'Peach.lnk',
                                          target=str(self.program / 'Peach.exe'))
         self.assertIs(raised.exception.__cause__, failure)
@@ -61,14 +61,14 @@ class DesktopSettingsTests(unittest.TestCase):
 
     def test_uninstall_refuses_media_overlap_external_storage_and_source_tree(self):
         self.config.locations = {'local': (str(self.data / 'sources/media'),)}
-        with self.assertRaisesRegex(ValueError, '媒体'):
+        with self.assertRaisesRegex(ValueError, 'media directory'):
             desktop_uninstall.plan(self.config, delete_data=True, program=self.program)
         self.config.locations = {}
         self.config.directory = lambda key: self.root / key
-        with self.assertRaisesRegex(ValueError, '外部'):
+        with self.assertRaisesRegex(ValueError, 'external'):
             desktop_uninstall.plan(self.config, delete_data=True, program=self.program)
         (self.program / '.git').mkdir()
-        with self.assertRaisesRegex(ValueError, '程序目录'):
+        with self.assertRaisesRegex(ValueError, 'program directory'):
             desktop_uninstall.plan(self.config, delete_data=False, program=self.program)
 
     def test_proxy_private_address_is_shared_but_direct_source_bypasses_it(self):
@@ -91,7 +91,7 @@ class DesktopSettingsTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps({'network':'proxy','proxy':f'http://127.0.0.1:{port}'}))
         self.assertTrue(peach_proxy.describe(self.root)['needs_selection'])
-        with self.assertRaisesRegex(ValueError, '来源代理'):
+        with self.assertRaisesRegex(ValueError, 'Source proxy settings differ'):
             peach_proxy.client_options(self.root)
         peach_proxy.save(self.root, {'mode':'direct'})
         self.assertEqual(peach_proxy.client_options(self.root), {'trust_env':False})
@@ -140,7 +140,7 @@ class DesktopSettingsTests(unittest.TestCase):
 
     def test_startup_does_not_overwrite_another_installation(self):
         with patch.object(desktop_startup, 'startup_directory', return_value=self.root), patch.object(desktop_startup, 'shortcut', side_effect=[
-            {'enabled':False}, {'enabled':True,'target':str(self.root / 'Other.exe')}]), self.assertRaisesRegex(ValueError, '另一份'):
+            {'enabled':False}, {'enabled':True,'target':str(self.root / 'Other.exe')}]), self.assertRaisesRegex(ValueError, 'another Peach installation'):
             desktop_startup.windows_entry(self.config, self.program / 'Peach.exe')
 
     def test_a_shortcut_aimed_at_the_packaged_entry_still_counts_as_this_installation(self):
@@ -202,7 +202,7 @@ class DesktopSettingsTests(unittest.TestCase):
             other = self.program / 'Other.exe'
             other.touch()
             desktop_startup.shortcut('write', icon, target=str(other), directory=str(self.program), expected=str(program))
-            with self.assertRaisesRegex(ValueError, '另一份'):
+            with self.assertRaisesRegex(ValueError, 'another Peach installation'):
                 desktop_startup.save(self.config, enabled=False, silent=True, desktop=True)
             self.assertEqual(desktop_startup.desktop_snapshot(self.config),
                              {'desktop': False, 'desktop_message': '桌面快捷方式属于另一份 Peach 安装'})

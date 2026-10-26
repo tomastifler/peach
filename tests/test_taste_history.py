@@ -78,7 +78,7 @@ class TasteHistoryTests(unittest.TestCase):
         self.assertEqual(import_history_exports([path], self.root / "store.sqlite")[0]["bookmarks"], 1)
         html = self.root / "普通页面.html"
         html.write_text('<a href="https://example.com">普通页面</a>', encoding="utf-8")
-        with self.assertRaisesRegex(ValueError, "书签文件未取得"):
+        with self.assertRaisesRegex(ValueError, "Bookmark file was not obtained"):
             import_history_exports([html], self.root / "invalid.sqlite")
         self.assertFalse((self.root / "invalid.sqlite").exists())
 
@@ -251,7 +251,7 @@ class TasteHistoryTests(unittest.TestCase):
             db.execute("CREATE TABLE downloads(id INTEGER PRIMARY KEY, url TEXT)")
         for selected in (path, path.parent):
             with self.subTest(selected=selected), mock.patch("peach.taste_history.discover_history_sources", return_value=[]):
-                with self.assertRaisesRegex(ValueError, "下载记录.*History"):
+                with self.assertRaisesRegex(ValueError, "download records.*History"):
                     configure_browser(self.root / "private.sqlite", "add", {"name": "115", "path": str(selected)})
 
     def test_sqlite_filename_and_optional_metadata_do_not_control_history_engine(self):
@@ -276,7 +276,7 @@ class TasteHistoryTests(unittest.TestCase):
         path = self.root / "History"
         path.write_bytes(b"not a sqlite database")
         with mock.patch("peach.taste_history.discover_history_sources", return_value=[]):
-            with self.assertRaisesRegex(ValueError, "历史文件未取得"):
+            with self.assertRaisesRegex(ValueError, "history file was not obtained"):
                 configure_browser(self.root / "private.sqlite", "add", {"name": "custom", "path": str(path)})
 
     def test_download_history_does_not_hide_web_history_in_same_profile(self):
@@ -507,7 +507,7 @@ class TasteHistoryTests(unittest.TestCase):
         explore_tags = {row["tag"] for row in analysis["explore"]}
         self.assertTrue({"游戏同人", "恋足"}.issubset(explore_tags))
         self.assertTrue(all(row["items"] > 0 for row in analysis["explore"]))
-        self.assertIn("不合口味", analysis["next_steps"][-1]["detail"])
+        self.assertIn("disliked", analysis["next_steps"][-1]["detail"])
 
     def test_history_is_parsed_once_per_store_version(self):
         def export(name, url, moment):

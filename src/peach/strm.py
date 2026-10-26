@@ -30,7 +30,7 @@ def validate_url(url: str) -> str:
     except ValueError:
         valid = False
     if not valid or any(ord(char) < 33 or ord(char) == 127 for char in url) or '\\' in url:
-        raise ValueError('STRM 需要不含账号密码的 HTTP 或 HTTPS 播放地址')
+        raise ValueError('STRM requires an HTTP or HTTPS playback address without credentials')
     return url
 
 
@@ -39,11 +39,11 @@ def read_target(path: Path) -> str:
         with path.open('rb') as handle:
             content = handle.read(MAX_BYTES + 1)
         if len(content) > MAX_BYTES:
-            raise ValueError('STRM 文件超过 64 KiB')
+            raise ValueError('STRM file exceeds 64 KiB')
         lines = [line.strip() for line in content.decode('utf-8-sig').splitlines()
                  if line.strip() and not line.lstrip().startswith('#')]
     except (OSError, UnicodeError) as error:
-        raise ValueError('STRM 文件未取得或不是 UTF-8 文本') from error
+        raise ValueError('STRM file was not obtained or is not UTF-8 text') from error
     if len(lines) != 1:
-        raise ValueError('STRM 文件需要且只能包含一个播放地址')
+        raise ValueError('STRM file must contain exactly one playback address')
     return validate_url(lines[0])

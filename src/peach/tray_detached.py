@@ -189,7 +189,7 @@ def _create_child(kernel, executable, argv, cwd, block, startup, flags, context)
 def launch_detached(argv, *, cwd, env=None) -> DetachedProcess:
     """由当前会话桌面进程承接父身份；失败明确报错，不回退到启动器 Job。"""
     if os.name != "nt":
-        raise OSError("独立托盘启动仅适用于 Windows")
+        raise OSError("Standalone tray startup is only supported on Windows")
     environment = os.environ.copy() if env is None else dict(env)
     executable = Path(argv[0])
     config = executable.parent.parent / "pyvenv.cfg"
@@ -200,20 +200,20 @@ def launch_detached(argv, *, cwd, env=None) -> DetachedProcess:
                       if "=" in line)
         home = next((value.strip() for key, value in values.items() if key.strip() == "home"), None)
         if home is None:
-            raise OSError(f"虚拟环境缺少基础解释器目录：{config}")
+            raise OSError(f"The virtual environment is missing the base interpreter directory: {config}")
         environment["__PYVENV_LAUNCHER__"] = str(executable.resolve())
         executable = Path(home) / executable.name
     kernel = _kernel()
     context = {"caller": {"pid": os.getpid(), **_job_facts(kernel, wintypes.HANDLE(-1), current=True)},
                "parent_source": "Windows desktop",
-               "job_chain": {"status": "unavailable", "reason": "未取得各层 Job 句柄与归属；仅记录已知进程和直接 Job"}}
+               "job_chain": {"status": "unavailable", "reason": "Handles and ownership of each Job layer were not obtained; only known processes and direct Jobs are recorded"}}
     user = ctypes.WinDLL("user32", use_last_error=True)
     user.GetShellWindow.restype = wintypes.HWND
     user.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
     shell = user.GetShellWindow()
     pid = wintypes.DWORD()
     if not shell or not user.GetWindowThreadProcessId(shell, ctypes.byref(pid)):
-        error = OSError("未取得当前会话的 Windows 桌面进程，请确认已登录 Windows 桌面")
+        error = OSError("No Windows desktop process was found for the current session; make sure you are signed in to the Windows desktop")
         error.peach_context = context
         raise error
     context["desktop"] = {"pid": pid.value}

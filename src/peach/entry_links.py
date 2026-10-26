@@ -184,9 +184,9 @@ def _host_problem(site: EntrySite, host: str) -> str:
     if not host:
         return ""
     if len(host) > _HOST_LIMIT:
-        return f"{site.title} 的地址请控制在 {_HOST_LIMIT} 个字符以内"
+        return f"Keep the address for {site.title} within {_HOST_LIMIT} characters"
     if not _HOST_SHAPE.fullmatch(host):
-        return f"{site.title} 这里只写域名本身，像 {site.host}"
+        return f"For {site.title}, enter only the domain itself, like {site.host}"
     return ""
 
 
@@ -194,16 +194,16 @@ def save(root: Path, body: dict) -> dict:
     """写回可换的那几站的域名。任一项不合规就整批不写。"""
     rows = body.get("sites")
     if not isinstance(rows, dict):
-        raise ValueError("请提交每个站点的地址")
+        raise ValueError("Submit an address for each site")
     result = defaults()
     for site in SITES:
         if not site.mirrored:
             continue
         row = rows.get(site.key)
         if not isinstance(row, dict):
-            raise ValueError(f"缺少 {site.title} 的设置")
+            raise ValueError(f"Missing settings for {site.title}")
         if not isinstance(row.get("host"), str):
-            raise ValueError(f"{site.title} 的地址必须是文字")
+            raise ValueError(f"The address for {site.title} must be text")
         host = _tidy_host(row["host"])
         problem = _host_problem(site, host)
         if problem:

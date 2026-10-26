@@ -78,7 +78,7 @@ def failures(config):
                 if action == "querying_metadata":
                     result["metadata"].add(asset_id)
                 # reading_local 的其余资产问题由 NFO 解析与番号冲突分支产生。
-                elif action == "reading_local" and row.get("message") not in {"媒体文件不可访问", "本地封面无法读取"}:
+                elif action == "reading_local" and row.get("message") not in {"媒体文件不可访问", "The local cover cannot be read"}:
                     result["identification"].add(asset_id)
         return result, timestamp(state.get("finished_at") or state.get("started_at"))
     except FileNotFoundError:
@@ -98,8 +98,8 @@ def _library_item(row):
 
 
 def library(settings, config):
-    groups = {key: group(label) for key, label in (("identification", "识别失败"),
-              ("metadata", "补资料失败"), ("cover", "缺封面"), ("duration", "缺时长"))}
+    groups = {key: group(label) for key, label in (("identification", "Identification failed"),
+              ("metadata", "Metadata fetch failed"), ("cover", "Missing cover"), ("duration", "缺时长"))}
     try:
         with closing(sqlite3.connect(settings.db_path.resolve().as_uri() + "?mode=ro", uri=True, timeout=1)) as connection:
             connection.execute("PRAGMA query_only=ON")
@@ -115,21 +115,21 @@ def library(settings, config):
         missing = [assets[row[0]] for row in rows
                    if (normalise_code_key(row[1]).casefold() not in covers if row[1]
                        else f"{row[0]}_4" not in posters)]
-        groups["cover"] = group("缺封面", missing)
+        groups["cover"] = group("Missing cover", missing)
     failed, issue_at = failures(config)
     if failed is not None:
-        for key, label in (("identification", "识别失败"), ("metadata", "补资料失败")):
+        for key, label in (("identification", "Identification failed"), ("metadata", "Metadata fetch failed")):
             groups[key] = group(label, [assets[value] for value in failed[key] if value in assets])
     return {"groups": groups, "issue_at": issue_at}
 
 
 SOURCE_CHECK_REASONS = {
-    "proxy": "代理连接失败", "timeout": "来源连接超时", "network": "来源连接未取得",
-    "auth_required": "来源要求登录或拒绝当前出口", "cloudflare_challenge": "来源要求人机验证",
-    "cloudflare_blocked": "来源拦截当前出口", "ip_banned": "来源拦截当前出口",
-    "geo_restricted": "来源限制当前地区", "rate_limited": "来源正在限流",
-    "server_error": "来源服务异常", "parse_error": "资料解析失败",
-    "not_found": "上次查询未命中", "cooldown": "来源正在冷却",
+    "proxy": "Proxy connection failed", "timeout": "Source connection timed out", "network": "来源连接未取得",
+    "auth_required": "Source requires login or rejected the current egress", "cloudflare_challenge": "Source requires human verification",
+    "cloudflare_blocked": "Source blocked the current egress", "ip_banned": "来源拦截当前出口",
+    "geo_restricted": "Source restricts the current region", "rate_limited": "Source is rate limiting",
+    "server_error": "Source server error", "parse_error": "Metadata parsing failed",
+    "not_found": "Last query found no match", "cooldown": "来源正在冷却",
 }
 
 
@@ -138,16 +138,16 @@ def _source_health(cooling, failed, fresh, recent, connection_ok, reason_key, *,
     if cooling:
         return "warning", "来源正在冷却"
     if failed:
-        return "warning", SOURCE_CHECK_REASONS.get(reason_key, "来源未取得资料")
+        return "warning", SOURCE_CHECK_REASONS.get(reason_key, "Source returned no data")
     if fresh:
-        return "ok", "资料解析通过"
+        return "ok", "Metadata parsing passed"
     if has_success:
-        return "stale", "曾解析成功，近期解析状态待复查"
+        return "stale", "Parsed successfully before; recent parsing status needs a recheck"
     if recent and connection_ok:
-        return "unknown", "连接检查通过；解析状态未取得"
+        return "unknown", "Connection check passed; parsing status not retrieved"
     if has_check:
-        return "stale", "已有检查记录，解析状态待复查"
-    return "unchecked", "尚无检查或解析记录，可在来源和凭证中检查连接"
+        return "stale", "A check record exists; parsing status needs a recheck"
+    return "unchecked", "No check or parsing record yet; check the connection under Sources and Credentials"
 
 
 def _profile_success(settings):

@@ -60,7 +60,7 @@ class StrmResources:
         with self.lock:
             row = self.entries.get(key)
         if row is None or row[0] <= time.monotonic() or row[1:3] != (asset_id, root):
-            raise ValueError('STRM 播放资源已失效，请重新打开作品')
+            raise ValueError('The STRM playback resource has expired; reopen the work')
         return row[3]
 
 
@@ -72,7 +72,7 @@ def rewrite_playlist(state, body: bytes, base: str, asset_id: int, root: str, se
                      external_query: str = '') -> str:
     def link(target, _nested):
         if not allowed_hop(root, target):
-            raise ValueError('STRM 播放列表包含不可访问的媒体地址')
+            raise ValueError('The STRM playlist contains an inaccessible media address')
         key = resources(state).add(asset_id, root, target)
         return f'/strm-resource/{asset_id}/{key}?session={quote(session, safe="")}{external_query}'
 
@@ -110,7 +110,7 @@ def proxy(request, asset_id: int, path, session: str = '', resource: str = ''):
                 for chunk in upstream.iter_bytes():
                     content.extend(chunk)
                     if len(content) > PLAYLIST_LIMIT:
-                        raise ValueError('STRM 播放列表超过 2 MiB')
+                        raise ValueError('STRM playlist exceeds 2 MiB')
             finally:
                 upstream.close()
             external_query = ''
@@ -143,8 +143,8 @@ def proxy(request, asset_id: int, path, session: str = '', resource: str = ''):
     except ValueError:
         if upstream is not None:
             upstream.close()
-        return JSONResponse({'error': 'STRM 内容无法解析，请检查播放地址和列表格式'}, status_code=400)
+        return JSONResponse({'error': 'STRM content cannot be parsed; check the playback address and playlist format'}, status_code=400)
     except (FollowProxyError, OSError, httpx.HTTPError):
         if upstream is not None:
             upstream.close()
-        return JSONResponse({'error': 'STRM 媒体未取得，请检查播放地址或在生成工具中更新 STRM'}, status_code=502)
+        return JSONResponse({'error': 'STRM media was not obtained; check the playback address or update the STRM in the generator'}, status_code=502)

@@ -265,7 +265,7 @@ class FeedWebTest(FeedWebFixture):
         snapshot = dispatch_api_get(self.contract, "/api/feeds", {})
         self.assertEqual(len(snapshot["sources"]), 1)
         self.assertEqual(snapshot["sources"][0]["name"], "示例源")
-        self.assertEqual(snapshot["sources"][0]["kind_label"], "JAV 订阅")
+        self.assertEqual(snapshot["sources"][0]["kind_label"], "JAV subscription")
         self.assertTrue(snapshot["sources"][0]["enabled"])
         # 没挂人物就没有资料图可画。
         self.assertFalse(snapshot["sources"][0]["has_image"])
@@ -335,7 +335,7 @@ class FeedWebTest(FeedWebFixture):
         result = self._check()
         self.assertFalse(result["results"][0]["ok"])
         row = dispatch_api_get(self.contract, "/api/feeds", {})["sources"][0]
-        self.assertEqual(row["last_error"], "来源回了 HTTP 503")
+        self.assertEqual(row["last_error"], "Source returned HTTP 503")
         self.assertIsNotNone(row["next_fetch_at"])
 
     def test_an_empty_alias_page_settles_quietly_and_names_its_row(self):
@@ -970,7 +970,7 @@ class FeedFollowByNameTest(PerformerFeedSwitchTest):
 
     def test_lookup_refuses_a_login_page_and_an_empty_name(self):
         self._serve(self.search, LOGIN_PAGE)
-        with self.assertRaisesRegex(ValueError, "登入页"):
+        with self.assertRaisesRegex(ValueError, "login page"):
             self._lookup()
         with self.assertRaises(ValueError):
             self._lookup("  ")
@@ -1015,7 +1015,7 @@ class FeedFollowByNameTest(PerformerFeedSwitchTest):
     def test_cards_held_by_two_different_people_are_refused_by_name(self):
         self._performer("甲", ["Kn01"])
         self._performer("乙", ["Kn02"])
-        with self.assertRaisesRegex(ValueError, "甲、乙"):
+        with self.assertRaisesRegex(ValueError, "甲, 乙"):
             self._follow(["Kn01", "Kn02"])
         self.assertEqual(self._sources(), [])
 
@@ -1135,7 +1135,7 @@ class JavDiscoveryTest(FeedWebFixture):
         result = self._discover(rankings={"peach_studios": [{"name": "示例厂牌", "score": 4}]})
         self.assertEqual(len(result["items"]), 2)
         self.assertTrue(all(row["release_date"] == "2010-01-01" for row in result["items"]))
-        self.assertTrue(all(row["reasons"] == ["厂牌偏好：示例厂牌（观看与反馈）"] for row in result["items"]))
+        self.assertTrue(all(row["reasons"] == ["Studio preference：示例厂牌（观看与反馈）"] for row in result["items"]))
         self.assertEqual(self._discover()["items"], [])
 
     def test_external_discovery_projects_obtained_metadata_and_canonical_tags(self):
@@ -1147,7 +1147,7 @@ class JavDiscoveryTest(FeedWebFixture):
         rows = self._discover(rankings=rankings, metadata={"tags": [{"name": "恋足"}], "series_name": "示例系列"})["items"]
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[0]["tags"], ["恋足"])
-        self.assertEqual(rows[0]["reasons"], ["标签偏好：恋足（浏览记录）", "系列偏好：示例系列（观看与反馈）"])
+        self.assertEqual(rows[0]["reasons"], ["Tag preference：恋足（浏览记录）", "Series preference：示例系列（观看与反馈）"])
 
     def test_library_exploration_excludes_completed_disliked_and_frequently_watched(self):
         with self.contract.database.write_transaction() as connection:
@@ -1164,7 +1164,7 @@ class JavDiscoveryTest(FeedWebFixture):
         result = self._discover("library", {"peach_tags": [{"name": "恋足", "entity_id": entity_id, "score": 4}]})
         self.assertEqual({row["asset_id"] for row in result["items"]}, {1, 2})
         self.assertTrue(all(row["tags"] == ["恋足"] for row in result["items"]))
-        self.assertTrue(all(row["reasons"] == ["标签偏好：恋足（观看与反馈）"] for row in result["items"]))
+        self.assertTrue(all(row["reasons"] == ["Tag preference：恋足（观看与反馈）"] for row in result["items"]))
 
 
 if __name__ == "__main__":  # pragma: no cover

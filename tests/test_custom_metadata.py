@@ -39,7 +39,7 @@ class CustomMetadataTests(unittest.TestCase):
             custom.validate(dict(definition(), fields={'code': 'eval()'}))
 
     def test_response_identity_must_come_from_response(self):
-        with self.assertRaisesRegex(ValueError, '番号'):
+        with self.assertRaisesRegex(ValueError, 'does not match the queried code'):
             custom.parse(definition(), 'ABW-001', {'data': {'id': 'ABW-002', 'title': '错片'}})
         record = custom.parse(definition(), 'ABW-001', {'data': {'id': 'ABW-001', 'title': '标题', 'cast': ['演员']}})
         self.assertEqual(record.payload()['actresses'], [{'japanese_name': '演员'}])
@@ -49,7 +49,7 @@ class CustomMetadataTests(unittest.TestCase):
 
     def test_private_dns_is_refused_before_connecting(self):
         with patch.object(custom, 'host_addresses', return_value=('127.0.0.1',)), patch.object(custom.requests, 'Session') as session:
-            with self.assertRaisesRegex(ValueError, '公网'):
+            with self.assertRaisesRegex(ValueError, 'public address'):
                 custom.fetch_json('https://metadata.example.com/ABW-001', 2)
             session.assert_not_called()
 
@@ -89,7 +89,7 @@ class CustomMetadataTests(unittest.TestCase):
                     patch.object(custom, 'host_addresses', side_effect=addresses), \
                     patch.object(custom.requests, 'Session') as session:
                 session.return_value.__enter__.return_value.stream.return_value.__enter__.return_value = response
-                with self.assertRaisesRegex(ValueError, '超时'):
+                with self.assertRaisesRegex(ValueError, 'timed out'):
                     custom.fetch_json('https://metadata.example.com/ABW-001', 15)
                 session.assert_not_called()
         for dns_elapsed in (15, 16):

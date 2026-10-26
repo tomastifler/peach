@@ -28,23 +28,23 @@ export function PortSettings({ data, receipt }: ConfigurationGroupProps) {
       revision: data.revision, media_dirs: data.media_dirs,
       ...(data.media_sources ? { media_sources: data.media_sources } : {}),
       port, scan_now: false,
-    }, 'POST', signal), (result) => { setSaved(result); receipt('已保存配置'); }, (cause) => {
+    }, 'POST', signal), (result) => { setSaved(result); receipt('Settings saved'); }, (cause) => {
       const fields = cause instanceof ApiError && cause.status === 400
         ? (cause.body as { errors?: { port?: string } } | null)?.errors : null;
       if (fields?.port) setFieldError(fields.port);
       else action.setError(errorMessage(cause));
     });
   };
-  if (saved) return <Section title="本机访问端口"><Stack>
-    <Note tone="success" title="配置已保存">Peach 正在重新启动。
-      <LinkButton href={saved.url} size="small">进入馆藏</LinkButton>
+  if (saved) return <Section title="Local access port"><Stack>
+    <Note tone="success" title="Settings saved">Peach is restarting.
+      <LinkButton href={saved.url} size="small">Open library</LinkButton>
     </Note>
   </Stack></Section>;
-  return <Section title="本机访问端口" onSubmit={submit}><Stack>
-    <Input id="configPort" label="端口" inputMode="numeric" value={port} onChange={setPort}
+  return <Section title="Local access port" onSubmit={submit}><Stack>
+    <Input id="configPort" label="Port" inputMode="numeric" value={port} onChange={setPort}
       validationBehavior="aria" isInvalid={Boolean(fieldError)} hint={fieldError || undefined} />
-    {action.error ? <Note tone="error" title="没有保存">{action.error}</Note> : null}
-  </Stack><Footer status="保存后 Peach 会重启，并跳转到新地址。">
-    <Button type="submit" {...busyProps(action.busy === 'save')}>保存配置</Button>
+    {action.error ? <Note tone="error" title="Not saved">{action.error}</Note> : null}
+  </Stack><Footer status="Peach will restart after saving and redirect to the new address.">
+    <Button type="submit" {...busyProps(action.busy === 'save')}>Save settings</Button>
   </Footer></Section>;
 }

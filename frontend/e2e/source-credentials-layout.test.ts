@@ -24,8 +24,8 @@ describe('来源链接与凭据布局', () => {
       });
       try {
         await page.reload();
-        const region = page.getByRole('region', { name: '自定义元数据来源', exact: true });
-        const add = region.getByRole('button', { name: '添加来源', exact: true });
+        const region = page.getByRole('region', { name: 'Custom metadata sources', exact: true });
+        const add = region.getByRole('button', { name: 'Add source', exact: true });
         const assertClosedCard = async () => {
           await add.waitFor(); await settle(page);
           const geometry = await add.evaluate(button => {
@@ -39,9 +39,9 @@ describe('来源链接与凭据布局', () => {
           assert.ok(geometry.radius > 0 && geometry.top >= 12 && geometry.top <= 18, JSON.stringify(geometry));
         };
         await assertClosedCard();
-        await page.getByRole('button', { name: '添加来源', exact: true }).click();
-        const form = page.getByRole('form', { name: '元数据来源配置', exact: true });
-        await form.getByRole('button', { name: '取消', exact: true }).click();
+        await page.getByRole('button', { name: 'Add source', exact: true }).click();
+        const form = page.getByRole('form', { name: 'Metadata source configuration', exact: true });
+        await form.getByRole('button', { name: 'Cancel', exact: true }).click();
         await form.waitFor({ state: 'detached' });
         await assertClosedCard();
         await region.screenshot({ path: `../build/agent-verification/browser/custom-source-closed-${viewport.name}.png` });
@@ -55,21 +55,21 @@ describe('来源链接与凭据布局', () => {
         });
         assert.ok(editorGeometry.top >= 14 && editorGeometry.top <= 18, JSON.stringify(editorGeometry));
         assert.ok(Math.abs(editorGeometry.left) <= 1 && Math.abs(editorGeometry.right) <= 1 && Math.abs(editorGeometry.bottom) <= 1, JSON.stringify(editorGeometry));
-        await form.getByRole('textbox', { name: '来源名称', exact: true }).fill('公开演示元数据');
-        await form.getByRole('textbox', { name: 'JSON 接口地址', exact: true }).fill('https://example.com/api/{code}');
-        const code = form.getByRole('textbox', { name: '试查番号（回车查询）', exact: true });
+        await form.getByRole('textbox', { name: 'Source name', exact: true }).fill('公开演示元数据');
+        await form.getByRole('textbox', { name: 'JSON endpoint URL', exact: true }).fill('https://example.com/api/{code}');
+        const code = form.getByRole('textbox', { name: 'Test code (press Return to query)', exact: true });
         await code.fill('DEMO-001');
         await code.press('Enter');
         await form.locator('pre').filter({ hasText: '接口试查结果' }).waitFor();
         const dimensions = await layout(page);
         assert.ok(dimensions.scrollWidth <= dimensions.viewportWidth + 1, JSON.stringify(dimensions));
         assert.deepEqual(dimensions.offenders, []);
-        await page.getByRole('region', { name: '自定义元数据来源', exact: true }).screenshot({
+        await page.getByRole('region', { name: 'Custom metadata sources', exact: true }).screenshot({
           path: `../build/agent-verification/browser/custom-source-${viewport.name}.png`,
         });
-        await form.getByRole('button', { name: '保存来源', exact: true }).click();
+        await form.getByRole('button', { name: 'Save source', exact: true }).click();
         await form.waitFor({ state: 'detached' });
-        await page.getByText('公开演示元数据 · 已停用', { exact: true }).waitFor();
+        await page.getByText('公开演示元数据 · Disabled', { exact: true }).waitFor();
         assert.equal(items.length, 1);
         assert.equal(await add.evaluate(button => parseFloat(getComputedStyle(button.parentElement!).borderTopWidth)), 1);
         assert.deepEqual(opened.problems, []);
@@ -99,7 +99,7 @@ describe('来源链接与凭据布局', () => {
       } finally { await opened.close(); }
     });
     it(`凭据的每个输入字段占满正文宽度（${viewport.name}）`, async () => {
-      const opened = await visit(browser, '/settings/library?section='+encodeURIComponent('来源与订阅'), viewport);
+      const opened = await visit(browser, '/settings/library?section='+encodeURIComponent('Sources & subscriptions'), viewport);
       try {
         await opened.page.route('**/api/follow/credentials', route => route.fulfill({ json: {
           root: '', providers: [{ provider: 'simpcity', provider_label: 'SimpCity', followable: true,
@@ -108,7 +108,7 @@ describe('来源链接与凭据布局', () => {
         await opened.page.reload();
         const field = opened.page.getByLabel('cookie', { exact: true });
         await field.waitFor(); await settle(opened.page);
-        const labels = await opened.page.evaluate(() => ['来源凭据', '作品资料站点'].map(name => {
+        const labels = await opened.page.evaluate(() => ['Source credentials', 'Title info sites'].map(name => {
           const section = document.querySelector(`[aria-label="${name}"]`)!;
           const label = section.querySelector('p')!;
           return { x: label.getBoundingClientRect().x, size: getComputedStyle(label).fontSize, weight: getComputedStyle(label).fontWeight };

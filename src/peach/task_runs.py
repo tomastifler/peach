@@ -83,36 +83,36 @@ MAX_FOLLOWUP_DEPTH = 2
 
 #: 任务登记表：key → 给人看的名字。不在表里的 key 由界面原样显示，不猜。
 TASK_LABELS = {
-    "follow-check": "追更检查",
-    "follow-resolve": "关注来源查找",
-    "library-processing": "扫描与采集",
-    "taste-refresh": "口味分析",
-    "link-check": "链接检查",
-    "link-prune": "失效链接清理",
-    "resource-scan": "资源同步检查",
-    "resource-apply": "资源同步清理",
-    "scraping-cover": "封面采集",
-    "media-repair": "媒体修复",
-    "organize": "按模板整理",
-    "batch": "批量操作",
-    "scrape-codes": "番号资料刮削",
-    "jav-covers": "封面批量抓取",
-    "entity-avatar": "补全资料图片",
-    "studio-mark": "补厂牌官网与标识",
-    "creator-identity": "查创作者身份",
-    "code-samples": "补番号样张",
-    "feed-check": "订阅源拉取",
-    "feed-scrape": "取新作资料",
-    "want-scrape": "取想要的资料",
-    "timeline-thumbnails": "视频缩略图采集",
-    "download-postprocess": "云下载后处理",
-    "seed-import": "导入初始资料",
+    "follow-check": "Follow check",
+    "follow-resolve": "Follow source lookup",
+    "library-processing": "Scan and collect",
+    "taste-refresh": "Taste analysis",
+    "link-check": "Link check",
+    "link-prune": "Dead link cleanup",
+    "resource-scan": "Resource sync check",
+    "resource-apply": "Resource sync cleanup",
+    "scraping-cover": "Cover collection",
+    "media-repair": "Media repair",
+    "organize": "Organize by template",
+    "batch": "Batch operation",
+    "scrape-codes": "Code metadata scrape",
+    "jav-covers": "Bulk cover fetch",
+    "entity-avatar": "Fill in profile images",
+    "studio-mark": "Studio website and logo backfill",
+    "creator-identity": "Creator identity lookup",
+    "code-samples": "Release sample backfill",
+    "feed-check": "Feed fetch",
+    "feed-scrape": "Fetch new-release metadata",
+    "want-scrape": "Fetch want-list metadata",
+    "timeline-thumbnails": "Video thumbnail collection",
+    "download-postprocess": "Cloud download post-processing",
+    "seed-import": "Import seed data",
 }
 
 
 #: 触发方式的中文名。跳过原因是给人看的一句话，里面不留英文枚举值。
 TRIGGER_LABELS = {
-    "manual": "手动", "scheduled": "定时", "startup": "启动", "cli": "命令行",
+    "manual": "Manual", "scheduled": "Scheduled", "startup": "Startup", "cli": "Command line",
 }
 
 
@@ -305,9 +305,9 @@ class TaskRunStore:
         `conflict="raise"` 是手动触发的语义：告诉用户是哪一轮挡着，让他自己决定。
         """
         if trigger not in TRIGGERS:
-            raise ValueError(f"未知的触发方式：{trigger}")
+            raise ValueError(f"Unknown trigger: {trigger}")
         if conflict not in ("skip", "raise"):
-            raise ValueError(f"未知的冲突处理方式：{conflict}")
+            raise ValueError(f"Unknown conflict handling: {conflict}")
         if not self.enabled:
             return None
         moment = stamp()
@@ -339,8 +339,8 @@ class TaskRunStore:
     def _record_skip(self, task_key: str, trigger: str, mutex_key: str,
                      blocking: TaskRun | None) -> None:
         """把一次静默跳过写成终态记录。它没有 `started_at`——这一轮从没开跑。"""
-        reason = (f"与第 {blocking.id} 轮（{trigger_label(blocking.trigger)}触发）冲突，本次跳过"
-                  if blocking else "已有一轮在进行，本次跳过")
+        reason = (f"Conflicts with run {blocking.id} (triggered by {trigger_label(blocking.trigger)}); skipping this one"
+                  if blocking else "A run is already in progress; skipping this one")
         summary = json.dumps({"blocked_by": blocking.id if blocking else None},
                              ensure_ascii=False)
         with self.database.write_transaction(notify=False) as connection:
@@ -392,7 +392,7 @@ class TaskRunStore:
                 first = run_id not in self._progress_failing
                 self._progress_failing.add(run_id)
             if first:
-                LOGGER.warning("第 %s 轮的进度没写进 task_run，下一次进度再写：%s",
+                LOGGER.warning("Progress for run %s was not written to task_run; will write it with the next progress update: %s",
                                run_id, error)
             return False
         with self._lock:
@@ -409,7 +409,7 @@ class TaskRunStore:
         写锁拿不到时按 `finish_retry_delays` 重试，全部用完仍写不进去才抛。
         """
         if status not in TERMINAL_STATUSES:
-            raise ValueError(f"{status} 不是终态")
+            raise ValueError(f"{status} is not a final status")
         if not self.enabled or run_id is None:
             return False
         moment = stamp()
@@ -426,7 +426,7 @@ class TaskRunStore:
                 if not delays:
                     raise
                 delay = delays.pop(0)
-                LOGGER.warning("第 %s 轮结算没写进 task_run，%s 秒后重试：%s",
+                LOGGER.warning("Settlement of run %s was not written to task_run; retrying in %s s: %s",
                                run_id, delay, failure)
                 time.sleep(delay)
         with self._lock:
@@ -642,7 +642,7 @@ class TaskRunStore:
                     self.suspend(run.id, label='等待服务启动后继续')
                     continue
             if self.finish(run.id, "interrupted",
-                           error="服务重启，这一轮没有跑完"):
+                           error="Service restarted; this run did not finish"):
                 recovered.append(run.id)
         return recovered
 
@@ -694,7 +694,7 @@ class TaskRunStore:
             clauses.append("status IN (%s)" % ",".join(f"'{s}'" for s in TERMINAL_STATUSES))
         elif status:
             if status not in (*ACTIVE_STATUSES, *TERMINAL_STATUSES):
-                raise ValueError(f"未知的状态：{status}")
+                raise ValueError(f"Unknown status: {status}")
             clauses.append("status=?")
             values.append(status)
         if task_key:
@@ -800,7 +800,7 @@ def cli_run(task_key: str, db_path: Path | str | None, *, label: str = "",
             candidate.query(limit=1)
             store = candidate
         except sqlite3.OperationalError:
-            print(f"[task-run] {db_path} 没有 task_run 表，本趟不登记进任务中心")
+            print(f"[task-run] {db_path} has no task_run table; this run is not recorded in the task center")
     if store is None:
         yield TaskRunHandle(TaskRunStore(Path(db_path or ":memory:"), enabled=False), None)
         return

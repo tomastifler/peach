@@ -57,7 +57,7 @@ class HardwareTranscoder:
         self.enabled = enabled
         self.backend = os.environ.get("PEACH_TRANSCODE_BACKEND", "auto").strip().lower()
         if self.backend not in {"auto", "software", "nvenc", "vaapi"}:
-            raise ValueError("PEACH_TRANSCODE_BACKEND 必须为 auto、software、nvenc 或 vaapi")
+            raise ValueError("PEACH_TRANSCODE_BACKEND must be auto, software, nvenc or vaapi")
         self.device = os.environ.get("PEACH_VAAPI_DEVICE", "").strip()
         self._encoders: dict[Path, tuple[HardwareEncoder, ...]] = {}
         self._lock = threading.Lock()
@@ -87,7 +87,7 @@ class HardwareTranscoder:
                         if encoder.backend == "vaapi":
                             break
                 self._encoders[ffmpeg] = tuple(available)
-                logger.info("转码硬件后端：%s", ", ".join(
+                logger.info("Transcode hardware backend: %s", ", ".join(
                     item.backend + (f" ({item.device})" if item.device else "")
                     for item in available) or "software")
             return self._encoders[ffmpeg]
@@ -106,9 +106,9 @@ class HardwareTranscoder:
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
         except (OSError, subprocess.SubprocessError) as exc:
-            logger.warning("转码硬件探测失败 %s %s：%s", encoder.backend, encoder.device, exc)
+            logger.warning("Transcode hardware probe failed %s %s: %s", encoder.backend, encoder.device, exc)
             return False
         if result.returncode:
-            logger.warning("转码硬件探测失败 %s %s：%s", encoder.backend, encoder.device,
+            logger.warning("Transcode hardware probe failed %s %s: %s", encoder.backend, encoder.device,
                            result.stderr.decode("utf-8", "replace")[-1000:])
         return result.returncode == 0

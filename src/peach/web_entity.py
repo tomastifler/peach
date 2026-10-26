@@ -781,8 +781,8 @@ SUGGEST_WORK_CANDIDATES = SUGGEST_WORKS * 3
 #: 两侧各排一次的话，改了一侧就会出现「后端认为最该先看的组显示在第三位」。
 #: 作品垫底：它的值是番号或整句标题，扫读成本比一个人名高。
 SUGGEST_GROUPS = (
-    ("performer", "女优"), ("creator", "创作者"), ("studio", "厂牌"),
-    ("agency", "事务所"), ("series", "系列"), ("tag", "标签"), ("asset", "视频"),
+    ("performer", "Performer"), ("creator", "Creator"), ("studio", "Studio"),
+    ("agency", "Agency"), ("series", "Series"), ("tag", "Tag"), ("asset", "Video"),
 )
 
 #: 直接挂在作品上的实体种类。事务所不在内：`asset_entity` 里没有它的行，

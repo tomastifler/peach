@@ -56,7 +56,7 @@ class ResolvedFollowMedia:
 
     def __post_init__(self) -> None:
         if self.public_hosts and self.headers:
-            raise ValueError("带凭据的媒体不能放行任意公网主机")
+            raise ValueError("Media with credentials cannot allow arbitrary public hosts")
 
 
 #: 媒体代理允许的主机，投影自 follow_providers；不在表里的 provider 一律拒绝。
@@ -159,7 +159,7 @@ class FollowMediaResolver:
         """
         remaining = self.cooling(provider)
         if remaining:
-            raise FollowMediaUnavailable(f"{provider} 限流冷却中，{int(remaining) + 1} 秒后再试")
+            raise FollowMediaUnavailable(f"{provider} is rate-limit cooling down; try again in {int(remaining) + 1} s")
         response = self.transport(request, timeout, max_bytes)
         if response.status in self.REFUSED_STATUSES:
             headers = {key.lower(): value for key, value in response.headers.items()}
@@ -205,7 +205,7 @@ class FollowMediaResolver:
         missed = self._misses.get(item_id)
         if missed is not None:
             if missed > now:
-                raise FollowMediaUnavailable("Rule34Video 详情页刚刚未取得，稍后再试")
+                raise FollowMediaUnavailable("The Rule34Video detail page could not be fetched just now; try again later")
             del self._misses[item_id]
         return None
 
@@ -240,20 +240,20 @@ class FollowMediaResolver:
         """媒体清单里的第 N 张：按它自己的 `resource_provider` 挑白名单与请求头。"""
         index = 0 if media_index is None else media_index
         if index < 0 or index >= len(media_items):
-            raise FollowMediaUnavailable("媒体序号不存在")
+            raise FollowMediaUnavailable("Media index does not exist")
         media = media_items[index]
         if not isinstance(media, dict):
-            raise FollowMediaUnavailable("媒体条目格式不符")
+            raise FollowMediaUnavailable("Media entry format mismatch")
         url = str(media.get("url") or "")
         resource_provider = str(media.get("resource_provider") or "")
         if resource_provider == "gofile":
             if not _allowed_resource(url, ("gofile.io",)):
-                raise FollowMediaUnavailable("Gofile 返回了不受信任的媒体地址")
+                raise FollowMediaUnavailable("Gofile returned an untrusted media URL")
             loader = getattr(self, "_credential_loader", None)
             credential = loader("gofile") if loader else None
             token = str(credential.values.get("api_token") or "") if credential else ""
             if not token:
-                raise FollowMediaUnavailable("Gofile API token 未配置")
+                raise FollowMediaUnavailable("Gofile API token is not configured")
             return ResolvedFollowMedia(
                 url, item.url, {"Authorization": f"Bearer {token}"},
                 allowed_hosts=("gofile.io",))
@@ -261,17 +261,17 @@ class FollowMediaResolver:
             # 正文图在 downloads.fanbox.cc；封面在 pixiv.pximg.net——pixiv 官方
             # CDN，fanbox 封面都从它出，与 fanbox.cc 同属一个运营方。
             if not _allowed_resource(url, ("fanbox.cc", "pixiv.pximg.net")):
-                raise FollowMediaUnavailable("FANBOX 返回了不受信任的图片地址")
+                raise FollowMediaUnavailable("FANBOX returned an untrusted image URL")
             return ResolvedFollowMedia(url, item.url,
                                        allowed_hosts=("fanbox.cc", "pixiv.pximg.net"))
         if resource_provider == "f95zone":
             if not _allowed_resource(url, ("attachments.f95zone.to",)):
-                raise FollowMediaUnavailable("F95 返回了不受信任的图片地址")
+                raise FollowMediaUnavailable("F95 returned an untrusted image URL")
             loader = getattr(self, "_credential_loader", None)
             credential = loader("f95zone") if loader else None
             cookie = str(credential.values.get("cookie") or "") if credential else ""
             if item.metadata.get("media_needs_credential") and not cookie:
-                raise FollowMediaUnavailable("F95 附件需要登录会话")
+                raise FollowMediaUnavailable("F95 attachments require a signed-in session")
             return ResolvedFollowMedia(
                 url, item.url, {"Cookie": cookie} if cookie else None,
                 allowed_hosts=("attachments.f95zone.to",))
@@ -280,11 +280,11 @@ class FollowMediaResolver:
             # 归档站（kemono、coomer、pawchive）帖子的附件清单：媒体就在条目自己的
             # 站上，按该来源的主机白名单放行，与 `resolve` 的直链分支同一口径。
             if not _allowed(item.provider, url):
-                raise FollowMediaUnavailable("来源媒体地址不可用")
+                raise FollowMediaUnavailable("Source media URL is unavailable")
             return ResolvedFollowMedia(
                 url, item.url, allowed_hosts=tuple(_PROVIDER_HOSTS[item.provider]),
                 public_hosts=item.provider in _PUBLIC_MEDIA_PROVIDERS)
-        raise FollowMediaUnavailable("媒体来源不受支持")
+        raise FollowMediaUnavailable("Media source is not supported")
 
     def resolve(self, item: FollowItemRow, media_index: int | None = None,
                 height: int | None = None) -> ResolvedFollowMedia:
@@ -298,14 +298,14 @@ class FollowMediaResolver:
         if isinstance(media_items, list) and media_items:
             return self._resolve_listed(item, media_items, media_index)
         if item.metadata.get("media_needs_credential"):
-            raise FollowMediaUnavailable("媒体需要来源登录会话")
+            raise FollowMediaUnavailable("The media requires a signed-in source session")
         if item.provider != "rule34video":
             # 归档站的存量行按旧规则拼过 URL（少 /data 前缀、主机也不对），
             # 在这里修回可取的形式；`_allowed` 按后缀匹配，file./n1. 这些子域
             # 仍在原站的白名单内，安全边界没有放宽。
             media_url = archive_file_url(item.provider, str(item.media_url or ""))
             if not media_url or not _allowed(item.provider, media_url):
-                raise FollowMediaUnavailable("来源媒体地址不可用")
+                raise FollowMediaUnavailable("Source media URL is unavailable")
             return ResolvedFollowMedia(
                 media_url, item.url,
                 allowed_hosts=tuple(_PROVIDER_HOSTS.get(item.provider, ())),
@@ -316,7 +316,7 @@ class FollowMediaResolver:
         if cached:
             return _pick_quality(cached, height)
         if not item.url or not _allowed(item.provider, item.url):
-            raise FollowMediaUnavailable("Rule34Video 详情地址不可用")
+            raise FollowMediaUnavailable("Rule34Video detail URL is unavailable")
         with self._item_lock(item.id):
             # 排队期间前一个请求可能已经写好缓存或记下失败，先看一眼再决定回不回源。
             with self._lock:
@@ -337,7 +337,7 @@ class FollowMediaResolver:
             LOGGER.warning("rule34video detail page for follow item %s unavailable: HTTP %s",
                            item.id, response.status)
             self._remember_miss(item.id)
-            raise FollowMediaUnavailable("Rule34Video 详情页未取得")
+            raise FollowMediaUnavailable("Rule34Video detail page could not be fetched")
         text = response.body.decode("utf-8", errors="replace")
         found: list[str] = []
         for matched in _VIDEO_URL_RE.finditer(text):
@@ -347,7 +347,7 @@ class FollowMediaResolver:
         if not found:
             LOGGER.warning("rule34video detail page for follow item %s has no video url", item.id)
             self._remember_miss(item.id)
-            raise FollowMediaUnavailable("Rule34Video 正片地址未取得")
+            raise FollowMediaUnavailable("Rule34Video main video URL could not be fetched")
         # 高清优先：默认播最高一档，其余作为可选清晰度交给播放器。认不出分辨率的
         # 排在最后但不丢——签名 URL 每次都变，丢了就没有回退。
         ordered = sorted(found, key=_video_height, reverse=True)
@@ -419,14 +419,14 @@ def open_upstream(client: httpx.Client, method: str, target: ResolvedFollowMedia
     用处，只会把上游的状态与正文（可能含主机名、提示语）原样交给浏览器。
     """
     if allowed is None and not target.allowed_hosts and not target.public_hosts:
-        raise FollowProxyError("这条媒体没有可代理的主机白名单")
+        raise FollowProxyError("This media has no proxyable host allowlist")
     url = target.url
     headers = proxy_request_headers(target, incoming)
     response: httpx.Response | None = None
     for _ in range(MAX_PROXY_REDIRECTS + 1):
         if not (allowed(url) if allowed is not None else _hop_allowed(target, url)):
-            raise FollowProxyError("媒体地址不在可代理的主机范围内" if url == target.url
-                                   else "上游把媒体重定向到了不受信任的地址")
+            raise FollowProxyError("The media URL is not within the proxyable hosts" if url == target.url
+                                   else "Upstream redirected the media to an untrusted address")
         request = client.build_request(method, url, headers=headers)
         if strip_credentials:
             for name in ('cookie', 'authorization', 'proxy-authorization'):
@@ -439,9 +439,9 @@ def open_upstream(client: httpx.Client, method: str, target: ResolvedFollowMedia
         response = None
         url = urllib.parse.urljoin(url, location)
     if response is None:
-        raise FollowProxyError("上游重定向次数过多")
+        raise FollowProxyError("Too many upstream redirects")
     if not 200 <= response.status_code < 300 and response.status_code not in accepted_statuses:
         status = response.status_code
         response.close()
-        raise FollowProxyError(f"上游返回 HTTP {status}")
+        raise FollowProxyError(f"Upstream returned HTTP {status}")
     return response

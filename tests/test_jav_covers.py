@@ -203,7 +203,7 @@ class FetchRetryTests(unittest.TestCase):
             chosen, _size, _data = covers.best_cover(transport_for(pages), "FC2-PPV-123456", 0,
                                                      prior_candidates=(moving, still))
             self.assertEqual(chosen.url, still.url)
-            with self.assertRaisesRegex(covers.NotFound, "动图"):
+            with self.assertRaisesRegex(covers.NotFound, "animated images"):
                 covers.best_cover(transport_for(pages), "FC2-PPV-123456", 0, prior_candidates=(moving,))
 
     def test_transient_transport_errors_use_the_project_backoff_window(self):

@@ -34,7 +34,7 @@ from .followups import Followup, FollowupType, register
 from .metadata import extract_peach_fields
 
 TASK_KEY = "feed-scrape"
-TASK_LABEL = "取新作资料"
+TASK_LABEL = "Fetch new-release metadata"
 
 #: 一条资料够用就停。四个标量都拿到就不再问下一家——Feed 是后台跑的，
 #: 多问一家换来的是配额，而壳上的值本来就不是真相字段。
@@ -60,14 +60,14 @@ def parse_key(key: str) -> list[str]:
     prefix, _, body = str(key).partition(":")
     codes = [code for code in body.split(",") if code]
     if prefix != TASK_KEY or not codes:
-        raise ValueError(f"认不出这条取资料后继：{key}")
+        raise ValueError(f"Unrecognised metadata follow-up: {key}")
     return codes
 
 
 def _label(codes: list[str]) -> str:
     if len(codes) == 1:
-        return f"{TASK_LABEL}：{codes[0]}"
-    return f"{TASK_LABEL}：{codes[0]} 等 {len(codes)} 部"
+        return f"{TASK_LABEL}: {codes[0]}"
+    return f"{TASK_LABEL}: {codes[0]} and {len(codes) - 1} more"
 
 
 def plan(codes) -> list[Followup]:
@@ -155,7 +155,7 @@ def collect(provider, code: str) -> tuple[dict, str | None]:
         if all(name in fields for name in WANTED):
             break
     if not fields and cover is None:
-        raise ValueError(f"来源链 {'、'.join(chain)} 上都没有这个番号的资料")
+        raise ValueError(f"None of the sources in the chain {', '.join(chain)} has data for this code")
     return fields, cover
 
 
@@ -206,8 +206,8 @@ def record_cover_attempt(contract, code: str, *, ok: bool, error=None):
         from .javdb_public import PublicSourceUnavailable
         from .remote_media_cache import RemoteMediaUnavailable
         import httpx
-        reason = (re.sub(r'https?://\S+', '来源地址', str(error)) if isinstance(error, (Unavailable, PublicSourceUnavailable, RemoteMediaUnavailable))
-                  else '来源连接失败' if isinstance(error, httpx.TransportError) else '封面处理未完成')
+        reason = (re.sub(r'https?://\S+', 'source URL', str(error)) if isinstance(error, (Unavailable, PublicSourceUnavailable, RemoteMediaUnavailable))
+                  else 'source connection failed' if isinstance(error, httpx.TransportError) else 'cover processing did not finish')
         record.update(error_type=type(error).__name__, reason=reason[:300])
     atomic_write_text(path, json.dumps(record, ensure_ascii=False))
 
@@ -298,7 +298,7 @@ def run(contract, key: str, handle) -> dict:
         if code in completed:
             continue
         handle.progress(current=index, total=len(codes),
-                        label=f"{TASK_LABEL}：{code}", throttle=0)
+                        label=f"{TASK_LABEL}: {code}", throttle=0)
         with contract.database.read_connection() as connection:
             row = connection.execute(
                 "SELECT id,code,scraped_at,scrape_error FROM feed_discovery WHERE code=?",

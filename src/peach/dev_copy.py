@@ -16,7 +16,7 @@ def files(root: Path):
 
 def candidates(root: Path, original: str) -> list[dict]:
     if not isinstance(original, str) or not original.strip() or len(original) > 2000:
-        raise ValueError("请选择不超过 2000 字的静态文案")
+        raise ValueError("Choose static copy of at most 2000 characters")
     found = []
     for path in files(root):
         if not path.is_file() or ".test." in path.name:
@@ -38,16 +38,16 @@ def candidates(root: Path, original: str) -> list[dict]:
 
 def save(root: Path, body: dict) -> dict:
     if not isinstance(body, dict):
-        raise ValueError("修改内容必须是对象")
+        raise ValueError("The edit must be an object")
     original, replacement = body.get("original", ""), body.get("replacement", "")
     if not isinstance(replacement, str) or not replacement.strip() or len(replacement) > 2000:
-        raise ValueError("新文案不能为空，且不能超过 2000 字")
+        raise ValueError("The new copy cannot be empty or exceed 2000 characters")
     selected = body.get("candidate")
     if selected not in candidates(root, original):
-        raise ValueError("源文件已变化，请重新选择文字")
+        raise ValueError("The source file has changed; select the text again")
     path = (root / selected["file"]).resolve()
     if path not in {p.resolve() for p in files(root)}:
-        raise ValueError("不能修改这个文件")
+        raise ValueError("This file cannot be modified")
     source = path.read_text(encoding="utf-8")
     quote = selected["quote"]
     if quote:

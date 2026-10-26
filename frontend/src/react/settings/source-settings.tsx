@@ -16,12 +16,12 @@ export function SourceSettings({ data, receipt, panel }: ConfigurationGroupProps
   const credentials = useQuery({ queryKey: FOLLOW_CREDENTIALS_KEY,
     queryFn: ({ signal }) => fetchCredentials(signal), enabled: panel?.active !== false, refetchOnMount: 'always' });
   return <div {...groupRoot(panel)}>
-    <div><ButtonLink href="/sources" variant="secondary">采集来源与登录状态</ButtonLink></div>
+    <div><ButtonLink href="/sources" variant="secondary">Collection sources and sign-in status</ButtonLink></div>
     {credentials.data
       ? <Credentials data={credentials.data} readOnly={Boolean(data.ledger_read_only)} toast={receipt} embedded />
       : credentials.error
-        ? <Note tone="error" title="来源凭据未取得">{errorMessage(credentials.error)}</Note>
-        : panel?.active !== false ? <LoadingDots label="正在读取来源凭据" /> : null}
+        ? <Note tone="error" title="Source credentials unavailable">{errorMessage(credentials.error)}</Note>
+        : panel?.active !== false ? <LoadingDots label="Loading source credentials" /> : null}
     {data.entry_links ? <EntryLinksForm initial={data.entry_links} receipt={receipt} /> : null}
     <IndexerSettings receipt={receipt} />
     <FollowPreferenceRows receipt={receipt} />

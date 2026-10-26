@@ -318,10 +318,10 @@ it('配置页打开返回的那一刻，页签条已经在容器里，选中的�
     return { mode: 'off', status: 'idle' };
   } })));
   await act(async () => {
-    const open = { section: '网络与访问' };
+    const open = { section: 'Network & access' };
     expect(await r.openManagedRoute('/settings/library', open, { container: stats, isCurrent: () => true })).toBe(true);
     const tabs = [...stats.querySelectorAll('.ui-configpage > .ui-board-local-nav[role="tablist"] > [role="tab"]')];
-    expect(tabs.map((tab) => tab.textContent)).toEqual(['媒体库与入库', '来源与订阅', '网络与访问', '应用与维护', '系统诊断']);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(['Library & import', 'Sources & subscriptions', 'Network & access', 'App & maintenance', 'System diagnostics']);
     expect(tabs.map((tab) => tab.getAttribute('aria-selected'))).toEqual(['false', 'false', 'true', 'false', 'false']);
     const active = stats.querySelector('.ui-board-group-active');
     expect(active?.id).toBe(tabs[2].getAttribute('aria-controls'));
@@ -365,10 +365,10 @@ it('诊断页先选配置分栏再导航，作品与任务交给共享入口', a
   vi.mocked(actions.requestConfigurationSection).mockImplementation(section => { order.push(section) });
   const page = element<ConfigurationProps & { diagnostics: ReactElement<DiagnosticsProps> }>('/settings/diagnostics', r, {}, actions, go);
   const props = page.diagnostics.props;
-  props.configure('网络与访问');
+  props.configure('Network & access');
   props.openItem(12);
   props.navigate('/tasks');
-  expect(order).toEqual(['网络与访问', '/settings/network', '/tasks']);
+  expect(order).toEqual(['Network & access', '/settings/network', '/tasks']);
   expect(actions.openItem).toHaveBeenCalledWith(12);
 });
 
@@ -382,7 +382,7 @@ it('统计页：点标签交壳回目录；「添加媒体目录」先交页签�
   props.onTag('痴女');
   props.openMediaSettings();
   expect(vi.mocked(actions.openTag).mock.calls).toEqual([['痴女']]);
-  expect(order).toEqual(['section 媒体库与入库', 'go /settings/library']);
+  expect(order).toEqual(['section Library & import', 'go /settings/library']);
   expect([props.configurable, props.tagLabel('JK制服')]).toEqual([false, 'JK制服']);
 });
 
@@ -439,9 +439,9 @@ it('回执、打开作品与资料页都交回壳：都走过去时回执', asyn
   duplicates.toast('已删除', { undo });
   duplicates.toast('已保留');
   duplicates.failure('删除', 'boom');
-  const configuration = element<ConfigurationProps>('/settings/library', r, { section: '媒体库与入库' }, actions, vi.fn());
+  const configuration = element<ConfigurationProps>('/settings/library', r, { section: 'Library & import' }, actions, vi.fn());
   configuration.receipt('已保存配置');
-  expect([configuration.reopenTutorial, configuration.section]).toEqual([actions.reopenTutorial, '媒体库与入库']);
+  expect([configuration.reopenTutorial, configuration.section]).toEqual([actions.reopenTutorial, 'Library & import']);
   const review = element<ReviewProps>('/review', r,
     { category: '', readOnly: false, readOnlyMessage: '', writerUrl: '' }, actions, vi.fn());
   review.openEntity('performer', '某人');

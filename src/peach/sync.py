@@ -165,7 +165,7 @@ def device_id(state_dir: Path) -> str:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(generated, encoding="utf-8")
     except OSError:
-        LOGGER.warning("无法保存 device-id，本次运行使用临时标识")
+        LOGGER.warning("Cannot save device-id; using a temporary identifier for this run")
     return generated
 
 
@@ -284,17 +284,17 @@ COPY_ACTIONS = ("pull", "push", "local-ahead")
 def plan(local: Path, shared: Path) -> SyncPlan:
     """只读判定，不碰任何文件。"""
     if local == shared or local.resolve() == shared.resolve():
-        return SyncPlan("disabled", "本机直接使用共享副本，不需要复制")
+        return SyncPlan("disabled", "This machine uses the shared copy directly; no replication needed")
     if not root_online(shared.parent):
-        return SyncPlan("offline", "共享副本所在的盘不可达，本地照常读写")
+        return SyncPlan("offline", "The drive holding the shared copy is unreachable; local reads and writes continue as normal")
 
     local_exists, shared_exists = local.is_file(), shared.is_file()
     if not shared_exists and not local_exists:
-        return SyncPlan("missing", "两侧都没有数据库")
+        return SyncPlan("missing", "Neither side has a database")
     if not shared_exists:
-        return SyncPlan("push", "共享副本不存在，用本地副本播种")
+        return SyncPlan("push", "The shared copy does not exist; seeding it from the local copy")
     if not local_exists:
-        return SyncPlan("pull", "本地副本不存在，从共享副本拉取")
+        return SyncPlan("pull", "The local copy does not exist; pulling from the shared copy")
 
     local_marker, shared_marker = read_marker(local), read_marker(shared)
     dirty = local_dirty(local, local_marker)
@@ -304,29 +304,29 @@ def plan(local: Path, shared: Path) -> SyncPlan:
     if local_marker is None or shared_marker is None:
         # 没有血缘可比，两份都有数据。这种情况只能人来选，自动挑一边就是丢数据。
         return SyncPlan(
-            "conflict", "缺少同步标记，无法判断两份数据库的先后",
+            "conflict", "Sync marker missing; cannot tell which database is newer",
             local_generation, shared_generation,
         )
     if (local_generation == shared_generation
             and local_marker.device != shared_marker.device):
         return SyncPlan(
-            "conflict", "同一世代的写入端标记不一致",
+            "conflict", "Writer markers for the same generation do not match",
             local_generation, shared_generation,
         )
     if shared_generation > local_generation:
         if dirty:
             return SyncPlan(
                 "conflict",
-                f"共享副本已到第 {shared_generation} 代，本地仍是第 {local_generation} 代"
-                f"且有未回写的改动",
+                f"The shared copy is at generation {shared_generation}, the local copy is still at generation {local_generation}"
+                f" with unwritten changes",
                 local_generation, shared_generation,
             )
-        return SyncPlan("pull", "共享副本更新", local_generation, shared_generation)
+        return SyncPlan("pull", "Shared copy is newer", local_generation, shared_generation)
     if shared_generation < local_generation:
-        return SyncPlan("push", "本地副本更新", local_generation, shared_generation)
+        return SyncPlan("push", "Local copy is newer", local_generation, shared_generation)
     if dirty:
-        return SyncPlan("local-ahead", "本地有待回写的改动", local_generation, shared_generation)
-    return SyncPlan("in-sync", "两侧一致", local_generation, shared_generation)
+        return SyncPlan("local-ahead", "Local changes are waiting to be written back", local_generation, shared_generation)
+    return SyncPlan("in-sync", "Both sides match", local_generation, shared_generation)
 
 
 def resolve(local: Path, shared: Path, device: str) -> SyncPlan:
@@ -342,7 +342,7 @@ def resolve(local: Path, shared: Path, device: str) -> SyncPlan:
     if (decision.action in ("push", "local-ahead")
             and owner is not None and owner != device):
         return SyncPlan(
-            "conflict", f"当前写入端是 {owner}，本机不能推送",
+            "conflict", f"The current writer is {owner}; this machine cannot push",
             decision.local_generation, decision.shared_generation,
         )
     return decision
@@ -375,14 +375,14 @@ class LedgerSync:
         """409 时给界面的解释：发生了什么、影响、怎么恢复。"""
         if self.status == "conflict":
             return (
-                f"数据库处于冲突状态（{self.detail}），本机暂时只读。"
-                "请在托盘执行「同步数据库」；若提示仍冲突，需按日志人工处理。"
+                f"The database is in a conflict state ({self.detail}); this machine is read-only for now. "
+                "Run 'Sync database' from the tray; if it still reports a conflict, resolve it manually using the log."
             )
-        owner = writer_device(self.local, self.shared) or "另一台机器"
+        owner = writer_device(self.local, self.shared) or "another machine"
         return (
-            f"数据库由 {owner} 负责写入，本机当前只能浏览。"
-            "请改在该机器上操作，或在托盘执行「由本机接管数据库写入」"
-            "（要求两侧数据一致）后再试。"
+            f"The database is written by {owner}; this machine can only browse for now. "
+            "Work on that machine instead, or run 'Take over database writes on this machine' from the tray"
+            " (requires both sides to match) and try again."
         )
 
     # ── 单次动作 ────────────────────────────────────────────────────────────
@@ -416,11 +416,11 @@ class LedgerSync:
         if decision.conflict:
             self.status, self.detail = "conflict", decision.reason
         elif owner == self.device:
-            self.status, self.detail = "writer", f"本机是写入端；{decision.reason}"
+            self.status, self.detail = "writer", f"This machine is the writer; {decision.reason}"
         elif owner:
-            self.status, self.detail = "reader", f"写入端是 {owner}；{decision.reason}"
+            self.status, self.detail = "reader", f"The writer is {owner}; {decision.reason}"
         else:
-            self.status, self.detail = "conflict", "没有可验证的写入端"
+            self.status, self.detail = "conflict", "No verifiable writer"
         return decision
 
     def synchronize_now(self) -> SyncPlan:
@@ -439,7 +439,7 @@ class LedgerSync:
         decision = plan(self.local, self.shared)
         if decision.action != "in-sync":
             self.status, self.detail = "conflict", (
-                f"接管前必须两侧一致；当前是 {decision.action}：{decision.reason}"
+                f"Both sides must match before taking over; currently {decision.action}: {decision.reason}"
             )
             return SyncPlan(
                 "conflict", self.detail,
@@ -455,7 +455,7 @@ class LedgerSync:
                      with_digest=False)
         write_marker(self.local, Marker(generation, self.device, stamp, 0, 0))
         self.observe()
-        return SyncPlan("take-ownership", "本机已成为唯一写入端", generation, generation)
+        return SyncPlan("take-ownership", "This machine is now the only writer", generation, generation)
 
     def push_if_needed(self) -> str:
         """周期回写。别人抢先推过就转冲突，绝不覆盖。"""
@@ -468,7 +468,7 @@ class LedgerSync:
             return "pushed"
         if decision.action == "conflict":
             self.status, self.detail = "conflict", decision.reason
-            LOGGER.error("数据库同步冲突：%s", decision.reason)
+            LOGGER.error("Database sync conflict: %s", decision.reason)
             return "conflict"
         self.status = decision.action
         return decision.action

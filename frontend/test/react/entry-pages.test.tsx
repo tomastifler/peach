@@ -62,10 +62,10 @@ describe('登录页', () => {
 
 describe('错误页', () => {
   const cases = [
-    { status: '403', title: '这里不能打开', lede: '请在运行 Peach 的电脑上打开配置' },
-    { status: '404', title: '四〇四', lede: null },
-    { status: '409', title: '现在不能这样做', lede: '请先完成首次设置' },
-    { status: '500', title: '出了点问题', lede: '服务出错' },
+    { status: '403', title: "You can't open this here", lede: '请在运行 Peach 的电脑上打开配置' },
+    { status: '404', title: '404', lede: null },
+    { status: '409', title: "You can't do this right now", lede: '请先完成首次设置' },
+    { status: '500', title: 'Something went wrong', lede: '服务出错' },
   ];
   for (const { status, title, lede } of cases) {
     it(`${status} 的标题与说明`, async () => {
@@ -76,7 +76,7 @@ describe('错误页', () => {
       expect(host.textContent?.includes(detail)).toBe(lede !== null);
       const home = host.querySelector('a');
       expect(home?.getAttribute('href')).toBe('/');
-      expect(home?.textContent).toBe('返回首页');
+      expect(home?.textContent).toBe('Back to home');
     });
   }
 });

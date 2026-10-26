@@ -62,7 +62,7 @@ from .sources.base import challenge_page
 
 #: 这类后继在任务中心的身份，也是活动页上那一行的名字来源。
 TASK_KEY = "performer-alias"
-TASK_LABEL = "补女优别名"
+TASK_LABEL = "Performer alias backfill"
 
 #: 这条后继写下的别名都以它开头，后面接 `@<任务行 id>`；撤回按它认。
 SOURCE = "auto:performer-alias"
@@ -140,17 +140,17 @@ def clean(raw: str) -> str:
 def rejection(name: str) -> str:
     """这个写法不收的原因；收得下返回空串。"""
     if not name:
-        return "空名"
+        return "empty name"
     if _UNCERTAIN.search(name):
-        return "带不确定标记"
+        return "has uncertainty marker"
     if name_rank(name) >= 3:
-        return "罗马字写法"
+        return "romanized spelling"
     if is_short_single_name(name):
-        return "短单名，会命中别人"
+        return "short single name; would match other people"
     if is_planning_alias(name):
-        return "一次性称呼"
+        return "one-off nickname"
     if is_descriptive(name):
-        return "描述性称呼"
+        return "descriptive nickname"
     return ""
 
 
@@ -162,11 +162,11 @@ def latin_rejection(name: str, primary: str) -> str:
     罗马字的名与姓之间就是空格，不适用；描述性称呼照旧不收。
     """
     if len(name.split()) < 2 and match_key(name) != match_key(primary):
-        return "罗马字单名，会命中别人"
+        return "romanized single name; would match other people"
     if len(match_key(name)) < 4:
-        return "短单名，会命中别人"
+        return "short single name; would match other people"
     if is_descriptive(name):
-        return "描述性称呼"
+        return "descriptive nickname"
     return ""
 
 
@@ -186,7 +186,7 @@ def parse_key(key: str) -> int:
     """把后继 key 拆回女优 id。形状不对就抛——那说明排队的行不是这个版本写的。"""
     prefix, _, raw = str(key).partition(":")
     if prefix != TASK_KEY or not raw.isdigit():
-        raise ValueError(f"认不出这条补别名后继：{key}")
+        raise ValueError(f"Unrecognized alias backfill follow-up: {key}")
     return int(raw)
 
 
@@ -347,9 +347,9 @@ class MinnanoPages:
         except (OSError, ValueError, KeyError, TypeError):
             pass
         if paused_until(self.cooldown_root, self.source):
-            raise Blocked("来源正在冷却")
+            raise Blocked("Source is cooling down")
         if self.requests >= self.max_requests:
-            raise Unavailable("这一条的请求数用完了")
+            raise Unavailable("Request budget for this item is used up")
         self.limiter.wait(url)
         self.requests += 1
         try:
@@ -358,14 +358,14 @@ class MinnanoPages:
         except SourcePaused as error:
             raise Blocked(str(error)) from None
         except Exception as error:  # noqa: BLE001 - 网络层失败都是「这一页没取到」
-            raise Unavailable(f"网络请求失败：{type(error).__name__}") from None
+            raise Unavailable(f"Network request failed: {type(error).__name__}") from None
         body = response.body.decode("utf-8", "replace")
         if response.status == 429:
             self._hold(refused=False)
-            raise Blocked("来源限流（429）")
+            raise Blocked("Source rate-limited (429)")
         if response.status == 403 or challenge_page(body):
             self._hold(refused=True)
-            raise Blocked("来源拒绝访问或要求机器人验证")
+            raise Blocked("Source denied access or requires bot verification")
         if response.status != 200:
             raise Unavailable(f"HTTP {response.status}")
         final_url = response.url or url
@@ -423,10 +423,10 @@ class WikiSitePages:
         from .scraping_access import pause_source, paused_until
 
         if paused_until(self.cooldown_root, self.site):
-            raise Blocked("来源正在冷却")
+            raise Blocked("Source is cooling down")
         missing = self._missing()
         if time.time() - float(missing.get(url, 0)) < self.MISSING_TTL:
-            raise Missing("站上没有这一页")
+            raise Missing("Page does not exist on the site")
         try:
             return self.pages.get(url)
         except MetadataProviderError as error:
@@ -439,7 +439,7 @@ class WikiSitePages:
                 raise Unavailable(str(error)) from None
             limited = error.status_code == 429
             pause_source(self.cooldown_root, self.site, refused=not limited)
-            raise Blocked("来源限流（429）" if limited else "来源拒绝访问或要求机器人验证") from None
+            raise Blocked("Source rate-limited (429)" if limited else "Source denied access or requires bot verification") from None
 
     def close(self) -> None:
         self.pages.close()
@@ -482,9 +482,9 @@ class Fc2cmadbPages:
         from .scraping_access import SourcePaused, pause_source, paused_until
 
         if paused_until(self.cooldown_root, FC2CMADB):
-            raise Blocked("来源正在冷却")
+            raise Blocked("Source is cooling down")
         if self.requests >= self.max_requests:
-            raise Unavailable("这一条的请求数用完了")
+            raise Unavailable("Request budget for this item is used up")
         self.limiter.wait(url)
         self.requests += 1
         try:
@@ -492,14 +492,14 @@ class Fc2cmadbPages:
         except SourcePaused as error:
             raise Blocked(str(error)) from None
         except Exception as error:  # noqa: BLE001 - 网络层失败都是「这一页没取到」
-            raise Unavailable(f"网络请求失败：{type(error).__name__}") from None
+            raise Unavailable(f"Network request failed: {type(error).__name__}") from None
         text = response.body[:4096].decode("utf-8", "replace")
         if response.status == 429:
             pause_source(self.cooldown_root, FC2CMADB)
-            raise Blocked("来源限流（429）")
+            raise Blocked("Source rate-limited (429)")
         if response.status == 403 or challenge_page(text):
             pause_source(self.cooldown_root, FC2CMADB, refused=True)
-            raise Blocked("来源拒绝访问或要求机器人验证")
+            raise Blocked("Source denied access or requires bot verification")
         if response.status == 404:
             return None
         if response.status != 200:
@@ -561,8 +561,8 @@ def minnano_profile_pages(pages: MinnanoPages, keys: list[str],
         if len(hits) == 1:
             profiles = [pages.get(f"{minnano_av.SITE}actress{hits.pop()}.html")]
             break
-        notes.append(f"「{key}」{'对上多个人' if hits else '检索未命中'}")
-    return profiles, "；".join(notes)
+        notes.append(f"'{key}' {'matches multiple people' if hits else 'search found nothing'}")
+    return profiles, "; ".join(notes)
 
 
 def search_order(hits: list[tuple[str, str, str]]) -> list[str]:
@@ -621,7 +621,7 @@ def av_neme_page(pages, keys: list[str], mine: set[str]) -> tuple[list, str]:
         try:
             encoded = quote(key.encode("euc_jp"))
         except UnicodeEncodeError:
-            notes.append(f"「{key}」写不成站上的编码")
+            notes.append(f"'{key}' cannot be encoded for the site")
             continue
         named = _page_named(pages, key, mine)
         if named is not None:
@@ -636,10 +636,10 @@ def av_neme_page(pages, keys: list[str], mine: set[str]) -> tuple[list, str]:
                 matched.append((url, names))
         if len(matched) == 1:
             return matched, ""
-        notes.append(f"「{key}」{'有 %d 张人物页都列着' % len(matched) if matched else '没有人物页列着'}")
+        notes.append(f"'{key}' {'is listed on %d profile pages' % len(matched) if matched else 'is not listed on any profile page'}")
         if matched:
             break
-    return [], "；".join(notes)
+    return [], "; ".join(notes)
 
 
 def fc2cmadb_page(pages: Fc2cmadbPages, codes: list[str], mine: set[str]) -> tuple[list, str]:
@@ -672,11 +672,11 @@ def fc2cmadb_page(pages: Fc2cmadbPages, codes: list[str], mine: set[str]) -> tup
         if matched:
             # 一部就够：同一个人在站上只有一页，再翻别的作品只是多花两次请求。
             break
-        shown = "、".join(str(one.get("japanese_name") or "") for one in listed)
-        notes.append(f"{code} 的女优栏{'是 ' + shown if shown else '是空的'}")
+        shown = ", ".join(str(one.get("japanese_name") or "") for one in listed)
+        notes.append(f"{code} performer field {'is ' + shown if shown else 'is empty'}")
     if len(found) > 1:
-        return [], "女优栏里不止一位列着她：" + "、".join(url for url, _name in found.values())
-    return [(url, [name]) for url, name in found.values()], "；".join(notes)
+        return [], "More than one person is listed in the performer field: " + ", ".join(url for url, _name in found.values())
+    return [(url, [name]) for url, name in found.values()], "; ".join(notes)
 
 
 # -- 落库 --------------------------------------------------------------------
@@ -707,29 +707,29 @@ def land(connection: sqlite3.Connection, entity_id: int, expected_name: str, sit
             "page": url, "batch": ""}
     current = _names(connection, entity_id, allow_creator=allow_creator)
     if current is None:
-        return [{**base, "alias": name, "action": GONE, "detail": "实体不在或不是女优"}
+        return [{**base, "alias": name, "action": GONE, "detail": "Entity is missing or is not a performer"}
                 for name in names]
     if normalize_entity_name(current[0]) != normalize_entity_name(expected_name):
         return [{**base, "alias": name, "action": STALE,
-                 "detail": f"数据库里这条实体现在叫 {current[0]}"} for name in names]
+                 "detail": f"The entity in the database is now named {current[0]}"} for name in names]
     have = {normalize_entity_name(name) for name in [current[0], *current[1]]}
     owners, rows = _owners(connection, allow_creator=allow_creator), []
     for name in dict.fromkeys(names):
         reason = rejection(name)
-        if allow_latin and reason == "罗马字写法":
+        if allow_latin and reason == "romanized spelling":
             reason = latin_rejection(name, names[0])
         others = sorted(owners.get(match_key(name), set()) - {entity_id})
         if reason:
             rows.append({**base, "alias": name, "action": SKIP, "detail": reason})
         elif normalize_entity_name(name) in have:
-            rows.append({**base, "alias": name, "action": HAVE, "detail": "已经有这个写法"})
+            rows.append({**base, "alias": name, "action": HAVE, "detail": "This spelling already exists"})
         elif others:
             owner = connection.execute("SELECT canonical_name FROM entity WHERE id=?",
                                        (others[0],)).fetchone()
             # `owner` 与 `listed` 给合并判定看，不进复核产物：占用者恰好一条才算得清是哪一对，
             # `listed` 为 0 说明这个写法是页上的主名。
             rows.append({**base, "alias": name, "action": TAKEN,
-                         "detail": f"{owner[0] if owner else ''}（实体 {others[0]}）已经用着这个写法",
+                         "detail": f"{owner[0] if owner else ''}(entity {others[0]}) already uses this spelling",
                          "owner": others[0] if len(others) == 1 else 0,
                          "listed": names.index(name)})
         else:
@@ -740,7 +740,7 @@ def land(connection: sqlite3.Connection, entity_id: int, expected_name: str, sit
             have.add(normalize_entity_name(name))
             owners.setdefault(match_key(name), set()).add(entity_id)
             rows.append({**base, "alias": name, "action": WRITE, "batch": batch,
-                         "detail": f"{site} 页面列着数据库里她的名字"})
+                         "detail": f"{site} page lists her name from the database"})
     return rows
 
 
@@ -799,13 +799,13 @@ def merge_one_person(contract, entity_id: int, rows: list[dict], batch: str) -> 
         broken = [row for row in connection.execute("PRAGMA foreign_key_check")
                   if tuple(row) not in existing]
         if broken:
-            raise RuntimeError(f"合并实体 {source_id} 进 {target_id} 后外键校验有 {len(broken)} 条违规")
+            raise RuntimeError(f"After merging entity {source_id} into {target_id}, the foreign key check found {len(broken)} violations")
     contract.cache_bust()
-    sites = "、".join(dict.fromkeys(row["site"] for row in taken))
+    sites = ", ".join(dict.fromkeys(row["site"] for row in taken))
     for row in taken:
         row.update(action=MERGE, batch=batch,
-                   detail=f"{sites} 名字栏把两条实体列成同一个人：{absorbed}（实体 {source_id}）"
-                          f"并入 {kept}（实体 {target_id}），迁 {moved['assets']} 部作品")
+                   detail=f"{sites} name field lists two entities as the same person: {absorbed} (entity {source_id})"
+                          f"merged into {kept} (entity {target_id}), moved {moved['assets']} works")
     return {"into": target_id, "from": source_id, "kept": kept, "absorbed": absorbed,
             "assets": moved["assets"], "backup": backup.name}
 
@@ -832,7 +832,7 @@ def _run(contract, key: str, handle) -> dict:
         refs = _refs(connection, entity_id)
         codes = fc2_codes(connection, entity_id)
     if names is None:
-        return {"outcome": "档案已不存在"}
+        return {"outcome": "Record no longer exists"}
     canonical = names[0]
     if handle is not None:
         handle.progress(label=_label(canonical), throttle=0)
@@ -854,15 +854,15 @@ def _run(contract, key: str, handle) -> dict:
         _record_review(contract.candidate_root, entity_id, rows)
     taken = sum(1 for row in rows if row["action"] == TAKEN)
     if merged:
-        outcome = f"{merged['absorbed']} 并入 {merged['kept']}"
+        outcome = f"{merged['absorbed']} merged into {merged['kept']}"
     elif written:
-        outcome = f"登记 {len(written)} 个别名"
+        outcome = f"Registered {len(written)} aliases"
     elif rows:
-        outcome = "没有新写法"
+        outcome = "No new spellings"
     elif any(report.startswith("未取得") for report in reports.values()):
         outcome = "未取得"
     else:
-        outcome = f"{'三' if codes else '两'}站都没对上她"
+        outcome = f"{'Three' if codes else 'Two'} sites all failed to match her"
     summary = {"name": canonical, "outcome": outcome, "sites": reports}
     if written:
         summary["aliases"] = written[:12]
@@ -881,22 +881,22 @@ def _visit_fc2cmadb(contract, sites: dict, entity_id: int, canonical: str, codes
     with contract.database.read_connection() as connection:
         current = _names(connection, entity_id)
     if current is None:
-        reports[FC2CMADB] = "未命中：档案已不存在"
+        reports[FC2CMADB] = "未命中：Record no longer exists"
         return []
     mine = {match_key(name) for name in [current[0], *current[1]] if name}
     try:
         pages, note = fc2cmadb_page(sites[FC2CMADB], codes, mine)
     except (Blocked, Unavailable) as error:
-        reports[FC2CMADB] = f"未取得：{error}"
+        reports[FC2CMADB] = f"未取得: {error}"
         return []
     if not pages:
-        reports[FC2CMADB] = f"未命中：{note or '女优栏里没有她'}"
+        reports[FC2CMADB] = f"未命中: {note or 'not in the performer field'}"
         return []
     rows: list[dict] = []
     for url, found in pages:
         with contract.database.write_transaction() as connection:
             rows.extend(land(connection, entity_id, canonical, FC2CMADB, url, found, batch))
-    reports[FC2CMADB] = "命中 " + "、".join(url for url, _found in pages)
+    reports[FC2CMADB] = "命中 " + ", ".join(url for url, _found in pages)
     return rows
 
 
@@ -919,13 +919,13 @@ def _visit(contract, sites: dict, entity_id: int, canonical: str, refs: list[str
             with contract.database.read_connection() as connection:
                 current = _names(connection, entity_id)
             if current is None:
-                reports[site] = "未命中：档案已不存在"
+                reports[site] = "未命中：Record no longer exists"
                 continue
             mine = {match_key(name) for name in [current[0], *current[1]] if not rejection(name)}
             keys = [name for name in search_keys(*current) if name not in tried[site]][:MAX_KEYS]
             entry_refs = refs if site == MINNANO and not turn else []
             if not keys and not entry_refs:
-                reports.setdefault(site, "未命中：没有能拿去检索的名字")
+                reports.setdefault(site, "未命中：No name available to search")
                 continue
             if not entry_refs:
                 tried[site].update(keys)
@@ -935,12 +935,12 @@ def _visit(contract, sites: dict, entity_id: int, canonical: str, refs: list[str
                 else:
                     pages, note = av_neme_page(sites[site], keys, mine)
             except (Blocked, Unavailable) as error:
-                reports[site] = f"未取得：{error}"
+                reports[site] = f"未取得: {error}"
                 continue
             pages = [(url, found) for url, found in pages
                      if url not in visited and _anchored(found, mine)]
             if not pages:
-                reports[site] = f"未命中：{note or '页面上没有数据库里她的名字'}"
+                reports[site] = f"未命中: {note or 'the database name is not on the page'}"
                 continue
             for url, found in pages:
                 visited.add(url)
@@ -948,7 +948,7 @@ def _visit(contract, sites: dict, entity_id: int, canonical: str, refs: list[str
                     landed = land(connection, entity_id, canonical, site, url, found, batch)
                 rows.extend(landed)
                 wrote = wrote or any(row["action"] == WRITE for row in landed)
-            reports[site] = "命中 " + "、".join(url for url, _found in pages)
+            reports[site] = "命中 " + ", ".join(url for url, _found in pages)
         if not wrote:
             break
     return reports, rows

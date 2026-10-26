@@ -178,7 +178,7 @@ class CreatorIndex:
                                     max_bytes=48 * 1024 * 1024)
         payload = connector.fetch_json(f"https://{connector.host}/api/v1/creators")
         if not isinstance(payload, list):
-            raise FollowSourceError(f"{provider} 的创作者清单格式不符")
+            raise FollowSourceError(f"{provider} creator list format mismatch")
         rows = [
             {"id": str(row.get("id") or ""), "name": str(row.get("name") or ""),
              "service": str(row.get("service") or "")}
@@ -213,10 +213,10 @@ def _kemono_candidates(provider: str, term: str, index: CreatorIndex) -> list[Ca
                                       len(row["name"]), row["name"].casefold()))
     host = KemonoConnector.HOSTS[provider]
     picked, seen = [], set()
-    for row, why in ([(r, "站内 id 精确匹配") for r in exact_id]
-                     + [(r, "创作者名精确匹配") for r in by_name]
-                     + [(r, "创作者名以该词开头" if r["name"].casefold().startswith(folded)
-                         else "创作者名包含该词") for r in partial]):
+    for row, why in ([(r, "Exact on-site id match") for r in exact_id]
+                     + [(r, "Exact creator name match") for r in by_name]
+                     + [(r, "Creator name starts with the term" if r["name"].casefold().startswith(folded)
+                         else "Creator name contains the term") for r in partial]):
         key = (row["service"], row["id"])
         if key in seen:
             continue
@@ -244,7 +244,7 @@ def _fanbox_candidates(archive_candidates: list[Candidate], transport) -> list[C
         profile = resolve_official_profile("fanbox", user_id, transport=transport)
         candidates.append(Candidate(
             "fanbox", profile.creator_id, profile.url,
-            profile.name, "work", "FANBOX 官方资料与归档身份一致", aliases,
+            profile.name, "work", "FANBOX official profile matches the archived identity", aliases,
         ))
     return candidates
 
@@ -276,7 +276,7 @@ def _rule34video_candidates(term: str, transport) -> list[Candidate]:
     for slug in rule34video_slugs(term):
         url = f"https://rule34video.com/models/{slug}/"
         if connector.probe(url, headers={"Accept": "text/html"}).status == 200:
-            return [Candidate("rule34video", slug, url, term.strip(), "work", "作者页存在")]
+            return [Candidate("rule34video", slug, url, term.strip(), "work", "Creator page exists")]
     return []
 
 
@@ -333,15 +333,15 @@ def _rule34xxx_candidates(term: str, transport, credential: Credential | None) -
     picked: list[Candidate] = []
     for tag, count, is_exact in hits:
         if count is None:
-            evidence = f"站内标签 {tag} 下有作品"
+            evidence = f"Works exist under on-site tag {tag}"
         elif is_exact:
-            evidence = f"站内标签 {tag} 下有 {count} 件作品" if count else f"站内存在标签 {tag}"
+            evidence = f"{count} works under on-site tag {tag}" if count else f"On-site tag {tag} exists"
         else:
-            evidence = (f"站内标签以该词开头：{tag} 下有 {count} 件作品" if count
-                        else f"站内存在以该词开头的标签 {tag}")
+            evidence = (f"On-site tag starts with the term: {count} works under {tag}" if count
+                        else f"On-site tag starting with the term exists: {tag}")
         kind = types.get(tag, "")
         if kind and kind != "general":
-            evidence += f"，站上归为{TAG_TYPE_LABELS.get(kind, kind)}"
+            evidence += f", classified on the site as {TAG_TYPE_LABELS.get(kind, kind)}"
         picked.append(Candidate("rule34xxx", tag, _rule34xxx_tag_url(tag),
                                 tag.replace("_", " "), "work", evidence))
     return picked
@@ -392,10 +392,10 @@ def _f95_external_search(term: str) -> ExternalSearch:
     query = f"{term} f95zone"
     return ExternalSearch(
         provider="f95zone",
-        label="用 Google 继续查找 F95zone",
+        label="Keep searching F95zone with Google",
         query=query,
         url="https://www.google.com/search?" + urllib.parse.urlencode({"q": query}),
-        evidence="F95zone 站内索引未命中，请核对搜索结果里的真实线程链接",
+        evidence="No hit in the F95zone on-site index; check the actual thread links in the search results",
     )
 
 
@@ -409,17 +409,17 @@ def _forum_candidates(provider: str, host: str, term: str, connector) -> list[Ca
     picked: list[Candidate] = []
     seen: set[str] = set()
     for query in forum_queries(term):
-        how = "按标题开头命中" if query.endswith("*") else "按标题命中"
+        how = "title-prefix hit" if query.endswith("*") else "title hit"
         for row in connector.search_threads(query):
             thread = str(row.get("thread_id") or "")
             if not thread or thread in seen:
                 continue
             seen.add(thread)
-            labels = "、".join(str(label) for label in row.get("labels") or () if label)
+            labels = ", ".join(str(label) for label in row.get("labels") or () if label)
             picked.append(Candidate(
                 provider, thread, f"https://{host}/threads/{thread}/",
-                str(row.get("title") or f"线程 {thread}"), "release",
-                f"站内搜索{how}「{query}」" + (f"，版块标签 {labels}" if labels else "")))
+                str(row.get("title") or f"Thread {thread}"), "release",
+                f"On-site search {how} \"{query}\"" + (f", forum tags {labels}" if labels else "")))
             if len(picked) >= MAX_CANDIDATES_PER_SOURCE:
                 return picked
         if picked:
@@ -451,7 +451,7 @@ def _f95_candidates(term: str, transport,
         if response.status == 200:
             picked.append(Candidate("f95zone", term,
                                     f"https://f95zone.to/threads/{term}/",
-                                    f"线程 {term}", "release", "线程存在"))
+                                    f"Thread {term}", "release", "Thread exists"))
         return picked
     seen: set[str] = set()
     for query in search_variants(term):
@@ -464,8 +464,8 @@ def _f95_candidates(term: str, transport,
                 version = str(row.get("version") or "").strip()
                 picked.append(Candidate(
                     "f95zone", thread, f"https://f95zone.to/threads/{thread}/",
-                    str(row.get("title") or f"线程 {thread}"), "release",
-                    f"{category} 分类命中" + (f"，当前版本 {version}" if version else "")))
+                    str(row.get("title") or f"Thread {thread}"), "release",
+                    f"{category} category hit" + (f", current version {version}" if version else "")))
                 if len(picked) >= MAX_CANDIDATES_PER_SOURCE:
                     return picked
         if picked:
@@ -559,11 +559,11 @@ def discover(term: str, *, secrets_root: Path, state_root: Path,
     """
     text = (term or "").strip()
     if not text:
-        raise FollowSourceError("请先输入要查找的名字或 id")
+        raise FollowSourceError("Enter a name or id to look up first")
     if len(text) > MAX_TERM_LENGTH:
-        raise FollowSourceError(f"名字或 id 最长 {MAX_TERM_LENGTH} 个字符")
+        raise FollowSourceError(f"A name or id can be at most {MAX_TERM_LENGTH} characters")
     if _TERM_FORBIDDEN_RE.search(text):
-        raise FollowSourceError("名字或 id 里不能包含 / \\ ? # & < > 引号或控制字符")
+        raise FollowSourceError("A name or id cannot contain / \\ ? # & < > quotes or control characters")
 
     credentials = credential_store_for(secrets_root, shared_root=shared_root)
     index = CreatorIndex(state_root, transport=transport)
@@ -591,7 +591,7 @@ def discover(term: str, *, secrets_root: Path, state_root: Path,
                 continue
             known = {(row.provider, canonical_source_ref(row.provider, row.ref)) for row in found}
             found.extend(
-                replace(hit, evidence=f"F95 首楼名片上的手柄 {handle}：{hit.evidence}",
+                replace(hit, evidence=f"Handle {handle} on the F95 first-post card: {hit.evidence}",
                         aliases=(handle,))
                 for hit in hits
                 if (hit.provider, canonical_source_ref(hit.provider, hit.ref)) not in known)
@@ -640,8 +640,8 @@ TAG_TYPE_WORKERS = 8
 #: 问不出来的也记（空串），免得每敲一下都为同一个名字再赌一次网络。
 _TAG_TYPES: dict[str, str] = {}
 #: 分类给人看的说法。站方的 `general` 落回「标签」——那一档就是「不是人」。
-TAG_TYPE_LABELS = {"artist": "作者", "character": "角色", "copyright": "作品",
-                   "metadata": "元数据", "general": "标签"}
+TAG_TYPE_LABELS = {"artist": "artist", "character": "character", "copyright": "copyright",
+                   "metadata": "metadata", "general": "tag"}
 
 
 def no_backoff(_seconds: float) -> None:

@@ -55,25 +55,25 @@ class VersionSnapshot:
 
     @property
     def build_label(self) -> str:
-        dirty = " · 有未提交修改" if self.dirty else ""
+        dirty = " · uncommitted changes" if self.dirty else ""
         base = f"{self.branch}@{self.commit}{dirty}"
         if not self.build_stale:
             return base
         if self.build_commit is None:
-            return f"{base} · 托盘构建身份未取得"
+            return f"{base} · tray build identity not obtained"
         if self.build_behind is not None and self.build_behind > 0:
-            return f"{base} · 托盘构建 {self.build_commit[:8]}，落后 {self.build_behind} 个提交"
-        return f"{base} · 托盘构建 {self.build_commit[:8]} 不在本检出历史里"
+            return f"{base} · tray build {self.build_commit[:8]}, {self.build_behind} commits behind"
+        return f"{base} · tray build {self.build_commit[:8]} is not in this checkout's history"
 
     @property
     def channel_label(self) -> str:
         if self.commit == "release":
-            return "更新通道 · GitHub 测试版"
+            return "Update channel · GitHub beta"
         if not self.remote_configured:
-            return "本地开发版 · 未配置更新源"
+            return "Local dev build · no update source configured"
         if not self.upstream:
-            return "已配置更新源 · 未跟踪分支"
-        return f"更新通道 · {self.upstream}"
+            return "Update source configured · branch not tracked"
+        return f"Update channel · {self.upstream}"
 
 
 @dataclass(frozen=True)
@@ -124,7 +124,7 @@ class VersionManager:
         package_version = __version__
         from .distribution import standalone
         if standalone():
-            return VersionSnapshot(package_version, "测试包", "release", False, False, None)
+            return VersionSnapshot(package_version, "Beta package", "release", False, False, None)
         commit = self._text("rev-parse", "--short=8", "HEAD") or "unknown"
         branch = self._text("branch", "--show-current") or "detached"
         dirty = bool(self._text("status", "--porcelain"))
@@ -180,40 +180,40 @@ class VersionManager:
         if standalone():
             from .release_updates import check
             release = check()
-            latest = f"最新测试版：{release['latest_version']}。" if release['latest_version'] else ""
-            return UpdateResult(release["state"], f"当前版本：{before.package_version}。{latest}{release['message']}", before)
+            latest = f"Latest beta: {release['latest_version']}. " if release['latest_version'] else ""
+            return UpdateResult(release["state"], f"Current version: {before.package_version}. {latest}{release['message']}", before)
         if not before.remote_configured:
             return UpdateResult(
                 "unconfigured",
-                f"Peach {before.package_version}（{before.build_label}）\n未配置更新源；当前为本地开发版。",
+                f"Peach {before.package_version} ({before.build_label})\nNo update source configured; this is a local dev build.",
                 before,
             )
         fetched = self._git("fetch", "--quiet", "--prune", "origin", timeout=30)
         if fetched.returncode != 0:
-            return UpdateResult("error", "无法连接更新源；本地版本未改变。", before)
+            return UpdateResult("error", "Cannot connect to the update source; the local version is unchanged.", before)
         current = self.inspect()
         if not current.upstream:
             return UpdateResult(
                 "untracked",
-                "更新源已连接，但当前分支没有对应的跟踪分支。",
+                "The update source is connected, but the current branch has no tracking branch.",
                 current,
             )
         counts = self._text("rev-list", "--left-right", "--count", f"HEAD...{current.upstream}").split()
         if len(counts) != 2 or not all(value.isdigit() for value in counts):
-            return UpdateResult("error", "更新源已连接，但无法比较版本。", current)
+            return UpdateResult("error", "The update source is connected, but versions cannot be compared.", current)
         ahead, behind = map(int, counts)
         if behind and ahead:
             state = "diverged"
-            message = f"本地领先 {ahead} 个提交，远端领先 {behind} 个提交；需要人工合并。"
+            message = f"Local is {ahead} commits ahead and remote is {behind} commits ahead; manual merge required."
         elif behind:
             state = "available"
-            message = f"发现 {behind} 个新提交。为保护并行工作树，只检查、不自动安装。"
+            message = f"Found {behind} new commits. To protect parallel worktrees, this only checks and does not install automatically."
         elif ahead:
             state = "ahead"
-            message = f"当前已比更新通道领先 {ahead} 个提交。"
+            message = f"The current checkout is {ahead} commits ahead of the update channel."
         else:
             state = "current"
-            message = f"Peach {current.package_version} 已是当前更新通道的最新版本。"
+            message = f"Peach {current.package_version} is the latest version on the current update channel."
         return UpdateResult(state, message, current, ahead=ahead, behind=behind)
 
     def update(self) -> UpdateResult:
@@ -237,8 +237,8 @@ class VersionManager:
         if snapshot.dirty:
             return UpdateResult(
                 "blocked",
-                f"更新通道有 {checked.behind} 个新提交，但本地检出有未提交修改；"
-                "先处理掉再同步。",
+                f"The update channel has {checked.behind} new commits, but the local checkout has uncommitted changes; "
+                "deal with them first, then sync.",
                 snapshot, behind=checked.behind,
             )
         before = self._text("rev-parse", "HEAD")
@@ -246,7 +246,7 @@ class VersionManager:
         if merged.returncode != 0:
             return UpdateResult(
                 "blocked",
-                f"无法快进到 {snapshot.upstream}；本地检出未改变，需要人工处理。",
+                f"Cannot fast-forward to {snapshot.upstream}; the local checkout is unchanged and needs manual handling.",
                 snapshot, behind=checked.behind,
             )
         current = self.inspect()
@@ -256,6 +256,6 @@ class VersionManager:
         )
         return UpdateResult(
             "updated",
-            f"已同步 {checked.behind} 个提交：{before[:8]} → {current.commit}。",
+            f"Synced {checked.behind} commits: {before[:8]} → {current.commit}.",
             current, behind=checked.behind, changed_paths=changed,
         )

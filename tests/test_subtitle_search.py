@@ -91,11 +91,11 @@ class SubtitleSearchTests(unittest.TestCase):
 
     def test_missing_chinese_does_not_fall_back_to_other_languages(self):
         with self.client(lambda request: httpx.Response(200, text='<a href="/subs/42/test-en.srt">English</a>')):
-            with self.assertRaisesRegex(source.SubtitleSearchError, '不存在'):
+            with self.assertRaisesRegex(source.SubtitleSearchError, 'does not exist'):
                 source.load(source._id('/subs/42/ABP-758.html'), 0)
 
     def test_provider_errors_and_changed_pages_are_actionable(self):
-        for response, message in ((httpx.Response(403), '无法连接'), (httpx.Response(200, text='captcha'), '页面未取得')):
+        for response, message in ((httpx.Response(403), 'temporarily unreachable'), (httpx.Response(200, text='captcha'), 'was not obtained')):
             with self.subTest(message=message), self.client(lambda request, response=response: response):
                 with self.assertRaisesRegex(source.SubtitleSearchError, message):
                     source.search('ABP-758')
@@ -110,9 +110,9 @@ class SubtitleSearchTests(unittest.TestCase):
             with self.subTest(url=url), self.assertRaises(source.SubtitleSearchError):
                 source._url(url, '.html')
         with self.client(lambda request: httpx.Response(302, headers={'Location': 'https://127.0.0.1/private'})):
-            with self.assertRaisesRegex(source.SubtitleSearchError, '地址不受支持'):
+            with self.assertRaisesRegex(source.SubtitleSearchError, 'address is not supported'):
                 source.files(source._id('/subs/42/a.html'))
-        with self.assertRaisesRegex(source.SubtitleSearchError, '编号无效'):
+        with self.assertRaisesRegex(source.SubtitleSearchError, 'Invalid subtitle ID'):
             source.files('invalid!')
 
     def test_conversion_rejects_invalid_timeline_graphics_and_oversized_input(self):

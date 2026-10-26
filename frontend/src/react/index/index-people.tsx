@@ -46,7 +46,7 @@ function Cell(
         className: `${CELL} ${big ? 'items-stretch text-left' : 'items-center text-center'}`,
       })}>
       {children}
-      {following ? <span data-index-feed="" role="img" aria-label="已订阅新作" className="absolute top-4 right-4 z-2 inline-flex">
+      {following ? <span data-index-feed="" role="img" aria-label="Subscribed to new releases" className="absolute top-4 right-4 z-2 inline-flex">
         <Chip variant="caption" color="blue"><Rss /></Chip>
       </span> : null}
       <span data-index-name="" className="text-body-medium wrap-anywhere text-text-primary">{name}</span>
@@ -93,7 +93,7 @@ export function OnlineAuthors(
     <div data-index-grid="" data-layout={layout} data-cells="people" className="index-grid-person gap-3">
       {items.map((author) => (
         <Cell key={author.key} data-follow-author={author.key} data-kind="performer" name={author.k}
-          readout={`${author.n.toLocaleString()} 项更新${author.held_by ? ' · 待确认' : ''}`} big={big}
+          readout={`${author.n.toLocaleString()} ${author.n === 1 ? 'update' : 'updates'}${author.held_by ? ' · pending review' : ''}`} big={big}
           onPress={() => {
             if (author.entity_id) props.openEntity('creator', author.k);
             else if (author.held_by) props.openEntity('creator', author.held_by);

@@ -100,7 +100,7 @@ def parse_capture(payload: dict) -> dict[str, str] | None:
         return None
     device = str(payload.get("device") or "")
     if not device:
-        LOGGER.warning("PikPak 网页的 localStorage 里没有 deviceid，换一个新的设备号")
+        LOGGER.warning("No deviceid in the PikPak web localStorage; using a new device ID")
         device = new_device_id()
     return {"refresh_token": refresh, "access_token": access, "expires_at": str(_epoch(payload.get("expires_at"))),
             "user_id": str(payload.get("sub") or ""), "device_id": device, "client_id": client_id}
@@ -146,12 +146,12 @@ class BrowserLogin:
         """拉起登录窗口。已经在等就回当前状态，不开第二个。没有浏览器时抛 ValueError。"""
         executable = self._find()
         if executable is None:
-            raise ValueError("这台电脑上没有找到 Chrome 或 Edge，用不了浏览器登录。可以展开下方用账号密码登录")
+            raise ValueError("Chrome or Edge was not found on this computer, so browser sign-in is unavailable. Expand the section below to sign in with account and password")
         with self._lock:
             if self._state["state"] == WAITING:
                 return self._snapshot()
             run_id = uuid.uuid4().hex
-            self._state = {"id": run_id, "state": WAITING, "message": "浏览器窗口已打开，在里面登录 PikPak"}
+            self._state = {"id": run_id, "state": WAITING, "message": "Browser window opened; sign in to PikPak in it"}
             self._cancel = threading.Event()
             cancel = self._cancel
             self._thread = threading.Thread(target=self._run, args=(run_id, executable, cancel),
@@ -169,7 +169,7 @@ class BrowserLogin:
         with self._lock:
             if self._state["state"] == WAITING:
                 self._cancel.set()
-                self._state = {"id": self._state["id"], "state": CANCELLED, "message": "已取消浏览器登录"}
+                self._state = {"id": self._state["id"], "state": CANCELLED, "message": "Browser sign-in cancelled"}
             return self._snapshot()
 
     def close(self) -> None:
@@ -194,10 +194,10 @@ class BrowserLogin:
             state, message = self._wait(browser, cancel)
             self._finish(run_id, state, message)
         except BrowserUnavailable as error:
-            self._finish(run_id, FAILED, f"浏览器没有打开：{error}")
+            self._finish(run_id, FAILED, f"The browser did not open: {error}")
         except Exception as error:  # noqa: BLE001 —— 线程里的任何异常都要变成可轮询的状态，否则页面一直等
-            LOGGER.error("PikPak 浏览器登录出错：%s", type(error).__name__)
-            self._finish(run_id, FAILED, f"浏览器登录出错：{type(error).__name__}")
+            LOGGER.error("PikPak browser sign-in error: %s", type(error).__name__)
+            self._finish(run_id, FAILED, f"Browser sign-in error: {type(error).__name__}")
         finally:
             browser.close()
         if self.status()["state"] == DONE and self.on_done is not None:
@@ -207,9 +207,9 @@ class BrowserLogin:
         deadline = self._clock() + self.wait_seconds
         while True:
             if cancel.is_set():
-                return CANCELLED, "已取消浏览器登录"
+                return CANCELLED, "Browser sign-in cancelled"
             if not browser.alive():
-                return CANCELLED, "浏览器窗口已关闭，登录没有完成"
+                return CANCELLED, "The browser window was closed before sign-in finished"
             try:
                 raw = browser.evaluate(_READ_SCRIPT, timeout=10)
             except TimeoutError:
@@ -218,15 +218,15 @@ class BrowserLogin:
                 # 页面跳转的那一瞬执行环境被销毁，脚本会报错；这是还在加载，不是窗口关了。
                 raw = None
             except (OSError, ValueError):
-                return CANCELLED, "浏览器窗口已关闭，登录没有完成"
+                return CANCELLED, "The browser window was closed before sign-in finished"
             if raw:
                 values = parse_capture(json.loads(raw))
                 if values is not None:
                     self._take(browser, values)
-                    return DONE, "已用浏览器登录 PikPak"
+                    return DONE, "Signed in to PikPak with the browser"
             if self._clock() >= deadline:
                 minutes = int(self.wait_seconds // 60)
-                return TIMEOUT, f"{minutes} 分钟内没有完成登录，窗口已关闭。可以再点一次「用浏览器登录」"
+                return TIMEOUT, f"Sign-in was not completed within {minutes} minutes and the window was closed. Click 'Sign in with browser' to try again"
             self._sleep(POLL_SECONDS)
 
     def _take(self, browser: _Browser, values: dict) -> None:
@@ -236,4 +236,4 @@ class BrowserLogin:
         try:
             browser.evaluate(_FORGET_SCRIPT, timeout=10)
         except (OSError, RuntimeError, ValueError):
-            LOGGER.warning("PikPak 登录窗口里的 credentials_* 没有删掉，浏览器照常关闭")
+            LOGGER.warning("credentials_* in the PikPak sign-in window were not removed; the browser closed as usual")

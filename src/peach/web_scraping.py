@@ -12,7 +12,7 @@ from .scraping_access import SOURCES, SourcePaused, SourceTransport, describe, s
 
 #: 连不上 DMM 图片主机时给的那句去处：2026-09 实测中国移动宽带直连大多在握手后被断开，
 #: 电信、联通直连正常，所以不是站点挂了，换条线路就好。
-MOBILE_BROADBAND_HINT = "中国移动宽带直连 DMM 图片主机常在握手后被断开，请把 DMM / FANZA 的连接方式设成 Peach 代理。"
+MOBILE_BROADBAND_HINT = "China Mobile broadband connecting directly to DMM image hosts is often dropped after the handshake; set the DMM / FANZA connection method to Peach proxy."
 
 
 def _kept_cover_size(target, incoming, incoming_size, installed, previous):
@@ -47,7 +47,7 @@ def w_scraping_cover(contract, body):
         raise ValueError(MIB_NOT_JAV)
     with contract.database.read_connection() as connection:
         if not connection.execute("SELECT 1 FROM asset WHERE code=? LIMIT 1", (code,)).fetchone():
-            raise ValueError("馆藏未找到这个番号")
+            raise ValueError("This code was not found in the library")
     return contract.scraping_cover_job.start_result(lambda: _fetch_cover(contract, code), recovery={'code': code})
 
 
@@ -56,21 +56,21 @@ def _unavailable_reason(exc, network_failed: bool, statuses: set[int]) -> tuple[
     from .jav_cover_fetch import (CoverConnectError, HOSTS_UNREACHABLE, NO_USABLE_OFFICIAL,
                                  OFFICIAL_PLACEHOLDER_ONLY)
     if isinstance(exc, CoverConnectError):
-        return "network", f"{HOSTS_UNREACHABLE}，未能完成封面比较；{MOBILE_BROADBAND_HINT}"
+        return "network", f"{HOSTS_UNREACHABLE}, so the cover comparison could not be completed; {MOBILE_BROADBAND_HINT}"
     if network_failed:
-        return "network", "来源连接失败，未能完成封面比较；请检查来源连接设置。"
+        return "network", "Source connection failed, so the cover comparison could not be completed; check the source connection settings."
     if statuses & {401, 403}:
         codes = "/".join(str(s) for s in sorted(statuses & {401, 403}))
-        return "access_denied", f"来源拒绝访问（HTTP {codes}），请检查登录或来源验证状态。"
+        return "access_denied", f"The source denied access (HTTP {codes}); check the sign-in or source verification status."
     if any(s >= 500 for s in statuses):
-        return "source_error", "来源服务异常（HTTP 5xx），请稍后重试。"
+        return "source_error", "The source service is failing (HTTP 5xx); try again later."
     if str(exc) == "所有渠道都没有候选":
-        return "no_candidate", "来源没有返回这个番号的封面候选，无法判断是否有高清版。"
+        return "no_candidate", "The source returned no cover candidate for this code, so it cannot be determined whether an HD version exists."
     return {
         OFFICIAL_PLACEHOLDER_ONLY: ("placeholder_only", f"{OFFICIAL_PLACEHOLDER_ONLY}。"),
         **dict.fromkeys(NO_USABLE_OFFICIAL, (
-            "unusable_candidate", "候选封面未通过检查：图片未取得、无法解码或宽度不足 700px。")),
-    }.get(str(exc), ("download_failed", "候选封面完整下载或图片校验失败，未取得可保存的图片。"))
+            "unusable_candidate", "Candidate cover failed the check: the image was not obtained, cannot be decoded, or is under 700px wide.")),
+    }.get(str(exc), ("download_failed", "The candidate cover failed to download completely or failed image validation; no savable image was obtained."))
 
 
 def _fetch_cover(contract, code):
@@ -84,7 +84,7 @@ def _fetch_cover(contract, code):
         installed = json.loads(sidecar.read_text(encoding="utf-8"))
         if (time.time() - float(installed["checked_at"]) < 86400 and target.is_file()
                 and hashlib.sha256(target.read_bytes()).hexdigest() == installed["raw_sha256"]):
-            return {"ok": True, "code": code, "result": f"复用 24 小时内核验过的本机封面（{installed['width']} × {installed['height']}），没有再向来源请求。", **{
+            return {"ok": True, "code": code, "result": f"Reused a local cover verified within the last 24 hours ({installed['width']} × {installed['height']}); the source was not queried again.", **{
                 key: installed[key] for key in ("width", "height", "raw_sha256")}}
     except (OSError, ValueError, KeyError, TypeError):
         installed = None
@@ -115,34 +115,34 @@ def _fetch_cover(contract, code):
                                           metadata_root=contract.follow_sources_root / "metadata" / "javinizer-go")
         kept_size = _kept_cover_size(target, candidate, size, installed, previous)
         if kept_size is not None:
-            suffix = "部分来源连接失败，未能完成全部来源比较。" if network_failed or any(s >= 400 and s != 404 for s in statuses) else "没有找到更大或更合适的封面。"
+            suffix = "Some sources failed to connect, so not every source could be compared." if network_failed or any(s >= 400 and s != 404 for s in statuses) else "No larger or better cover was found."
             return {"ok": True, "code": code, "reason": "kept_existing",
-                    "result": f"本机封面 {kept_size[0]} × {kept_size[1]}，来源可用封面 {size[0]} × {size[1]}；保留本机封面。{suffix}"}
+                    "result": f"Local cover {kept_size[0]} × {kept_size[1]}, source cover available {size[0]} × {size[1]}; keeping the local cover. {suffix}"}
         evidence = {"code": code, "width": size[0], "height": size[1],
                     "source": candidate.source, "source_url": candidate.url,
                     "raw_sha256": hashlib.sha256(data).hexdigest(),
                     "installed_sha256": hashlib.sha256(data).hexdigest(),
                     "checked_at": time.time(), "resolver": "peach-jav-cover-v1"}
         install_cover(target, code, data, size, evidence=evidence)
-        return {"ok": True, "code": code, "result": "高清封面已保存", "width": size[0],
+        return {"ok": True, "code": code, "result": "HD cover saved", "width": size[0],
                 "height": size[1], "requests": raw.requests, "bytes": raw.bytes}
     except Unavailable as exc:
         reason, message = _unavailable_reason(exc, network_failed, statuses)
-        labels = {"placeholder": "「准备中」占位图", "probe_failed": "图片头请求失败", "invalid_image": "图片无法解码",
-                  "too_small": "图片宽度不足 700px", "download_failed": "完整下载失败",
-                  "dimension_mismatch": "完整图片尺寸与探测结果不一致"}
-        details = "；".join(f"{label} {diagnostics[key]} 张" for key, label in labels.items() if diagnostics.get(key))
+        labels = {"placeholder": "'Preparing' placeholder image", "probe_failed": "image header request failed", "invalid_image": "image cannot be decoded",
+                  "too_small": "image width under 700px", "download_failed": "full download failed",
+                  "dimension_mismatch": "full image size does not match the probe result"}
+        details = "; ".join(f"{label}: {diagnostics[key]}" for key, label in labels.items() if diagnostics.get(key))
         if details:
-            message = ("候选封面未通过检查。" if reason == "unusable_candidate" else message) + details + "。"
-        return {"ok": False, "code": code, "reason": reason, "error": message + "已有图片保留。"}
+            message = ("Candidate cover failed the check." if reason == "unusable_candidate" else message) + " " + details + "."
+        return {"ok": False, "code": code, "reason": reason, "error": message + " Existing images are kept."}
     except SourcePaused as exc:
         return {"ok": False, "code": code, "reason": "paused", "error": str(exc)}
     except httpx.TransportError:
-        return {"ok": False, "code": code, "reason": "network", "error": "来源连接失败，请检查来源连接设置；已有图片保留。"}
+        return {"ok": False, "code": code, "reason": "network", "error": "Source connection failed; check the source connection settings. Existing images are kept."}
     except OSError:
-        return {"ok": False, "code": code, "reason": "local_file", "error": "本机封面读取或保存失败，请检查封面目录权限与磁盘空间。"}
+        return {"ok": False, "code": code, "reason": "local_file", "error": "Reading or saving the local cover failed; check the cover directory permissions and disk space."}
     except Exception as exc:
-        return {"ok": False, "code": code, "reason": "processing_error", "error": f"封面处理失败（{type(exc).__name__}），未能完成比较；请查看服务日志。",
+        return {"ok": False, "code": code, "reason": "processing_error", "error": f"Cover processing failed ({type(exc).__name__}), so the comparison could not be completed; check the service log.",
                 "error_type": type(exc).__name__}
     finally:
         transport.close()
@@ -151,7 +151,7 @@ def _fetch_cover(contract, code):
 def q_scraping(contract, _args):
     return {"sources": [describe(contract.follow_secrets_root, source) for source in SOURCES
                         if source != "instagram"],
-            "instagram_status": "Instagram 自动头像定位尚待独立登录会话验证"}
+            "instagram_status": "Instagram automatic avatar location still awaits verification with a separate signed-in session"}
 
 
 def w_scraping_settings(contract, body):
@@ -161,15 +161,15 @@ def w_scraping_settings(contract, body):
 def _connection_failure(exc, label):
     """来源连接异常对应可操作的诊断说明。"""
     if isinstance(exc, SourcePaused):
-        detail, message = "cooldown", "来源正在冷却，请稍后重试。"
+        detail, message = "cooldown", "The source is cooling down; try again later."
     elif isinstance(exc, httpx.ProxyError):
-        detail, message = "proxy", "代理连接失败，请检查 Peach 代理。"
+        detail, message = "proxy", "The proxy connection failed; check the Peach proxy."
     elif isinstance(exc, httpx.TimeoutException):
-        detail, message = "timeout", "来源连接超时，请稍后重试或检查连接方式。"
+        detail, message = "timeout", "The source connection timed out; try again later or check the connection method."
     else:
         detail = "network"
-        message = (f"连接未取得；{MOBILE_BROADBAND_HINT}" if label == "高清图片 CDN"
-                   else "连接未取得；此来源可能需要代理，请检查来源连接方式。")
+        message = (f"Connection not obtained; {MOBILE_BROADBAND_HINT}" if label == "高清图片 CDN"
+                   else "Connection not obtained; this source may need a proxy, so check the source connection method.")
     return {"ok": False, "kind": "unavailable", "reason": detail,
             "message": message, "error_type": type(exc).__name__}
 
@@ -179,24 +179,24 @@ def _connection_message(detail, reason):
     from .metadata import reason_blames_credentials
 
     if detail == "cloudflare_challenge":
-        return "来源返回人机验证页，请检查来源验证状态或更换出口。"
+        return "The source returned a human-verification page; check the source verification status or change the exit."
     if detail == "rate_limited":
-        return "来源正在限流，请稍后重试。"
+        return "The source is rate-limiting; try again later."
     if detail == "not_found":
-        return "来源检查地址不存在，请核对站点地址。"
+        return "The source check address does not exist; verify the site address."
     if reason_blames_credentials(reason):
-        return "来源要求登录或验证，请在官网完成登录后重试。"
-    return f"{reason}。" if reason else "来源暂不可用，请稍后重试。"
+        return "The source requires sign-in or verification; sign in on the official site and try again."
+    return f"{reason}." if reason else "The source is temporarily unavailable; try again later."
 
 
 def w_scraping_check(contract, body):
     from .metadata import auth_wall_reason
     source = str(body.get("source", ""))
     if source not in SOURCES:
-        raise ValueError("未知采集来源")
+        raise ValueError("Unknown scraping source")
     if not SOURCES[source]["login"]:
         return {"ok": True, "results": [{"label": "来源页面", "ok": False, "kind": "unavailable",
-                "reason": "needs_code", "message": "片商官网按番号选择，请输入馆藏番号检查高清封面。"}],
+                "reason": "needs_code", "message": "Maker sites are selected by code; enter a library code to check for an HD cover."}],
                 "session_verified": False}
     targets = [("来源页面", SOURCES[source]["login"])]
     if source == "dmm":

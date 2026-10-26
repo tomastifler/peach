@@ -42,7 +42,7 @@ export function BulkToolbar(props: BulkToolbarProps) {
   const allShown = shown.length > 0 && shown.length === pageKeys.length;
   const sources = commonReviewSources(selectedRows);
   const needsSource = metadata && selectedRows.some((row) => (row.candidates?.length || 0) > 1);
-  const sourceLabel = sources.length ? '统一选择来源' : '所选项目无共同来源';
+  const sourceLabel = sources.length ? 'Choose a source for all' : 'Selected items share no common source';
 
   const toggleAll = () => {
     const next = new Set(selected);
@@ -52,18 +52,18 @@ export function BulkToolbar(props: BulkToolbarProps) {
 
   return (
     <>
-      <div role="group" aria-label="复核筛选" data-review-filter data-glass-pane=""
+      <div role="group" aria-label="Review filter" data-review-filter data-glass-pane=""
         className="sticky top-topbar z-10 flex flex-wrap items-center gap-2 p-3">
-        <Select aria-label="筛选分组方式" size="sm" selectedKey={groupBy}
+        <Select aria-label="Filter grouping" size="sm" selectedKey={groupBy}
           onSelectionChange={(key) => { if (key !== null) onGroupBy(String(key) as ReviewGrouping) }}>
           {groupOptions.map(([key, name]) => <SelectItem key={key} id={key}>{name}</SelectItem>)}
         </Select>
         {/* 只有一组时没什么可筛的：一个「全部分类」的下拉读起来像坏了。 */}
         {groups.length > 1 ? (
-          <Select aria-label={groupBy === 'field' ? '筛选字段分类' : '筛选当前分类'} size="sm"
+          <Select aria-label={groupBy === 'field' ? 'Filter field category' : 'Filter current category'} size="sm"
             selectedKey={filter || '*'}
             onSelectionChange={(key) => { if (key !== null) onFilter(String(key) === '*' ? '' : String(key)) }}>
-            <SelectItem id="*">全部分类</SelectItem>
+            <SelectItem id="*">All categories</SelectItem>
             {groups.map((group) => (
               <SelectItem key={group.key} id={group.key}>
                 {`${group.title} · ${group.rows.length}`}
@@ -73,13 +73,13 @@ export function BulkToolbar(props: BulkToolbarProps) {
         ) : null}
         <Button variant="secondary" size="small" leadingIcon={RiCheckDoubleLine}
           aria-pressed={allShown} disabled={busy || !pageKeys.length} onClick={toggleAll}>
-          {allShown ? '清空当前选择' : filter ? '全选当前分类' : '全选本页'}
+          {allShown ? 'Clear current selection' : filter ? 'Select all in category' : 'Select all on page'}
         </Button>
       </div>
 
-        <SelectionDock label="复核所选项目" visible={selected.size > 0} count={`已选 ${selected.size} 项`}>
+        <SelectionDock label="Review selected items" visible={selected.size > 0} count={`${selected.size} selected`}>
           {needsSource ? (
-            <Select aria-label="统一选择来源" size="sm" selectedKey=""
+            <Select aria-label="Choose a source for all" size="sm" selectedKey=""
               isDisabled={busy || !sources.length}
               onSelectionChange={(key) => { if (key !== null && key !== '') onUnifySource(String(key)) }}>
               <SelectItem id="">{sourceLabel}</SelectItem>
@@ -87,11 +87,11 @@ export function BulkToolbar(props: BulkToolbarProps) {
             </Select>
           ) : null}
           <Button variant="primary" size="small" disabled={busy || !selected.size || !approvable}
-            onClick={() => onRun('approved')}>通过所选</Button>
+            onClick={() => onRun('approved')}>Approve selected</Button>
           <Button variant="danger" size="small" disabled={busy || !selected.size}
-            onClick={() => onRun('rejected')}>拒绝所选</Button>
+            onClick={() => onRun('rejected')}>Reject selected</Button>
           <Button variant="ghost" size="small" disabled={busy}
-            onClick={() => onSelected(new Set())}>取消选择</Button>
+            onClick={() => onSelected(new Set())}>Deselect</Button>
           {feedback
             ? <p role="status" className="w-full text-body-2-regular text-text-secondary">{feedback}</p>
             : null}

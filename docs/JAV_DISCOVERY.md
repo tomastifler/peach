@@ -1,92 +1,92 @@
-# JAV 发现
+# JAV discovery
 
-发现用于找可能喜欢的作品。三个主分区为「馆藏」「发现」「想要」；发现内有「库外发现」和「馆藏探索」两种范围。
+Discovery is for finding titles you may like. The three main sections are "Library", "Discover", and "Want"; Discover has two scopes, "Outside the library" and "Library exploration".
 
-卡片的版本标签保留在标题中；推荐档位、其他来源和内容标签在左对齐的一栏中展示。JAV 馆藏元信息包含人物、发行日期与文件大小。4K 根据实际媒体尺寸显示，无码与字幕标签使用已记录的版本属性，不依据封面推断。来源记录保留完整出演资料，明确登记的男优不参与展示、口味与推荐。来源头像与详情使用同一查询缓存。
+A card's version tag stays in the title; the recommendation tier, other sources, and content tags are shown in one left-aligned column. JAV library metadata includes people, release date, and file size. 4K is shown from the actual media dimensions, and the uncensored and subtitle tags use recorded version attributes, never inferred from the cover. Source records keep the full cast information; explicitly registered male performers do not take part in display, taste, or recommendation. Source avatars and details share one query cache.
 
-发现筛选栏等待查询时，标签和读数使用占位；范围、版式与排序控件即时显示。首屏与页面内加载态复用同一组标签占位，标签的高度和横向排列与实际控件一致。
+While the Discover filter bar waits for a query, tags and readouts use placeholders; the scope, layout, and sort controls show immediately. The first-screen and in-page loading states reuse the same set of tag placeholders, and the tags' height and horizontal layout match the actual controls.
 
-发现卡与首页共用头像、标题、署名和日期排版，署名、日期与馆藏文件大小带对应图标。筛选栏的刷新图标更新作品资料；读取期间同一位置提供停止操作，进度在筛选栏下方显示。图片导航固定在媒体区两侧，悬停面与关闭键一致。
+Discover cards and the home page share the avatar, title, credit, and date typesetting, and the credit, date, and library file size carry matching icons. The refresh icon on the filter bar updates title metadata; during reading, a stop action is offered in the same place and progress shows below the filter bar. Image navigation is fixed on both sides of the media area, with hover surfaces consistent with the close button.
 
-已有推荐先显示并后台更新。浏览证据只读取推荐需要的访问，按日去重，同一地址和标题共用身份解析；独立缓存只保存实体、姓名和计数，随浏览历史、实体身份、别名、关注链接、标签决定及解析规则失效。观看和标记直接参与本地偏好计算，任务心跳不使推荐偏好缓存失效。
+Existing recommendations are shown first and updated in the background. Browsing evidence reads only the visits recommendation needs, deduplicated by day, and the same URL and title share one identity resolution; a separate cache stores only entities, names, and counts, and is invalidated by browsing history, entity identity, aliases, follow links, tag decisions, and resolution rules. Watching and marking feed directly into local preference computation, and task heartbeats do not invalidate the recommendation preference cache.
 
-人物头像、姓名正文和提示统一使用本地规范名及唯一别名映射，未知姓名保留来源写法，同一人物的别名只显示一次；原始来源记录保持原文。厂牌有本地实体时打开资料页，无本地实体时只显示名称。发现卡以覆盖方式打开详情，关闭后保留范围、搜索、标签、排序、卡片结果和滚动位置。影院模式保留详情框体尺寸，在媒体区内展开，隐藏媒体下方的缩略图与分页点，退出恢复普通布局和同一播放器。
+Person avatars, name text, and hints all use the local canonical name and unique alias mapping; unknown names keep the source's spelling, and a person's aliases are shown only once; the original source record stays verbatim. A studio opens its profile page when a local entity exists, and shows only the name otherwise. A Discover card opens its details as an overlay, and on close keeps the scope, search, tags, sort, card results, and scroll position. Cinema mode keeps the detail frame size and expands within the media area, hides the thumbnails and pagination dots below the media, and on exit restores the normal layout and the same player.
 
-视频媒体处于选中状态时，左右方向键按播放设置快退、快进；图片处于选中状态时按方向键翻页。此规则适用于只有封面、带样本图片及带视频预览的作品。
+When a video media item is selected, the left and right arrow keys rewind and fast-forward per the playback settings; when an image is selected, the arrow keys turn pages. This rule applies to titles with only a cover, with sample images, and with a video preview.
 
-已取得的公开静态头像地址保存在来源资料边车，读取头像直接复用图片下载与解码，不要求再次取得完整作品详情；带查询参数或签名的地址不保存。缺少静态地址时，头像请求复用已取得的作品身份读取并核验详情。卡片只为进入视口的人物读取来源头像。已打开的作品详情使用六小时查询缓存，陈旧详情先显示已有资料，再后台更新。
+Public static avatar URLs already obtained are stored in the source-metadata sidecar, and reading an avatar reuses image download and decoding directly, without fetching the full title details again; URLs with query parameters or signatures are not stored. When no static URL is available, the avatar request reuses the already-obtained title identity to read and verify the details. Cards read source avatars only for people that enter the viewport. Opened title details use a six-hour query cache; stale details show existing data first and update in the background.
 
-想要清单优先显示已有查询缓存，并在需要时后台更新；待找提供「全部」「有磁链」「没磁链」分段筛选，筛选使用已保存的资源状态，不触发来源查询。
+The want list shows the existing query cache first and updates in the background when needed; "To find" offers the segment filters "All", "With magnet", and "No magnet", and filtering uses the saved resource status without triggering a source query.
 
-| 范围 | 候选 | 打开方式 |
+| Scope | Candidates | How it opens |
 | --- | --- | --- |
-| 库外发现 | 已知、未入库、未忽略的作品，无发行日期阈值 | `/jav/movie/:code` 作品详情 |
-| 馆藏探索 | 未看或只看过一次且进度不足一半的 JAV，排除看过标记、不合口味及已移除作品 | `/item/:id` 视频详情 |
+| Outside the library | Known titles that are not in the library and not ignored, with no release-date threshold | `/jav/movie/:code` title details |
+| Library exploration | JAV that is unwatched or watched only once with progress under half, excluding watched marks, not-my-taste, and removed titles | `/item/:id` video details |
 
-## 已有数据
+## Existing data
 
-观看次数、观看时长、评分、喜欢及高潮记录提供强证据；馆藏数量提供较弱的积累证据，浏览记录和启用的关注关系分别计权。已标记不合口味、已移除作品不提供正向证据。出演者、创作者、内容标签、厂牌、系列、五年发行区间和时长区间分别构建偏好强度。身份按规范名或唯一别名匹配；来源标签复用 genre 归一规则。每个候选按自身特征与偏好强度计算，其他偏好不稀释其匹配分。资料未取得的维度不获得正向分。
+Watch count, watch time, rating, likes, and climax records give strong evidence; library count gives weaker accumulated evidence, and browsing records and enabled follows are weighted separately. Titles marked not-my-taste and removed titles give no positive evidence. Performers, creators, content tags, studios, series, five-year release intervals, and duration intervals each build a preference strength. Identity matches by canonical name or unique alias; source tags reuse the genre normalization rules. Each candidate is scored by its own features against the preference strengths, and other preferences do not dilute its match score. Dimensions whose metadata is not obtained get no positive score.
 
-推荐复用 `related.rank_related` 的 MMR 选集，用候选间的标签 IDF 和身份相似度减少重复；偏好相关度由 `taste_preferences` 提供。发行区间和时长只按已有馆藏、观看分布作为小权重证据，不限制新旧作品。没有口味信号时不制造推荐理由。
+Recommendation reuses the MMR selection from `related.rank_related`, using inter-candidate tag IDF and identity similarity to reduce repetition; preference relevance is provided by `taste_preferences`. Release interval and duration serve only as small-weight evidence from the existing library and watch distribution, and do not restrict newer or older titles. No recommendation reason is made up when there is no taste signal.
 
-库外候选来自本机已知的 `feed_discovery`，并非全发行目录。发现页为固定的至多 100 部作品后台读取资料，标签随进度更新，无需打开各部详情。来源资料保存在独立缓存中，服务重启后可继续读取；新作每天按需补齐一次，发行超过一个日历月后取得的成功快照固定保存，最多 2,048 条，失败冷却 15 分钟。库内匹配使用账本中已有的规范实体与观看进度。每轮最多为 4,000 个匹配优先的候选做排序，返回至多 100 部；容量限制不是发行时间限制。同番号只显示一张卡。
+Outside-library candidates come from the locally known `feed_discovery`, not the full release catalog. The Discover page background-reads metadata for a fixed set of at most 100 titles, tags update as progress goes, with no need to open each title's details. Source metadata is kept in a separate cache and can continue reading after a service restart; new titles are filled in on demand once a day, successful snapshots obtained more than one calendar month after release are stored permanently, at most 2,048 entries, with a 15-minute failure cooldown. In-library matching uses the canonical entities and watch progress already in the ledger. Each round ranks at most 4,000 match-first candidates and returns at most 100 titles; the capacity limit is not a release-time limit. Only one card is shown per product code.
 
-排序支持口味、发行日期、来源评分、时长和番号，均可切换升降序。推荐档位显示在内容标签前：75 分起为「强烈推荐」，50 分起为「推荐」，25 分起为「值得看看」，其余为「探索」；未知读数显示「资料未取得」。口味分固定为偏好相关度乘以 100，不是喜欢概率，也不按列表缩放。悬停或键盘聚焦可查看推荐分、MMR 选择分、来源评分及各维度证据。口味排序对选集按同一推荐分升降序显示；其他字段排序缺失值排在末尾。
+Sorting supports taste, release date, source rating, duration, and product code, each switchable ascending or descending. The recommendation tier is shown before the content tags: from 75 points "Strongly recommended", from 50 "Recommended", from 25 "Worth a look", and the rest "Explore"; an unknown readout shows "Metadata unavailable". The taste score is fixed as preference relevance times 100; it is not a probability of liking and is not rescaled by the list. Hovering or keyboard focus shows the recommendation score, MMR selection score, source rating, and the evidence for each dimension. Taste sorting shows the selected set ascending or descending by the same recommendation score; for sorts on other fields, missing values go last.
 
-后台任务串行请求、间隔 3 秒；每轮最多 202 次 HTTP 请求、16 MiB 响应及 900 秒。页面显示进度，支持停止和重新读取。完成后只在同一固定集合过期时补齐，不自动启动下一批；停止或失败需要显式恢复。来源返回 403 或 429 时停止并冷却。编目边车只保留编目字段，不保存签名播放地址、资源链接或观看行为，不写入 ledger。
+The background task requests serially with a 3-second interval; each round makes at most 202 HTTP requests, 16 MiB of responses, and 900 seconds. The page shows progress and supports stop and re-read. When finished, it only fills in when the same fixed set expires, and does not start the next batch automatically; stopping or failure requires an explicit resume. A 403 or 429 from the source stops and cools down. The catalog sidecar keeps only catalog fields, and stores no signed playback URLs, resource links, or watch behavior, and writes nothing to the ledger.
 
-## 外部读取的缓存范围
+## Cache scope for external reads
 
-| 外部内容 | 策略 |
+| External content | Policy |
 | --- | --- |
-| 作品公开资料、评论分页、磁链区与评论资源、想要资源查询 | 发行期每 24 小时按需更新；发行超过一个日历月后补齐一次并固定保存；日期未知或未来日期每天更新 |
-| 图片、关注视频、作品预览流 | 复用媒体持久缓存；下载内容与资料 JSON 分开保存，播放地址失效不替换已有内容 |
-| Prestige 官方预告 | 按官方 SKU 与作品身份读取公开 MP4；成功结果发行满月固定保存，暂未提供的预告每天再查，来源失败保持可重试状态 |
-| 标签映射、人物规范身份、想要状态、观看行为 | 每次从本地状态投影，来源固定快照不冻结本地决定 |
-| 关注列表、新作订阅、任务状态、授权与连接诊断 | 保持各自更新机制；不按作品发行日永久冻结 |
-| 手动重新查询、明确发起的刮削 | 使用既有强制读取入口，仍遵守来源限速及失败冷却 |
+| Public title metadata, review pagination, magnet section and review resources, want-resource queries | Updated on demand every 24 hours during the release period; filled once after more than one calendar month since release and then stored permanently; updated daily when the date is unknown or in the future |
+| Images, follow videos, title preview streams | Reuse the persistent media cache; downloaded content is stored separately from metadata JSON, and an expired playback URL does not replace existing content |
+| Prestige official trailers | Reads public MP4 by official SKU and title identity; successful results are stored permanently once the title is a month past release, trailers not yet available are re-queried daily, and source failures stay retryable |
+| Tag mappings, canonical person identity, want status, watch behavior | Projected from local state each time; the source's fixed snapshot does not freeze local decisions |
+| Follow lists, new-release subscriptions, task status, authorization and connection diagnostics | Keep their own update mechanisms; not permanently frozen by title release date |
+| Manual re-query, explicitly initiated scrape | Use the existing forced-read entry point, still obeying source rate limits and failure cooldown |
 
-评论与资源在服务端保存来源快照，在浏览器保存完整成功的分页与查询结果。重开详情、浏览器或服务重启可复用；`checked_at` 表示实际取得来源的时间，读取缓存不续期。评论区可手动刷新。刷新失败保留成功内容及时间，缺页、部分来源失败和格式错误不建立固定缓存。服务端 JSON 按键原子写入，同键跨请求和跨进程合并；签名材料只保留短期内存。尚未缓存的媒体若使用带查询参数的临时地址，地址每天按需补齐，已有媒体字节继续复用。
+Reviews and resources keep a source snapshot on the server, and the browser keeps fully successful paginations and query results. They can be reused after reopening details, restarting the browser, or restarting the service; `checked_at` is the time the source was actually fetched, and reading the cache does not renew it. The review area can be refreshed manually. A failed refresh keeps the successful content and time; missing pages, partial source failures, and format errors do not create a fixed cache. Server JSON is written atomically by key, merging across requests and processes for the same key; signing material is kept only in short-lived memory. For media not yet cached that uses a temporary URL with query parameters, the URL is filled in on demand daily, and existing media bytes continue to be reused.
 
-已取得的作品 ID 可从编目缓存复用，详情直接读取并核对完整资料，不重复按番号搜索。图片下载与资料缓存分开，同键请求合并，CDN 图片不占资料 API 的请求间隔；来源限流、失败冷却与身份核对仍执行。
+A title ID already obtained can be reused from the catalog cache, and details are read directly and verified against the full metadata, without searching by product code again. Image downloads are separate from the metadata cache, same-key requests are merged, and CDN images do not occupy the metadata API's request interval; source rate limits, failure cooldown, and identity checks still apply.
 
-新作详情显示女优、性别未知的出演者、厂牌和系列。标签按本地词表与人工决定映射、去重并排除非内容分类，已确认的来源简体与繁体写法共用规范名，未收录词保留来源原文。评论和资源在详情栏内展开；资源标题单行省略，完整名称可悬停查看，大小缺失显示「大小未知」。操作按主动作、次要动作、来源外链排列。
+New-release details show performers, performers of unknown gender, studio, and series. Tags are mapped by the local vocabulary and manual decisions, deduplicated, and non-content categories are excluded; confirmed simplified and traditional source spellings share a canonical name, and unlisted words keep the source's original text. Reviews and resources expand inside the details pane; a resource title is truncated to one line with the full name on hover, and a missing size shows "Size unknown". Actions are arranged as primary action, secondary actions, then source external links.
 
-## 资料与候选扩展方案
+## Metadata and candidate expansion plan
 
-| 维度或能力 | 当前条件 | 取得和使用方案 |
+| Dimension or capability | Current condition | How it is obtained and used |
 | --- | --- | --- |
-| 标签、题材、场景、外观 | 库内有规范标签；库外后台资料提供来源标签 | 按本机归一规则投影，保留原词和分类；资料未取得时保留状态 |
-| 系列、厂牌 | 库内实体及部分库外资料可用 | 后台资料或详情缓存补足候选属性，参与 MMR |
-| 历史作品目录 | 当前候选只覆盖已知作品 | 按口味人物、厂牌、系列和标签调用公开目录的有界分页，逐页去重、排除已入库及忽略项；请求尊重来源间隔，不以“新作”接口代替全目录 |
-| 年代、时长、质量与热度 | 年代、时长分布参与低权重偏好；部分作品有来源评分 | 来源评分仅作质量参考；跨来源热度未取得，不把它当作个人偏好 |
-| 相似作品与探索比例 | 已有标签 IDF 与 MMR | 保留明确匹配的主体，给少量相邻题材探索位；取得“不感兴趣”反馈后才做可撤回的负向调整 |
-| 近期偏好 | 口味接口支持时间窗口，发现当前使用全部时间 | 合并近期与长期证据，按事件时间衰减；单次浏览不足以改写偏好 |
+| Tags, theme, scene, appearance | The library has canonical tags; outside-library background metadata provides source tags | Projected by the local normalization rules, keeping the original word and category; the state is kept when metadata is not obtained |
+| Series, studio | Library entities and some outside-library metadata are available | Background metadata or the details cache fills candidate attributes, which take part in MMR |
+| Historical title catalog | Current candidates cover only known titles | Call bounded pagination of the public catalog by taste performers, studios, series, and tags, deduplicating page by page and excluding titles already in the library and ignored ones; requests respect the source interval, and the "new release" interface does not stand in for the whole catalog |
+| Era, duration, quality, and popularity | Era and duration distributions take part in low-weight preference; some titles have a source rating | The source rating serves only as a quality reference; cross-source popularity is not obtained and is not treated as personal preference |
+| Similar titles and exploration ratio | Tag IDF and MMR already exist | Keep the clearly matching subjects and give a few slots to adjacent-theme exploration; only after "not interested" feedback is obtained make a revocable negative adjustment |
+| Recent preference | The taste API supports time windows; Discover currently uses all time | Merge recent and long-term evidence, decayed by event time; a single visit is not enough to rewrite preference |
 
-行为原始记录留在本机；向公开目录查询只发送必要的人物、厂牌、系列、标签或番号。真实候选落库、后台采集和负向偏好学习需要另行定义来源、撤回口径与数据写入范围。
+Raw behavior records stay on this machine; queries to the public catalog send only the necessary person, studio, series, tag, or product code. Persisting real candidates, background collection, and negative-preference learning need the source, the revocation rules, and the data write scope to be defined separately.
 
-## 来源提示
+## Source notes
 
-作品详情与馆藏视频共用标题折叠、人物和厂牌身份格、规格图标与标签筛选样式。人物按来源或规范资料的明确性别分为女优及性别未确认的出演者；男优仅保留来源记录，不凭姓名或头像推断性别。来源与评论评分按小数比例填充五颗星，来源评分同时显示原始分数；评论日期显示年月日。来源标签遵循本机归一规则和已登记分类。人物优先显示本地头像与取景，缺少本地图时可显示该作品来源名单对应的头像。
+Title details and library videos share title folding, person and studio identity cells, spec icons, and tag-filter styles. People are split by the explicit gender in the source or canonical data into performers and performers of unconfirmed gender; male performers are kept only as source records, and gender is not inferred from names or avatars. Source and review ratings fill five stars by decimal proportion, the source rating also shows the raw score; review dates show year, month, and day. Source tags follow the local normalization rules and registered categories. People prefer the local avatar and framing, and when there is no local image, the avatar matching the title's source cast list may be shown.
 
-封面与预览图复用关注详情的左右切换和圆点。缩略图条常驻主图下方，横向滚动并支持点击、键盘切换；只有进入可见范围的小图才读取。来源提供可信视频预览时，可切换至视频；播放器复用视频详情的播放、进度、音量、设置和全屏控件，等待用户播放，切回图片或关闭详情时停止。视频的缩略图与媒体 indicator 都在播放器下方。未提供视频入口的作品只显示图片。「作品来源」使用按钮打开新标签页。已建档厂牌打开规范资料页，未建档厂牌进入馆藏厂牌筛选；来源大小写差异和日英组合写法复用既有解析规则，投影到唯一已有身份。评论和资源通过带对象图标与箭头的标题展开、收起；详情画框按视口预留高度，右侧内容在框内滚动。想要和下载操作服从账本的实际只读状态。
+Covers and preview images reuse the left-right switching and dots of follow details. The thumbnail strip stays under the main image, scrolls horizontally, and supports click and keyboard switching; only thumbnails that enter the visible range are read. When the source provides a trusted video preview you can switch to video; the player reuses the video details' play, progress, volume, settings, and fullscreen controls, waits for the user to press play, and stops when switching back to images or closing the details. The video's thumbnails and media indicator are both below the player. Titles without a video entry show only images. "Title source" opens a new tab with a button. A studio with a profile opens its canonical profile page, and one without goes to the library studio filter; case differences in the source and mixed Japanese-English spellings reuse the existing resolution rules and project to the single existing identity. Reviews and resources expand and collapse through a heading with an object icon and an arrow; the details frame reserves height by viewport, and the right-hand content scrolls inside the frame. Want and download actions obey the ledger's actual read-only state.
 
-评论读取期间仅评论区显示 skeleton，微光定位并裁切在占位条内，已显示的标题、身份和操作保持挂载。桌面与手机均覆盖正常动画的等待及展开状态。
+While reviews are being read, only the review area shows a skeleton, with the shimmer positioned and clipped inside the placeholder bars, and the headings, identity, and actions already shown stay mounted. Desktop and phone both cover the wait and expand states under normal animation.
 
-来源返回多少评论就展示多少。公开 Web UI 的匿名评论分页已取得首两页不同记录，完整评论范围仍未取得；HTML 来源的部分评论限制不代表所有来源均需 VIP。资源提示说明本次取得范围并提供来源页，不推断用户账号权限。
+As many reviews as the source returns are shown. The public Web UI's anonymous review pagination has obtained different records for the first two pages, but the full review range is still not obtained; a partial review limit on an HTML source does not mean every source requires VIP. The resource note explains the range obtained this time and provides the source page, without inferring the user's account permissions.
 
-新作详情和发现列表的每个来源标签都经过人工决定、内容词表与非内容过滤。已登记的中文来源词同时接受简体和繁体写法，规范标签去重，未收录的词保留来源原文。当前缓存的只读核验覆盖 116 部作品、93 种来源词：78 种映射、7 种排除、8 种未收录，逐词结果存于 `<私有验证记录>`。
+Every source tag in new-release details and the Discover list goes through manual decisions, the content vocabulary, and the non-content filter. Registered Chinese source words accept both simplified and traditional spellings, canonical tags are deduplicated, and unlisted words keep the source's original text. The currently cached read-only verification covers 116 titles and 93 source words: 78 mapped, 7 excluded, 8 unlisted, with per-word results stored in `<私有验证记录>`.
 
-馆藏 JAV 详情也使用同一媒体轮播，默认打开正片，封面和已登记的官方样张按需读取。查看图片时暂停正片，返回正片保留播放位置；已登记样张的缩略图使用现有小图缓存。作品没有登记样张时异步读取来源详情的预览图片，复用公共详情及持久图片缓存；等待和重试只占图片区域，正片实例保持挂载。来源图片仅供浏览，不写入账本。
+Library JAV details use the same media carousel, open the main feature by default, and read the cover and registered official samples on demand. Viewing images pauses the main feature, and returning to it keeps the playback position; thumbnails for registered samples use the existing small-image cache. When a title has no registered samples, preview images from the source details are read asynchronously, reusing the public details and the persistent image cache; waiting and retrying occupy only the image area, and the main-feature instance stays mounted. Source images are for browsing only and are not written to the ledger.
 
-馆藏与库外作品共用按视口预留的详情画框。等待资料、切换横竖图和视频时保持画框高度；右侧正文与底部推荐各自在可用空间内滚动。缩略图条支持鼠标滚轮横向滚动。
+Library and outside-library titles share a details frame that reserves height by viewport. The frame height holds while waiting for metadata and switching between landscape and portrait images and video; the right-hand text and the bottom recommendations each scroll within the space available. The thumbnail strip supports horizontal mouse-wheel scrolling.
 
-公开图片使用三个下载槽位，同一图片请求共享结果，缓存命中不等待其他图片下载；图片 CDN 不使用资料 API 的请求间隔。资料 API 与图片 CDN 各自保留来源冷却，彼此的故障不阻塞另一种读取。资料 API 保留 3 秒间隔，图片保留来源主机校验、单次字节上限和 6 小时缓存。
+Public images use three download slots, requests for the same image share a result, and a cache hit does not wait for other image downloads; the image CDN does not use the metadata API's request interval. The metadata API and the image CDN each keep their own source cooldown, and a fault in one does not block reads from the other. The metadata API keeps a 3-second interval, and images keep source-host verification, a per-request byte cap, and a 6-hour cache.
 
-资源协议用文字「磁链」「ED2K」「网页链接」。标题和元数据占据资源区宽度，窄资源区的操作键在下方换行，宽资源区并列显示。字节容量复用馆藏 `fmtSize` 口径显示，有明确单位的容量按来源展示；纯数字且单位未取得时显示「大小未标注」，悬停可查看来源原值。复制和下载使用原始链接。
+The resource protocols use the words "Magnet", "ED2K", and "Web link". Title and metadata take the width of the resource area; in a narrow resource area the action buttons wrap below, and in a wide one they sit side by side. Byte capacity is displayed with the library's `fmtSize` conventions, and capacities with an explicit unit are shown as the source gives them; a bare number with no unit obtained shows "Size not labeled", with the source's original value on hover. Copy and download use the original link.
 
-云下载的直接添加优先取得可用高清候选；「想要」的待找清单在同一请求预算内继续汇集 manko.fun、JavDB 和 sukebei，按画质与版本排序并去重。JavDB 资源区与评论中的磁链、ED2K 和网页链接按原协议保留，取得范围提示随来源返回。待找缓存与快速添加候选分开，已取得的多个资源保留展开入口。
+For cloud download's direct add, usable HD candidates are obtained first; the "Want" to-find list keeps gathering manko.fun, JavDB, and sukebei within the same request budget, sorted by quality and version and deduplicated. The JavDB resource area and the magnet, ED2K, and web links in reviews are kept in their original protocol, and the range note comes back with the source. The to-find cache is separate from quick-add candidates, and multiple obtained resources keep an expand entry.
 
-新作页的匿名资源接口合并磁链区与前 8 页评论的链接，资源按协议身份去重并保留评论锚点。评论取数失败时保留磁链区结果，并在资源区提示未取得的范围；重新查询同时刷新磁链和评论。资源缓存使用包含评论的独立身份。
+The anonymous resource API on the new-release page merges the magnet section with links from the first 8 review pages, deduplicating resources by protocol identity and keeping the review anchor. When review fetching fails, the magnet-section result is kept and the resource area notes the range not obtained; re-querying refreshes both magnets and reviews. The resource cache uses a separate identity that includes reviews.
 
-待找资源在浏览器和服务端本机缓存。发行未满三个月保存 7 天，更早作品保存 1 年，最多保留 128 部；服务重启后有效期从原查询时间继续计算。已取得的结果优先读取，不等待其他作品的查询锁；过期或点击「重新查询」才访问来源。主动查询失败时保留上次成功资源；来源失败或受限且没有结果的状态只短暂缓存，不写入持久结果。缓存位于私有来源目录，不写入账本。
+To-find resources are cached on the browser and server machine. A title under three months past release is kept for 7 days, an older one for 1 year, up to 128 titles; after a service restart the validity continues from the original query time. Obtained results are read first without waiting for other titles' query locks; the source is accessed only when expired or when "Re-query" is clicked. When an explicit query fails, the last successful resources are kept; a source failure or limited state with no results is cached only briefly and not written to the persistent results. The cache lives in the private source directory and is not written to the ledger.

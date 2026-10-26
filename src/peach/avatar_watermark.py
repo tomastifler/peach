@@ -107,7 +107,7 @@ def ensure_model(path: Path | None = None, *, allow_download: bool = True) -> Pa
     if target.is_file() and _digest(target) == MODEL_SHA256:
         return target
     if not allow_download:
-        raise WatermarkModelUnavailable(f"文字检测模型不在 {target}，且不允许下载")
+        raise WatermarkModelUnavailable(f"The text detection model is not at {target} and downloading is not allowed")
     target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_suffix(target.suffix + ".part")
     try:
@@ -115,12 +115,12 @@ def ensure_model(path: Path | None = None, *, allow_download: bool = True) -> Pa
             partial.write_bytes(response.read())
     except OSError as error:
         partial.unlink(missing_ok=True)
-        raise WatermarkModelUnavailable(f"取文字检测模型失败：{error}") from error
+        raise WatermarkModelUnavailable(f"Failed to fetch the text detection model: {error}") from error
     digest = _digest(partial)
     if digest != MODEL_SHA256:
         partial.unlink(missing_ok=True)
         raise WatermarkModelUnavailable(
-            f"文字检测模型校验不符：期望 {MODEL_SHA256}，实际 {digest}")
+            f"Text detection model checksum mismatch: expected {MODEL_SHA256}, got {digest}")
     partial.replace(target)
     return target
 

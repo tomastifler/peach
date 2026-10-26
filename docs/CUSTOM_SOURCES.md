@@ -1,58 +1,58 @@
-# 自定义元数据来源
+# Custom Metadata Sources
 
-采集页的「自定义元数据来源」用于接入公开 JSON 元数据接口。每个来源保存名称、固定 HTTPS
-接口地址、番号格式、字段路径、适用内容类型和连接方式。保存后可编辑、试查、启用、停用或删除。
+The "Custom metadata sources" section on the collection page connects public JSON metadata endpoints. Each source stores a name, a fixed HTTPS
+endpoint URL, a code format, field paths, applicable content types, and a connection method. After saving, it can be edited, test-queried, enabled, disabled, or deleted.
 
-接口地址必须包含一个 `{code}`。字段路径用点连接对象键或数组下标，例如 `data.title`、
-`items.0.title`。番号字段必填；标题、厂牌、系列、发行日期是文本，演员和标签是文本数组。
-番号格式可选原样、小写、去掉连字符或转为下划线。试查番号输入后按回车，结果显示在当前表单。
+The endpoint URL must contain exactly one `{code}`. Field paths join object keys or array indexes with dots, for example `data.title` and
+`items.0.title`. The code field is required; title, studio, series, and release date are text, while performers and tags are text arrays.
+The code format can be as-is, lowercase, hyphens removed, or hyphens converted to underscores. Enter a code to test and press Enter; the result is shown in the current form.
 
-这套配置只适用于单次 GET 返回的 JSON，不解析 HTML、CSS selector、JSON-LD、YAML 规则，
-也不执行脚本。需要 Cookie、站点 API key、多次查询或浏览器验证的来源使用已有专用适配器。
+This configuration only applies to JSON returned by a single GET. It does not parse HTML, CSS selectors, JSON-LD, or YAML rules,
+and does not run scripts. Sources that need cookies, site API keys, multiple queries, or browser verification use the existing dedicated adapters.
 
-## 接口示例
+## Endpoint Example
 
-一本道公开接口的配置：
+Configuration for the 1Pondo public endpoint:
 
-| 字段 | 值 |
+| Field | Value |
 | --- | --- |
-| 接口地址 | `https://www.1pondo.tv/dyn/phpauto/movie_details/movie_id/{code}.json` |
-| 番号格式 | 连字符转下划线 |
-| 番号字段 | `MovieID` |
-| 标题字段 | `Title` |
-| 演员字段 | `ActressesJa` |
-| 适用类型 | 无码 |
+| Endpoint URL | `https://www.1pondo.tv/dyn/phpauto/movie_details/movie_id/{code}.json` |
+| Code format | Hyphen to underscore |
+| Code field | `MovieID` |
+| Title field | `Title` |
+| Performer field | `ActressesJa` |
+| Applicable type | Uncensored |
 
-Peach 已内置一本道适配器，此例用于说明接口配置，不需要重复添加。自定义来源的适用内容类型
-由用户选择；对于发行体系同形的番号，需要选择确实覆盖目标作品的接口。
+Peach already ships a built-in 1Pondo adapter; this example only illustrates endpoint configuration and does not need to be added again. The applicable content types of a custom source
+are chosen by the user; for codes that share the same release scheme, choose an endpoint that actually covers the target work.
 
-## 采集与复核
+## Collection and Review
 
-启用的来源追加到适用类型的内建来源链末尾，前面的来源资料足够时按既有规则停止查询。
-响应中的番号字段必须与查询番号匹配，查询 URL 不能代替响应提供身份证据。
+Enabled sources are appended to the end of the built-in source chain for the applicable type; when earlier sources already provide enough data, querying stops under the existing rules.
+The code field in the response must match the queried code; the query URL cannot stand in for identity evidence from the response.
 
-结果进入现有来源快照、候选及复核流程，置信度为 `0.5`，归为未登记来源，不参与自动批准。
-来源端点、字段映射、番号格式或线路变化时，新的查询规则有独立证据键；启停或改名称保持证据键。
-删除配置不删除已保存的来源快照或复核产物。
+Results enter the existing source snapshot, candidate, and review flow, with confidence `0.5`, classified as an unregistered source, and do not take part in auto-approval.
+When the source endpoint, field mapping, code format, or route changes, the new query rule gets an independent evidence key; enabling, disabling, or renaming keeps the evidence key.
+Deleting a configuration does not delete saved source snapshots or review artifacts.
 
-## 网络与存储
+## Network and Storage
 
-接口使用 HTTPS 公网域名、默认 443 端口，拒绝用户信息、片段、私网解析结果和重定向。
-查询使用最多 15 秒的时间预算，响应最多 1 MiB；代理配置、DNS 解析和会话准备共用该预算。
-系统 DNS 解析为同步调用，无法在预算到期时强制取消；解析返回时若预算已耗尽，不再发起
-HTTP 请求，因此实际返回时间可能超过预算。直连或 Peach 代理都通过 cURL `CONNECT_TO` 固定已验证的
-公共 IP，TLS 的 SNI 和证书验证仍使用接口原域名。Peach 代理沿用已保存的连接设置，不另存凭据。
+The endpoint uses an HTTPS public domain on the default port 443, and rejects user info, fragments, private-network resolution results, and redirects.
+A query uses a time budget of at most 15 seconds and a response of at most 1 MiB; proxy configuration, DNS resolution, and session preparation share this budget.
+System DNS resolution is a synchronous call and cannot be forcibly cancelled when the budget expires; if the budget is already exhausted when resolution returns, no
+HTTP request is made, so the actual return time may exceed the budget. Both direct connections and the Peach proxy pin the verified public IP through cURL `CONNECT_TO`,
+while TLS SNI and certificate verification still use the endpoint's original domain. The Peach proxy reuses the saved connection settings and does not store credentials separately.
 
-配置位于本机 `secrets/custom-metadata.json`，通过文件锁和原子替换保存；不写 ledger。
+The configuration lives in the local `secrets/custom-metadata.json`, saved with a file lock and atomic replacement; nothing is written to the ledger.
 
-## 复用与取证
+## Reuse and Evidence
 
-- 参考 OpenAver `502278a3e09c7520838ffb00b2ff080323a4cdcb` 的声明式配置、公网目标检查和
-  番号身份核对。上游支持 YAML、CSS/meta/JSON-LD 及一至两步页面抓取；Peach 主动收窄为单步 JSON。
-  未复制上游实现。
-- 使用项目固定版本 `curl_cffi 0.16.3`、`filelock 4.0.12`，以及既有 `SiteRecord`、
-  `identifies_code`、来源链与复核流程，无新增依赖。cURL 的连接边界见
-  [CONNECT_TO 官方说明](https://curl.se/libcurl/c/CURLOPT_CONNECT_TO.html)。
-- 2026-10-13 无写入 POC：正式适配器经 Peach 代理、固定公共 IP、严格 TLS 查询
-  `112312_478`，返回番号匹配、标题非空、演员 1 人、置信度 `0.5`。直连 r18.dev 与一本道时
-  返回 `curl (35) Recv failure: Connection was reset`；未降低 TLS 校验。
+- Follows OpenAver `502278a3e09c7520838ffb00b2ff080323a4cdcb` for declarative configuration, public-target checks, and
+  code identity verification. Upstream supports YAML, CSS/meta/JSON-LD, and one- to two-step page scraping; Peach deliberately narrows this to a single-step JSON.
+  The upstream implementation was not copied.
+- Uses the project-pinned `curl_cffi 0.16.3` and `filelock 4.0.12`, plus the existing `SiteRecord`,
+  `identifies_code`, source chain, and review flow, with no new dependencies. For the cURL connection boundary see the
+  [CONNECT_TO official documentation](https://curl.se/libcurl/c/CURLOPT_CONNECT_TO.html).
+- 2026-10-13 no-write POC: the official adapter queried `112312_478` through the Peach proxy with a pinned public IP and strict TLS,
+  returning a matching code, a non-empty title, 1 performer, and confidence `0.5`. Direct connections to r18.dev and 1Pondo
+  returned `curl (35) Recv failure: Connection was reset`; TLS verification was not lowered.

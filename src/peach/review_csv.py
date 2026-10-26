@@ -200,7 +200,7 @@ def _candidate_source_label(paths: list[Path]) -> str:
     names = [path.name for path in paths]
     if len(names) <= 3:
         return "; ".join(names)
-    return "; ".join(names[:3]) + f" 等 {len(names)} 份"
+    return "; ".join(names[:3]) + f" ({len(names)} total)"
 
 
 def read_candidates(category: str, root: Path | None = None) -> tuple[list[dict], str | None, int]:

@@ -40,10 +40,10 @@ from .web_state import WebContract
 
 #: 批量操作在活动页上的名字。表里存 `operation`，人看的是这一列。
 BATCH_LABELS = {
-    "like": "批量标记喜欢", "seen": "批量标记看过", "later": "批量加入稍后看",
-    "dispose": "批量移入回收站", "restore": "批量还原", "delete": "批量永久删除",
-    "dismiss-junk": "批量确认不是垃圾", "reconsider-junk": "批量重新判定垃圾",
-    "region": "批量判定产地",
+    "like": "Bulk mark as liked", "seen": "Bulk mark as seen", "later": "Bulk add to watch later",
+    "dispose": "Bulk move to trash", "restore": "Bulk restore", "delete": "Bulk delete permanently",
+    "dismiss-junk": "Bulk confirm not junk", "reconsider-junk": "Bulk re-evaluate junk",
+    "region": "Bulk determine region",
 }
 
 
@@ -338,7 +338,7 @@ def promo_name_rules() -> tuple[dict, ...]:
         names = frozenset(re.sub(r"\s", "", name).casefold() for name in entry.get("names", ()))
         patterns = tuple(re.compile(pattern, re.I) for pattern in entry.get("patterns", ()))
         if not entry["reason"] or not (names or patterns) or int(entry["max_bytes"]) <= 0:
-            raise ValueError(f"推广附件命名规则不完整：{entry}")
+            raise ValueError(f"Promotional attachment naming rule is incomplete: {entry}")
         rules.append({
             "reason": str(entry["reason"]),
             "suffixes": frozenset(str(suffix).casefold() for suffix in entry["suffixes"]),
@@ -368,17 +368,17 @@ def _promo_name_reason(suffix: str, path: str, size: int) -> str:
 def _attachment_junk_reason(suffix: str, path: str, size: int) -> str:
     """区分安装附件与网页存档组件。"""
     if suffix in INSTALLER_SUFFIXES and size < 64 * 1024**2:
-        return "媒体目录中的安装附件"
+        return "Installer attachment in a media directory"
     if suffix in PAGE_COMPONENT_SUFFIXES and any(
             part.casefold().endswith("_files") for part in PureWindowsPath(path).parent.parts):
-        return "网页存档的脚本或样式附件"
+        return "Script or style attachment of a saved web page"
     parent = PureWindowsPath(path).parent.name
     if (parent.casefold().endswith('_files') and PAGE_PROMO_CLAIM.search(parent)
             and AD_DOMAIN.search(parent[:-len('_files')]) and suffix in {'.gif', '.jpg', '.png'}
             and size < 2 * 1024**2
             and (PAGE_CHROME_IMAGE.fullmatch(PureWindowsPath(path).stem)
                  or (PureWindowsPath(path).name.casefold() == '1.gif' and size <= 4096))):
-        return "推广网页存档的横幅、标志或导航图片"
+        return "Banner, logo or navigation image of a promotional saved web page"
     return ""
 
 
@@ -398,16 +398,16 @@ def _video_evidence(row, stem: str, longer: dict, promo_dir: bool,
             and not PART_MARK.search(stem):
         # 分卷已排除，真番号下不到两成时长基本就是片段/预告，单独即可入队复核。
         # 用户标记的 `反抗不如享受.mp4`（ABW-220，244 秒）正好卡在旧的 35 分门外。
-        score += 40; why.append(f"同番号有 {longest/60:.0f} 分完整版")
+        score += 40; why.append(f"A full version of {longest/60:.0f} min exists for the same code")
     if duration is not None and 0 < duration < 240:
-        score += 15; why.append("不足 4 分钟")
+        score += 15; why.append("Under 4 minutes")
     context = directory_points
     if (row["size"] or 0) < JUNK_VIDEO_MAX_BYTES:
-        score += 10; context += 10; why.append("小于 120 MB")
+        score += 10; context += 10; why.append("Under 120 MB")
     if promo_dir:
         # 30 分单独不构成删片理由：正片也可能躺在别人起错名的目录里，
         # 要再叠一条时长或体积证据才到门槛。
-        score += 30; context += 30; why.append("住在推广目录")
+        score += 30; context += 30; why.append("Lives in a promotional directory")
     probed = duration is not None and duration > 0
     return score, 0 if probed else context, why
 
@@ -447,9 +447,9 @@ def _scored_junk(contract: WebContract) -> tuple[list[dict], frozenset[int]]:
         promo = bool(PROMO_PHRASE.search(nm) or PROMO_DOMAIN.search(nm))
         page_archive = suffix in PAGE_ARCHIVE_SUFFIXES
         if suffix in INTERNET_SHORTCUT_SUFFIXES:
-            s += 60; why.append("网址快捷方式")
+            s += 60; why.append("URL shortcut")
         elif page_archive:
-            s += 60; why.append("网页存档")
+            s += 60; why.append("Saved web page")
         attachment_reason = _attachment_junk_reason(suffix, d.get("path") or name, d.get("size") or 0)
         if attachment_reason:
             s += 60; why.append(attachment_reason)
@@ -491,18 +491,18 @@ def _scored_junk(contract: WebContract) -> tuple[list[dict], frozenset[int]]:
         promo_dir = _promo_directory(PureWindowsPath(d.get("path") or name).parent.parts)
         if promo and residue < 6 and not bundled:
             # 名字剥完只剩广告本身，这是最硬的信号。
-            s += 60; why.append("整个名字都是推广语")
+            s += 60; why.append("The whole name is promotional text")
         elif promo and residue < 14 and not real_owner and not bundled:
-            s += 30; why.append("推广语占了名字主体")
+            s += 30; why.append("Promotional text makes up most of the name")
             neighbours = promo_neighbours.get(folder, 0)
             if neighbours >= PROMO_CLUSTER_FILES:
                 s += 30
-                why.append(f"同目录另有 {neighbours - 1} 个同类推广名")
+                why.append(f"{neighbours - 1} more promotional names of the same kind in the same directory")
         directory_points = 0
         if owner_is_promo:
-            directory_points = 50; why.append("创作者位是推广站域名")
+            directory_points = 50; why.append("The creator slot is a promotional site domain")
         elif AD_DIRPACK.search(folder) and not self_evident:
-            directory_points = 45; why.append("目录是「域名+番号」的推广打包")
+            directory_points = 45; why.append("The directory is a promotional pack named 'domain + code'")
         s += directory_points
         # 非视频的推广形态：装饰符小图、品牌推广名、住在推广目录。`self_evident`
         # （真番号、内容级体积、正片配套图）与网页存档、网址快捷方式已单独计分，
@@ -510,11 +510,11 @@ def _scored_junk(contract: WebContract) -> tuple[list[dict], frozenset[int]]:
         if (d.get("medium") != "video" and not self_evident and not page_archive
                 and suffix not in INTERNET_SHORTCUT_SUFFIXES):
             if decorated:
-                s += 60; why.append("装饰符小图")
+                s += 60; why.append("Small decorative image")
             elif brand_hit:
-                s += 60; why.append("推广品牌名")
+                s += 60; why.append("Promotional brand name")
             elif promo_dir:
-                s += 50; why.append("住在推广目录")
+                s += 50; why.append("Lives in a promotional directory")
         if d.get("medium") == "video":
             points, weak, reasons = _video_evidence(d, nm, longer, promo_dir, directory_points)
             s += points; review_only += weak; why.extend(reasons)
@@ -550,10 +550,10 @@ def _restore_staged_media(staged):
             if quarantine.name == 'content' and manifest.is_file():
                 record = json.loads(manifest.read_text(encoding='utf-8'))
                 if record['original'] != str(original):
-                    raise ValueError('隔离恢复路径不符')
+                    raise ValueError('Quarantine restore path does not match')
                 shutil.copyfile(quarantine, original)
                 if hashlib.sha256(original.read_bytes()).hexdigest() != record['sha256']:
-                    raise ValueError('隔离恢复内容不符')
+                    raise ValueError('Quarantine restore content does not match')
                 quarantine.unlink()
                 manifest.unlink()
                 quarantine.parent.rmdir()
@@ -587,7 +587,7 @@ def _quarantine_media(original: Path, *, location: str | None = None) -> Path:
         body = quarantine.read_bytes()
         current = original.stat()
         if len(body) != stat.st_size or (current.st_size, current.st_mtime_ns) != (stat.st_size, stat.st_mtime_ns):
-            raise OSError('文件在隔离备份期间发生变化')
+            raise OSError('The file changed during the quarantine backup')
         record = dict(original=str(original), size=len(body),
                       sha256=hashlib.sha256(body).hexdigest())
         manifest.write_text(json.dumps(record, ensure_ascii=False), encoding='utf-8')
@@ -708,7 +708,7 @@ def purge_assets(connection, rows, *, missing_only: bool = False):
         if media and missing_only:
             try:
                 present = translate_ledger_path(media).exists()
-                reason = "文件仍在盘上"
+                reason = "The file is still on disk"
             except OSError as error:
                 present, reason = True, error.strerror or str(error)
             if present:

@@ -67,8 +67,8 @@ def _closeness_features(left, right, weights: Mapping[int, float]) -> float:
 
 def _reasons_features(a: Mapping[str, set[int]], b: Mapping[str, set[int]]) -> list[str]:
     return [label for kind, label in (
-        ("creator", "同创作者"), ("series", "同系列"),
-        ("performer", "同出演者"), ("tag", "标签接近"), ("studio", "同厂牌"),
+        ("creator", "Same creator"), ("series", "Same series"),
+        ("performer", "Same performer"), ("tag", "Similar tags"), ("studio", "Same studio"),
     ) if a[kind] & b[kind]]
 
 

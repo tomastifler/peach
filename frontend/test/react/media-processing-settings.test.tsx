@@ -27,10 +27,10 @@ it('读取已保存模式，等待服务端保存完成才更新开关和回执'
   await settle();
   expect(requests).toEqual([{ metadata_only: true }]);
   expect(receipt).not.toHaveBeenCalled();
-  expect(host.textContent).toContain('正在保存');
+  expect(host.textContent).toContain('Saving');
   await saved.release({ metadata_only: true });
   await settle();
-  expect(receipt).toHaveBeenCalledWith('已关闭视频预览生成');
+  expect(receipt).toHaveBeenCalledWith('Video preview generation turned off');
   expect(control?.checked).toBe(false);
 });
 

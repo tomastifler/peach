@@ -1,38 +1,38 @@
-# CloudDrive 配置与调优
+# CloudDrive configuration and tuning
 
-Peach 支持已挂载的 115、PikPak、光鸭、OneDrive，以及「其他已挂载网盘」的文件读写。先用 CloudDrive2、OpenList 对应的挂载工具或系统文件系统把网盘接成本机目录，再由 Peach 扫描。平台账号、写入权限和实际网络连接由挂载工具负责；文件操作失败时，Peach 显示实际错误。
+Peach supports file read and write on mounted 115, PikPak, Guangya (光鸭), and OneDrive drives, plus "Other mounted drive". First use CloudDrive2, an OpenList mount tool, or the system filesystem to attach the drive as a local directory, then let Peach scan it. The mount tool is responsible for platform accounts, write permissions, and the actual network connection; when a file operation fails, Peach shows the actual error.
 
-光鸭云盘的上传、建文件夹、改名和移动需要 CloudDrive2 v1.1.0 或更高版本、应用写入权限和有效会员；删除、复制接口暂不可用，见 [CloudDrive 官方更新记录](https://www.clouddrive2.com/download.html)。OneDrive 与其他挂载来源也需要相应的写入权限。Peach 的文件整理支持预览、执行与回滚，云下载支持范围见下文。
+Uploading, creating folders, renaming, and moving on Guangya cloud drive require CloudDrive2 v1.1.0 or later, application write permission, and an active membership; the delete and copy interfaces are not available yet, see the [CloudDrive release notes](https://www.clouddrive2.com/download.html). OneDrive and other mounted sources also need the corresponding write permission. Peach's file organizing supports preview, execution, and rollback; the range of cloud download support is described below.
 
-要往网盘里添资源，可以用「云下载」把磁力交给 115 或 PikPak 离线下载，见下文[云下载](#云下载把磁力交给网盘离线下载)一节。
+To add resources to a drive, use "Cloud download" to hand a magnet to 115 or PikPak offline download, see the [Cloud download](#cloud-download-hand-magnets-to-the-drive-for-offline-download) section below.
 
-网盘看片卡不卡，几乎全取决于 CloudDrive2 的缓存和读取设置。配置页里的「CloudDrive 缓存建议」只列起步值和填写位置，本文补充原理、换算和排查方法。
+Whether playback from a drive stutters depends almost entirely on CloudDrive2's cache and read settings. The "CloudDrive cache suggestions" on the configuration page list only starting values and where to enter them; this document adds the rationale, unit conversions, and troubleshooting.
 
-## 配置步骤
+## Setup steps
 
-1. 在 CloudDrive2 里登录网盘、建立挂载点，并打开「启动时自动挂载」。具体操作见 [CloudDrive 官方帮助](https://www.clouddrive2.com/help.html)。
-2. 在 Peach 首次设置页，或配置页的媒体分组里添加文件夹，选择实际网盘来源。未单列的网盘选「其他已挂载网盘」。同一个来源可以添加多个文件夹，但文件夹之间不能互相包含。
-3. 填写路径：
-   - Windows：直接填挂载出来的盘符路径，例如 `B:\`。
-   - macOS、Linux：只需填 Peach 实际读取的目录，例如 `/Volumes/CloudDrive/115`。Peach 自动保存数据库所需的路径配置；已有目录改位置时，修改这一行的媒体目录即可。
-   - Docker：只需填容器内目录，例如 `/media/115`，不能填容器无法访问的宿主机路径。还需要在 Compose 中把实际目录挂进容器，见 [Docker 部署](DOCKER.md#配置文件与路径)。
-4. 为新增网盘目录选择「媒体读取策略」：正常读取，或代理流量保护。PikPak 也由用户选择；实际走哪条代理需在挂载工具中配置。
-5. 点「保存配置」，Peach 会重新读取设置。每个文件夹行右侧标着它在线还是离线，刷新页面重新读取。
-6. 勾选扫描再保存，Peach 会依次扫描所有在线的文件夹，离线的跳过。网盘重新挂上以后，再勾选一次扫描并保存即可。
+1. In CloudDrive2, sign in to the drive, create a mount point, and turn on "Mount at startup". For details see the [CloudDrive help](https://www.clouddrive2.com/help.html).
+2. On Peach's first-run setup page, or in the media group of the configuration page, add a folder and pick the actual drive source. For drives not listed separately, choose "Other mounted drive". One source can have several folders, but folders cannot contain each other.
+3. Enter the path:
+   - Windows: enter the mounted drive-letter path directly, for example `B:\`.
+   - macOS, Linux: enter only the directory Peach actually reads, for example `/Volumes/CloudDrive/115`. Peach saves the path mapping the database needs; to move an existing directory, just change the media directory on this row.
+   - Docker: enter only the in-container directory, for example `/media/115`, not a host path the container cannot access. You also need to mount the real directory into the container in Compose, see [Docker deployment](DOCKER.md#configuration-file-and-paths).
+4. For a new drive directory, choose the "media read policy": normal read, or proxy traffic protection. For PikPak the user also chooses; which proxy is actually used must be configured in the mount tool.
+5. Click "Save configuration" and Peach reloads the settings. The right side of each folder row shows whether it is online or offline; refresh the page to reload.
+6. Tick scan and save, and Peach scans all online folders in turn, skipping offline ones. After a drive is mounted again, tick scan and save once more.
 
-Windows 上，Peach 和 CloudDrive2 要在同一个普通用户下运行。用「以管理员身份运行」启动的程序，可能看不到普通用户挂载的盘。
+On Windows, Peach and CloudDrive2 must run under the same normal user. A program started with "Run as administrator" may not see drives mounted by the normal user.
 
-复用另一台 Peach 的数据库时，才需要在配置文件中对应数据库里的影片路径和本机媒体目录。已有部署保留自身的对应关系；只搬动媒体目录时修改配置页中这一行的目录。手动编辑配置的字段含义见[运行与配置](OPERATIONS.md#在-macos-上对应-windows-路径mediamounts)。
+You only need to map the movie paths in a database to the local media directories in the settings file when reusing another Peach's database. Existing deployments keep their own mapping; if you only move the media directory, change that row's directory on the configuration page. For the meaning of fields when editing the settings by hand, see [Operations and configuration](OPERATIONS.md#mapping-windows-paths-on-macos-mediamounts).
 
-选择网盘来源时，首次设置页和配置页会检查这台电脑有没有装 CloudDrive2 和它需要的挂载驱动（Windows 是 WinFsp，macOS 是 macFUSE），没装会给出下载入口。便携版 CloudDrive2 放在 PATH 里也能被识别。「装了没有」和「挂上了没有」是分开显示的。
+When you choose a drive source, the first-run setup page and the configuration page check whether this computer has CloudDrive2 and the mount driver it needs (WinFsp on Windows, macFUSE on macOS), and give a download link if not. A portable CloudDrive2 on the PATH is also recognized. "Installed" and "mounted" are shown separately.
 
-其他规则：
+Other rules:
 
-- 网盘离线时，它的配置照样保留。两个文件夹的盘符根或挂载点重叠时，会在对应那一行报错。
-- 保存配置不会改动已经入库的文件的来源和路径。
-- 终端里的 `peach init` 问答只能添加本地文件夹。网盘来源请在首次设置页或配置页添加，也可以直接写进设置文件。
+- When a drive is offline, its configuration is kept. If two folders' drive-letter roots or mount points overlap, an error is shown on the corresponding row.
+- Saving the configuration does not change the source or path of files already in the library.
+- The `peach init` prompts in the terminal can only add local folders. Add drive sources on the first-run setup page or the configuration page, or write them straight into the settings file.
 
-macOS 设置文件示例：
+macOS settings file example:
 
 ```toml
 [media.locations]
@@ -44,116 +44,116 @@ pikpak = ['A:\']
 pikpak = ['/Volumes/CloudDrive/PikPak']
 ```
 
-## 媒体读取策略与视频预览
+## Media read policy and video previews
 
-「代理流量保护」标记这个挂载目录的媒体读取有成本，批处理与播放沿用受保护来源的确认边界；它不修改 CloudDrive2 或 OpenList 的代理。普通媒体的自动探测跳过受保护目录。既有配置保持当前行为，可在 Peach 配置中逐个目录修改。
+"Proxy traffic protection" marks media reads from this mount directory as costly; batch processing and playback keep the confirmation boundary of protected sources. It does not change CloudDrive2 or OpenList proxies. Automatic probing of normal media skips protected directories. Existing configurations keep their current behavior and can be changed per directory in the Peach configuration.
 
-九宫格和时间轴另由「生成视频预览」控制。关闭后仍可登记文件、探测允许读取的普通媒体、采集本地 NFO 与在线资料；时间轴默认关闭，需选择间隔后才生成。STRM 与 ISO 不参与后台探测或抽帧；STRM 仅在播放时读取 HTTP(S) 目标，ISO 交给外部播放器。
+The contact sheet and timeline are controlled separately by "Generate video previews". When it is off you can still register files, probe normal media that is allowed to be read, and collect local NFO and online metadata; the timeline is off by default and is generated only after you pick an interval. STRM and ISO do not take part in background probing or frame extraction; STRM reads its HTTP(S) target only during playback, and ISO is handed to an external player.
 
-OneDrive 的账号类型与访问路径不同，官网能打开不代表下载直连。请按运行挂载工具那台机器的实际路径选择读取策略；OneDrive、光鸭的真实账号兼容性仍待验证。
+OneDrive account types and access paths differ, and being able to open the official site does not mean downloads connect directly. Choose the read policy according to the actual path on the machine running the mount tool; real-account compatibility for OneDrive and Guangya is still to be verified.
 
-## 三处缓存是三处设置
+## Three caches, three settings
 
-CloudDrive2 有三种缓存，各自单独设置，改了一个不会影响另外两个。这是最容易白忙一场的地方。
+CloudDrive2 has three kinds of cache, each set separately; changing one does not affect the other two. This is where it is easiest to waste effort.
 
-| 名字 | 占用 | 作用 |
+| Name | Uses | Purpose |
 | --- | --- | --- |
-| Buffer Cache | 内存 | 正在读的那几块数据在内存里留多久 |
-| 磁盘缓存 | 硬盘 | 读过的数据块存到硬盘，下次直接从硬盘读 |
-| 文件夹缓存 | 硬盘 | 把整个目录的文件内容提前下载下来 |
+| Buffer Cache | Memory | How long the blocks currently being read stay in memory |
+| Disk cache | Disk | Blocks already read are stored on disk and read from disk next time |
+| Folder cache | Disk | Downloads the contents of a whole directory ahead of time |
 
-只有机械硬盘时，先只用按需读取；反复看同一批文件时，再打开文件夹缓存。
+With only a spinning hard disk, use on-demand reading first; turn on the folder cache when you watch the same set of files repeatedly.
 
-文件管理器里显示的缓存大小是逻辑大小，不等于实际占用的硬盘空间。
+The cache size shown in the file manager is a logical size and does not equal the disk space actually used.
 
-## 缓存上限与清理
+## Cache limit and cleanup
 
-缓存上限和清理方式在 CloudDrive2 的「设置」里填。清理方式选 LRU，空间不够时先删最久没用过的缓存。
+The cache limit and cleanup mode are set in CloudDrive2's "Settings". Choose LRU for the cleanup mode, so the least recently used cache is deleted first when space runs short.
 
-**上限不要填 0。** 填 0 时缓存实际占到过约 911 GB；填 30 GiB 之后也出现过超限，原因还没查明。
+**Do not set the limit to 0.** With 0 the cache once grew to about 911 GB; after setting 30 GiB it has also exceeded the limit, and the cause is not yet known.
 
-系统盘至少留 40 GiB 空闲。填完后：
+Keep at least 40 GiB free on the system disk. After setting it:
 
-1. 重新打开设置页，确认数值存住了。
-2. 过一段时间看硬盘实际少了多少。设置页上的数字不一定等于实际占用，超限往往就是这样没被发现的。
+1. Reopen the settings page and confirm the value was kept.
+2. After a while, check how much disk space actually disappeared. The number on the settings page does not always equal actual usage, and that is often how an overrun goes unnoticed.
 
-## 读取长度与线程
+## Read length and threads
 
-读取长度和下载线程在每个网盘各自的下载设置里改。
+Read length and download threads are changed in each drive's own download settings.
 
-- 读取长度从 256 / 128 KB 起步，适合扫描、抽帧和拖动进度条。
-- 看高码率视频还在缓冲，就试 512 / 256 KB。如果打开速度、拖动、流量和播放都没有改善，就调回去。
-- 下载线程都从 2 开始。115 不要超过客户端标出的上限；PikPak 和 WebDAV 只有在带宽有富余、并且调到 4 确实更快时才用 4。
-- 能开直链就开，开完放一个视频确认还能播。走 WebDAV 时，先确认服务端允许直链。115 的连接方式不能照搬到 PikPak，PikPak 按 CloudDrive2 当前提供的接入方式配置。
+- Start the read length at 256 / 128 KB, which suits scanning, frame extraction, and seeking.
+- If a high-bitrate video still buffers, try 512 / 256 KB. If opening speed, seeking, traffic, and playback all fail to improve, set it back.
+- Start download threads at 2. For 115 do not exceed the limit the client states; for PikPak and WebDAV use 4 only when there is spare bandwidth and 4 is actually faster.
+- Turn on direct links if you can, and after turning them on play a video to confirm it still plays. When using WebDAV, first confirm the server allows direct links. 115's connection method cannot be copied to PikPak; configure PikPak by the access method CloudDrive2 currently provides.
 
-直链和代理是两个独立的开关。连接慢时，两种组合分别试一次再比较，不要只看开关开没开。
+Direct link and proxy are two independent switches. When the connection is slow, try each combination once and compare, rather than only looking at whether a switch is on.
 
-调小读取长度能省多少流量，目前没有冷缓存下的对照数据。请按实际流量计数判断，不要按读取长度的比例去推算。
+There is currently no cold-cache comparison data on how much traffic a smaller read length saves. Judge by the actual traffic counter, and do not extrapolate from the ratio of read lengths.
 
-## 码率与速度不是一个单位
+## Bitrate and speed are different units
 
-视频码率的单位是 Mbps，下载速度的单位是 MB/s，两者差 8 倍：
+Video bitrate is in Mbps and download speed is in MB/s; they differ by a factor of 8:
 
-    需要的 MB/s = 码率 Mbps ÷ 8
+    required MB/s = bitrate in Mbps ÷ 8
 
-例如 80 Mbps 的视频至少要 10 MB/s。留出余量，下载速度稳定在 15 MB/s 以上，才能说播放正常。
+For example, an 80 Mbps video needs at least 10 MB/s. Leave headroom: only when download speed stays steadily above 15 MB/s can playback be called normal.
 
-看视频时，先暂停批量抽帧，关掉不用的播放页。Peach 同时读取的视频数量从 1–2 个起步。
+When watching a video, first pause batch frame extraction and close playback pages you are not using. Start Peach's concurrent video reads at 1–2.
 
-## 让网盘里的新文件自动入库
+## Auto-register new files from the drive
 
-Peach 不实时监视网盘目录，因为每列一次目录都是一次网络请求。如果希望 `B:`（115）和 `A:`（PikPak）里新存进去的文件立刻出现在 Peach，需要让 CloudDrive2 主动通知 Peach。
+Peach does not watch drive directories in real time, because every directory listing is a network request. If you want files newly saved to `B:` (115) and `A:` (PikPak) to show up in Peach immediately, have CloudDrive2 notify Peach actively.
 
-这个通知（webhook）是 CloudDrive2 的会员功能。不配置也不影响其他功能，新文件仍由定期的全量扫描发现。设计说明见 [ADR-0041](adr/0041-new-files-are-pushed-in-scanning-is-the-backstop.md)。
+This notification (webhook) is a CloudDrive2 membership feature. Leaving it unconfigured does not affect other features; new files are still found by the periodic full scan. For the design see [ADR-0041](adr/0041-new-files-are-pushed-in-scanning-is-the-backstop.md).
 
-1. 在 Peach 配置页「媒体」分组里，打开「新文件落地就入库」和「接收 CloudDrive2 通知」。
-2. 在「云端路径前缀」里，把 CloudDrive2 里看到的目录和媒体目录对应起来，例如 `/115` 对应 `B:\`。
-3. 点「保存配置」。页面会生成一整段 CloudDrive2 配置，地址、端点和密钥都已经填好。
-4. 点「复制配置」，到 CloudDrive2 的「设置 → Webhooks」里新增一条，粘贴后保存。
+1. In the "Media" group of the Peach configuration page, turn on "Register new files as they land" and "Receive CloudDrive2 notifications".
+2. In "Cloud path prefix", map the directories you see in CloudDrive2 to media directories, for example `/115` to `B:\`.
+3. Click "Save configuration". The page generates a full block of CloudDrive2 configuration with the address, endpoint, and key already filled in.
+4. Click "Copy configuration", go to CloudDrive2's "Settings → Webhooks", add a new entry, paste, and save.
 
-注意事项：
+Notes:
 
-- 配置里的地址是 Peach 所在电脑的局域网地址。Peach 只接受本机和私有网络发来的通知，来自公网的请求一律忽略。
-- Windows 版 CloudDrive2 的编辑框会把换行存坏，列表里显示「无效」。解决办法：把这段配置存成一个 `.toml` 文件，放进 `%LOCALAPPDATA%\CloudDrive.WinUI\webhooks\`，然后重启 CloudDrive2。Webhooks 页的「刷新」不会重新读取这个文件夹。
-- CloudDrive2 发通知时也走它自己的代理设置，代理要让局域网地址直连。
+- The address in the configuration is the LAN address of the computer running Peach. Peach only accepts notifications from this machine and private networks; requests from the public internet are ignored.
+- The Windows CloudDrive2 edit box corrupts line breaks, and the list shows "Invalid". Workaround: save this configuration as a `.toml` file, put it in `%LOCALAPPDATA%\CloudDrive.WinUI\webhooks\`, then restart CloudDrive2. "Refresh" on the Webhooks page does not re-read this folder.
+- When CloudDrive2 sends a notification it also uses its own proxy settings; the proxy must connect to LAN addresses directly.
 
-验证方法：往网盘里放一个视频，几秒后它应该出现在 Peach 里。没有出现时，看配置页上的状态：
+To verify: put a video into the drive, and a few seconds later it should appear in Peach. If it does not, check the status on the configuration page:
 
-- 「已入库」计数不动：通知没有到达 Peach，检查地址或密钥。
-- 计数在动但文件没出现：「云端路径前缀」没对上。
-- CloudDrive2 列表显示有效，却一条通知都没发：先确认 CloudDrive2 账号是会员。
+- The "Registered" count does not move: the notification did not reach Peach; check the address or key.
+- The count moves but the file does not appear: the "Cloud path prefix" does not match.
+- The CloudDrive2 list shows valid but no notification is sent at all: first confirm the CloudDrive2 account is a member.
 
-密钥泄露或想换一个，在同一处点「更换密钥」，然后重新复制配置并粘贴一次。
+If the key leaks or you want a new one, click "Rotate key" in the same place, then copy the configuration again and paste it once more.
 
-## 云下载：把磁力交给网盘离线下载
+## Cloud download: hand magnets to the drive for offline download
 
-云下载把磁力交给 115 或 PikPak 在网盘那头下载，文件不经过这台电脑。下载完的文件落进已挂载的目录，由上一节的推送发现登记入库；推送没配时，等下一次扫描发现。
+Cloud download hands a magnet to 115 or PikPak to download on the drive side, and the files do not pass through this computer. Finished files land in a mounted directory and are found and registered by the push discovery in the previous section; if push is not configured, they are found by the next scan.
 
-配置在配置页「下载」分组的「云下载」和「PikPak 账号」两张卡里：
+Configuration is in the two cards "Cloud download" and "PikPak account" in the "Download" group of the configuration page:
 
-- **115**：经 CloudDrive2 的 gRPC 接口提交。在 CloudDrive2「设置 → API 令牌」里生成一个令牌，至少勾「提交离线任务」「查看离线任务与配额」，要在 Peach 里取消任务再勾「取消离线任务」，要在 Peach 里新建目标目录再勾上新建文件夹权限（`allow_create_folder`）。检查报出缺哪项权限、目标目录能不能离线下载、本月还剩几条配额，只读，不提交任务：地址和令牌都已保存时，卡片一打开就按已保存的配置查一遍；点「保存配置」后响应里也带着一份，直接显示在卡上；改了表单想先看结果再保存，点「检查」按此刻填的值重查。CloudDrive2 跑在这台电脑上时地址可以留空，检查会依次试 `http://127.0.0.1:19798`（独立版默认）和 `http://127.0.0.1:29798`（Windows 桌面版常见），用不需要令牌的 `GetSystemInfo` 看谁应答，把先应答的地址填回表单；点「保存配置」后才记下来。两个都不应答时报错并列出试过的两个地址，这时确认 CloudDrive2 已启动，或者把它的实际地址填进去。
-- **PikPak**：PikPak 没有开放接口，Peach 照网页端的协议直连。用账号密码登录一次换取登录令牌；勾「保存密码」时登录过期会自动重新登录，不勾就要回到这张卡重新登录。登录触发人机验证时，卡上会给出验证页链接，在浏览器里完成后回来再点一次「登录」，Peach 不替你过验证。
-- **目标目录**：115 填 CloudDrive2 挂载树里的路径，这个目录要落在推送发现某个「云端路径前缀」下面；PikPak 填网盘里已经存在的目录，再选 PikPak 根目录对应哪个媒体目录。
-- **留空时按推送发现填**：115 目标目录留空时，检查对推送发现的每条前缀调 `FindFileByPath`，CloudDrive2 报这条前缀在 115 网盘上（云盘类型 `115open` 或 `115`，看的是 CloudDrive2 自报的类型，不看前缀名字），就建议 `<前缀>/云下载`；有几条时优先对应媒体目录声明为 115 来源的那条。目录留空点「保存配置」时，这个目录存在就直接存上，卡上接着报它能不能离线、还剩几条配额；不存在时其他字段照常保存，这个目录填回表单、输入框标红，并给一颗「新建这个目录」，只有点了才调 `CreateFolder` 在 CloudDrive2 里建，建好后再点「保存配置」记下它；不建也不改路径就点「保存配置」，会被拦下并在这个字段上提示先新建或改路径。打开卡片时的检查和「检查」键推出的目录只填回表单，点「保存配置」才记下来。推送发现里没有 115 那条前缀时，检查会提示先去那张卡登记 115 的挂载根。PikPak 根目录对应的媒体目录留空、且 PikPak 已登录或账号框里填了账号时同理：前缀就是 PikPak 云盘根、对应的本机根是已声明的 PikPak 来源，就选上它；推不出来时提示去下拉框选或去推送发现登记。只用 115 的话不查也不提示 PikPak。探测到的地址和推出的 PikPak 根只填回表单，点「保存配置」才记下来。
-- **等待上限**：远端超过这么久还没下完就标为「停滞」，多半是没有人做种。
+- **115**: submitted through CloudDrive2's gRPC interface. In CloudDrive2 "Settings → API tokens" generate a token and tick at least "Submit offline tasks" and "View offline tasks and quota"; to cancel tasks from Peach also tick "Cancel offline tasks", and to create the target directory from Peach also tick the create-folder permission (`allow_create_folder`). The check reports which permission is missing, whether the target directory can be used for offline download, and how many quota entries remain this month; it is read-only and submits no task. When the address and token are both saved, the card runs the check against the saved configuration as soon as it opens; after you click "Save configuration" the response carries one too and shows it directly on the card; if you changed the form and want to see the result before saving, click "Check" to re-check with the values currently entered. When CloudDrive2 runs on this computer the address can be left empty, and the check tries `http://127.0.0.1:19798` (the standalone default) and `http://127.0.0.1:29798` (common for the Windows desktop version) in turn, uses `GetSystemInfo`, which needs no token, to see which one answers, and fills the first responder back into the form; it is only remembered after you click "Save configuration". If neither answers, it reports an error listing the two addresses it tried; confirm CloudDrive2 is started, or enter its actual address.
+- **PikPak**: PikPak has no open interface, so Peach connects directly following the web client's protocol. Sign in once with account and password to get a login token; with "Save password" ticked, an expired login is renewed automatically, otherwise you must come back to this card and sign in again. When sign-in triggers human verification, the card gives a link to the verification page; complete it in a browser and click "Sign in" again, and Peach does not pass the verification for you.
+- **Target directory**: for 115, enter a path in CloudDrive2's mount tree, and this directory must fall under one of the push discovery "cloud path prefixes"; for PikPak, enter a directory that already exists on the drive, and then choose which media directory the PikPak root corresponds to.
+- **Filled from push discovery when empty**: when the 115 target directory is empty, the check calls `FindFileByPath` for every prefix in push discovery; if CloudDrive2 reports the prefix is on a 115 drive (drive type `115open` or `115`, based on the type CloudDrive2 reports itself, not the prefix name), it suggests `<prefix>/云下载`; with several, it prefers the one whose media directory is declared as a 115 source. When the directory is empty and you click "Save configuration", if the directory exists it is saved directly and the card goes on to report whether it can be used offline and how much quota is left; if it does not exist, the other fields are saved as usual, the directory is filled back into the form, the input is highlighted red, and a "Create this directory" button is offered; only clicking it calls `CreateFolder` to create it in CloudDrive2, and after it is created click "Save configuration" again to remember it; if you click "Save configuration" without creating it or changing the path, it is blocked with a prompt on this field to create it or change the path first. The directory suggested by the check when the card opens and by the "Check" button is only filled back into the form, and is remembered only when you click "Save configuration". If push discovery has no 115 prefix, the check prompts you to register the 115 mount root on that card first. The same applies when the media directory for the PikPak root is empty and PikPak is signed in or an account is entered in the account box: if the prefix is the PikPak drive root and the corresponding local root is a declared PikPak source, it is selected; if it cannot be inferred, it prompts you to choose from the dropdown or register in push discovery. If you only use 115, PikPak is neither checked nor mentioned. The detected address and inferred PikPak root are only filled back into the form and are remembered only when you click "Save configuration".
+- **Wait limit**: if the remote has not finished after this long it is marked "Stalled", usually because nobody is seeding.
 
-令牌、refresh token 和保存的密码只存在这台电脑的凭据文件里，不进设置文件，不随设置同步，也不写进日志和 Peach 数据库。
+Tokens, refresh tokens, and saved passwords live only in the credentials file on this computer; they do not go into the settings file, are not synced with settings, and are not written to logs or the Peach database.
 
-提交在云下载弹层里：JAV 入库页每条作品的「搜索资源」与页上的「提交磁力」、高清版目标卡的「搜索资源」都在原页打开它，带上番号和标题；按番号搜索或贴磁力、选 115 或 PikPak、确认目标目录后提交。提交过的任务在活动页（`/activity`）的「云下载」段看进度。同一个磁力（按 infohash 判断）已经有任务时，Peach 接着跟进那一条，不重复提交。
+Submission happens in the cloud download dialog: "Search resources" on each item of the JAV intake page, "Submit magnet" on the page, and "Search resources" on the HD-version target card all open it in place, carrying the product code and title; search by product code or paste a magnet, choose 115 or PikPak, confirm the target directory, and submit. Submitted tasks show progress in the "Cloud download" section of the Activity page (`/activity`). When the same magnet (judged by infohash) already has a task, Peach keeps following that one rather than submitting again.
 
-任务卡显示状态和失败原因，在远端跑的可以取消，失败、取消和停滞的可以重新提交，每张卡都能复制磁力。几条规则：
+Task cards show status and failure reason; ones running remotely can be cancelled, failed, cancelled, and stalled ones can be resubmitted, and every card can copy its magnet. A few rules:
 
-- 115 每提交一次扣一条离线配额，年费会员每月 1500 条、月费 200 条，重新提交也算。
-- 115 判为违规的资源（错误码 50038）不重试，以后再贴同一个磁力会直接拒绝。
-- PikPak 免费与会员账号的离线任务上限：未取得。
-- 接口失效时任务报错，复制磁力到网盘客户端里手动添加即可。
+- Each 115 submission uses one offline quota entry: 1500 per month for annual members and 200 per month for monthly members, and resubmitting counts too.
+- Resources 115 judges as violating rules (error code 50038) are not retried, and pasting the same magnet later is rejected directly.
+- Offline task limits for free and member PikPak accounts: not obtained.
+- When the interface stops working the task reports an error; copy the magnet and add it manually in the drive client.
 
-## 起步值来自哪里
+## Where the starting values come from
 
-表里的容量和并发数是按容量估算的建议值，不是测出来的最快设置。请按实际占用空间和播放效果再调。
+The capacities and concurrency numbers in the table are suggested values estimated from capacity, not measured fastest settings. Adjust them by actual space usage and playback results.
 
-- 256／128 KB 读取长度、开启直链、30 GiB 上限这一组，来自 2026-08-13 的本机配置，之后长期使用没有异常。
-- 115 单条下载速度在 2026-08-15 测得约 2.02 MB/s，当时还有旧的播放连接在争用带宽。这只是当时那条线路的结果，换时间、换线路都会变，不能拿来当基准。
-- 本机当前填的值以 CloudDrive2 设置页为准，这里不另存一份。
+- The group of 256／128 KB read length, direct links on, and a 30 GiB limit comes from the local configuration of 2026-08-13, and has shown no problems in long-term use since.
+- A single 115 download was measured at about 2.02 MB/s on 2026-08-15, when an old playback connection was still competing for bandwidth. That is only the result for that line at that time; it changes with time and line and cannot serve as a baseline.
+- The values currently entered on this machine are whatever the CloudDrive2 settings page says; a copy is not kept here.
 
-[官方帮助](https://www.clouddrive2.com/help.html)、[缓存说明](https://www.clouddrive2.com/features.html) 与 [版本记录](https://www.clouddrive2.com/download.html) 核验于 2026-09-06。直链和线程选项以所装版本和服务端能力为准。
+The [official help](https://www.clouddrive2.com/help.html), [cache description](https://www.clouddrive2.com/features.html), and [release notes](https://www.clouddrive2.com/download.html) were checked on 2026-09-06. Direct link and thread options depend on the installed version and server capability.

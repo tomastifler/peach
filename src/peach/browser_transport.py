@@ -155,10 +155,10 @@ class _WebSocket:
         while b"\r\n\r\n" not in head:
             chunk = self.sock.recv(4096)
             if not chunk:
-                raise ConnectionError("浏览器在握手时关闭了连接")
+                raise ConnectionError("The browser closed the connection during the handshake")
             head += chunk
         if b" 101 " not in head.split(b"\r\n", 1)[0]:
-            raise ConnectionError("浏览器拒绝了调试连接")
+            raise ConnectionError("The browser rejected the debugging connection")
         self.buffer = head.split(b"\r\n\r\n", 1)[1]
         self.next_id = 0
 
@@ -264,7 +264,7 @@ class _Browser:
             self.process = self._popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                        stderr=subprocess.DEVNULL)
         except OSError as error:
-            raise BrowserUnavailable(f"浏览器没有启动：{error}") from None
+            raise BrowserUnavailable(f"The browser did not start: {error}") from None
         port = self._wait_port(port_file)
         try:
             page = next(target for target in self._targets(port) if target.get("type") == "page")
@@ -276,12 +276,12 @@ class _Browser:
             self.window_id = self.socket.call("Browser.getWindowForTarget", targetId=page.get("id", "")).get("windowId")
         except (OSError, StopIteration, KeyError, ValueError, RuntimeError) as error:
             self.close()
-            raise BrowserUnavailable(f"浏览器的调试口没有接上：{error}") from None
+            raise BrowserUnavailable(f"The browser debugging port did not connect: {error}") from None
 
     def _wait_port(self, port_file: Path) -> int:
         for _ in range(300):
             if self.process is not None and self.process.poll() is not None:
-                raise BrowserUnavailable(f"浏览器启动后立即退出（{self.process.returncode}）")
+                raise BrowserUnavailable(f"The browser exited right after starting ({self.process.returncode})")
             if port_file.is_file():
                 lines = port_file.read_text(encoding="utf-8", errors="replace").splitlines()
                 if len(lines) >= 2 and lines[0].strip().isdigit():
@@ -297,7 +297,7 @@ class _Browser:
         assert self.socket is not None
         result = self.socket.call("Runtime.evaluate", timeout, expression=expression, returnByValue=True)
         if "exceptionDetails" in result:
-            raise RuntimeError(result["exceptionDetails"].get("text") or "页面脚本出错")
+            raise RuntimeError(result["exceptionDetails"].get("text") or "Page script error")
         return result.get("result", {}).get("value")
 
     def navigate(self, url: str, *, referrer: str | None = None) -> None:
@@ -419,7 +419,7 @@ class BrowserTransport:
 
     def __call__(self, request: HttpRequest, timeout: float, max_bytes: int) -> HttpResponse:
         if request.method.upper() != "GET":
-            raise BrowserUnavailable("浏览器传输只发 GET")
+            raise BrowserUnavailable("Browser transport only sends GET")
         with self._lock:
             browser = self._ensure()
             try:
@@ -431,7 +431,7 @@ class BrowserTransport:
                     raise
                 # 页面脚本、调试连接或进程任一处坏了都按断连处理：关掉，下一次请求重新拉起。
                 self._drop()
-                raise BrowserUnavailable(f"浏览器请求未取得：{error}") from None
+                raise BrowserUnavailable(f"Browser request not retrieved: {error}") from None
             finally:
                 self._touch()
         body = document["html"].encode("utf-8")[:max_bytes + 1]
@@ -501,7 +501,7 @@ class BrowserTransport:
                     if not cleared and waited >= reset_limit:
                         cleared = True
                         count = browser.clear_cookies(url)
-                        LOGGER.info("%s 的验证页 %d 秒没有自动通过，清掉该站 %d 条 cookie 重载", host, int(elapsed), count)
+                        LOGGER.info("%s: verification page did not pass automatically within %d s; clearing %d cookies for the site and reloading", host, int(elapsed), count)
                         browser.navigate(url, referrer=referrer)
                         phase_started = now
                     elif cleared and waited >= auto_limit:
@@ -511,9 +511,9 @@ class BrowserTransport:
                         shown_at = now
                         browser.place(visible=True)
                         _set_attention(host, f"{host} 的人机验证需要点一下，浏览器窗口已打开")
-                        LOGGER.warning("%s 的验证页没有自动通过，等待用户点击", host)
+                        LOGGER.warning("%s: verification page did not pass automatically; waiting for the user to click", host)
                 elif elapsed >= timeout:
-                    raise PageTimeout(f"{host} 的页面在 {int(elapsed)} 秒内没有打开")
+                    raise PageTimeout(f"{host} page did not open within {int(elapsed)} seconds")
                 self._sleep(1.0)
         except ChallengeUnsolved:
             # 放弃的验证页不能留在窗口里：它每 50 秒自己重载一次，`cf_chl_rc_ni` 跟着涨，在没人看的窗口里
@@ -533,7 +533,7 @@ class BrowserTransport:
             return state
         clicked = browser.evaluate(_CLICK_SCRIPT % {"pattern": json.dumps(gate["button"])})
         if not clicked:
-            LOGGER.warning("%s 的年龄门上没有找到能点的按钮", parts.hostname)
+            LOGGER.warning("%s: no clickable button found on the age gate", parts.hostname)
             return state
         started = self._clock()
         while self._clock() - started < GATE_SECONDS:
@@ -541,7 +541,7 @@ class BrowserTransport:
             state = self._state(browser)
             if state["ready"] in ("interactive", "complete") and state["url"] and gate["path"] not in urlsplit(state["url"]).path:
                 return state
-        LOGGER.warning("%s 的年龄门点了「%s」但没有跳回去", parts.hostname, clicked)
+        LOGGER.warning("%s: clicked [%s] on the age gate but was not redirected back", parts.hostname, clicked)
         return state
 
     def _touch(self) -> None:

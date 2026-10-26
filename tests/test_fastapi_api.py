@@ -400,10 +400,10 @@ class FastApiContractTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.005)
         sources = (await self.client.get("/api/sources?t=secret")).json()
         self.assertEqual(sources["offline"], ["local"])
-        self.assertEqual(sources["sources"][0]["message"], "本地磁盘：没有权限读取")
+        self.assertEqual(sources["sources"][0]["message"], "本地磁盘：Permission denied")
         payload = (await self.client.get("/healthz")).json()
         self.assertTrue(payload["ok"])
-        self.assertEqual(payload["media_mounts"]["warnings"], ["本地磁盘：没有权限读取"])
+        self.assertEqual(payload["media_mounts"]["warnings"], ["本地磁盘：Permission denied"])
 
     async def test_reader_role_keeps_gets_available_and_rejects_posts(self):
         class ReaderSync:
@@ -1844,11 +1844,11 @@ class FastApiContractTests(unittest.IsolatedAsyncioTestCase):
         refused = await self.client.post("/login", content=body, headers=page)
         self.assertEqual(refused.status_code, 400)
         self.assertTrue(refused.headers["content-type"].startswith("text/html"))
-        self.assertIn('data-page="login" data-next="/stats" data-error="请选择有效的保持登录时间">', refused.text)
+        self.assertIn('data-page="login" data-next="/stats" data-error="Choose a valid stay-signed-in duration">', refused.text)
         self.assertNotIn("set-cookie", refused.headers)
         refused = await self.client.post("/login", content=body, headers=form)
         self.assertEqual(refused.status_code, 400)
-        self.assertEqual(refused.json(), {"error": "请选择有效的保持登录时间"})
+        self.assertEqual(refused.json(), {"error": "Choose a valid stay-signed-in duration"})
         routes_auth._ATTEMPTS.clear()
         for _ in range(10):
             wrong = await self.client.post("/login", content="token=wrong&next=%2Fstats", headers=form)
@@ -1857,11 +1857,11 @@ class FastApiContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(limited.status_code, 429)
         self.assertEqual(limited.headers["retry-after"], "60")
         self.assertTrue(limited.headers["content-type"].startswith("text/html"))
-        self.assertIn('data-page="login" data-next="/stats" data-error="尝试次数较多，请一分钟后重试">',
+        self.assertIn('data-page="login" data-next="/stats" data-error="Too many attempts; try again in a minute">',
                       limited.text)
         limited = await self.client.post("/login", content="token=secret&next=%2Fstats", headers=form)
         self.assertEqual(limited.status_code, 429)
-        self.assertEqual(limited.json(),{"error": "尝试次数较多，请一分钟后重试"})
+        self.assertEqual(limited.json(),{"error": "Too many attempts; try again in a minute"})
 
     async def test_index_directory_urls_keep_query_and_use_canonical_path(self):
         await self.client.post('/login', content='token=secret&next=%2F',
@@ -2977,8 +2977,8 @@ class FastApiContractTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(climbing.status_code, 403, "`..` 爬出 Peach 数据目录的一样不开")
         self.assertEqual(gone.status_code, 410)
         # 410 与 403 在页面那层的通用错误映射里都没有说法，原因得由这条自己写成中文。
-        self.assertEqual(gone.json()["message"], "这个位置已经不在了")
-        self.assertIn("不归 Peach 管", refused.json()["message"])
+        self.assertEqual(gone.json()["message"], "This location no longer exists")
+        self.assertIn("not managed by Peach", refused.json()["message"])
 
     async def test_photo_thumbnail_is_generated_once_and_cached(self):
         source = self._seed_photo()

@@ -46,11 +46,11 @@ def endpoint(value: object) -> str:
         url = urlsplit(text)
         port = url.port
     except ValueError:
-        raise ValueError("索引器地址格式不正确") from None
+        raise ValueError("Indexer address format is invalid") from None
     if (len(text) > 2048 or url.scheme not in ("http", "https") or not url.hostname
             or url.username is not None or url.password is not None or url.query or url.fragment
             or any(char.isspace() for char in text) or port == 0):
-        raise ValueError("填写 HTTP 或 HTTPS API 地址；API key 单独填写，地址不带查询参数")
+        raise ValueError("Enter an HTTP or HTTPS API address; enter the API key separately and keep query parameters out of the address")
     return text
 
 
@@ -72,7 +72,7 @@ class Indexers:
                 endpoint(row.get("url"))
             return rows
         except (CredentialError, ValueError, TypeError):
-            raise ValueError("索引器配置读不出来，请在本机「配置 → 下载」中重新保存") from None
+            raise ValueError("Indexer configuration could not be read; save it again under Settings → Downloads on this machine") from None
 
     def public(self) -> dict:
         return {"indexers": [
@@ -83,26 +83,26 @@ class Indexers:
     def save(self, body: dict) -> dict:
         rows = body.get("indexers") if isinstance(body, dict) else None
         if not isinstance(rows, list) or len(rows) > MAX_INDEXERS:
-            raise ValueError(f"最多配置 {MAX_INDEXERS} 个索引器")
+            raise ValueError(f"At most {MAX_INDEXERS} indexers can be configured")
         previous = {row["key"]: row for row in self.load()}
         saved: list[dict] = []
         keys: set[str] = set()
         for row in rows:
             if not isinstance(row, dict):
-                raise ValueError("索引器配置必须是对象")
+                raise ValueError("Indexer configuration must be an object")
             key = str(row.get("key") or "")
             name = str(row.get("name") or "").strip()
             if not re.fullmatch(r"[a-zA-Z0-9_-]{1,48}", key) or key in keys:
-                raise ValueError("索引器编号为空或重复")
+                raise ValueError("Indexer ID is empty or duplicated")
             if not name or len(name) > 80:
-                raise ValueError("索引器名称须为 1 到 80 个字符")
+                raise ValueError("Indexer name must be 1 to 80 characters")
             address = endpoint(row.get("url"))
             old = previous.get(key, {})
             secret = str(row.get("api_key") or "").strip()
             if not secret and not row.get("clear_api_key") and old.get("url") == address:
                 secret = old.get("api_key", "")
             if len(secret) > 512 or any(char.isspace() for char in secret):
-                raise ValueError("API key 格式不正确")
+                raise ValueError("API key format is invalid")
             saved.append(dict(key=key, name=name, url=address, api_key=secret,
                               enabled=row.get("enabled") is True))
             keys.add(key)
@@ -118,9 +118,9 @@ class Filters:
 
     def __post_init__(self):
         if not 0 <= self.min_size <= self.max_size <= 1024 ** 4:
-            raise ValueError("体积区间须在 0 到 1 TiB 之间，下限不能大于上限")
+            raise ValueError("Size range must be between 0 and 1 TiB, and the minimum cannot exceed the maximum")
         if self.goal not in ("quality", "chinese", "uncensored"):
-            raise ValueError("质量目标只能是高清、中字或无码")
+            raise ValueError("Quality target must be HD, Chinese subtitles or uncensored")
 
 
 def qualities(title: str, tags: list[str], code: str) -> dict:
@@ -146,7 +146,7 @@ def torrent_info_hash(data: bytes) -> str:
     meta = bencode2.bdecode(data)
     info = meta.get(b"info") if isinstance(meta, dict) else None
     if not isinstance(info, dict):
-        raise ValueError("种子文件缺少 info 字典")
+        raise ValueError("Torrent file is missing the info dictionary")
     return hashlib.sha1(bencode2.bencode(info)).hexdigest()
 
 
@@ -185,22 +185,22 @@ def _xml(client: httpx.Client, indexer: dict, params: dict, deadline: float) -> 
     params = {**params, "apikey": indexer.get("api_key", "")}
     remaining = deadline - time.monotonic()
     if remaining <= 0:
-        raise ValueError("索引器查询超时")
+        raise ValueError("Indexer query timed out")
     with client.stream("GET", indexer["url"], params=params, timeout=min(10, remaining)) as response:
         if response.status_code != 200:
-            raise ValueError(f"索引器返回 HTTP {response.status_code}")
+            raise ValueError(f"Indexer returned HTTP {response.status_code}")
         content = bytearray()
         for chunk in response.iter_bytes(chunk_size=16384):
             if time.monotonic() > deadline:
-                raise ValueError("索引器查询超时")
+                raise ValueError("Indexer query timed out")
             content.extend(chunk)
             if len(content) > MAX_BYTES:
-                raise ValueError("索引器响应超过 2 MiB")
+                raise ValueError("Indexer response exceeds 2 MiB")
     text = bytes(content).decode("utf-8")
     if "<!DOCTYPE" in text.upper() or "<!ENTITY" in text.upper():
-        raise ValueError("索引器 XML 含不支持的实体声明")
+        raise ValueError("Indexer XML contains an unsupported entity declaration")
     if fromstring(text).tag not in ("caps", "rss", "error"):
-        raise ValueError("索引器没有返回 Torznab XML")
+        raise ValueError("Indexer did not return Torznab XML")
     return text
 
 
@@ -245,16 +245,16 @@ class Search:
     def run(self, indexers: list[dict], code: str, filters: Filters, blocked=()) -> dict:
         code = normalise_code_key(code)
         if not code or len(code) > 80 or not same_release_code(release_code_from_text(code), code):
-            raise ValueError("请输入可识别的作品番号")
+            raise ValueError("Enter a recognizable release code")
         active = [row for row in indexers if row.get("enabled")]
         if len(active) > MAX_INDEXERS:
-            raise ValueError("索引器数量超过上限")
+            raise ValueError("Indexer count exceeds the limit")
         if not active:
             return {"ok": True, "state": "unavailable", "items": [], "warnings": [],
-                    "error": "请在本机「配置 → 下载」中添加并启用索引器"}
+                    "error": "Add and enable an indexer under Settings → Downloads on this machine"}
         if not self.lock.acquire(blocking=False):
             return {"ok": False, "state": "busy", "items": [], "warnings": [],
-                    "error": "资源搜索正在进行，请稍后重试"}
+                    "error": "A resource search is in progress; try again later"}
         try:
             key = (json.dumps(active, sort_keys=True), code, filters)
             cached = self.cache.get(key)
@@ -284,7 +284,7 @@ class Search:
                     caps = parse_capabilities(_xml(client, indexer, {"t": "caps"}, deadline))
                     search = caps.searching.search if caps.searching else None
                     if not search or not search.available or "q" not in search.supported_params:
-                        raise ValueError("索引器没有声明番号搜索能力")
+                        raise ValueError("The indexer does not declare code search capability")
                     limit = min(MAX_ITEMS, max(1, caps.limits.max or MAX_ITEMS)) if caps.limits else MAX_ITEMS
                     items = parse_torznab(_xml(client, indexer, {
                         "t": "search", "q": query, "cat": "6000", "limit": str(limit)}, deadline))
@@ -307,7 +307,7 @@ class Search:
                         else:
                             found[row["info_hash"]] = row
                 except (httpx.HTTPError, UnicodeError, ParseError, TorznabAPIError):
-                    warnings.append(f"{indexer['name']}：请求失败或响应格式不正确，请检查索引器")
+                    warnings.append(f"{indexer['name']}: request failed or the response format is invalid; check the indexer")
                 except ValueError as error:
                     warnings.append(f"{indexer['name']}：{error}")
         def rank(row):
@@ -315,4 +315,4 @@ class Search:
             return (-int(target), -row["resolution"], -row["seeders"], row["size"], row["info_hash"])
         return {"ok": successful > 0, "state": "ready" if successful else "error",
                 "items": sorted(found.values(), key=rank), "warnings": warnings,
-                "error": "" if successful else "所有索引器都未能完成搜索"}
+                "error": "" if successful else "No indexer was able to complete the search"}

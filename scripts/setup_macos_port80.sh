@@ -79,15 +79,15 @@ remove_legacy() {
 if [ "$ACTION" = "check" ]; then
     rebuild_conf /etc/pf.conf > "$WORK/pf.conf"
     if pfctl -n -f "$WORK/pf.conf" 2>"$WORK/err"; then
-        echo "语法检查通过；install 会把它写入 /etc/pf.conf"
+        echo "Syntax check passed; install will write it into /etc/pf.conf"
     else
-        echo "语法检查失败：" >&2; cat "$WORK/err" >&2; exit 1
+        echo "Syntax check failed:" >&2; cat "$WORK/err" >&2; exit 1
     fi
     exit 0
 fi
 
 if [ "$(id -u)" -ne 0 ]; then
-    echo "需要 root：sudo sh $0 $ACTION" >&2
+    echo "Root required: sudo sh $0 $ACTION" >&2
     exit 1
 fi
 
@@ -98,7 +98,7 @@ if [ "$ACTION" = "uninstall" ]; then
     strip_conf /etc/pf.conf > "$WORK/pf.conf"
     cp "$WORK/pf.conf" /etc/pf.conf
     pfctl -f /etc/pf.conf 2>/dev/null || true
-    echo "已移除 80/443 的重定向"
+    echo "Removed the 80/443 redirects"
     exit 0
 fi
 
@@ -126,7 +126,7 @@ RULES
 # 先在临时文件上验证，通过了才动系统文件。
 rebuild_conf /etc/pf.conf > "$WORK/pf.conf"
 if ! pfctl -n -f "$WORK/pf.conf" 2>"$WORK/err"; then
-    echo "生成的 pf.conf 语法不合法，未改动系统文件：" >&2
+    echo "The generated pf.conf is not valid; system files were not changed:" >&2
     cat "$WORK/err" >&2
     exit 1
 fi
@@ -150,7 +150,7 @@ pfctl -f /etc/pf.conf
 launchctl bootout system "$DAEMON" 2>/dev/null || true
 launchctl bootstrap system "$DAEMON"
 
-echo "已把 80 -> ${TARGET_PORT}、443 -> ${TLS_PORT}（经 ${IFACE}）"
-echo "  验证：curl -s --noproxy '*' -o /dev/null -w '%{http_code}\\n' http://peach.local/healthz"
+echo "Redirected 80 -> ${TARGET_PORT} and 443 -> ${TLS_PORT} (via ${IFACE})"
+echo "  Verify: curl -s --noproxy '*' -o /dev/null -w '%{http_code}\\n' http://peach.local/healthz"
 echo "        curl -s --noproxy '*' -o /dev/null -w '%{http_code}\\n' https://peach.local/healthz"
-echo "  移除：sudo sh $0 uninstall"
+echo "  Remove: sudo sh $0 uninstall"

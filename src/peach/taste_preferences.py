@@ -10,8 +10,8 @@ from .taste_evidence import era, length_band, preference_evidence
 
 WEIGHTS = {"performer": .4, "creator": .4, "tag": .34, "studio": .12, "series": .08,
            "era": .03, "length": .03}
-LABELS = {"performer": "出演者偏好", "creator": "创作者偏好", "tag": "标签偏好",
-          "studio": "厂牌偏好", "series": "系列偏好", "era": "发行年代偏好", "length": "时长偏好"}
+LABELS = {"performer": "Performer preference", "creator": "Creator preference", "tag": "Tag preference",
+          "studio": "Studio preference", "series": "Series preference", "era": "Release era preference", "length": "Length preference"}
 _PROFILES = {}
 _POLICY_FINGERPRINT = None
 PROFILE_TABLES = ('asset', 'asset_entity', 'asset_preference', 'entity', 'entity_alias',
@@ -100,6 +100,6 @@ def preference_score(row, strengths, names, evidence):
         sources = sorted({source for eid in matches for source in evidence[kind][eid]})
         labels = sorted(str(names[kind].get(eid, eid)) for eid in matches)
         if kind in {"era", "length"}:
-            labels = ["与你的馆藏和观看分布接近"]
+            labels = ["Close to your library and viewing distribution"]
         reasons.append(f"{LABELS[kind]}：{'、'.join(labels[:3])}（{'、'.join(sources)}）")
     return round((total + people_score) / denominator, 4) if denominator else 0.0, reasons

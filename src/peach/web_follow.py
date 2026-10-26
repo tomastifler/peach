@@ -1182,7 +1182,7 @@ def _profile_link_suggestions(rows, aliases: dict[str, str]) -> list[dict]:
                 "canonical": canonical,
                 "alias": handle,
                 "evidence": f"{PROVIDER_LABELS.get(row['provider'], row['provider'])}"
-                            f" 首楼的创作者主页链接指向 {service}/{handle}",
+                            f" the creator profile link in the first post points to {service}/{handle}",
             })
             if len(suggestions) >= MAX_ALIAS_SUGGESTIONS:
                 return suggestions
@@ -1225,7 +1225,7 @@ def _follow_alias_suggestions(rows, aliases: dict[str, str]) -> list[dict]:
             suggestions.append({
                 "canonical": shorter["name"],
                 "alias": longer["name"],
-                "evidence": "规范化名称存在包含关系，仅供人工确认",
+                "evidence": "The normalized names contain one another; for manual confirmation only",
             })
             if len(suggestions) >= MAX_ALIAS_SUGGESTIONS:
                 return suggestions
@@ -1602,10 +1602,10 @@ def _sorted_groups(groups: tuple, sort: str, direction: str, seed: int = 1) -> t
 #: 建议分组的名字与先后。顺序在这里定，页面照抄——两侧各排一次的话，改了一侧就会
 #: 出现「服务端认为最该先看的组显示在第三位」。
 FOLLOW_SUGGEST_GROUPS = (
-    ("followed", "已关注"),
-    ("archive", "归档站的创作者"),
-    ("tag_artist", "Rule34.xxx 的创作者"),
-    ("tag", "Rule34.xxx 标签"),
+    ("followed", "Followed"),
+    ("archive", "Archive-site creator"),
+    ("tag_artist", "Rule34.xxx creator"),
+    ("tag", "Rule34.xxx tag"),
 )
 
 
@@ -1949,18 +1949,18 @@ def w_follow_image_dims(contract, body) -> dict:
     """
     entries = body.get("entries")
     if not isinstance(entries, list):
-        raise ValueError("entries 必须是列表")
+        raise ValueError("entries must be a list")
     if len(entries) > IMAGE_DIMS_BATCH_LIMIT:
-        raise ValueError(f"一次最多回写 {IMAGE_DIMS_BATCH_LIMIT} 张")
+        raise ValueError(f"At most {IMAGE_DIMS_BATCH_LIMIT} can be written back at a time")
     learned = 0
     with contract.database.write_transaction() as connection:
         store = _store(contract, connection)
         for entry in entries:
             if not isinstance(entry, dict):
-                raise ValueError("每一项必须是对象")
+                raise ValueError("Each item must be an object")
             dims = positive_dims(entry.get("width"), entry.get("height"))
             if dims is None:
-                raise ValueError("width/height 必须是正整数")
+                raise ValueError("width/height must be positive integers")
             media = entry.get("media")
             index = int(media) if media is not None else None
             if store.set_image_dims(int(entry["item"]), *dims, media_index=index):
@@ -2156,7 +2156,7 @@ class _FollowCheckSession:
 
     def checkpoint(self, **fields):
         if self.job_id and not self.contract.follow_job.checkpoint(self.job_id, **fields):
-            raise InterruptedError('关注检查已停止')
+            raise InterruptedError('Follow check stopped')
 
     def remember(self, row, result, *, finished):
         if result.get('ok') and isinstance(result.get('page'), int):
@@ -2180,7 +2180,7 @@ class _FollowCheckSession:
         older = bool(self.body.get('older'))
         for round_index in range(501):
             if self.job_id and self.contract.follow_job.snapshot() is None:
-                raise InterruptedError('关注检查已停止')
+                raise InterruptedError('Follow check stopped')
             result = _check_payload(run_check(row, credentials=self.credentials, writer=self.writer,
                 connector_factory=build_connector, older=older, progress=progress,
                 initial_days=self.initial_days, cooldown=self.cooldown))
@@ -2347,7 +2347,7 @@ def w_follow_source(contract, body) -> dict:
             store = _store(contract, connection)
             exists = any(row["id"] == source_id for row in store.sources())
             if not exists:
-                raise ValueError("这个关注来源不存在")
+                raise ValueError("This follow source does not exist")
             store.set_enabled(source_id, enabled)
         return {"ok": True, "source": source_id, "enabled": enabled}
     if action != "add":
@@ -2384,8 +2384,8 @@ def w_follow_source(contract, body) -> dict:
             "source": source_id, "provider": parsed.provider,
             "provider_label": PROVIDER_LABELS.get(parsed.provider, parsed.provider),
             "ref": parsed.ref, "label": label, "ok": True, "deferred": True,
-            "message": ("已登记，等待检查更新" if body.get("defer_check") else
-                        "已登记，另一次检查正在进行，这条稍后再查"),
+            "message": ("Registered; waiting for an update check" if body.get("defer_check") else
+                        "Registered; another check is in progress, so this one will be checked later"),
         }
     return {"ok": True, "source": source_id, "provider": parsed.provider,
             "ref": parsed.ref, "label": label, "checked": outcome,
@@ -2434,7 +2434,7 @@ def w_follow_creator(contract, body) -> dict:
     """资料页上「是同一个人」：把同名等确认的那组关注作者绑到这位创作者名下。"""
     entity_id, key = body.get("entity_id"), str(body.get("key") or "")
     if type(entity_id) is not int or not key.startswith("name:"):
-        raise ValueError("entity_id 与 key 都要给")
+        raise ValueError("Both entity_id and key are required")
     with contract.database.write_transaction() as connection:
         written = follow_creators.confirm(connection, entity_id, key)
     contract.cache_bust()
@@ -2524,7 +2524,7 @@ def w_follow_resolve(contract, body, *, progress=None, checkpoint=None, resume_s
                 progress=lambda **fields: job.update(job_id, **fields),
                 checkpoint=lambda **fields: job.checkpoint(job_id, **fields), resume_state=job.snapshot())
             job.update(job_id, **result, status="complete", completed_at=time.time())
-        return job.start(work, restart=True, initial={"message": "正在准备查找关注来源"},
+        return job.start(work, restart=True, initial={"message": "Preparing to look up follow sources"},
                          recovery={'lines': body.get('lines'), 'background': True})
     raw = body.get("lines")
     if isinstance(raw, str):
@@ -2533,9 +2533,9 @@ def w_follow_resolve(contract, body, *, progress=None, checkpoint=None, resume_s
         raise ValueError("lines must be a list of strings")
     lines = [str(line).strip() for line in raw if str(line).strip()]
     if not lines:
-        raise ValueError("没有可解析的内容")
+        raise ValueError("Nothing to parse")
     if len(lines) > MAX_RESOLVE_LINES:
-        raise ValueError(f"一次最多解析 {MAX_RESOLVE_LINES} 行，收到 {len(lines)} 行")
+        raise ValueError(f"At most {MAX_RESOLVE_LINES} lines can be parsed at a time; received {len(lines)}")
 
     known = {(row["provider"], canonical_source_ref(row["provider"], row["ref"])) for row in
              (_source_payload(r) for r in _existing_sources(contract))}
@@ -2561,8 +2561,8 @@ def w_follow_resolve(contract, body, *, progress=None, checkpoint=None, resume_s
                 label = PROVIDER_LABELS.get(provider, provider)
                 progress(
                     checked=done_units + position, total=total_units,
-                    message=f"查找关注来源：来源 {done_units + position + 1}/{total_units} · {label}"
-                            + (f"（第 {line_index + 1}/{len(lines)} 行）" if len(lines) > 1 else ""))
+                    message=f"Looking up follow sources: source {done_units + position + 1}/{total_units} · {label}"
+                            + (f" (line {line_index + 1}/{len(lines)})" if len(lines) > 1 else ""))
 
         return note
 
@@ -2576,12 +2576,12 @@ def w_follow_resolve(contract, body, *, progress=None, checkpoint=None, resume_s
             results = [row for row in results if row['line'] != line]
             results.append(result)
             if checkpoint and not checkpoint(results=results.copy(), checked=done_units + plan_units(line), total=total_units):
-                raise InterruptedError('关注来源查找已停止')
+                raise InterruptedError('Follow source lookup stopped')
         done_units += plan_units(line)
     if progress is not None and total_units:
         # 每个来源是开查前报一次自己的序号，最后一个报的是 total-1；收尾这一下才走满。
         progress(checked=total_units, total=total_units,
-                 message=f"查找关注来源：{total_units} 个来源已查完")
+                 message=f"Looking up follow sources: {total_units} sources checked")
     return {"ok": True, "results": results}
 
 
@@ -2606,14 +2606,14 @@ def w_follow_credential(contract, body) -> dict:
     provider = str(body.get("provider") or "")
     guide = CREDENTIAL_GUIDE.get(provider)
     if guide is None or not guide.get("fields"):
-        raise ValueError(f"{provider or '(空)'} 不接受凭据")
+        raise ValueError(f"{provider or '(empty)'} does not accept credentials")
     values = body.get("values")
     if not isinstance(values, dict):
         raise ValueError("values must be an object")
     allowed = set(guide["fields"])
     unknown = sorted(set(values) - allowed)
     if unknown:
-        raise ValueError(f"{provider} 不认识这些字段：{', '.join(unknown)}")
+        raise ValueError(f"{provider} does not recognize these fields: {', '.join(unknown)}")
     cleaned = {name: str(values[name]).strip() for name in guide["fields"]
                if str(values.get(name) or "").strip()}
     store = _credential_store(contract)
@@ -2640,7 +2640,7 @@ def w_follow_credential(contract, body) -> dict:
 #: 撤销后要不要多说一句。共享副本删掉了或压根没有都不必打扰用户；
 #: 只有「盘不在、这次只撤掉了本机」必须说出来，否则用户以为撤干净了。
 CLEAR_NOTES = {
-    "offline": "共享盘不在，只撤掉了本机这份。等盘回来要再撤一次，否则会被同步回来。",
+    "offline": "The shared drive is missing, so only this machine's copy was withdrawn. Withdraw again once the drive is back, otherwise it will sync back.",
 }
 
 

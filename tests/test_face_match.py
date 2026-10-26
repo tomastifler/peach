@@ -28,7 +28,7 @@ class EnsureModelTests(unittest.TestCase):
             target = Path(temp).resolve() / "sface.onnx"
             with self.assertRaises(FaceModelUnavailable) as caught:
                 face_match.ensure_model(target, allow_download=False)
-            self.assertIn("人脸比对模型", str(caught.exception))
+            self.assertIn("face matching model", str(caught.exception))
 
     def test_the_pinned_model_is_the_lfs_object(self):
         self.assertEqual(len(face_match.MODEL_SHA256), 64)

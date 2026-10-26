@@ -30,7 +30,7 @@ from .follow_variants import classify, group_duplicates, video_spec_markers
 def _now_text(moment: datetime | None = None) -> str:
     moment = moment or datetime.now(timezone.utc)
     if moment.tzinfo is None:
-        raise FollowSourceError("追更时间戳必须带时区")
+        raise FollowSourceError("Follow timestamps must include a time zone")
     return moment.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
@@ -326,7 +326,7 @@ class FollowStore:
                  semantics: str = "work", entity_id: int | None = None,
                  metadata: dict | None = None, moment: datetime | None = None) -> int:
         if semantics not in ("work", "release"):
-            raise FollowSourceError("semantics 只能是 work 或 release")
+            raise FollowSourceError("semantics must be work or release")
         ref = canonical_source_ref(provider, ref)
         stamp = _now_text(moment)
         payload = json.dumps(metadata or {}, ensure_ascii=False)
@@ -585,7 +585,7 @@ class FollowStore:
         """
         predicate = _ENRICHED_PREDICATES.get(str(mark or ""))
         if predicate is None:
-            raise ValueError(f"未登记的补齐判据：{mark!r}")
+            raise ValueError(f"Unregistered backfill criterion: {mark!r}")
         rows = self._connect().execute(
             "SELECT external_id FROM follow_item WHERE source_id=?"
             f" AND {predicate}", (source_id,))
@@ -652,7 +652,7 @@ class FollowStore:
                 "checked_at": _now_text(reference), "candidates": len(fetch.candidates),
             }, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
         except OSError as error:
-            return None, f"证据未取得（{self.sources_root} 不可写：{error.strerror or error}）"
+            return None, f"Evidence not obtained ({self.sources_root} is not writable: {error.strerror or error})"
         return str(path.relative_to(self.sources_root.parent)), None
 
     # ---- 读取与分组 -----------------------------------------------------
@@ -779,9 +779,9 @@ class FollowStore:
 
     def set_status(self, item_id: int, status: str) -> None:
         if status not in ("new", "seen", "saved", "ignored"):
-            raise FollowSourceError(f"未知的追更状态：{status}")
+            raise FollowSourceError(f"Unknown follow status: {status}")
         if status == "saved":
-            raise FollowSourceError("`saved` 只能由 save_asset() 设置")
+            raise FollowSourceError("`saved` can only be set by save_asset()")
         self._connect().execute(
             "UPDATE follow_item SET status=? WHERE id=?", (status, item_id))
 
@@ -796,7 +796,7 @@ class FollowStore:
             "SELECT hidden_media_json FROM follow_item WHERE id=?", (int(item_id),)
         ).fetchone()
         if row is None:
-            raise FollowSourceError(f"追更条目不存在：{item_id}")
+            raise FollowSourceError(f"Follow item does not exist: {item_id}")
         try:
             current = [key for key in json.loads(row[0] or "[]")
                        if isinstance(key, str) and key]
@@ -822,7 +822,7 @@ class FollowStore:
         """
         dims = positive_dims(width, height)
         if dims is None:
-            raise FollowSourceError(f"图片宽高必须是正整数：{width}×{height}")
+            raise FollowSourceError(f"Image width and height must be positive integers: {width}×{height}")
         if media_index is None:
             prefix = "$"
             guard = ""
@@ -875,9 +875,9 @@ class FollowStore:
         canonical_key = normalized_author_name(canonical_name)
         alias_key = normalized_author_name(alias_name)
         if not canonical_key or not alias_key:
-            raise ValueError("规范创作者名和平台别名都不能为空")
+            raise ValueError("The canonical creator name and the platform alias cannot be empty")
         if canonical_key == alias_key:
-            raise ValueError("这两个名字归一化后相同，不需要维护别名")
+            raise ValueError("These two names are identical once normalised; no alias is needed")
 
         connection = self._connect()
         stamp = _now_text(moment)
@@ -931,16 +931,16 @@ class FollowStore:
         """删掉一条别名。规范名本身不能当别名删掉，那会拆散整个组。"""
         alias_key = normalized_author_name(alias_name)
         if not alias_key:
-            raise ValueError("别名不能为空")
+            raise ValueError("The alias cannot be empty")
         connection = self._connect()
         row = connection.execute(
             "SELECT canonical_key FROM follow_author_alias WHERE alias_key=?",
             (alias_key,),
         ).fetchone()
         if row is None:
-            raise ValueError("这个创作者别名不存在")
+            raise ValueError("This creator alias does not exist")
         if str(row["canonical_key"]) == alias_key:
-            raise ValueError("规范名不能作为别名移除")
+            raise ValueError("The canonical name cannot be removed as an alias")
         connection.execute(
             "DELETE FROM follow_author_alias WHERE alias_key=?", (alias_key,))
 
@@ -1034,17 +1034,17 @@ class FollowStore:
         不改写任何既有 asset 的真相字段，也不下载媒体。
         """
         if not confirm:
-            raise FollowSourceError("写 ledger 需要显式 confirm=True")
+            raise FollowSourceError("Writing to the ledger requires explicit confirm=True")
         connection = self._connect()
         row = connection.execute(
             self._SELECT + " WHERE i.id=?", (item_id,)).fetchone()
         if row is None:
-            raise FollowSourceError(f"追更条目 {item_id} 不存在")
+            raise FollowSourceError(f"Follow item {item_id} does not exist")
         item = self._row(row)
         if item.asset_id:
             return item.asset_id
         if not item.url:
-            raise FollowSourceError("候选没有作品页 URL，无法作为在线作品保存")
+            raise FollowSourceError("The candidate has no work page URL and cannot be saved as an online work")
         stamp = _now_text(moment)
         existing = connection.execute(
             "SELECT id FROM asset WHERE location='online' AND path=?", (item.url,)
@@ -1110,7 +1110,7 @@ class FollowStore:
         `ON DELETE CASCADE` 会留下认不出主人的孤儿行。
         """
         if not confirm:
-            raise FollowSourceError("删 ledger 行需要显式 confirm=True")
+            raise FollowSourceError("Deleting ledger rows requires explicit confirm=True")
         connection = self._connect()
         removed = 0
         for row in rows:

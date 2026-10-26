@@ -45,8 +45,8 @@ class Fc2SimilarityPolicyTests(unittest.TestCase):
         self.assertEqual(rows[0]["evidence_kinds"], "comment_equivalent")
         self.assertEqual(rows[0]["left_owned"], "1")
         self.assertEqual(rows[0]["right_owned"], "")
-        self.assertIn("合集", rows[0]["warnings"])
-        self.assertIn("尚不在本地", rows[0]["warnings"])
+        self.assertIn("compilation", rows[0]["warnings"])
+        self.assertIn("not yet in the local ledger", rows[0]["warnings"])
 
     def test_exact_hash_across_numbers_is_inferred_but_never_merged(self):
         rows = build_candidates([

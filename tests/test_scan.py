@@ -211,13 +211,13 @@ class PosixShapeTests(_ScanCase):
         with self.assertRaises(scan.ScanTargetError) as caught:
             scan.walk_root_for("local", r"R:\media2", declared_roots=declared,
                                mounts={"local": (str(self.media),)}, windows=False)
-        self.assertIn("第 2 个数据库路径前缀", str(caught.exception))
+        self.assertIn("Database path prefix #2", str(caught.exception))
 
     def test_a_directory_outside_the_mount_is_refused(self):
         with self.assertRaises(scan.ScanTargetError) as caught:
             scan.ledger_root_for("local", "/somewhere/else", declared_roots=self.DECLARED,
                                  mounts={"local": (str(self.media),)}, windows=False)
-        self.assertIn("挂载点", str(caught.exception))
+        self.assertIn("mount point", str(caught.exception))
 
 
 class SidecarTests(_ScanCase):
@@ -239,7 +239,7 @@ class SidecarTests(_ScanCase):
         result, output = self._scan(r"R:\media", declared_roots=self.DECLARED,
                                     mounts={"local": (self.media,)}, windows=False)
         self.assertEqual(result.sidecars, 8)
-        self.assertIn("附属文件未登记 8 个", output)
+        self.assertIn("unregistered sidecar files 8", output)
         self.assertEqual(set(self._paths()), {
             r"R:\media\FC2-1\FC2-1-CD1.mp4", r"R:\media\创作者\sub\a.mp4",
             r"R:\media\cover.jpg", r"R:\media\notes.txt"})

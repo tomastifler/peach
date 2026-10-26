@@ -36,12 +36,12 @@ def initialize() -> None:
     if config.present:
         return
     if config.directory("database").joinpath("ledger.db").exists():
-        raise RuntimeError("已有数据库但缺少配置文件，请恢复 config.toml 后启动")
+        raise RuntimeError("A database exists but the configuration file is missing; restore config.toml and start again")
     process = launch("init", "--no-input")
     try:
         code = process.wait(timeout=120)
         if code:
-            raise RuntimeError(f"初始化失败，退出码 {code}")
+            raise RuntimeError(f"Initialization failed, exit code {code}")
     finally:
         stop_process(process)
 
@@ -62,7 +62,7 @@ def supervise(host: str, port: int, stopping: threading.Event) -> int:
                 return code or 1
             if scanner is not None and scanner.poll() is not None:
                 if scanner.returncode:
-                    print(f"资料处理失败，退出码 {scanner.returncode}", file=sys.stderr, flush=True)
+                    print(f"Metadata processing failed, exit code {scanner.returncode}", file=sys.stderr, flush=True)
                 scanner = None
             if scanner is None:
                 location = onboarding.take_first_scan_request(config)
@@ -76,7 +76,7 @@ def supervise(host: str, port: int, stopping: threading.Event) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="运行通过浏览器管理的 Peach 服务")
+    parser = argparse.ArgumentParser(description="Run the browser-managed Peach service")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8900)
     args = parser.parse_args(argv)

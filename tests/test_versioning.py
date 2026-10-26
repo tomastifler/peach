@@ -104,7 +104,7 @@ class VersionManagerTests(unittest.TestCase):
             self.assertFalse(snapshot.remote_configured)
             result = manager.check()
             self.assertEqual(result.state, "unconfigured")
-            self.assertIn("本地开发版", result.message)
+            self.assertIn("local dev build", result.message)
 
     def test_check_fetches_and_reports_remote_commits_without_applying(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -182,7 +182,7 @@ class VersionManagerTests(unittest.TestCase):
                 result = VersionManager(repo).update()
 
                 self.assertEqual(result.state, "blocked")
-                self.assertIn("未提交修改", result.message)
+                self.assertIn("uncommitted changes", result.message)
                 self.assertEqual(git(repo, "rev-parse", "HEAD").stdout.strip(), before)
                 self.assertEqual((repo / "version.txt").read_text(encoding="utf-8"), "dirty\n")
 
@@ -238,7 +238,7 @@ class PackagedBuildAgeTests(unittest.TestCase):
             self.assertEqual(snapshot.build_commit, built_at)
             self.assertEqual(snapshot.build_behind, 1)
             self.assertTrue(snapshot.build_stale)
-            self.assertIn(f"托盘构建 {built_at[:8]}，落后 1 个提交", snapshot.build_label)
+            self.assertIn(f"tray build {built_at[:8]}, 1 commits behind", snapshot.build_label)
 
     def test_a_tray_built_from_the_current_head_is_not_stale(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -266,7 +266,7 @@ class PackagedBuildAgeTests(unittest.TestCase):
             self.assertIsNone(snapshot.build_commit)
             self.assertEqual(snapshot.build_behind, UNKNOWN_BUILD_AGE)
             self.assertTrue(snapshot.build_stale)
-            self.assertIn("托盘构建身份未取得", snapshot.build_label)
+            self.assertIn("tray build identity not obtained", snapshot.build_label)
 
     def test_a_build_commit_outside_this_repository_counts_as_stale(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -275,7 +275,7 @@ class PackagedBuildAgeTests(unittest.TestCase):
             with self.packaged(stranger):
                 snapshot = VersionManager(repo).inspect()
             self.assertEqual(snapshot.build_behind, UNKNOWN_BUILD_AGE)
-            self.assertIn("不在本检出历史里", snapshot.build_label)
+            self.assertIn("is not in this checkout's history", snapshot.build_label)
 
     def test_stale_paths_name_what_changed_since_the_build(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -329,7 +329,7 @@ class BuildLabelTests(unittest.TestCase):
         )
         self.assertEqual(
             snapshot.build_label,
-            "master@1a2b3c4d · 有未提交修改 · 托盘构建 9f8e7d6c，落后 4 个提交",
+            "master@1a2b3c4d · uncommitted changes · tray build 9f8e7d6c, 4 commits behind",
         )
 
 

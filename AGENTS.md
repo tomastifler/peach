@@ -74,7 +74,7 @@
 - **工作树**：并发改代码时主检出只做集成。每个智能体在 `scripts/agent_worktree.py create` 建于 `peach-worktrees/` 的隔离工作树里干活；提交前 `git rev-parse --show-toplevel` 必须不是主检出（`scripts/githooks/` 拒收主检出 master 上的直接提交与手工 merge），工作者只交分支、从不自己合并。细节见 `peach-worktree`。
 - **仓库整洁**：`peach-worktrees/` 与 `.claude/worktrees/` 下都不得留未在 `git worktree list` 注册的目录（`tests/test_repo_hygiene.py`）；`prune --apply` 扫空目录，有文件的报出来等人看。不用 `git add .`、`git add -A`、目录路径或 glob，只暂存本任务拥有的文件再核对 `git diff --cached --name-status`；实现与它的测试原子提交。交付提交须署名（`scripts/co_author.py`）。
 - **文案只写最终状态**：界面字串、注释、docstring、测试名与文档不写改动前后对比，例外逐行加 `copy-lint-disable-line`（`tests/test_copy_final_state.py`）。
-- **测试写法**：读仓库文件再 `assertIn` 一段写法的源码文本断言按文件计数只减不增（`tests/test_source_assertion_ratchet.py`）；行为、设计决定各归何处见 `docs/TESTING.md`「写什么测试」。
+- **测试写法**：读仓库文件再 `assertIn` 一段写法的源码文本断言按文件计数只减不增（`tests/test_source_assertion_ratchet.py`）；行为、设计决定各归何处见 `docs/TESTING.md`「What tests to write」。
 - **依赖策略**：Python 依赖精确固定版本，每个被 import 的外部模块要有声明的归属，前端清单与实际 vendored 路径一致，所有清单都进 Dependabot（`tests/test_dependency_policy.py`）。
 
 ## 常犯错误（没有自动拦截，都是真实重犯过的）

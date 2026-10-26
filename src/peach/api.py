@@ -105,7 +105,7 @@ COMPRESSION_EXCLUDED_TYPES = (
 #: Starlette 自己抛的那几种 HTTPException 带的是英文 detail，给人看之前换成中文。
 _DEFAULT_DETAILS = {
     "Not Found": "这个地址下没有页面。",
-    "Method Not Allowed": "这个地址不接受这种请求。",
+    "Method Not Allowed": "This address does not accept this kind of request.",
 }
 
 
@@ -131,7 +131,7 @@ def _start_tunnel(settings: PeachSettings, manager: tunnel.TunnelManager) -> Non
     try:
         manager.start(tunnel.plan_for_settings(settings))
     except tunnel.TunnelError:
-        LOGGER.warning("Cloudflare Tunnel 未能启动", exc_info=True)
+        LOGGER.warning("Cloudflare Tunnel failed to start", exc_info=True)
 
 
 def _restore_task_center(contract) -> None:
@@ -324,7 +324,7 @@ def create_app(
         filename="feed-schedule.json",
         default=FollowScheduleConfig(enabled=True,
                                      interval_minutes=feeds.DEFAULT_INTERVAL_MINUTES),
-        unavailable_message="订阅源拉取只在写入端可用",
+        unavailable_message="Feed fetching is only available on the writer",
     )
     contract.feed_scheduler = feed_scheduler
     from .web_job_recovery import RecoveryService

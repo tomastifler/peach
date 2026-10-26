@@ -60,7 +60,7 @@ const fieldErrorsOf = (cause: unknown): FieldErrors | null => {
 export function MediaSettings({ data, receipt, panel }: ConfigurationGroupProps) {
   return (
     <div {...groupRoot(panel)}>
-      {data.editable ? <MediaForm data={data} receipt={receipt} /> : <Note tone="neutral" title="只读">{data.notice}</Note>}
+      {data.editable ? <MediaForm data={data} receipt={receipt} /> : <Note tone="neutral" title="Read-only">{data.notice}</Note>}
       {data.editable ? null : <MountStatus data={data} />}
       {data.push_discovery
         ? <PushDiscoveryForm initial={data.push_discovery} receipt={receipt} />
@@ -105,7 +105,7 @@ function MediaForm({ data, receipt }: ConfigurationGroupProps) {
     }, 'POST', signal), (result) => {
       revision.current = result.revision;
       setRowErrors([]);
-      receipt('已保存配置');
+      receipt('Settings saved');
       setSaved(result);
     }, (cause) => {
       const fields = fieldErrorsOf(cause);
@@ -116,10 +116,10 @@ function MediaForm({ data, receipt }: ConfigurationGroupProps) {
 
   if (saved) {
     return (
-      <Section title="媒体目录">
+      <Section title="Media folders">
         <Stack>
-          <Note tone="success" title="配置已保存">
-            Peach 正在重新启动。稍后自动跳转，或点击<LinkButton href={saved.url} size="small">进入馆藏</LinkButton>。
+          <Note tone="success" title="Settings saved">
+            Peach is restarting. You will be redirected shortly, or click <LinkButton href={saved.url} size="small">Open library</LinkButton>.
           </Note>
         </Stack>
       </Section>
@@ -131,13 +131,13 @@ function MediaForm({ data, receipt }: ConfigurationGroupProps) {
   const cloud = rows.some((row) => isCloudSource(row.location));
   const missing = cloud ? (data.mount_dependencies ?? []).filter((dependency) => !dependency.available) : [];
   return (
-    <Section title="媒体目录" onSubmit={submit}>
+    <Section title="Media folders" onSubmit={submit}>
       <Stack>
         <div className="flex flex-col gap-3">
-          <FieldLabel>媒体目录</FieldLabel>
-          <div role="group" aria-label="媒体目录" className="flex flex-col gap-3">
+          <FieldLabel>Media folders</FieldLabel>
+          <div role="group" aria-label="Media folders" className="flex flex-col gap-3">
             {rows.map((row, index) => (
-              <FolderRow key={index} label={`媒体目录 ${index + 1}`} path={row.path}
+              <FolderRow key={index} label={`Media folder ${index + 1}`} path={row.path}
                 onPath={(path) => edit(index, { path })} error={rowErrors[index]} inputRef={inputRef(index)}
                 picking={picking === index} onPick={() => void pick(index)}
                 onRemove={rows.length > 1 ? () => remove(index) : undefined}
@@ -145,28 +145,28 @@ function MediaForm({ data, receipt }: ConfigurationGroupProps) {
                 <SourceSelect index={index} value={row.location}
                   onChange={(location) => edit(index, { location, cost: location === 'local' ? 'free' : '' })} />
                 <MediaReadPolicy index={index} cost={row.cost} onChange={(cost) => edit(index, { cost })}
-                  error={requireReadPolicy && !row.cost ? '请选择媒体读取策略' : undefined} />
-                <Input className="min-w-40 flex-1" aria-label={`媒体库名称 ${index + 1}`} maxLength={80}
-                  placeholder="媒体库名称"
+                  error={requireReadPolicy && !row.cost ? 'Choose a media read policy' : undefined} />
+                <Input className="min-w-40 flex-1" aria-label={`Library name ${index + 1}`} maxLength={80}
+                  placeholder="Library name"
                   value={row.library} onChange={(library) => edit(index, { library })} />
-                <LibraryIconPicker label={`媒体库图标 ${index + 1}`} value={row.library_icon} kind={row.location}
+                <LibraryIconPicker label={`Library icon ${index + 1}`} value={row.library_icon} kind={row.location}
                   onChange={(library_icon) => edit(index, { library_icon })} />
               </FolderRow>
             ))}
           </div>
-          <Button variant="secondary" className="self-start" onClick={add}>添加文件夹</Button>
+          <Button variant="secondary" className="self-start" onClick={add}>Add folder</Button>
         </div>
         {cloud ? <><MediaReadPolicyHelp /><CloudDriveGuide /></> : null}
         {missing.map((dependency) => (
           <Help key={dependency.name}>
-            未检测到 {dependency.name}。<ExternalLink href={dependency.download_url}>下载 {dependency.name}</ExternalLink>
+            {dependency.name} not detected. <ExternalLink href={dependency.download_url}>Download {dependency.name}</ExternalLink>
           </Help>
         ))}
-        <Checkbox isSelected={scanNow} onChange={setScanNow}>保存后扫描并补全资料</Checkbox>
-        {failure ? <Note tone="error" title="没有保存">{failure}</Note> : null}
+        <Checkbox isSelected={scanNow} onChange={setScanNow}>Scan and fill in metadata after saving</Checkbox>
+        {failure ? <Note tone="error" title="Not saved">{failure}</Note> : null}
       </Stack>
-      <Footer status="保存后 Peach 会重新启动。">
-        <Button type="submit" {...busyProps(action.busy === 'save')}>保存配置</Button>
+      <Footer status="Peach will restart after saving.">
+        <Button type="submit" {...busyProps(action.busy === 'save')}>Save settings</Button>
       </Footer>
     </Section>
   );
@@ -185,17 +185,17 @@ function MountStatus({ data }: { data: ConfigurationData }) {
   const refresh = () => void action.run('refresh', (signal) => fetchConfiguration(signal),
     (result) => queryClient.setQueryData(CONFIGURATION_KEY, result));
   return (
-    <Section title="挂载状态">
+    <Section title="Mount status">
       <FactList>
         {sources.map((row, index) => (
           <Fact key={index} term={<><SourceMark mark={sourceMark(row.location)} />{sourceName(row.location)}</>}>
-            {row.path || '未配置挂载点'}<MountBadge online={row.online} />
+            {row.path || 'No mount point configured'}<MountBadge online={row.online} />
           </Fact>
         ))}
       </FactList>
       {action.error ? <Stack divided><ErrorText>{action.error}</ErrorText></Stack> : null}
       <Footer>
-        <Button variant="secondary" onClick={refresh} {...busyProps(action.busy === 'refresh')}>刷新挂载状态</Button>
+        <Button variant="secondary" onClick={refresh} {...busyProps(action.busy === 'refresh')}>Refresh mount status</Button>
       </Footer>
     </Section>
   );

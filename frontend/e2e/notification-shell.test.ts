@@ -25,9 +25,9 @@ describe('通知和任务卡的共用外框', () => {
           document.documentElement.classList.toggle('dark', theme === 'dark');
           const entry = '/dist/peach-app.js', ui = await import(entry);
           ui.showToast(document.getElementById('toasts'), { success: '', error: '' }, 'shell-receipt',
-            { html: '配置已保存', alert: false, timeout: Infinity, action: null });
+            { html: 'Settings saved', alert: false, timeout: Infinity, action: null });
         }, theme);
-        const receipt = page.locator('#toasts [data-sonner-toast][data-styled="true"]').filter({ hasText: '配置已保存' });
+        const receipt = page.locator('#toasts [data-sonner-toast][data-styled="true"]').filter({ hasText: 'Settings saved' });
         await receipt.waitFor();
         await page.waitForFunction(() => [...document.querySelectorAll('#toasts [data-sonner-toast]')]
           .every(node => node.getAttribute('data-mounted') === 'true' && node.getAnimations().length === 0));

@@ -25,7 +25,7 @@ export async function syncPostSetupTutorial(){
   if(postSetupTutorialMarker()!=='pending'||await tutorialState.readPostSetupTutorialDone()){hide();return}
   const request=nextPostSetupTutorialRequest();root.hidden=false;root.setAttribute('aria-busy','true');
   if(!root.firstElementChild){
-    root.innerHTML=`<article class="post-setup-notification post-setup-loading">${icon('compass')}<p>正在检查安装进度…</p></article>`;
+    root.innerHTML=`<article class="post-setup-notification post-setup-loading">${icon('compass')}<p>Checking setup progress…</p></article>`;
   }
   try{
     const tasks=await tutorialState.postSetupTutorialTasks();
@@ -51,13 +51,13 @@ export async function syncPostSetupTutorial(){
       const collapsed=card.dataset.collapsed!=='true';
       card.dataset.collapsed=String(collapsed);setPostSetupTutorialCollapsed(collapsed);
       collapse.setAttribute('aria-expanded',String(!collapsed));
-      collapse.setAttribute('aria-label',collapsed?'展开安装教程':'折叠安装教程');
+      collapse.setAttribute('aria-label',collapsed?'Expand setup guide':'Collapse setup guide');
       collapse.innerHTML=icon(collapsed?'chevron-up':'chevron-down');
     });
     root.querySelectorAll('[data-tutorial-skip]').forEach(button=>applicationEffects.handler(button, 'onclick', ()=>{
       const skippedNow=postSetupTutorialSkipped(),key=button.dataset.tutorialSkip;
       skippedNow.add(key);setPostSetupTutorialSkipped(skippedNow);
-      receiptsState.actionReceipt(`已跳过「${button.dataset.tutorialLabel}」`,{undo:async()=>{
+      receiptsState.actionReceipt(`Skipped "${button.dataset.tutorialLabel}"`,{undo:async()=>{
         const restored=postSetupTutorialSkipped();restored.delete(key);setPostSetupTutorialSkipped(restored);
         setPostSetupTutorialMarker('pending');await syncPostSetupTutorial();
       }});
@@ -75,9 +75,9 @@ export async function syncPostSetupTutorial(){
     /* 取数失败时这张卡是死的：没有清单，也没有下一步。给一条重试和一个关闭，
        不然它只能一直杵在右下角占着地方。 */
     root.innerHTML=`<article class="post-setup-notification post-setup-error">${icon('alert')}
-      <div><h2>暂时无法检查安装进度</h2><p>切换页面或重新打开后会再检查一次。</p>
-      <div class="post-setup-error-actions"><button class="geist-button" type="button" data-tutorial-retry>重试</button>
-      <button class="geist-button" type="button" data-tutorial-dismiss>关闭</button></div></div></article>`;
+      <div><h2>Cannot check setup progress right now</h2><p>It will be checked again after you switch pages or reopen the app.</p>
+      <div class="post-setup-error-actions"><button class="geist-button" type="button" data-tutorial-retry>Retry</button>
+      <button class="geist-button" type="button" data-tutorial-dismiss>Close</button></div></div></article>`;
     root.removeAttribute('aria-busy');
     applicationEffects.handler(root.querySelector('[data-tutorial-retry]'), 'onclick', ()=>{
       delete root.dataset.tutorialSignature;root.innerHTML='';void syncPostSetupTutorial();
@@ -121,28 +121,28 @@ tutorialState.postSetupTutorialTasks = async()=>{
   const pendingReview=Object.values(review.counts||{})
     .reduce((sum,value)=>sum+(Number(value)||0),0);
   return [
-    {key:'library',label:'完成首次扫描',description:libraryReady
-      ?`已经导入 ${Number(library.total).toLocaleString()} 项馆藏。`:'等待扫描导入第一项馆藏。',
+    {key:'library',label:'Complete the first scan',description:libraryReady
+      ?`${Number(library.total).toLocaleString()} library items imported.`:'Waiting for the scan to import the first library item.',
       href:'/data-cleanup',done:libraryReady,icon:'scan-search'},
-    {key:'scraping',label:'设置采集来源与凭证',description:savedScrapingCredentials.length
-      ?`已为 ${savedScrapingCredentials.length.toLocaleString()} 个采集来源保存凭证。`
-      :'检查来源连接方式，并为需要登录的来源保存凭证。',
+    {key:'scraping',label:'Set up scraping sources and credentials',description:savedScrapingCredentials.length
+      ?`Credentials saved for ${savedScrapingCredentials.length.toLocaleString()} scraping sources.`
+      :'Check each source and save any sign-in credentials.',
       href:'/sources',done:savedScrapingCredentials.length>0,icon:'settings'},
-    {key:'history',label:'导入浏览器历史记录',description:Number(taste.history_sources||0)>0
-      ?`已导入 ${Number(taste.history_sources).toLocaleString()} 份浏览器历史。`
-      :'从这台电脑的浏览器导入口味分析记录。',
+    {key:'history',label:'Import browser history',description:Number(taste.history_sources||0)>0
+      ?`${Number(taste.history_sources).toLocaleString()} browser histories imported.`
+      :'Import taste-analysis records from this computer\'s browsers.',
       href:'/taste',setupEntry:true,done:Number(taste.history_sources||0)>0,icon:'history'},
-    {key:'follow',label:'添加一个关注来源',description:followReady
-      ?`已启用 ${sources.length.toLocaleString()} 个来源。`:'添加想持续追踪的创作者或来源。',
+    {key:'follow',label:'Add a follow source',description:followReady
+      ?`${sources.length.toLocaleString()} sources enabled.`:'Add creators or sources to follow.',
       href:'/subscriptions?tab=add',done:followReady,icon:'rss'},
-    {key:'credentials',label:'补齐关注来源凭证',description:!followReady
-      ?'添加关注后，会按来源检查必要凭证。':required.length
-        ?(credentialsReady?'已配置当前来源需要的凭证。':`${required.length.toLocaleString()} 个来源需要凭证。`)
-        :'当前关注来源不需要凭证。',
+    {key:'credentials',label:'Complete follow source credentials',description:!followReady
+      ?'Credentials are checked once you add a follow.':required.length
+        ?(credentialsReady?'Credentials needed by the current sources are configured.':`${required.length.toLocaleString()} sources need credentials.`)
+        :'The current follow sources need no credentials.',
       href:'/subscriptions?tab=source',done:credentialsReady,icon:'key-round'},
-    {key:'review',label:'处理首次复核',description:!libraryReady
-      ?'扫描完成后，这里会列出需要复核的资料。':pendingReview
-        ?`还有 ${pendingReview.toLocaleString()} 条需要复核。`:'首次复核队列已清空。',
+    {key:'review',label:'Complete the first review',description:!libraryReady
+      ?'After the scan finishes, items that need review will be listed here.':pendingReview
+        ?`${pendingReview.toLocaleString()} still need review.`:'The first review queue is clear.',
       href:'/review',done:libraryReady&&pendingReview===0,icon:'square-check-big'},
   ];
 };
@@ -156,18 +156,18 @@ tutorialState.postSetupTutorialHtml = (tasks,skippedCount,totalCount)=>{
       <span class="post-setup-check" aria-hidden="true">${task.done?icon('check'):icon(task.icon)}</span>
       <span><b>${task.label}</b><small>${task.description}</small></span>
       ${icon('chevron-right')}</a>
-    ${task.done?'':`<button class="post-setup-skip" type="button" data-tutorial-skip="${task.key}" data-tutorial-label="${task.label}">跳过</button>`}
+    ${task.done?'':`<button class="post-setup-skip" type="button" data-tutorial-skip="${task.key}" data-tutorial-label="${task.label}">Skip</button>`}
     </li>`).join('');
   return `<article class="post-setup-notification" data-collapsed="${collapsed}">
       <header class="post-setup-notification-head">
         <span class="post-setup-notification-icon" aria-hidden="true">${icon('compass')}</span>
-        <div><h2>完成 Peach 的安装教程</h2>
-        <p>已处理 ${completeCount}/${totalCount} 项。</p></div>
+        <div><h2>Finish setting up Peach</h2>
+        <p>${completeCount}/${totalCount} done.</p></div>
         <button class="post-setup-collapse" type="button" data-tutorial-collapse aria-controls="postSetupTaskList" aria-expanded="${!collapsed}"
-          aria-label="${collapsed?'展开安装教程':'折叠安装教程'}">${icon(collapsed?'chevron-up':'chevron-down')}</button>
+          aria-label="${collapsed?'Expand setup guide':'Collapse setup guide'}">${icon(collapsed?'chevron-up':'chevron-down')}</button>
       </header>
       <ol class="post-setup-task-list" id="postSetupTaskList">${rows}</ol>
-      <footer><button class="geist-button" type="button" data-tutorial-action="next">继续：${next.label}</button></footer>
+      <footer><button class="geist-button" type="button" data-tutorial-action="next">Continue: ${next.label}</button></footer>
     </article>`;
 };
 tutorialState.writePostSetupTutorialDone = async done=>{

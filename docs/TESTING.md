@@ -1,228 +1,227 @@
-# 测试与依赖
+# Testing and dependencies
 
-这份文档讲三件事：依赖怎么装、怎么升级；改完代码要跑哪些测试、CI 怎么分；新测试该写成什么样。
+This document covers three things: how to install and upgrade dependencies; which tests to run after changing code and how CI splits them; and what new tests should look like.
 
-Windows 发布制品的覆盖升级在 Actions 的「Windows 覆盖升级验收」手动执行：填写已发布的起始版本、目标版本及目标制品的完整构建提交。工作流分别验证 ZIP 原位解压和安装包原位安装，每种路径覆盖默认数据目录与 `PEACH_DATA_ROOT` 指定目录，并上传日志。它使用已发布制品，不重新构建或发布；在线更新和失败回滚仍由 `scripts/smoke_online_update.py` 单独验证。
+The in-place upgrade of Windows release artifacts is run manually in Actions under "Windows 覆盖升级验收" (the workflow name, "Windows in-place upgrade acceptance"): fill in the published starting version, the target version and the full build commit of the target artifact. The workflow separately verifies in-place ZIP extraction and in-place installer installation, covers both the default data directory and a directory given by `PEACH_DATA_ROOT` for each path, and uploads logs. It uses published artifacts and does not rebuild or publish; online update and failure rollback are still verified separately by `scripts/smoke_online_update.py`.
 
-Release 工作流还在干净的 Windows runner 上运行 `smoke_update_tasks.py --apply`，使用临时账本验证安装接受正在运行的采集任务、暂停并保留任务标识、覆盖后自动续跑，以及配置保留。脚本默认只预演；本机可以验证 ZIP 与安装助手协议，安装包实装限干净的 Actions runner。
+The Release workflow also runs `smoke_update_tasks.py --apply` on a clean Windows runner, using a temporary ledger to verify that the installer accepts a running collection task, pauses it while keeping the task identifier, resumes automatically after the overwrite, and preserves configuration. The script only does a dry run by default; locally the ZIP and installer helper protocol can be verified, but real installer installation is limited to clean Actions runners.
 
-## 环境与锁文件
+## Environment and lock files
 
-依赖由 uv 按锁文件精确复现。源码安装用 `uv sync --locked`。开发、测试和构建在隔离工作树里建自己的 `.venv`，工作树不碰正在服务的环境；主检出的依赖同步与迁移由重启流程负责，见 [运行与配置](OPERATIONS.md) 的「刷新源码运行态」一节（ADR-0091）。
+Dependencies are reproduced exactly from the lock file by uv. Source installs use `uv sync --locked`. Development, testing and building create their own `.venv` in an isolated worktree, and the worktree does not touch the environment that is serving; dependency sync and migration of the main checkout are handled by the restart flow, see the section "Refresh the source runtime" in [Operation and configuration](OPERATIONS.md) (ADR-0091).
 
-安装全部测试依赖（先完成前端依赖安装和构建，再开始正式验证）：
+Install all test dependencies (finish installing and building the frontend dependencies first, then start the formal verification):
 
 ```text
 uv sync --locked --all-extras
 ```
 
-添加直接依赖并同时更新清单和传递锁文件；版本必须精确固定：
+Add a direct dependency and update both the manifest and the transitive lock file; versions must be pinned exactly:
 
 ```text
-uv add "包名==版本"
+uv add "package==version"
 ```
 
-构建环境只选择构建依赖：
+The build environment selects only the build dependencies:
 
 ```text
 uv sync --locked --extra build
 ```
 
-提交 `pyproject.toml` 与 `uv.lock`。CI 用 `--locked` 拒绝过期锁文件；Dependabot 的 `uv` 生态负责更新。`uv pip install` 只用于临时环境或安装产物，不用来维护项目依赖。普通 pip 安装 wheel 的冒烟另外独立验证打包声明。
+Commit `pyproject.toml` and `uv.lock`. CI uses `--locked` to reject a stale lock file; Dependabot's `uv` ecosystem handles updates. `uv pip install` is used only for temporary environments or installing build outputs, not for maintaining project dependencies. A separate smoke test with plain pip installing the wheel verifies the packaging declarations independently.
 
-### 接手 Dependabot 的升级
+### Taking over Dependabot upgrades
 
-Dependabot 的 PR 一律在本地接管，不在网页上合：
+Dependabot PRs are always taken over locally, never merged on the web:
 
-依赖升级须同时提交派生产物。只改 npm 清单与锁文件时，vendor 版本记录或构建结果可能与 Git 中的文件不一致，相关门槛会拒绝；这本身不代表依赖存在兼容性问题。Test 工作流先完成所选前端检查，通过后才启动 Python、浏览器与 wheel 回归。缺少产物时先本地接管重算，不能跳过一致性检查后直接合并。
+A dependency upgrade must also commit the derived artifacts. If only the npm manifest and lock file change, the vendor version record or build output may disagree with the files in Git, and the related gate rejects it; this by itself does not mean the dependency has a compatibility problem. The Test workflow first completes the selected frontend checks, and only after they pass does it start the Python, browser and wheel regressions. When artifacts are missing, take over locally and regenerate them first; do not skip the consistency check and merge directly.
 
-- npm 的两份清单各有一层派生产物：根 `package.json` 对应 `web/vendor/**` 与 `web/index.html` 的版本注释，`frontend/package.json` 对应 `web/dist/` 的主界面与独立页面包。Dependabot 算不出这些，它的 workflow 拿到的 token 又是只读的，推不回 `dependabot/**`，所以 `npm run check:vendor` 或前端产物检查会失败。
-- uv 与 github-actions 没有派生产物，但 master 在本机集成、通常领先 origin。在网页上合会让两边分叉，回并要在主检出 master 上 merge，被 `scripts/githooks/` 拒收。
+- Each of the two npm manifests has a layer of derived artifacts: the root `package.json` corresponds to `web/vendor/**` and the version comment in `web/index.html`, and `frontend/package.json` corresponds to the main UI and standalone page bundles in `web/dist/`. Dependabot cannot compute these, and the token its workflow gets is read-only, so it cannot push back to `dependabot/**`; hence `npm run check:vendor` or the frontend artifact check fails.
+- uv and github-actions have no derived artifacts, but master is integrated locally and is usually ahead of origin. Merging on the web would make the two sides diverge, and merging back on master in the main checkout is rejected by `scripts/githooks/`.
 
-每周的升级在一个隔离工作树里一次接完：
+The weekly upgrades are taken over in one go in an isolated worktree:
 
-1. 运行 `scripts/adopt_dependency_bump.py --all-open --co-author '<工具> (<模型>) <厂商 noreply>'`，看它列出的 PR 与各自的清单。
-2. 加 `--apply`，按编号从小到大一个 PR 一个提交：取回分支，只把它自己对清单的改动三方合并套进来，npm 重算派生产物，uv 跑 `uv lock --check`。
-3. 两个 PR 改到相邻行时脚本停下，报出冲突文件并在 `build/adopt-pr-<编号>.txt` 备好提交说明。按它印出的步骤解冲突、重算、提交，再跑一次 `--all-open --apply`；已接管的 PR 按提交说明跳过。
-4. 跑 `test.ps1 full`，走 ready / integrate，推送 master 后按它印出的 `gh pr close` 逐个关 PR。PR 显示为 Closed 而不是 Merged，因为提交是在本地重做的。
-5. 同一轮跑 `scripts/check_reference_updates.py check --cadence weekly --diff`，查 Dependabot 管不到的上游：按 sha 钉住的 amane 是否前移，Peach 代码直接消费或逐字复制的参考来源是否变化。审阅与 `accept` 按 `peach-reference-evidence` 技能；amane 前移单开分支升级。
+1. Run `scripts/adopt_dependency_bump.py --all-open --co-author '<tool> (<model>) <vendor noreply>'` and look at the PRs it lists and their manifests.
+2. Add `--apply`; in ascending PR number, one commit per PR: fetch the branch, three-way merge only its own manifest changes into place, regenerate derived artifacts for npm, and run `uv lock --check` for uv.
+3. When two PRs touch adjacent lines the script stops, reports the conflicting files and prepares the commit message in `build/adopt-pr-<number>.txt`. Resolve the conflict, regenerate and commit following the steps it prints, then run `--all-open --apply` again; PRs already taken over are skipped according to the commit message.
+4. Run `test.ps1 full`, go through ready / integrate, and after pushing master close the PRs one by one with the `gh pr close` commands it prints. The PRs show as Closed rather than Merged because the commits were redone locally.
+5. In the same round run `scripts/check_reference_updates.py check --cadence weekly --diff` to check upstreams Dependabot cannot cover: whether the sha-pinned amane has moved forward, and whether reference sources that Peach code consumes directly or copies verbatim have changed. Review and `accept` follow the `peach-reference-evidence` skill; an amane advance is upgraded on its own branch.
 
-单个 PR 用 `--pr <编号>`，流程相同。`.github/dependabot.yml` 把每个生态的 minor 与 patch 合成一个 PR，semver-major 照常一个包一个 PR，接管前先读变更说明。需要改代码的大版本在隔离工作树完成迁移和验证；TanStack Table 的大版本也由 Dependabot 检查。
+For a single PR use `--pr <number>`, with the same flow. `.github/dependabot.yml` merges the minor and patch updates of each ecosystem into one PR, and semver-major still gets one PR per package; read the release notes before taking over. Major versions that need code changes are migrated and verified in an isolated worktree; major versions of TanStack Table are also checked by Dependabot.
 
-版本来自 `src/peach/__init__.py`，已纳入 uv 缓存键；源码版本更新后再次同步会刷新安装元数据。缓存规则采用 [uv 官方动态元数据机制](https://docs.astral.sh/uv/concepts/cache/#dynamic-metadata)。
+The version comes from `src/peach/__init__.py` and is part of the uv cache key; syncing again after a source version update refreshes the installation metadata. The cache rule follows [uv's official dynamic metadata mechanism](https://docs.astral.sh/uv/concepts/cache/#dynamic-metadata).
 
-### 每次发版检查
+### Checks for every release
 
-`release_tag.py --bump auto --apply` 在写版本前调用 `release_review.py`，检查两份 Python 锁、两份 npm 清单的可用更新、Dependabot 待处理 PR、sha 固定的运行依赖及其最新稳定发布，以及登记表中全部非 manual 参考来源。独立检查入口为 `scripts/release_review.py`；报告存于 `build/release-review.json`，含提交、时间、差异与逐项错误。Docker 与 GitHub Actions 的更新以 Dependabot PR 为线索，不据空 PR 列表断言全部最新。
+`release_tag.py --bump auto --apply` calls `release_review.py` before writing the version. It checks available updates for the two Python lock files and the two npm manifests, pending Dependabot PRs, sha-pinned runtime dependencies and their latest stable releases, and all non-manual reference sources in the registry. The standalone entry is `scripts/release_review.py`; the report is stored at `build/release-review.json` and contains commit, time, diff and per-item errors. Docker and GitHub Actions updates are tracked through Dependabot PRs as leads; an empty PR list is not taken to prove everything is up to date.
 
-网络失败记为「未取得」，其余检查继续；检查不全时版本文件保持原样。发现更新只报告，由智能体对照真实消费者、字段语义与许可证判断采用范围；升级依赖沿用隔离工作树与完整验证。原文证据按 `peach-reference-evidence` 审阅后接受，人工笔记不被网页覆盖。
+A network failure is recorded as "not obtained" and the other checks continue; when the checks are incomplete the version files stay unchanged. Discovered updates are only reported, and the agent decides the adoption scope by comparing real consumers, field semantics and licenses; upgrading dependencies follows the isolated worktree and full verification. Source-text evidence is accepted after review per `peach-reference-evidence`, and manual notes are not overwritten by web pages.
 
-## 验证频率
+## Verification frequency
 
-测试直接使用项目入口，不设置机器级资源槽位、CPU、内存或进程数限额。每轮并发由 `-Jobs` / `--jobs` 选择，默认按本机核数取最多四路，显式正整数不设机器级上限。取消时只按已创建的 PID 清理本轮子进程树；全量测试与集成仍按代码一致性要求互斥。
+Tests use the project entry points directly and set no machine-level resource slots, CPU, memory or process-count limits. Concurrency per run is chosen with `-Jobs` / `--jobs`, defaulting to at most four lanes by local core count, and an explicit positive integer has no machine-level cap. On cancel only the child process trees of this run, by the PIDs already created, are cleaned up; full tests and integration remain mutually exclusive as code consistency requires.
 
-Python 静态检查使用开发依赖 Ruff，随每个正式测试域扫描全仓自有 Python 文件，覆盖应用、脚本、测试和打包入口。规则为 Pyflakes（`F`）、Ruff 支持的 Pylint 错误规则（`PLE`），以及可变默认参数、`finally` 跳转、无效表达式和循环闭包规则（`B006`、`B012`、`B018`、`B023`）。生成的 `downloads_clouddrive_pb2.py` 排除；公开导出的导入用显式同名别名声明。命名、行数、空行和复杂度偏好不属于这套 lint 门槛。
+Python static checking uses the development dependency Ruff, scanning all of the repository's own Python files with each formal test domain, covering the application, scripts, tests and packaging entry points. The rules are Pyflakes (`F`), the Pylint error rules supported by Ruff (`PLE`), and the mutable default argument, `finally` jump, useless expression and loop closure rules (`B006`, `B012`, `B018`, `B023`). The generated `downloads_clouddrive_pb2.py` is excluded; publicly exported imports are declared with explicit same-name aliases. Preferences for naming, line count, blank lines and complexity are not part of this lint gate.
 
-文档与文案检查包含 seiso 稳定规则和最终状态检查，随正式入口执行。分类、范围、独立检查与预览规则用法见 [文档与界面文案](WRITING.md#检查与复核)。seiso 由开发依赖与锁文件固定，运行 Peach 不需要它。
+Documentation and copy checks include seiso's stable rules and a final-state check, and run with the formal entry. For categories, scope, standalone checks and preview rules see [Documentation and UI copy](WRITING.md#checking-and-review). seiso is pinned by the development dependencies and the lock file; running Peach does not need it.
 
-不是每次都跑全量：本机按改动涉及的域选测，CI 按提交类型决定覆盖多宽。
-调试先跑相关用例，冻结代码后运行一次 `auto`；不要手写逐域循环重复执行公共用例。测试失败先定向复现，修复后由 `auto` 判断哪些域需要补测。
+The full suite is not run every time: locally, tests are selected by the domains the change touches, and CI decides how wide the coverage is by commit type.
+For debugging, run the relevant cases first, and once the code is frozen run `auto` once; do not hand-write per-domain loops that repeat the shared cases. When a test fails, reproduce it in a targeted way first, and after the fix `auto` decides which domains need to be re-tested.
 
-| 场景 | 验证 |
+| Scenario | Verification |
 | --- | --- |
-| 本机修改 | 正式入口默认 `auto`，按影响域取并集；同代码、环境与范围的有效记录可复用 |
-| 普通 PR | Python 3.14：macOS 与 Windows 均按影响域验证 |
-| 普通主线提交 | Python 3.14：macOS、Windows、前端、浏览器与 wheel 完整回归 |
-| 实际依赖、迁移、共享测试设施、未知影响面 | Windows 与 macOS 的 Python 3.14 全量 |
-| 手动 CI | 完整系统矩阵 |
-| wheel | Windows 与 macOS 各一次 Python 3.14 独立最小安装 |
-| Release | 复用同 SHA 主线成功 CI；Windows 独立 EXE 与 Apple Silicon、Intel DMG 分别构建和验收 |
+| Local change | The formal entry defaults to `auto`, taking the union by impact domain; valid records with the same code, environment and scope can be reused |
+| Ordinary PR | Python 3.14: macOS and Windows both verified by impact domain |
+| Ordinary mainline commit | Python 3.14: full regression on macOS, Windows, frontend, browser and wheel |
+| Actual dependencies, migrations, shared test infrastructure, unknown impact | Full Python 3.14 run on Windows and macOS |
+| Manual CI | Full system matrix |
+| wheel | One standalone minimal install on each of Windows and macOS with Python 3.14 |
+| Release | Reuse the successful mainline CI for the same SHA; the Windows standalone EXE and the Apple Silicon and Intel DMGs are built and accepted separately |
 
-Python 全量按文件稳定分片，Windows 四片、macOS 两片，每片使用独立 runner；汇总任务要求所有分片和计划选择的任务成功。分片子进程不签发记录。
+The full Python run is stably sharded by file, four shards on Windows and two on macOS, each shard on its own runner; the summary job requires all shards and the planned selected tasks to succeed. Shard subprocesses do not issue records.
 
-Test 工作流的 `web-bundle` 在 Ubuntu 上统一执行 tsc、lint、Vitest、构建及产物差异检查；lint 同时检查无诊断且扫描文件数大于零。CI 的 Python 任务把这三个工具用例交给前端任务，把两个真实浏览器用例交给浏览器矩阵；同模块的契约测试仍执行。任务身份由固定工作流与 job 名识别，未知任务和本机保留完整测试。承担部分 CI 职责的运行不签发本机测试记录。
+The `web-bundle` job of the Test workflow runs tsc, lint, Vitest, the build and the artifact diff check uniformly on Ubuntu; lint also checks that there are no diagnostics and that the number of scanned files is greater than zero. In CI the Python jobs hand these three tool cases to the frontend job and the two real-browser cases to the browser matrix; contract tests in the same module still run. Job identity is recognized by fixed workflow and job names, and unknown jobs and the local machine keep the full tests. A run that takes on part of CI's duties does not issue a local test record.
 
-浏览器用例由 `web-e2e` 的六个 Windows runner 分担，每片有自己的服务、演示库与日志。`ci_plan.py` 按 `ci-browser-timings.json` 的实测秒数分配文件，新文件使用默认权重；每个文件恰好执行一次。每片经项目入口的 `-Focus` 运行分配的浏览器文件，首启文件始终归首次设置服务。它装 Node 24、前端依赖、ffmpeg，并经 `PEACH_E2E_CHROME` 指定 Chrome。本机浏览器入口与并发语义保持完整。
+Browser cases are shared across the six Windows runners of `web-e2e`, each shard with its own service, demo library and logs. `ci_plan.py` assigns files according to the measured seconds in `ci-browser-timings.json`, new files use a default weight, and each file runs exactly once. Each shard runs its assigned browser files through the project entry's `-Focus`, and the first-launch file always belongs to the first-setup service. It installs Node 24, frontend dependencies and ffmpeg, and specifies Chrome through `PEACH_E2E_CHROME`. The local browser entry and concurrency semantics remain complete.
 
-PR 计划按改动选择前端、vendor、wheel 与浏览器任务，文档 PR 只执行适用检查；主线、依赖、未知影响与手动验证包含全部任务。`frontend-ready` 汇总所选前端检查，失败时不启动后续完整回归；未选择前端任务的计划可正常执行。产物差异以文件统计显示。`verified` 根据计划核对必需任务，缺失、失败、取消及必需任务跳过均判失败。Actions 工作流本身由固定版 actionlint 检查语法、表达式、依赖与脚本。PR 更新取消同 PR 的过期运行，主线 Test 按提交各自保留结果。
+The PR plan selects frontend, vendor, wheel and browser jobs according to the change, and a documentation PR runs only the applicable checks; mainline, dependencies, unknown impact and manual verification include all jobs. `frontend-ready` aggregates the selected frontend checks and, on failure, does not start the following full regression; a plan that selects no frontend job runs normally. Artifact diffs are shown as file statistics. `verified` checks the required jobs against the plan, and a missing, failed, cancelled or skipped required job counts as failure. The Actions workflows themselves are checked by a pinned version of actionlint for syntax, expressions, dependencies and scripts. A PR update cancels stale runs of the same PR, and mainline Test keeps its result for each commit.
 
-Python 分片上传完整测试输出；浏览器分片上传 TAP、服务日志及已脱敏网络日志，保留 14 天。npm 审计遇到 high 或 critical 漏洞直接失败；只有临时网络错误最多请求三次，在前两次失败后分别等待 15 与 30 秒，未知响应不当成通过。
+Python shards upload the full test output; browser shards upload the TAP, service logs and redacted network logs, retained for 14 days. The npm audit fails directly on a high or critical vulnerability; only temporary network errors are requested up to three times, waiting 15 and 30 seconds after the first two failures, and an unknown response is not treated as a pass.
 
-Release 在媒体工具编译前核对同 SHA 主线 CI，缓存键绑定媒体工具源码清单与构建脚本，缓存内容同时含二进制和对应源码包；制品与独立开箱验收仍是发布前置。Docker 只在镜像相关主线改动、匹配 PR、版本标签或手动请求时运行，验收后推送同一个本地镜像。版本发布与覆盖升级验收不取消进行中的同目标运行；覆盖升级需明确选择目标版本及完整构建提交。
+Release checks the mainline CI of the same SHA before compiling the media tools; the cache key is bound to the media tool source manifest and build script, and the cache contents include both binaries and the corresponding source packages; artifacts and standalone out-of-the-box acceptance remain prerequisites to publishing. Docker runs only on image-related mainline changes, matching PRs, version tags or manual requests, and pushes the same local image after acceptance. Version release and in-place upgrade acceptance do not cancel in-progress runs for the same target; an in-place upgrade needs the target version and the full build commit chosen explicitly.
 
-浏览器用例覆盖 `frontend/e2e` 下全部 `*.test.ts`，包括子目录。`setup.test.ts` 由 `SetupE2ETests` 在首次设置服务上执行，其余文件在已配置的演示库服务上按文件并发、文件内串行。并发数取 `PEACH_E2E_CONCURRENCY`；未设时本机取逻辑核数的四分之一、上限 4，CI（`GITHUB_ACTIONS=true`）为 1。并发批最多 12 个文件，串行批每批一个文件，各自取得完整 TAP 结果。测量动画、密度切换与等待态替换的文件（`tests/test_web_e2e.py` 的 `TIMING_SENSITIVE_SUITES`）在并发批之后串行；并发为 1 时按设计决定、交互回归和路由冒烟排序。每批限时 600 秒，任一批失败，整轮验证失败。并发的文件共用一个服务和演示库：用例触发的写请求只能落在别的用例不断言的状态上，否则用 `page.route` 拦下或归进串行批。控制台逐批输出文件名；完整 TAP 日志与服务访问日志 `serve.log` 保存在 `build/agent-verification/browser/`，CI 在测试结束后上传其中的 TAP 日志。
+Browser cases cover all `*.test.ts` under `frontend/e2e`, including subdirectories. `setup.test.ts` is run by `SetupE2ETests` on the first-setup service, and the other files run on the configured demo-library service concurrently across files and serially within a file. The concurrency is taken from `PEACH_E2E_CONCURRENCY`; when unset, locally it is a quarter of the logical cores with a cap of 4, and in CI (`GITHUB_ACTIONS=true`) it is 1. A concurrent batch has at most 12 files, a serial batch has one file per batch, and each obtains its full TAP result. Files that measure animation, density switching and replacement of waiting states (`TIMING_SENSITIVE_SUITES` in `tests/test_web_e2e.py`) run serially after the concurrent batches; when concurrency is 1 they are ordered as design decisions, interaction regressions and route smoke tests. Each batch is limited to 600 seconds, and if any batch fails the whole verification round fails. Concurrent files share one service and demo library: write requests triggered by a case may only land on state that other cases do not assert, otherwise intercept them with `page.route` or move them into the serial batch. The console prints the file names batch by batch; the full TAP log and the service access log `serve.log` are saved in `build/agent-verification/browser/`, and CI uploads the TAP log from there after the tests finish.
 
-需要外部前置条件（Node、ffmpeg、Chrome 等）的用例，本机缺条件时跳过，在 CI（`GITHUB_ACTIONS=true`）里判失败，判定集中在 `tests/support/conditions.py` 的 `missing_prerequisite`。所以 `python` 矩阵里 `core` 以外的行也装 Node，Windows 行另装 ffmpeg 与 Chrome。
+Cases that need external prerequisites (Node, ffmpeg, Chrome, etc.) are skipped locally when a prerequisite is missing and fail in CI (`GITHUB_ACTIONS=true`); the decision is centralized in `missing_prerequisite` in `tests/support/conditions.py`. That is why rows of the `python` matrix other than `core` also install Node, and the Windows rows additionally install ffmpeg and Chrome.
 
-本机默认并行：入口传 `--jobs auto`（Windows `-Jobs`），运行器按同一套稳定分片切成并发数四倍的片，每个子进程各领一片、先完成的接着领下一片，父进程汇总成败、用例数与逐用例耗时后按原口径签发一份记录，一片红整轮红。`-Jobs 1` 退回串行。测试之间没有共享的端口或全局目录，账本与仓库夹具都在各自的临时目录里，并行才是安全的；新增测试保持这一点。
+Local parallelism is on by default: pass `--jobs auto` to the entry (`-Jobs` on Windows), and the runner splits the same stable sharding into four times as many shards as the concurrency; each child process takes one shard and, when done, the next one; the parent process summarizes success or failure, case counts and per-case timings, and issues one record under the original criteria; one red shard makes the whole round red. `-Jobs 1` falls back to serial. There are no shared ports or global directories between tests, and the ledger and repository fixtures are all in their own temporary directories, so parallelism is safe; new tests keep it that way.
 
-Windows 的路径、挂载、托盘、证书、进程编码、更新、认证及迁移属于 `core`。构建和工作流修改选择 `packaging` 与 `tooling`；测试调度自身仍全量。仅 uv 工具版本或项目展示字段变化不算依赖图变化；无法解析时全量。
+Windows paths, mounts, tray, certificates, process encoding, updates, authentication and migrations belong to `core`. Build and workflow changes select `packaging` and `tooling`; the test scheduling itself still runs the full suite. A change only in the uv tool version or in project display fields does not count as a change in the dependency graph; when it cannot be parsed, run the full suite.
 
-人名对照等业务测试保留：修改相关域时执行，主线全量也执行。测试数据库从真实迁移生成模板，各用例复制独立临时库；迁移测试直接执行迁移。重试测试注入 sleeper 并断言退避序列。重复继承的测试只保留一份。
+Business tests such as performer name mapping are kept: they run when the related domain changes and also in the full mainline run. The test database is generated as a template from real migrations, and each case copies its own temporary database; migration tests run migrations directly. Retry tests inject a sleeper and assert the backoff sequence. Tests that are repeated through inheritance are kept only once.
 
-## 写什么测试
+## What tests to write
 
-纯 HTTP 请求契约可使用 `tests/support/web.py` 的 `route_client`：请求经过真实路由、中间件和依赖，不启动后台服务；调用方仍须准备完整临时账本。服务启动、恢复与关闭语义使用正常 lifespan，由集成测试覆盖。
+Pure HTTP request contracts can use `route_client` from `tests/support/web.py`: requests go through the real routes, middleware and dependencies without starting background services; the caller must still prepare a complete temporary ledger. Service start, recovery and shutdown semantics use the normal lifespan and are covered by integration tests.
 
-浏览器入口通过 `PEACH_E2E_NET_LOG_DIR` 保存 Chromium 网络事件日志；模式为 `HeavilyRedacted`，文件位于 `build/agent-verification/browser/network/`，CI 与 TAP 一起上传。网络请求失败仍使测试失败；排查 `ERR_NO_BUFFER_SPACE` 时同时核对 TAP 与该次浏览器的网络事件，不根据错误字样推断机器资源状态，也不添加放行重试。
+The browser entry saves Chromium network event logs through `PEACH_E2E_NET_LOG_DIR`; the mode is `HeavilyRedacted`, the files are in `build/agent-verification/browser/network/`, and CI uploads them together with the TAP. A failed network request still fails the test; when investigating `ERR_NO_BUFFER_SPACE`, check the TAP together with that browser's network events, do not infer the machine's resource state from the error text, and do not add a pass-through retry.
 
-测试应在用户可感知的行为错误时失败。页面的请求、缓存、选择、错误反馈和路由由组件测试与浏览器测试验证；CSS 层叠、主题、尺寸和交互后的样式由浏览器读取计算值。
+A test should fail when behavior the user can perceive is wrong. Requests, caching, selection, error feedback and routing of a page are verified by component tests and browser tests; CSS cascade, theme, size and post-interaction styles are verified by the browser reading computed values.
 
-源码检查集中在通用规范、隐私边界、产物、依赖和跨语言常量一致性。组件名称、变量名、某个函数是否被调用、端点字面量出现几次和文档的具体措辞，不单独设门槛。一个失败模式优先在最便宜且能真实触发它的层验证；组件已验证的业务分支，不在 Python 中再逐段比对其源码。浏览器保留真实导航、布局、焦点与层叠等需要浏览器才能成立的检查。
+Source inspection is concentrated on general conventions, privacy boundaries, artifacts, dependencies and cross-language constant consistency. Component names, variable names, whether a function is called, how many times an endpoint literal appears and the exact wording of documents get no gate of their own. A failure mode is preferably verified at the cheapest layer that can actually trigger it; a business branch already verified by a component is not compared line by line against its source in Python. The browser keeps checks that only hold in a browser, such as real navigation, layout, focus and stacking.
 
-按下面的分工写：
+Write them according to this division of labor:
 
-- 行为（点了发出什么请求、状态怎么变、算出什么值）写 vitest（`frontend/test/`）或 `tests/test_web_js.py`；后端调用真函数或真接口。
-- 用户定过的设计决定写进对应区域的 `frontend/e2e/design-*.test.ts`（共用 `design-fixture.ts`），读 `getComputedStyle`；布局与运行期不变量进 `smoke.test.ts`。
-- 源码文本断言只减不增，由 `tests/test_source_assertion_ratchet.py` 按文件计数拦截。已有行为或浏览器验证的实现文本断言直接清退；确有行为缺口时才补用例，并同步降低基线。
-- 先列失败模式再写用例。异步请求的中间态用手动放行的 Promise 验证；假 fetch 在同一个 `act` 里就回话，会掩盖请求未完成时的时序问题。
-- 修缺陷先写一条会失败的用例，看它红了再修；修完按同一写法搜别处，有同类就收成共用实现。没有行为缺口的改动（文案、纯样式）不补回归用例。
-- 使用应用 lifespan 的测试应显式准备账本状态：正常后台服务使用完整迁移的临时账本，缺失或迁移未就绪的场景验证后台服务保持停止。用 `assertNoLogs("peach", level="ERROR")` 覆盖服务启动、请求和正常退出；故障注入用 `assertLogs` 核对预期原因，不能仅凭接口返回成功放过非预期后台错误，也不能全局屏蔽错误日志。
-- `support.gitrepo.seed_repository` 的临时仓库在命令返回前完成 Git 自动维护；仓库局部设置 `maintenance.autoDetach=false` 与 `gc.autoDetach=false`，避免后台写入与模板复制、临时目录回收竞争。保留正常维护和清理错误，不修改机器的 Git 配置。
-- 不写同义反复的用例：断言常量等于它自己、mock 掉被测对象再断言 mock 被调用，都证明不了什么。
+- Behavior (what request a click sends, how state changes, what value is computed) goes into vitest (`frontend/test/`) or `tests/test_web_js.py`; the backend calls real functions or real interfaces.
+- Design decisions the user has settled go into the `frontend/e2e/design-*.test.ts` of the corresponding area (sharing `design-fixture.ts`), reading `getComputedStyle`; layout and runtime invariants go into `smoke.test.ts`.
+- Source-text assertions only decrease, never increase, enforced by `tests/test_source_assertion_ratchet.py` counting per file. Implementation-text assertions already covered by behavior or browser verification are removed outright; add a case only when there is a real behavior gap, and lower the baseline accordingly.
+- List the failure modes before writing cases. Verify the intermediate state of an async request with a manually released Promise; a fake fetch that answers within the same `act` hides timing problems while the request is still incomplete.
+- To fix a defect, first write a case that fails, see it go red, then fix; after the fix, search elsewhere the same way, and if there are similar cases consolidate them into a shared implementation. Changes with no behavior gap (copy, pure styling) do not get a regression case.
+- Tests that use the application lifespan should prepare ledger state explicitly: normal background services use a fully migrated temporary ledger, and scenarios with a missing or unmigrated ledger verify that background services stay stopped. Use `assertNoLogs("peach", level="ERROR")` to cover service start, requests and normal exit; fault injection uses `assertLogs` to check the expected cause, a successful interface return alone must not let an unexpected background error pass, and error logs must not be masked globally.
+- The temporary repository from `support.gitrepo.seed_repository` completes Git auto-maintenance before the command returns; the repository-local settings `maintenance.autoDetach=false` and `gc.autoDetach=false` prevent background writes from racing with template copying and temporary directory reclamation. Normal maintenance and cleanup errors are kept, and the machine's Git configuration is not modified.
+- Do not write tautological cases: asserting a constant equals itself, or mocking out the object under test and asserting the mock was called, prove nothing.
 
-## 正式入口
+## Formal entry
 
-测试只从下面两个入口跑，入口负责选测、签发测试记录和环境预检，自己拼的命令拿不到有效记录。
+Tests are run only from the two entries below; the entry handles test selection, issuing test records and environment preflight, and hand-assembled commands do not get a valid record.
 
-Windows 按影响域验证：
+Verify by impact domain on Windows:
 
 ```powershell
 & .\scripts\test.ps1
 ```
 
-macOS 按影响域验证：
+Verify by impact domain on macOS:
 
 ```sh
 ./scripts/test.sh
 ```
 
-显式全量用 Windows `-Scope full` 或 macOS 首参数 `full`。入口通过 `scripts/test_environment.py` 准备 Python 依赖，再核对源码位置、选测并记录慢测试。隔离工作树按 `uv sync --locked --all-extras` 同步自己的 `.venv`；缺少本地环境时用主检出的 Python 启动准备，测试仍在新建的本地环境里运行。同步保留启动解释器的 Python 版本，忽略外部 `VIRTUAL_ENV` 和 `UV_PROJECT_ENVIRONMENT`，拒绝工作树环境指向主检出。
+For an explicit full run use `-Scope full` on Windows or `full` as the first argument on macOS. The entry prepares Python dependencies through `scripts/test_environment.py`, then checks the source location, selects tests and records slow tests. An isolated worktree syncs its own `.venv` with `uv sync --locked --all-extras`; when the local environment is missing, preparation starts with the main checkout's Python, and the tests still run in the newly created local environment. The sync keeps the Python version of the launching interpreter, ignores the external `VIRTUAL_ENV` and `UV_PROJECT_ENVIRONMENT`, and rejects a worktree environment pointing at the main checkout.
 
-主检出只按 ADR-0091 只读检查依赖；缺包或检查失败时以 `3` 退出，依赖变更由重启流程执行。找不到 uv、锁文件过期或同步失败也会停止测试。前端依赖与构建仍按上文安装。完成安装和编辑后再启动最终验证；运行中发生改动时，完整批次按下述规则保留未受影响的文件结果。
+The main checkout only checks dependencies read-only per ADR-0091; on a missing package or a failed check it exits with `3`, and dependency changes are performed by the restart flow. A missing uv, a stale lock file or a failed sync also stops the tests. Frontend dependencies and the build are still installed as above. Start the final verification after installation and editing are complete; if changes occur during the run, the full batch keeps the results of unaffected files according to the rules below.
 
-本机全量验证与 `integrate` 共用 `full-suite.lock`，从取得代码和环境快照一直持有到记录写入完成。
-锁忙时打印持有者并等待，最长 30 分钟；超时退出且不执行测试或合并。集成事务本身仍由
-`integration.lock` 串行保护。部分域验证与 CI 分片不签发独立的本机全量记录。
+Local full verification and `integrate` share `full-suite.lock`, held from taking the code and environment snapshot until the record is written.
+When the lock is busy it prints the holder and waits for up to 30 minutes; on timeout it exits without running tests or merging. The integration transaction itself is still serialized by
+`integration.lock`. Partial-domain verification and CI shards do not issue a standalone local full record.
 
-锁旁的持有者信息用独立文件锁保护读写和清理；主锁仍负责验证与集成互斥。等锁线程关闭记录文件后，持有者才删除记录，避免 Windows 文件共享冲突。
+The holder information next to the lock is protected by its own file lock for reads, writes and cleanup; the main lock still handles mutual exclusion between verification and integration. The holder deletes the record only after the lock-waiting thread has closed the record file, avoiding Windows file-sharing conflicts.
 
-测试入口退出码：`0` 验证有效，`1` 用例失败，`2` 参数或锁等待失败，`3` 环境预检失败，
-`4` 验证期间代码或依赖变化，尚未取得当前状态的完整记录。Windows 托盘遇到 `4` 最多执行三轮完整验证，
-只有取得有效记录才继续打包；用例失败直接停止。
+Test entry exit codes: `0` verification valid, `1` a case failed, `2` argument or lock wait failure, `3` environment preflight failure,
+`4` code or dependencies changed during verification and a complete record of the current state has not yet been obtained. On `4` the Windows tray runs at most three rounds of full verification,
+and continues to packaging only after a valid record is obtained; a failed case stops directly.
 
-正式入口会在创建测试分片前探测 PATH 中的外部工具。工具路径存在但当前权限不能启动时，
-入口以一条环境结论退出，不把同一个 `CreateProcess` 权限错误散落到多个用例。整条
-`scripts/test.ps1` 要在正常 PowerShell 权限下运行；权限不足时补权限再原样重跑，
-不拆成单测也不跳过用例。
+Before creating test shards, the formal entry probes the external tools on PATH. When a tool path exists but the current permissions cannot launch it,
+the entry exits with a single environment conclusion rather than scattering the same `CreateProcess` permission error across many cases. The whole
+`scripts/test.ps1` must run with normal PowerShell permissions; on insufficient permissions, grant them and rerun as is,
+without splitting into single tests or skipping cases.
 
-判失败的只有本次所选域真的会用到的工具，其余启动受限的工具只打印一行提示：受限环境里
-ffmpeg 起不来是事实，但它不该挡住一次只改文档的 `checks`。域由选中的测试源码推出来。
-确认本次无关时用 `PEACH_SKIP_PREFLIGHT=1` 整体跳过预检；分片子进程不重复预检。
+Only tools that the selected domains of this run will actually use count as failures; other tools that are restricted from launching just print a one-line notice: in a restricted environment
+ffmpeg failing to start is a fact, but it should not block a `checks` run that only changes documentation. The domains are derived from the selected test source.
+When you have confirmed they are irrelevant to this run, skip the preflight as a whole with `PEACH_SKIP_PREFLIGHT=1`; shard subprocesses do not repeat the preflight.
 
-## 定向调试与局部记录
+## Targeted debugging and partial records
 
-Windows 的 `-Focus` 接受 Python 模块、类、方法或仓库相对路径，可传数组；macOS/Linux 对每个选择器重复传 `--focus`。入口准备隔离依赖并核对源码。选择器不存在、浏览器路径超出 `frontend/e2e` 或与分片混用时拒绝执行。
+On Windows `-Focus` accepts a Python module, class, method or repository-relative path, and can take an array; on macOS/Linux repeat `--focus` for each selector. The entry prepares the isolated dependencies and checks the source. It refuses to run if a selector does not exist, a browser path is outside `frontend/e2e`, or it is mixed with shards.
 
-定向调试 Python 回归：
+Targeted debugging of a Python regression:
 
 ```powershell
 & .\scripts\test.ps1 -Focus test_test_evidence
 ```
 
-定向调试一个浏览器文件，包括它的桌面和手机用例：
+Targeted debugging of one browser file, including its desktop and phone cases:
 
 ```powershell
 & .\scripts\test.ps1 -Focus frontend/e2e/jav-detail.test.ts
 ```
 
-macOS/Linux 的相同入口：
+The same entry on macOS/Linux:
 
 ```sh
 ./scripts/test.sh auto --focus frontend/e2e/jav-detail.test.ts
 ```
 
-定向调试不签发记录，不能作为 `ready` / `integrate` 的验收证明。浏览器文件选择只在调试环境生效；正式入口拒绝残留的 `PEACH_TEST_FOCUS` / `PEACH_E2E_FILES`，防止局部运行被签成整域。某个浏览器批次失败或超时后立即结束该轮浏览器检查，保留完整 TAP 与服务日志。
+Targeted debugging issues no record and cannot serve as acceptance proof for `ready` / `integrate`. Browser file selection takes effect only in the debugging environment; the formal entry rejects leftover `PEACH_TEST_FOCUS` / `PEACH_E2E_FILES` to prevent a partial run from being signed as a whole domain. After a browser batch fails or times out, that round of browser checks ends immediately, keeping the full TAP and service logs.
 
-浏览器沿用 Playwright 的默认进程模型与静音设置，不限制渲染进程数，也不把 GPU 或音频服务强制并入浏览器进程。原生浏览器启动限时 60 秒，页面主体等待限时 15 秒，每批限时 600 秒；进程启动与页面行为分别验收。需要任务状态桩的页面通过 `visit` 的准备回调在首次导航前安装响应，等对应的 React 主体出现后再检查任务状态；进行中的任务不作为主体等待态。页面主体等待失败时保留 URL、关闭状态、已收集的运行期问题与无障碍树，夹具关闭本次浏览器上下文。
+The browser keeps Playwright's default process model and mute settings, does not limit renderer processes, and does not force the GPU or audio service into the browser process. Native browser launch is limited to 60 seconds, the page body wait to 15 seconds, and each batch to 600 seconds; process startup and page behavior are accepted separately. Pages that need task-state stubs install responses through the preparation callback of `visit` before the first navigation, and check the task state only after the corresponding React body appears; an in-progress task is not treated as a body waiting state. When the page body wait fails, the URL, closed state, collected runtime issues and the accessibility tree are kept, and the fixture closes this browser context.
 
-Windows Release 工作流使用 `uv sync --locked --all-extras` 准备完整依赖。安装目录回归与 PyInstaller 构建共用这份 venv，测试入口按完整锁文件核验依赖。
+The Windows Release workflow prepares the full dependencies with `uv sync --locked --all-extras`. The installation directory regression and the PyInstaller build share this venv, and the test entry verifies dependencies against the full lock file.
 
-macOS Release 使用 `macos-15`（Apple Silicon）和 `macos-15-intel`（Intel）分别构建，解释器、依赖与目标架构必须一致。独立验收任务只下载候选制品与冒烟脚本，挂载只读 DMG，核对 Applications 链接、许可证、签名与原生架构，再执行 `scripts/smoke_macos.py`。该脚本将应用移到源码树外，在移除开发工具的 PATH 下验证首次设置、迁移、单机账本、登录、前端资源与配置保存，数据全部使用临时目录。所有平台验收成功才发布；普通 push 不构建安装包，手动运行 Release 不上传公开资产。
+macOS Release builds on `macos-15` (Apple Silicon) and `macos-15-intel` (Intel) separately, and the interpreter, dependencies and target architecture must match. The standalone acceptance job downloads only the candidate artifact and the smoke script, mounts the read-only DMG, checks the Applications link, license, signature and native architecture, and then runs `scripts/smoke_macos.py`. The script moves the app out of the source tree and, with a PATH from which development tools have been removed, verifies first setup, migration, single-machine ledger, login, frontend assets and configuration saving, with all data in temporary directories. Publishing happens only when acceptance succeeds on all platforms; an ordinary push does not build installers, and a manually run Release does not upload public assets.
 
-`auto` 从同环境、24 小时内的记录计算差异：有效全量基线保留原时间戳；有效局部基线只复用未受差异影响且本次需要的域。相同代码状态补跑缺少的域。新增、删除与修改文件均参与比较；共享设施、未知影响面和环境差异不能复用局部记录。局部记录不会变成全量，继承时间戳不延长有效期。单域失败撤销该域与全量证明，保留其他域的原成功时间；失败域必须补测，不能从旧基线恢复。全量失败撤销所有证明。`-Fresh` 与显式 `full` 始终实际执行。
+`auto` computes the difference from records in the same environment within 24 hours: a valid full baseline keeps its original timestamp; a valid partial baseline reuses only the domains that are unaffected by the difference and needed this time. The same code state fills in missing domains. Added, deleted and modified files all take part in the comparison; shared infrastructure, unknown impact and environment differences cannot reuse partial records. A partial record never becomes a full one, and an inherited timestamp does not extend validity. A single-domain failure revokes that domain and the full proof, keeping the original success times of the other domains; the failed domain must be re-tested and cannot be restored from an old baseline. A full failure revokes all proofs. `-Fresh` and an explicit `full` always actually execute.
 
-选测比较文件内容：Python 只有注释或格式变化、npm 清单只有 description/keywords 变化、TOML 只有注释或格式变化时选 `checks`。Python docstring、运行时字串和类型注释属于有效内容。Python 构建元数据变化选 `packaging`，实际依赖变化、文件模式变化、解析失败和未知影响面保留完整验证。
+Test selection compares file contents: when a Python change is only comments or formatting, an npm manifest change is only description/keywords, or a TOML change is only comments or formatting, `checks` is selected. Python docstrings, runtime strings and type annotations count as effective content. Python build metadata changes select `packaging`; actual dependency changes, file mode changes, parse failures and unknown impact keep full verification.
 
-新增、删除文件按所属功能域选测；已有文件的执行权限变化和符号链接保持 `full`。
+Added and deleted files are selected by the functional domain they belong to; execute-permission changes and symbolic links on existing files stay at `full`.
 
-完整批次通过但运行中发生局部改动时，保留未受影响测试文件的结果和原时间；退出 `4`，随后 `auto` 只补缺少的域。只有同一完整批次覆盖所有测试文件才恢复 `full`，局部批次不能拼成全量证明。环境、共享逻辑或未知范围变化清空保留结果；失败和过期结果不能复用。
+When a full batch passes but a partial change occurred during the run, the results and original times of unaffected test files are kept; it exits with `4`, and `auto` then fills in only the missing domains. `full` is restored only when the same full batch covers all test files; partial batches cannot be stitched into a full proof. A change in environment, shared logic or unknown scope clears the retained results; failed and expired results cannot be reused.
 
-测试记录格式升级时，主检出的入口可能无法识别新格式。先在工作树通过 `ready`，再由主检出调用该工作树中已验收的 `scripts/agent_worktree.py`，用 `--repo` 指定主检出并执行 `integrate`。该方式仍检查测试记录、README 声明、目标分支和集成锁；不要手工改写记录或跳过门槛。集成后主检出使用同一版本的入口。
+When the test record format is upgraded, the main checkout's entry may not recognize the new format. First pass `ready` in the worktree, then have the main checkout call the already-accepted `scripts/agent_worktree.py` from that worktree, specifying the main checkout with `--repo` and running `integrate`. This way still checks the test record, the README statement, the target branch and the integration lock; do not hand-edit the record or bypass the gates. After integration the main checkout uses the same version of the entry.
 
-PR 的浏览器 CI 根据界面、Web API、认证与浏览器用例选择；普通后端单测不单独触发浏览器任务。工作流按职责选测，发布工作流触发打包验证，看板等管理工作流只触发工具检查。主线推送与手动完整验证继续覆盖全部 CI 任务。
+The browser CI of a PR is selected according to UI, Web API, authentication and browser cases; ordinary backend unit tests do not trigger a browser job on their own. Workflows are selected by responsibility, release workflows trigger packaging verification, and management workflows such as boards trigger only tool checks. Mainline pushes and manual full verification continue to cover all CI jobs.
 
-## 记录的环境身份
+## Environment identity of records
 
-记录只在「代码、环境、范围」三项都匹配时可复用，环境那一项由 `scripts/test_evidence.py`
-的 `environment()` 算成一个摘要：解释器与已安装包、平台、`PEACH_*` 等环境变量、前端
-`node_modules` 锁，以及 node／npm／git／ffmpeg／ffprobe／openssl 六个外部工具。
+A record can be reused only when all three of "code, environment, scope" match, and the environment item is computed by `environment()` in `scripts/test_evidence.py`
+into one digest: the interpreter and installed packages, the platform, environment variables such as `PEACH_*`, the frontend
+`node_modules` lock, and six external tools: node / npm / git / ffmpeg / ffprobe / openssl.
 
-uv 只探针、不进指纹：它负责建环境，装出来的解释器与包已经逐个记在摘要里，而它自己由
-winget 自动升级。把它的版本也算进去的话，升级当天全部记录一起失效，被验证的那套环境
-却一个字节都没变。
+uv is only probed and is not part of the fingerprint: it builds the environment, and the interpreter and packages it installs are already recorded one by one in the digest, while uv itself
+is auto-upgraded by winget. If its version were counted too, all records would be invalidated together on the day of an upgrade,
+though not one byte of the verified environment had changed.
 
-工具身份取它**自报的版本**，不取 PATH 解析到的路径与文件字节。同一套 Git 安装在
-PowerShell 里解析到 `Git\cmd\git.exe`、在 Git Bash 里解析到 `Git\mingw64\bin\git.exe`，
-两个前端字节不同而版本和行为相同；按路径记身份会把记录绑在 shell 上：在一个 shell 里
-跑出记录，换另一个 shell 跑 `integrate` 就报「缺少有效测试记录」，回到工作树跑 `auto`
-又说「复用记录」，两句查的是两个键，代价是白跑一遍全量。
+A tool's identity takes the **version it reports itself**, not the path resolved on PATH or the file bytes. The same Git installation resolves to `Git\cmd\git.exe` in
+PowerShell and to `Git\mingw64\bin\git.exe` in Git Bash:
+the two launcher binaries differ in bytes while the version and behavior are the same; recording identity by path would tie records to the shell: a record produced in one shell, and then `integrate` run from another shell, reports "缺少有效测试记录" (the literal error message, "valid test record missing"),
+while going back to the worktree and running `auto` says "reusing record" instead; the two statements check two different keys, at the cost of an unnecessary full run.
 
-改 `environment()` 的算法本身时，主检出那份代码算不出新键，无法验证带着新算法的分支。
-那一次的 `integrate` 用分支自己的脚本跑，并把仓库指到主检出。`--repo` 是顶层参数，
-放在子命令前面，放后面会被 argparse 拒收：
+When changing the algorithm of `environment()` itself, the main checkout's code cannot compute the new key and so cannot verify a branch carrying the new algorithm.
+In that case `integrate` is run with the branch's own script and the repository pointed at the main checkout. `--repo` is a top-level argument,
+placed before the subcommand; placed after it, argparse rejects it:
 
 ```powershell
-& .\.venv\Scripts\python.exe -X utf8 <工作树>\scripts\agent_worktree.py `
-  --repo <主检出> integrate --branch <分支>
+& .\.venv\Scripts\python.exe -X utf8 <worktree>\scripts\agent_worktree.py `
+  --repo <main-checkout> integrate --branch <branch>
 ```

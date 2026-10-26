@@ -47,25 +47,25 @@ CloseApplications=yes
 RestartApplications=no
 
 [Languages]
-Name: "chs"; MessagesFile: "ChineseSimplified.isl"
+Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [CustomMessages]
-chs.StillRunning=Peach 仍在运行，未能自动退出。请从托盘菜单退出 Peach 后重试。
-chs.TaskCheckFailed=无法确认后台任务状态，安装已取消。请等待任务结束后重试。
-chs.MigrationFailed=本地数据库未能更新到新版本，Peach 启动后可能出错。升级前的备份在数据目录的 database 文件夹里，文件名以 ledger.pre-migrate- 开头。
-chs.DataKept=Peach 已卸载。设置、本地数据库和观看记录保留在 %1，需要时可手动删除；媒体文件不受影响。
-chs.DirectoryOverlapsData=程序目录不能与 Peach 数据目录重叠。请选择独立的程序文件夹。
-chs.DirectoryNotDedicated=请选择空文件夹或已有的 Peach 安装目录。卸载 Peach 时会移除整个程序文件夹。
-chs.DirectoryNotWritable=当前用户无法写入程序目录或其上级目录。请选择有写入权限的位置，以便安装和更新 Peach。
-chs.DirectoryLink=程序目录和数据目录不能经过目录链接。请选择普通文件夹。
-chs.DirectoryMove=请先卸载现有 Peach（保留数据），再选择新的安装目录。
-chs.ReportingFailed=版本统计与错误诊断选项未能保存。首次设置或设置页可再次选择；未保存的同意不会启用上传。
-chs.LibrarySharingFailed=馆藏与口味上传选项未能保存。可在设置页重新选择。
+english.StillRunning=Peach is still running and could not exit automatically. Quit Peach from the tray menu and try again.
+english.TaskCheckFailed=Could not confirm the background task status, so the installation was cancelled. Wait for the tasks to finish and try again.
+english.MigrationFailed=The local database could not be updated to the new version, so Peach may error after it starts. The pre-upgrade backup is in the database folder of the data directory, with a file name starting with ledger.pre-migrate-.
+english.DataKept=Peach has been uninstalled. Settings, the local database and watch history are kept in %1 and can be deleted manually if needed; media files are not affected.
+english.DirectoryOverlapsData=The program directory cannot overlap the Peach data directory. Choose a separate program folder.
+english.DirectoryNotDedicated=Choose an empty folder or an existing Peach installation directory. Uninstalling Peach removes the entire program folder.
+english.DirectoryNotWritable=The current user cannot write to the program directory or its parent directory. Choose a location with write access so Peach can be installed and updated.
+english.DirectoryLink=The program and data directories cannot go through directory links. Choose a regular folder.
+english.DirectoryMove=Uninstall the existing Peach (keeping data) first, then choose a new installation directory.
+english.ReportingFailed=The version statistics and error diagnostics choice could not be saved. You can choose again in first-time setup or on the settings page; consent that was not saved will not enable uploads.
+english.LibrarySharingFailed=The library and taste upload choice could not be saved. You can choose again on the settings page.
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "reporting"; Description: "发送版本统计与错误诊断（推荐）：版本、系统信息、故障类型、代码位置与发生次数"; GroupDescription: "数据上传（可在设置页关闭）："
-Name: "librarysharing"; Description: "上传馆藏与各类偏好明细（匿名化处理）"; GroupDescription: "数据上传（可在设置页关闭）："; Flags: unchecked
+Name: "reporting"; Description: "Send version statistics and error diagnostics (recommended): version, system info, error type, code location and occurrence count"; GroupDescription: "Data upload (can be turned off on the settings page):"
+Name: "librarysharing"; Description: "Upload library and preference details (anonymised)"; GroupDescription: "Data upload (can be turned off on the settings page):"; Flags: unchecked
 
 [InstallDelete]
 ; PyInstaller 的依赖都在 _internal 里；覆盖安装留下上一版多出来的库会被新版误加载。
@@ -86,7 +86,7 @@ Name: "{userdesktop}\Peach"; Filename: "{app}\Peach.exe"; Parameters: "--show"; 
 
 [Run]
 Filename: "{app}\Peach.exe"; Parameters: "--show"; Description: "{cm:LaunchProgram,Peach}"; Flags: nowait postinstall skipifsilent
-Filename: "https://github.com/peach-mitao/peach"; Description: "打开 Peach 仓库，给项目加星"; Flags: shellexec postinstall skipifsilent unchecked
+Filename: "https://github.com/peach-mitao/peach"; Description: "Open the Peach repository and star the project"; Flags: shellexec postinstall skipifsilent unchecked
 
 [UninstallDelete]
 ; 自更新整目录换过之后，卸载记录里的文件清单不再完整，按目录整个移除。
@@ -107,16 +107,16 @@ function GetCurrentProcessId(): LongWord;
 procedure InitializeWizard();
 begin
   LibrarySharingPage := CreateOutputMsgMemoPage(wpSelectTasks,
-    '馆藏与口味明细上传', '用于 Peach 用户群体的馆藏结构与偏好研究。',
-    '继续表示同意每周上传以下明细；不参与可返回取消勾选。', '');
+    'Library and taste details upload', 'Used for research on library structure and preferences across Peach users.',
+    'Continuing means you agree to upload the details below weekly; to opt out, go back and untick it.', '');
   LibrarySharingPage.RichEditViewer.Text :=
-    '作品：去重后的作品编号、评分、喜欢、不喜欢、已看、稍后看、播放次数、观看比例与手动添加的标签。' + #13#10#13#10 +
-    '偏好汇总：出演者、创作者、厂牌、系列、手动标签、年代与时长分组的收藏、喜欢、不喜欢、观看数量和评分分布（有编号作品与无编号条目分开），以及主动收藏的实体名称。' + #13#10#13#10 +
-    '馆藏覆盖：文件数量、有编号作品数量与无编号条目数量。无编号馆藏只参与本机汇总。' + #13#10#13#10 +
-    '版本与周期：Peach 版本、字段版本、UTC 自然周。' + #13#10#13#10 +
-    '不上传账号、设备或安装标识、内部行号、文件名、路径、标题、媒体、网址、搜索词及逐条浏览或观看记录。' + #13#10#13#10 +
-    '完整明细可反映成人内容偏好；接收服务为独立 Sentry 项目，可见连接 IP。' + #13#10#13#10 +
-    '可在设置页查看完整本机预览或关闭。关闭停止后续发送，已发送数据无法通过本机开关撤回。';
+    'Works: de-duplicated work codes, ratings, likes, dislikes, watched, watch-later, play counts, watch ratios and manually added tags.' + #13#10#13#10 +
+    'Preference summary: favourites, likes, dislikes, watch counts and rating distributions grouped by performer, creator, studio, series, manual tag, era and duration (coded works and uncoded entries kept separate), plus the names of entities you actively favourited.' + #13#10#13#10 +
+    'Library coverage: file count, coded work count and uncoded entry count. The uncoded library is only included in the local summary.' + #13#10#13#10 +
+    'Version and period: Peach version, field version and UTC calendar week.' + #13#10#13#10 +
+    'Not uploaded: accounts, device or installation identifiers, internal row numbers, file names, paths, titles, media, URLs, search terms, and per-item browsing or watch history.' + #13#10#13#10 +
+    'The full details can reflect adult content preferences; the receiving service is a separate Sentry project and can see the connecting IP.' + #13#10#13#10 +
+    'You can view the full local preview or turn this off on the settings page. Turning it off stops further uploads; data already sent cannot be withdrawn with the local switch.';
 end;
 
 function ShouldSkipPage(PageID: Integer): Boolean;
@@ -195,8 +195,8 @@ begin
   if not ToolsPrepared then
   begin
     if ToolsPage = nil then
-      ToolsPage := CreateOutputMarqueeProgressPage('准备媒体工具', '已有工具会校验后复用，缺少时自动下载。');
-    ToolsPage.SetText('正在检查、下载并校验媒体工具，请稍候。', '下载失败可重试，现有安装会保留。');
+      ToolsPage := CreateOutputMarqueeProgressPage('Preparing media tools', 'Existing tools are verified and reused; missing ones are downloaded automatically.');
+    ToolsPage.SetText('Checking, downloading and verifying media tools. Please wait.', 'If the download fails you can retry; the existing installation is kept.');
     ToolsPage.Show;
     ToolsPage.Animate;
     try
@@ -209,7 +209,7 @@ begin
     end;
     if not ToolsPrepared then
     begin
-      Result := '媒体工具未能准备完成，请检查网络后重试。';
+      Result := 'Media tools could not be prepared. Check your network and try again.';
       if LoadStringFromFile(ExpandConstant('{tmp}\Peach-preflight\tools-error.txt'), ErrorText) then
         Result := UTF8Decode(ErrorText);
       Exit;

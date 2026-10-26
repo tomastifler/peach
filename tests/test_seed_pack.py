@@ -408,7 +408,7 @@ class ScriptTests(SeedPackCase):
         source.close()
         with contextlib.redirect_stdout(io.StringIO()) as older:
             self.assertEqual(script.main(["export", "--db", db, "--version", VERSION, "--out", str(out)]), 2)
-        self.assertIn("需要更新的 version 与 revision", json.loads(older.getvalue())["error"])
+        self.assertIn("requires an updated version and revision", json.loads(older.getvalue())["error"])
         self.assertEqual(seed_pack.load(out)["version"], f"{VERSION}.1")
 
 

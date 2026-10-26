@@ -28,12 +28,12 @@ it('配置块给的是服务端拼好的那一段，复制键把它整个写进�
   // 卡片自己就是 `secondary`，代码块用同一档等于没有块——底色要比它亮一级才看得出来。
   expect(host.querySelector('[data-code-block]')?.className).toContain('bg-background-tertiary-default');
   expect(host.querySelector('pre')?.textContent).toBe(TOML);
-  expect(host.textContent).not.toContain('共享密钥');
-  expect(host.textContent).not.toContain('通知地址');
-  await click(buttonNamed('复制配置', host));
+  expect(host.textContent).not.toContain('Shared secret');
+  expect(host.textContent).not.toContain('Notification address');
+  await click(buttonNamed('Copy configuration', host));
   await settle();
   expect(writeText).toHaveBeenCalledWith(TOML);
-  expect(receipt).toHaveBeenCalledWith('已复制 CloudDrive2 配置');
+  expect(receipt).toHaveBeenCalledWith('CloudDrive2 configuration copied');
 });
 
 it('配置块默认收起，横向滚动用全站的覆盖式滑块', async () => {
@@ -45,7 +45,7 @@ it('配置块默认收起，横向滚动用全站的覆盖式滑块', async () =
   const pre = host.querySelector('pre')!;
   const fold = pre.closest('details');
   expect(fold?.open).toBe(false);
-  expect(fold?.querySelector('summary')?.textContent).toContain('查看配置');
+  expect(fold?.querySelector('summary')?.textContent).toContain('View configuration');
   expect(pre.className).not.toContain('max-h');
   expect(pre.dataset.overlayScrollbar).toBe('true');
   expect(pre.parentElement?.querySelector('.ovtrack')).not.toBeNull();
@@ -55,8 +55,8 @@ it('这台机器没有对外的 HTTPS 地址时说出原因，不发一段填了
   const host = await mount(
     <PushDiscoveryForm initial={state({ origin: '', config_toml: '' })} receipt={vi.fn()} />);
   expect(host.querySelector('pre')).toBeNull();
-  expect(buttonNamed('复制配置', host)).toBeNull();
-  expect(host.textContent).toContain('要先有 CloudDrive2 能访问的 HTTPS 地址');
+  expect(buttonNamed('Copy configuration', host)).toBeNull();
+  expect(host.textContent).toContain('Requires an HTTPS address that CloudDrive2 can reach');
 });
 
 it('配置块跟着已保存的开关走，拨一下不算数', async () => {
@@ -71,7 +71,7 @@ it('换过密钥之后配置块换成新的那一段', async () => {
   const next = state({ secret: 'new', config_toml: '[global_params]\nbase_url = "https://h"\n' });
   vi.stubGlobal('fetch', fetchMock(200, next));
   const host = await mount(<PushDiscoveryForm initial={state()} receipt={vi.fn()} />);
-  await click(buttonNamed('更换密钥', host));
+  await click(buttonNamed('Replace secret', host));
   await settle();
   expect(host.querySelector('pre')?.textContent).toBe(next.config_toml);
 });

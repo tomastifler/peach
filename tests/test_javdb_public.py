@@ -486,7 +486,7 @@ class DetailProjectionTests(unittest.TestCase):
                 patch('peach.web_jav_detail.PUBLIC_API.reviews', side_effect=PublicSourceUnavailable('限流')):
             result = q_jav_resources(self.contract, {'code': 'EXM-001'})
         self.assertEqual(len(result['items']), 1)
-        self.assertEqual(result['warnings'], ['评论资源未取得：限流'])
+        self.assertEqual(result['warnings'], ['Comment resources were not obtained: 限流'])
 
     def test_comment_resource_scan_has_a_page_limit(self):
         with patch('peach.web_jav_detail.PUBLIC_API.movie', return_value={'id': 'Exact'}), \
@@ -494,7 +494,7 @@ class DetailProjectionTests(unittest.TestCase):
                 patch('peach.web_jav_detail.PUBLIC_API.reviews', return_value=[{'content': '正文'}] * 10) as reviews:
             result = q_jav_resources(self.contract, {'code': 'EXM-001'})
         self.assertEqual(reviews.call_count, 8)
-        self.assertEqual(result['warnings'], ['已查询前 8 页评论资源。'])
+        self.assertEqual(result['warnings'], ['The first 8 pages of comment resources were queried.'])
 
     def test_magnet_failure_keeps_comment_resources(self):
         with patch('peach.web_jav_detail.PUBLIC_API.movie', return_value={'id': 'Exact'}), \
@@ -504,7 +504,7 @@ class DetailProjectionTests(unittest.TestCase):
             result = q_jav_resources(self.contract, {'code': 'EXM-001'})
         self.assertEqual(result['state'], 'ready')
         self.assertEqual([item['protocol'] for item in result['items']], ['ed2k'])
-        self.assertEqual(result['warnings'], ['磁链区资源未取得：未取得'])
+        self.assertEqual(result['warnings'], ['Magnet section resources were not obtained: 未取得'])
 
     def test_source_avatars_and_studio_logos_preserve_each_identity(self):
         movie = {'id': 'Exact', 'actors': [

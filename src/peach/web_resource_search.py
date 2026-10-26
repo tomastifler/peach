@@ -8,13 +8,13 @@ _SEARCH = Search()
 def q_resource_search(contract, args) -> dict:
     service = getattr(contract, "downloads", None)
     if service is None:
-        raise ValueError("云下载服务没有启用")
+        raise ValueError("Cloud download service is not enabled")
     try:
         filters = Filters(min_size=int(args.get("min_size") or 0),
                           max_size=int(args.get("max_size") or 1024 ** 4),
                           goal=str(args.get("goal") or "quality"))
     except (TypeError, OverflowError):
-        raise ValueError("体积区间必须是字节数") from None
+        raise ValueError("Size range must be in bytes") from None
     with contract.database.read_connection() as connection:
         blocked = [row[0] for row in connection.execute(
             "SELECT info_hash FROM download_task WHERE blocked_at IS NOT NULL")]
@@ -39,7 +39,7 @@ def q_resource_search(contract, args) -> dict:
         "state": "ready" if direct["items"] or indexed.get("state") == "ready" else indexed.get("state", "error"),
         "items": rank_candidates(combined, filters.goal),
         "warnings": direct["warnings"] + list(indexed.get("warnings") or ()),
-        "trace": direct["trace"] + (["索引器后备：已查询"] if indexed.get("state") != "unavailable" else []),
+        "trace": direct["trace"] + (["Indexer fallback: queried"] if indexed.get("state") != "unavailable" else []),
         "next_sources": direct["next_sources"], "reference_only": direct["reference_only"],
         "error": "" if direct["items"] or indexed.get("ok") else indexed.get("error", ""),
     }

@@ -11,11 +11,11 @@ it('口味分保留零值、小数与负排序分，未取得读数不伪装成�
   for (const value of [undefined, null, NaN, Infinity]) expect(discoveryScore(value)).toBe('—');
 });
 it('推荐标签使用固定百分制与档次，未知值和越界值有明确读数', () => {
-  expect(recommendationScore(0.337)).toEqual({ score: '34', label: '值得看看', color: 'yellow' });
-  for (const [input, score, label] of [[0, '0', '探索'], [-0.1, '0', '探索'], [0.5, '50', '推荐'], [0.75, '75', '强烈推荐'], [1.2, '100', '强烈推荐']] as const) {
+  expect(recommendationScore(0.337)).toEqual({ score: '34', label: 'Worth a look', color: 'yellow' });
+  for (const [input, score, label] of [[0, '0', 'Explore'], [-0.1, '0', 'Explore'], [0.5, '50', 'Recommended'], [0.75, '75', 'Highly recommended'], [1.2, '100', 'Highly recommended']] as const) {
     expect(recommendationScore(input)).toMatchObject({ score, label });
   }
-  for (const value of [undefined, null, NaN, Infinity]) expect(recommendationScore(value)).toMatchObject({ score: '—', label: '资料未取得' });
+  for (const value of [undefined, null, NaN, Infinity]) expect(recommendationScore(value)).toMatchObject({ score: '—', label: 'Details unavailable' });
 });
 it('发现查询隔离排序缓存，并在同一资料任务上轮询、停止与显式更新', async () => {
   const requests: URL[] = [];

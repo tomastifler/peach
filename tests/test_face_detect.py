@@ -56,7 +56,7 @@ class EnsureModelTests(unittest.TestCase):
                               return_value=_Response()):
                 with self.assertRaises(FaceModelUnavailable) as caught:
                     ensure_model(target)
-            self.assertIn("校验不符", str(caught.exception))
+            self.assertIn("checksum mismatch", str(caught.exception))
             self.assertFalse(target.exists())
 
     def test_the_pinned_digest_is_a_real_sha256(self):

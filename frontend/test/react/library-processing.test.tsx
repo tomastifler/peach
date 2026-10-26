@@ -84,14 +84,14 @@ it('来源说没有只报一个数，不算问题也不提供失败重试', asyn
     issues_log: LOG,
   });
   const host = await mount(card({ toast: vi.fn() }));
-  expect(host.textContent).toContain('外部来源没有资料 30 部、没有封面 162 部，7 天内不再问。');
+  expect(host.textContent).toContain('External sources have no metadata 30 works, no cover 162 works; not asked again for 7 days.');
   expect(host.textContent).toContain(LOG);
   /* 完整记录那一行退回灰字，它上面那条线取同一个颜色；中性 separator 是另一种灰。 */
   const record = [...host.querySelectorAll('p')].find((line) => line.textContent?.includes(LOG))!;
   expect(record.closest('.text-text-secondary')).not.toBeNull();
   expect(record.closest('.border-t')!.className).toContain('border-current/20');
   expect(host.querySelector('[role="alert"]')).toBeNull();
-  expect(buttonNamed('重试未完成项')).toBeNull();
+  expect(buttonNamed('Retry unfinished items')).toBeNull();
   expect(host.querySelector('details')).toBeNull();
 });
 
@@ -99,19 +99,19 @@ it('扫描与补全方式共用一颗主键加一个下拉，各自交自己的�
   const served = await open({ status: 'idle' }, () => ({ status: 'complete' }));
   const host = await mount(card({ toast: vi.fn() }));
 
-  await click(buttonNamed('同步媒体库', host));
+  await click(buttonNamed('Sync library', host));
   await click(host.querySelector('[data-split-button] [aria-haspopup="dialog"]'));
-  expect(menuItem('同步媒体库')).not.toBeNull();
-  await click(menuItem('仅扫描文件'));
+  expect(menuItem('Sync library')).not.toBeNull();
+  await click(menuItem('Scan files only'));
   await click(host.querySelector('[data-split-button] [aria-haspopup="dialog"]'));
-  await click(menuItem('仅同步已入库影片'));
+  await click(menuItem('Sync library videos only'));
   await click(host.querySelector('[data-split-button] [aria-haspopup="dialog"]'));
-  await click(menuItem('仅生成视频预览'));
+  await click(menuItem('Generate video previews only'));
   await click(host.querySelector('[data-split-button] [aria-haspopup="dialog"]'));
-  await click(menuItem('仅补全资料'));
+  await click(menuItem('Complete metadata only'));
 
   expect(served.posts()).toEqual([{}, { stage: 'scan' }, { stage: 'collect' }, { stage: 'previews' }, { stage: 'metadata' }]);
-  expect(host.querySelector('a[href="/sources"]')?.textContent).toContain('来源和凭证');
+  expect(host.querySelector('a[href="/sources"]')?.textContent).toContain('Sources and credentials');
 });
 
 it('启动只提交一次，进度用 GET 读回来，完成后给出回执与复核入口', async () => {
@@ -123,17 +123,17 @@ it('启动只提交一次，进度用 GET 读回来，完成后给出回执与�
       : { status: 'complete', job_id: 'one', scanned: 9, identified: 4, candidates: 2 },
   );
   const host = await mount(card({ toast }));
-  await click(buttonNamed('同步媒体库', host));
+  await click(buttonNamed('Sync library', host));
 
   expect(served.calls.map((call) => call.method)).toEqual(['POST', 'GET']);
   expect(host.querySelector('a[href="/review"]')).not.toBeNull();
   expect(toast).toHaveBeenCalledTimes(1);
   const receipt = host.querySelector('[role="status"]');
-  expect(receipt?.textContent).toContain('处理完成');
+  expect(receipt?.textContent).toContain('Processing complete');
   expect(receipt?.textContent).toContain(
-    '已扫描 9 个文件，识别 4 个番号，整理 2 组资料结果，自动保存 0 条。');
+    'Scanned 9 files, identified 4 codes, organized 2 metadata result groups, auto-saved 0.');
   // 这一趟没补任何女优资料，回执里就不出现那句话。
-  expect(receipt?.textContent).not.toContain('补齐女优资料');
+  expect(receipt?.textContent).not.toContain('Performer profiles filled in');
 });
 
 it('补齐女优资料的读数进回执，冲突和未取得各自点名', async () => {
@@ -148,11 +148,11 @@ it('补齐女优资料的读数进回执，冲突和未取得各自点名', asyn
         },
   );
   const host = await mount(card({ toast: vi.fn() }));
-  await click(buttonNamed('同步媒体库', host));
+  await click(buttonNamed('Sync library', host));
 
   expect(served.posts()).toEqual([{}]);
   expect(host.querySelector('[role="status"]')?.textContent).toContain(
-    '补齐女优资料：别名 5 个，头像 3 张，1 个同名冲突交回人工，2 张头像未取得。');
+    'Performer profiles filled in: 5 aliases, 3 avatars, 1 same-name conflicts handed back for manual review, 2 avatars not fetched.');
 });
 
 it('首屏读到的上一趟终态不冒充这一次的回执', async () => {
@@ -163,7 +163,7 @@ it('首屏读到的上一趟终态不冒充这一次的回执', async () => {
 
   expect(served.calls.every((call) => call.method === 'GET')).toBe(true);
   expect(toast).not.toHaveBeenCalled();
-  expect(host.textContent).not.toContain('处理完成');
+  expect(host.textContent).not.toContain('Processing complete');
 });
 
 it('运行态说清当前项目、动作与等待时长，处理慢只提示不另起任务', async () => {
@@ -173,13 +173,13 @@ it('运行态说清当前项目、动作与等待时长，处理慢只提示不�
   });
   const host = await mount(card({ toast: vi.fn() }));
 
-  expect(host.textContent).toContain('当前：ABW-001.mp4 · 查询外部资料 · 已等待 5 分 0 秒');
-  expect(host.textContent).toContain('处理较慢');
+  expect(host.textContent).toContain('Current: ABW-001.mp4 · Querying external metadata · waited 5m 0s');
+  expect(host.textContent).toContain('Processing is slow');
   // 有分母就画进度条，不再另画一组等待点：同一件事两种说法。
   expect(host.querySelectorAll('[role="progressbar"]')).toHaveLength(1);
   expect(host.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2');
 
-  await click(buttonNamed('同步媒体库', host));
+  await click(buttonNamed('Sync library', host));
   expect(served.posts()).toEqual([]);
 });
 
@@ -195,7 +195,7 @@ it('失败时把问题清单折叠进错误提示，重试只交失败的那些�
   expect(alert?.textContent).toContain('2 项需要处理');
   const details = alert!.querySelector('details')!;
   expect(details.open).toBe(false);
-  expect(details.querySelector('summary')?.textContent).toBe('问题清单：共 23 项，展开查看前 1 项');
+  expect(details.querySelector('summary')?.textContent).toBe('Issue list: 23 in total; expand to see the first 1');
   expect(details.querySelector('li a')?.getAttribute('href')).toBe('/assets/7');
   expect(details.querySelector('li')?.textContent).toContain('样品.mp4');
   expect(details.querySelector('li code')?.textContent).toBe('R:\\Media\\样品.mp4');
@@ -209,14 +209,14 @@ it('失败时把问题清单折叠进错误提示，重试只交失败的那些�
   expect(details.parentElement?.className).toContain('border-t');
   // 完整记录是出事之后自己去翻的东西，退回灰字，旁边给一颗打开它的键。
   const log = details.querySelector('p')!;
-  expect(log.textContent).toBe(`完整记录：${LOG}`);
+  expect(log.textContent).toBe(`Full log: ${LOG}`);
   expect(log.closest('.text-text-secondary')).not.toBeNull();
-  expect(details.querySelector('button[aria-label="在资源管理器中显示"]')).not.toBeNull();
+  expect(details.querySelector('button[aria-label="Show in file explorer"]')).not.toBeNull();
   // 补上没做完的那些是这一趟的事，重新跑一整批是下一趟的事：页脚那颗留着，各答各的问题。
-  expect(buttonNamed('同步媒体库', host)?.textContent).toBe('同步媒体库');
+  expect(buttonNamed('Sync library', host)?.textContent).toBe('Sync library');
 
   // 重试键属于错误提示，问题清单收起时仍可操作。
-  const retry = buttonNamed('重试未完成项')!;
+  const retry = buttonNamed('Retry unfinished items')!;
   expect(retry.className).toContain('bg-button-primary');
   expect(alert!.contains(retry)).toBe(true);
   expect(details.contains(retry)).toBe(false);
@@ -234,7 +234,7 @@ it('有可重试项时页脚那颗发的仍是整批，不夹带上一趟的失�
   }, () => ({ status: 'running', job_id: 'two' }));
   const host = await mount(card({ toast: vi.fn() }));
 
-  await click(buttonNamed('同步媒体库', host));
+  await click(buttonNamed('Sync library', host));
   expect(served.posts()).toEqual([{}]);
 });
 
@@ -244,8 +244,8 @@ it('失败项都不可重试时仍能重新发起整批任务', async () => {
     retryable_asset_ids: [], issue_preview: [{ asset_id: 1, message: '未识别到番号' }],
   });
   const host = await mount(card({ toast: vi.fn() }));
-  expect(buttonNamed('重试未完成项')).toBeNull();
-  expect(buttonNamed('同步媒体库', host)?.textContent).toBe('同步媒体库');
+  expect(buttonNamed('Retry unfinished items')).toBeNull();
+  expect(buttonNamed('Sync library', host)?.textContent).toBe('Sync library');
 });
 
 it('读不回来时留住已有进度，只在旁边说一句连接中断', async () => {
@@ -255,7 +255,7 @@ it('读不回来时留住已有进度，只在旁边说一句连接中断', asyn
   const host = await mount(card({ toast: vi.fn() }));
   await tick(2000);
 
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain('连接中断，正在重新读取处理进度');
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Connection lost; re-reading processing progress');
   expect(host.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('3');
 });
 
@@ -314,7 +314,7 @@ it('刚结束的任务横幅第一次读到也报，同一个任务号只报一�
   }
   expect(toast).toHaveBeenCalledTimes(1);
   expect(toast).toHaveBeenNthCalledWith(
-    1, '扫描与资料采集已完成：识别 3 个番号，整理 2 组资料结果，自动保存 0 条');
+    1, 'Scan and metadata collection finished: 3 codes identified, 2 metadata result groups organized, 0 auto-saved');
 });
 
 it('两个容器读同一趟任务：一个周期只问一次，撤掉一个另一个照常', async () => {
@@ -342,26 +342,26 @@ it('两个容器的等待秒数每秒推进，不增加轮询请求，换文件�
   const served = await open(state);
   const banner = await mountRoot(notice({ toast: vi.fn(), mode: 'notice' }));
   const panel = await mountRoot(card({ toast: vi.fn(), monitor: true }));
-  expect(banner.host.textContent).toContain('已等待 33 秒');
-  expect(panel.host.textContent).toContain('已等待 33 秒');
+  expect(banner.host.textContent).toContain('waited 33s');
+  expect(panel.host.textContent).toContain('waited 33s');
   await tick(1000);
-  expect(banner.host.textContent).toContain('已等待 34 秒');
-  expect(panel.host.textContent).toContain('已等待 34 秒');
+  expect(banner.host.textContent).toContain('waited 34s');
+  expect(panel.host.textContent).toContain('waited 34s');
   expect(served.calls).toHaveLength(0);
   await tick(1000);
-  expect(banner.host.textContent).toContain('已等待 35 秒');
-  expect(panel.host.textContent).toContain('已等待 35 秒');
+  expect(banner.host.textContent).toContain('waited 35s');
+  expect(panel.host.textContent).toContain('waited 35s');
   expect(served.calls).toHaveLength(1);
   await act(async () => {
     queryClient.setQueryData(LIBRARY_PROCESSING_KEY, { ...state, current_asset_id: 2, waited_seconds: 0 });
   });
-  expect(banner.host.textContent).not.toContain('已等待 35 秒');
+  expect(banner.host.textContent).not.toContain('waited 35s');
   await tick(1000);
-  expect(banner.host.textContent).toContain('已等待 1 秒');
-  expect(panel.host.textContent).toContain('已等待 1 秒');
+  expect(banner.host.textContent).toContain('waited 1s');
+  expect(panel.host.textContent).toContain('waited 1s');
   await act(async () => { queryClient.setQueryData(LIBRARY_PROCESSING_KEY, { ...state, status: 'paused' }) });
-  expect(banner.host.textContent).not.toContain('已等待');
-  expect(panel.host.textContent).not.toContain('已等待');
+  expect(banner.host.textContent).not.toContain('waited');
+  expect(panel.host.textContent).not.toContain('waited');
   await banner.unmount();
   await panel.unmount();
   const requests = served.calls.length;
@@ -383,21 +383,21 @@ it('卡片卸载之后轮询就停了', async () => {
 
 it('来源说没有的计数带千分位，等待时长按分、时、天进位', () => {
   expect(notesLine({ querying_metadata: 1234567, fetching_cover: 0 }))
-    .toBe('外部来源没有资料 1,234,567 部，7 天内不再问。');
+    .toBe('External sources have no metadata 1,234,567 works; not asked again for 7 days.');
   expect(currentLine({ status: 'running', current_action: 'fetching_cover', waited_seconds: 259200 } as LibraryProcessingData))
-    .toBe('采集缺失封面 · 已等待 3 天 0 小时');
+    .toBe('Fetching missing covers · waited 3d 0h');
 });
 
 it('首次整库任务先说明资源影响，确认模式后才启动，取消不启动', async () => {
   localStorage.removeItem(RESOURCE_NOTICE_KEY);
   const served = await open({ status: 'idle', speed_mode: 'standard' }, () => ({ status: 'running', job_id: 'one' }));
   const host = await mount(card({ toast: vi.fn() }));
-  await click(buttonNamed('同步媒体库', host));
+  await click(buttonNamed('Sync library', host));
   expect(served.posts()).toEqual([]);
-  expect(document.querySelector('dialog')?.textContent).toContain('可能让电脑变慢');
-  await click(buttonNamed('取消', document.querySelector('dialog')!));
+  expect(document.querySelector('dialog')?.textContent).toContain('may slow down your computer');
+  await click(buttonNamed('Cancel', document.querySelector('dialog')!));
   expect(served.posts()).toEqual([]);
-  await click(buttonNamed('同步媒体库', host));
+  await click(buttonNamed('Sync library', host));
   await click(document.querySelector('dialog input[value="low"]'));
   await submit(document.querySelector('dialog form'));
   expect(served.posts()).toEqual([{ speed_mode: 'low' }]);
@@ -418,29 +418,29 @@ it('暂停与继续使用同一个任务号，暂停不是完成，暂停时仍�
     return state;
   });
   const host = await mount(card({ toast, onComplete }));
-  expect(host.textContent).toContain('预计剩余约 20–40 分钟（粗估）');
-  await click(buttonNamed('暂停', host));
-  expect(host.textContent).toContain('正在暂停，当前步骤结束后暂停');
+  expect(host.textContent).toContain('About 20–40 minutes remaining (rough estimate)');
+  await click(buttonNamed('Pause', host));
+  expect(host.textContent).toContain('Pausing; will pause when the current step ends');
   state = { ...state, status: 'paused' };
   await tick(2000);
-  expect(buttonNamed('继续', host)).not.toBeNull();
-  expect(host.textContent).toContain('已暂停，继续后更新预估');
+  expect(buttonNamed('Resume', host)).not.toBeNull();
+  expect(host.textContent).toContain('Paused; the estimate updates after resuming');
   expect(onComplete).not.toHaveBeenCalled();
   expect(toast).not.toHaveBeenCalled();
-  await click(buttonNamed('继续', host));
+  await click(buttonNamed('Resume', host));
   expect(served.posts()).toEqual([{ action: 'pause', job_id: 'one' }, { action: 'resume', job_id: 'one' }]);
-  expect(buttonNamed('暂停', host)).not.toBeNull();
+  expect(buttonNamed('Pause', host)).not.toBeNull();
 });
 
 it('首屏暂停状态在卡片和横幅中保留进度与继续入口', async () => {
   await open({ status: 'paused', job_id: 'one', checked: 2, total: 10 });
   const host = await mount(card({ toast: vi.fn() }));
   const banner = await mount(notice({ toast: vi.fn(), mode: 'notice' }));
-  expect(host.textContent).toContain('已暂停');
-  expect(banner.textContent).toContain('已暂停');
-  expect(buttonNamed('继续', host)).not.toBeNull();
-  expect(buttonNamed('继续', banner)).not.toBeNull();
-  expect(buttonNamed('标准', banner)).not.toBeNull();
+  expect(host.textContent).toContain('Paused');
+  expect(banner.textContent).toContain('Paused');
+  expect(buttonNamed('Resume', host)).not.toBeNull();
+  expect(buttonNamed('Resume', banner)).not.toBeNull();
+  expect(buttonNamed('Standard', banner)).not.toBeNull();
   expect(host.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2');
 });
 
@@ -450,26 +450,26 @@ it('模式切换失败保留服务端选中值和原位错误，可重试', asyn
     ? { ok: false, status: 409, json: async () => ({ error: '任务已变化，请刷新后重试' }) }
     : { ok: true, status: 200, json: async () => ({ status: 'running', job_id: 'one', speed_mode: 'standard' }) }));
   const host = await mount(card({ toast: vi.fn() }));
-  await click(buttonNamed('标准', host));
+  await click(buttonNamed('Standard', host));
   const slider = document.querySelector<HTMLInputElement>('input[type="range"]')!;
   await act(async () => {
     slider.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
     slider.dispatchEvent(new KeyboardEvent('keyup', { key: 'Home', bubbles: true }));
   });
   expect(host.textContent).toContain('任务已变化，请刷新后重试');
-  expect(buttonNamed('标准', host)).not.toBeNull();
+  expect(buttonNamed('Standard', host)).not.toBeNull();
   expect(slider.value).toBe('1');
   expect(slider.disabled).toBe(false);
 });
 
 it('预估按粗估与实测速率显示区间，缺少有效范围时等待估算', () => {
   const state: LibraryProcessingData = { status: 'running', eta_seconds_min: 1200, eta_seconds_max: 2400, eta_kind: 'historical' };
-  expect(remainingTime(state)).toBe('预计剩余约 20–40 分钟（粗估）');
+  expect(remainingTime(state)).toBe('About 20–40 minutes remaining (rough estimate)');
   expect(remainingTime({ ...state, eta_seconds_min: 600, eta_seconds_max: 900, eta_kind: 'measured', eta_scope: '资料采集' }))
-    .toBe('预计剩余约 10–15 分钟 · 资料采集');
-  expect(remainingTime({ ...state, eta_seconds_max: NaN })).toBe('正在估算剩余时间…');
-  expect(remainingTime({ ...state, eta_seconds_min: 2500 })).toBe('正在估算剩余时间…');
-  expect(remainingTime({ ...state, eta_seconds_min: 0, eta_seconds_max: 10 })).toBe('预计剩余不到 1 分钟');
+    .toBe('About 10–15 minutes remaining · 资料采集');
+  expect(remainingTime({ ...state, eta_seconds_max: NaN })).toBe('Estimating remaining time…');
+  expect(remainingTime({ ...state, eta_seconds_min: 2500 })).toBe('Estimating remaining time…');
+  expect(remainingTime({ ...state, eta_seconds_min: 0, eta_seconds_max: 10 })).toBe('Less than 1 minute remaining');
   expect(remainingTime({ ...state, status: 'complete' })).toBe('');
 });
 
@@ -480,16 +480,16 @@ it('处理较慢时各任务面显示等待进展，不沿用旧估时', async (
   const host = await mount(card({ toast: vi.fn() }));
   const banner = await mount(notice({ toast: vi.fn(), mode: 'notice' }));
   for (const surface of [host, banner]) {
-    expect(surface.textContent).toContain('等待当前文件响应，剩余时间待更新');
-    expect(surface.textContent).not.toContain('预计剩余');
-    expect(surface.textContent).toContain('检查配套文件');
+    expect(surface.textContent).toContain('Waiting for the current file to respond; remaining time pending');
+    expect(surface.textContent).not.toContain('minutes remaining');
+    expect(surface.textContent).toContain('Checking companion files');
   }
 });
 
 it('扫描总量未知时显示已发现文件数，已知阶段显示完成数', () => {
   expect(processingLine({ status: 'running', stage: '扫描文件', scanned: 12345 }))
-    .toBe('扫描文件 · 已发现 12,345 个文件');
-  expect(processingLine({ status: 'paused', checked: 38, total: 100 })).toBe('已暂停 · 38 / 100 项');
+    .toBe('扫描文件 · 12,345 files found');
+  expect(processingLine({ status: 'paused', checked: 38, total: 100 })).toBe('Paused · 38 / 100 items');
 });
 
 it('启动失败时提示弹窗保留模式选择和重试入口', async () => {
@@ -499,7 +499,7 @@ it('启动失败时提示弹窗保留模式选择和重试入口', async () => {
     ? { ok: false, status: 400, json: async () => ({ error: '媒体目录不可用' }) }
     : { ok: true, status: 200, json: async () => ({ status: 'idle' }) }));
   const host = await mount(card({ toast: vi.fn() }));
-  await click(buttonNamed('同步媒体库', host));
+  await click(buttonNamed('Sync library', host));
   await click(document.querySelector('dialog input[value="low"]'));
   await submit(document.querySelector('dialog form'));
   expect(document.querySelector('dialog')?.textContent).toContain('媒体目录不可用');

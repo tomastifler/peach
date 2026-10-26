@@ -124,7 +124,7 @@ def _decode_times(stts: bytes) -> list[int]:
     cursor = 8
     for _ in range(count):
         if cursor + 8 > len(stts):
-            raise RepairUnavailable("stts 长度和声明的条目数对不上")
+            raise RepairUnavailable("stts length does not match the declared entry count")
         run, delta = struct.unpack_from(">II", stts, cursor)
         cursor += 8
         for _ in range(run):
@@ -155,28 +155,28 @@ def _display_order(ffprobe: Path, source: Path, decode_times: list[int]) -> list
         completed = subprocess.run(command, capture_output=True, timeout=PROBE_TIMEOUT_SECONDS,
                                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise RepairUnavailable(f"ffprobe 没跑完：{exc}") from exc
+        raise RepairUnavailable(f"ffprobe did not finish: {exc}") from exc
     if completed.returncode:
-        raise RepairUnavailable(f"ffprobe 退出码 {completed.returncode}")
+        raise RepairUnavailable(f"ffprobe exit code {completed.returncode}")
 
     index_of = {value: index for index, value in enumerate(decode_times)}
     if len(index_of) != len(decode_times):
-        raise RepairUnavailable("dts 有重复，认不出哪一帧是哪一帧")
+        raise RepairUnavailable("dts has duplicates; cannot tell which frame is which")
     rank = [-1] * len(decode_times)
     seen = 0
     for line in completed.stdout.decode("utf-8", "replace").splitlines():
         text = line.strip().rstrip(",")
         if not text or text == "N/A":
-            raise RepairUnavailable("有帧没有时间戳")
+            raise RepairUnavailable("A frame has no timestamp")
         index = index_of.get(int(text))
         if index is None:
-            raise RepairUnavailable("解码器报的时间戳不在 stts 里")
+            raise RepairUnavailable("Decoder-reported timestamp is not in stts")
         if rank[index] >= 0:
-            raise RepairUnavailable("同一帧被输出了两次")
+            raise RepairUnavailable("The same frame was output twice")
         rank[index] = seen
         seen += 1
     if seen != len(decode_times):
-        raise RepairUnavailable(f"解码出 {seen} 帧，样本表里有 {len(decode_times)} 个")
+        raise RepairUnavailable(f"Decoded {seen} frames, sample table has {len(decode_times)}")
     return rank
 
 
@@ -251,11 +251,11 @@ def _track_duration(root: _Box, trak: _Box) -> int:
     mdia = trak.find(b"mdia")
     mdhd = mdia.find(b"mdhd") if mdia else None
     if not (mvhd and mvhd.payload and mdhd and mdhd.payload):
-        raise RepairUnavailable("算不出轨道时长")
+        raise RepairUnavailable("Cannot compute track duration")
     movie_scale = struct.unpack_from(">I", mvhd.payload, 20 if mvhd.payload[0] == 1 else 12)[0]
     media_scale = struct.unpack_from(">I", mdhd.payload, 20 if mdhd.payload[0] == 1 else 12)[0]
     if not media_scale:
-        raise RepairUnavailable("媒体时间刻度是 0")
+        raise RepairUnavailable("Media timescale is 0")
     return _timed_field(mdhd.payload, 16, 24) * movie_scale // media_scale
 
 
@@ -271,7 +271,7 @@ def _shift_chunk_offsets(box: _Box, delta: int) -> None:
             count = struct.unpack_from(">I", child.payload, 4)[0]
             values = [struct.unpack_from(">I", child.payload, 8 + n * 4)[0] + delta for n in range(count)]
             if any(value > 0xFFFFFFFF for value in values):
-                raise RepairUnavailable("偏移超出 32 位，这个片源要 co64 才修得了")
+                raise RepairUnavailable("Offset exceeds 32 bits; this source needs co64 to be repaired")
             child.payload = child.payload[:8] + b"".join(struct.pack(">I", value) for value in values)
         elif child.kind == b"co64":
             count = struct.unpack_from(">I", child.payload, 4)[0]
@@ -292,15 +292,15 @@ def _layout(source: Path) -> tuple[bytes, _Span, _Span]:
         boxes = _top_level(handle)
         kinds = {kind for kind, *_ in boxes}
         if not {b"moov", b"mdat"} <= kinds:
-            raise RepairUnavailable("顶层缺 moov 或 mdat")
+            raise RepairUnavailable("Top level is missing moov or mdat")
         mdat = next(box for box in boxes if box[0] == b"mdat")
         moov = next(box for box in boxes if box[0] == b"moov")
         if moov[1] > mdat[1]:
-            raise RepairUnavailable("moov 在 mdat 之后，这个布局还没支持")
+            raise RepairUnavailable("moov is after mdat; this layout is not supported yet")
         if any(box[1] > mdat[1] for box in boxes):
-            raise RepairUnavailable("mdat 后面还有盒子，这个布局还没支持")
+            raise RepairUnavailable("mdat is followed by more boxes; this layout is not supported yet")
         if mdat[3] - mdat[2] <= 0 or moov[3] - moov[1] > HEADER_LIMIT:
-            raise RepairUnavailable("moov 太大或 mdat 是空的")
+            raise RepairUnavailable("moov is too large or mdat is empty")
         handle.seek(0)
         return handle.read(mdat[2]), moov, mdat
 
@@ -314,18 +314,18 @@ def repaired_header(source: Path, ffprobe: Path) -> RepairedHeader:
     video = next((trak for trak in traks if _is_video(trak)), None)
     stbl = _sample_table(video) if video else None
     if stbl is None:
-        raise RepairUnavailable("找不到视频轨的样本表")
+        raise RepairUnavailable("Cannot find the video track's sample table")
     if stbl.find(b"ctts") is not None:
-        raise RepairUnavailable("这个片源已经有 ctts")
+        raise RepairUnavailable("This source already has ctts")
     stts = stbl.find(b"stts")
     if stts is None or stts.payload is None:
-        raise RepairUnavailable("视频轨没有 stts")
+        raise RepairUnavailable("Video track has no stts")
 
     decode_times = _decode_times(stts.payload)
     offsets, shift = _composition_offsets(
         decode_times, _display_order(ffprobe, source, decode_times))
     if not shift and all(value == 0 for value in offsets):
-        raise RepairUnavailable("显示顺序本来就等于解码顺序，没有要修的")
+        raise RepairUnavailable("Display order already equals decode order; nothing to repair")
 
     stbl.children.insert(stbl.children.index(stts) + 1, _Box(b"ctts", _ctts(offsets), []))
     edts = video.find(b"edts")
@@ -345,7 +345,7 @@ def repaired_header(source: Path, ffprobe: Path) -> RepairedHeader:
     rebuilt = root.serialize()
     prefix = head[:moov[1]] + rebuilt + head[moov[3]:]
     if len(prefix) - mdat[2] != delta:
-        raise RepairUnavailable("重建后的头长度对不上")
+        raise RepairUnavailable("Rebuilt header length does not match")
     return RepairedHeader(prefix=prefix, payload_start=mdat[2], payload_end=mdat[3])
 
 

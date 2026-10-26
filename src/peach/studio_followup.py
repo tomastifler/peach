@@ -31,7 +31,7 @@ from .followups import Attempts, Followup, FollowupType, attempts_root, register
 
 #: 这类后继在任务中心的身份，也是活动页上那一行的名字来源。
 TASK_KEY = "studio-mark"
-TASK_LABEL = "补厂牌官网与标识"
+TASK_LABEL = "Studio website and logo backfill"
 
 #: 这条后继写下的一切都带这个归属串，撤回按它认。
 SOURCE = "auto:studio-mark"
@@ -57,7 +57,7 @@ def parse_key(key: str) -> int:
     """把后继 key 拆回厂牌 id。形状不对就抛——那说明排队的行不是这个版本写的。"""
     prefix, _, raw = str(key).partition(":")
     if prefix != TASK_KEY or not raw.isdigit():
-        raise ValueError(f"认不出这条补厂牌后继：{key}")
+        raise ValueError(f"Unrecognized studio backfill follow-up: {key}")
     return int(raw)
 
 
@@ -178,7 +178,7 @@ def _land_site(contract, entity_id: int, name: str, aliases, batch: str) -> dict
     url = str(row["final_url"] or row["candidate_url"])
     now = datetime.now(timezone.utc).isoformat()
     metadata = {"source": SOURCE, "batch": batch, "verdict": verdict, "installed_at": now,
-                "evidence": f"{row['note']}；标题「{row['title']}」", "sha256": row["sha256"]}
+                "evidence": f"{row['note']}; title: {row['title']}", "sha256": row["sha256"]}
     with contract.database.write_transaction() as connection:
         connection.execute(
             "INSERT OR IGNORE INTO entity_link"

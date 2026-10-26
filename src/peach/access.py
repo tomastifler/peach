@@ -36,9 +36,9 @@ def load(path: Path | None) -> dict:
 
 def validate_password(password: str, confirmation: str) -> None:
     if password != confirmation:
-        raise ValueError("两次输入的密码不一致")
+        raise ValueError("The two passwords do not match")
     if password and not 8 <= len(password) <= 256:
-        raise ValueError("访问密码需为 8–256 个字符")
+        raise ValueError("The access password must be 8–256 characters")
 
 
 def _digest(password: str, salt: str) -> str:
@@ -86,7 +86,7 @@ def public(policy: dict) -> dict:
 
 def issue(policy: dict, days: int) -> tuple[str, int | None]:
     if type(days) is not int or not 0 <= days <= 365:
-        raise ValueError("请选择有效的保持登录时间")
+        raise ValueError("Choose a valid stay-signed-in duration")
     seconds = days * 86400 if days else 43200
     value = URLSafeSerializer(policy["key"], salt="peach-browser-access").dumps(
         {"revision": policy["revision"], "expires": int(time.time()) + seconds})

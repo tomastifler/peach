@@ -39,104 +39,104 @@ const indexEntries = (page: Page): Locator =>
 
 /** 统计页画完的标志：四张读数卡兼页签，第一张是馆藏。名字里还带读数和体积，按前缀匹配。 */
 const statsInventoryTab = (page: Page): Locator =>
-  page.locator('#stats').getByRole('tab', { name: /^馆藏视频/ });
+  page.locator('#stats').getByRole('tab', { name: /^Library videos/ });
 
 const ROUTES: readonly Route[] = [
-  { path: '/works/EXM-001', body: page => [page.locator('#stage [data-jav-detail] h1'), page.getByRole('img', { name: 'EXM-001 封面', exact: true })] },
-  { path: '/jav', body: page => [heading(page, '#javLibraryHeader', 'JAV'), page.getByRole('tab', { name: '馆藏', exact: true, selected: true }), page.locator('#grid [data-media-card]:visible, #grid [data-media-empty]:visible').first()] },
-  { path: '/jav?tab=discover', body: page => [heading(page, '#stats', 'JAV'), page.getByRole('tab', { name: '发现', exact: true, selected: true }), page.getByText('暂无匹配口味的作品', { exact: true })] },
-  { path: '/jav?tab=wants', body: page => [heading(page, '#stats', 'JAV'), page.getByRole('tab', { name: '想要', exact: true, selected: true }), page.getByText('还没有想要的作品', { exact: true })] },
+  { path: '/works/EXM-001', body: page => [page.locator('#stage [data-jav-detail] h1'), page.getByRole('img', { name: 'EXM-001 cover', exact: true })] },
+  { path: '/jav', body: page => [heading(page, '#javLibraryHeader', 'JAV'), page.getByRole('tab', { name: 'Library', exact: true, selected: true }), page.locator('#grid [data-media-card]:visible, #grid [data-media-empty]:visible').first()] },
+  { path: '/jav?tab=discover', body: page => [heading(page, '#stats', 'JAV'), page.getByRole('tab', { name: 'Discover', exact: true, selected: true }), page.getByText('No works match your taste yet', { exact: true })] },
+  { path: '/jav?tab=wants', body: page => [heading(page, '#stats', 'JAV'), page.getByRole('tab', { name: 'Wants', exact: true, selected: true }), page.getByText('No works on the want list yet', { exact: true })] },
   { path: '/', body: (page) => [page.locator('#grid [data-media-card]').first()] },
-  { path: '/wall', body: (page) => [page.locator('[data-wall-tile]').first(), page.getByRole('button', { name: '退出播放墙' })] },
-  { path: '/performers', body: (page) => [heading(page, '#index', '艺人'), indexEntries(page)] },
-  { path: '/creators', body: (page) => [heading(page, '#index', '卖家'), indexEntries(page)] },
-  { path: '/creators/', body: (page) => [heading(page, '#index', '卖家'), indexEntries(page)] },
-  { path: '/performers?category=animation', body: (page) => [heading(page, '#index', '艺人'), indexEntries(page)] },
-  { path: '/studios', body: (page) => [heading(page, '#index', '厂牌'), indexEntries(page)] },
-  { path: '/agencies', body: (page) => [heading(page, '#index', '事务所'), indexEntries(page)] },
-  { path: '/tags', body: (page) => [heading(page, '#index', '标签'), indexEntries(page)] },
+  { path: '/wall', body: (page) => [page.locator('[data-wall-tile]').first(), page.getByRole('button', { name: 'Exit video wall' })] },
+  { path: '/performers', body: (page) => [heading(page, '#index', 'Performers'), indexEntries(page)] },
+  { path: '/creators', body: (page) => [heading(page, '#index', 'Creators'), indexEntries(page)] },
+  { path: '/creators/', body: (page) => [heading(page, '#index', 'Creators'), indexEntries(page)] },
+  { path: '/performers?category=animation', body: (page) => [heading(page, '#index', 'Performers'), indexEntries(page)] },
+  { path: '/studios', body: (page) => [heading(page, '#index', 'Studios'), indexEntries(page)] },
+  { path: '/agencies', body: (page) => [heading(page, '#index', 'Agencies'), indexEntries(page)] },
+  { path: '/tags', body: (page) => [heading(page, '#index', 'Tags'), indexEntries(page)] },
   {
     path: '/playlists',
-    body: (page) => [heading(page, '#stats', '播放列表'), heading(page, '#stats', '还没有播放列表')],
+    body: (page) => [heading(page, '#stats', 'Playlists'), heading(page, '#stats', 'No playlists yet')],
   },
   {
     path: '/follow',
-    body: (page) => [heading(page, '#stats', '关注'), heading(page, '#stats', '还没有关注任何来源')],
+    body: (page) => [heading(page, '#stats', 'Follow'), heading(page, '#stats', 'You are not following any source yet')],
   },
   {
     // 骨架里也有「关注列表」那一排分段，可整块带 `aria-hidden`；按角色找得到页签的只有真页面。
     path: '/subscriptions',
-    body: (page) => [heading(page, '#main', '关注管理'),
-      page.locator('#stats').getByRole('tab', { name: '添加关注', exact: true })],
+    body: (page) => [heading(page, '#main', 'Manage follows'),
+      page.locator('#stats').getByRole('tab', { name: 'Add follow', exact: true })],
   },
   {
     // 订阅源页签由地址参数直达；演示库没有订阅源，等到的是那一节的页脚按钮。
     path: '/subscriptions?tab=feeds',
-    body: (page) => [page.locator('#stats').getByRole('tab', { name: 'JAV 订阅源', exact: true, selected: true }),
-      page.locator('#stats').getByRole('button', { name: '立即拉取', exact: true })],
+    body: (page) => [page.locator('#stats').getByRole('tab', { name: 'JAV feeds', exact: true, selected: true }),
+      page.locator('#stats').getByRole('button', { name: 'Fetch now', exact: true })],
   },
   {
     // 骨架里那条指标带也写着「馆藏视频」，认不出画完没有；只有真页面把四张读数卡做成页签。
     path: '/stats',
-    body: (page) => [heading(page, '#main', '统计'), statsInventoryTab(page)],
+    body: (page) => [heading(page, '#main', 'Stats'), statsInventoryTab(page)],
   },
   {
     // 骨架那条指标带也写着「浏览记录」，认不出画完没有；把两套证据做成页签的只有真页面。
     path: '/taste',
-    body: (page) => [heading(page, '#main', '口味'),
-      page.locator('#stats').getByRole('tab', { name: '浏览器记录', exact: true })],
+    body: (page) => [heading(page, '#main', 'Taste'),
+      page.locator('#stats').getByRole('tab', { name: 'Browser history', exact: true })],
   },
   {
     // 骨架那一列分类也写着「复核分类」，认不出画完没有；把十个分类做成页签的只有真页面。
     path: '/review',
-    body: (page) => [heading(page, '#main', '人工复核'),
-      page.locator('#stats').getByRole('tab', { name: '元数据字段' })],
+    body: (page) => [heading(page, '#main', 'Manual review'),
+      page.locator('#stats').getByRole('tab', { name: 'Metadata fields' })],
   },
   {
     path: '/data-cleanup',
     // 挂载前的遗留骨架用 heading，最终 React 卡片用带名字的 section；等最终语义才能证明挂载完成。
-    body: (page) => [heading(page, '#main', '数据管理'),
-      page.locator('#stats section[aria-label="扫描与采集"]'),
-      page.locator('#stats section[aria-label="媒体修复"]')],
+    body: (page) => [heading(page, '#main', 'Data management'),
+      page.locator('#stats section[aria-label="Scan and collect"]'),
+      page.locator('#stats section[aria-label="Media repair"]')],
   },
   {
     // 演示库里没有垃圾候选，等到的是垃圾队列那一页的空态标题；壳铺的骨架只有卡片占位。
     path: '/junk-files',
-    body: (page) => [heading(page, '#main', '垃圾文件'), heading(page, '#grid', '没有待判断的垃圾文件')],
+    body: (page) => [heading(page, '#main', 'Junk files'), heading(page, '#grid', 'No junk files to assess')],
   },
   {
     // 骨架只写「正在比对重复内容」；汇总块上那一格「重复内容」有没有重复组都会画，只有真页面有。
     path: '/duplicates',
-    body: (page) => [heading(page, '#main', '重复文件'), page.locator('#stats').getByText('重复内容', { exact: true })],
+    body: (page) => [heading(page, '#main', 'Duplicate files'), page.locator('#stats').getByText('Duplicates', { exact: true })],
   },
   {
     // 旧直达地址落到数据管理页的锚点上；骨架里那一段没有 `id`，带 `id` 的只有演示库配了根目录后的真卡片。
     path: '/resource-sync',
-    body: (page) => [heading(page, '#main', '数据管理'), page.locator('#stats section#resource-sync')],
+    body: (page) => [heading(page, '#main', 'Data management'), page.locator('#stats section#resource-sync')],
   },
   {
     path: '/quality-goals',
     // 演示库里没有标记中的目标，等到的是空态那一句：它是真的标题元素，不是一段文字。
-    body: (page) => [heading(page, '#main', '高清版'), heading(page, '#stats', '没有标记中的高清版目标')],
+    body: (page) => [heading(page, '#main', 'HD versions'), heading(page, '#stats', 'No HD targets marked')],
   },
   {
     // 「高清图片可能需要代理」那句遗留骨架里也有，认不出画完没有；「高清封面」那一张只有真页面有。
     path: '/sources',
-    body: (page) => [heading(page, '#main', '来源和凭证'), page.locator('#stats form[aria-label="高清封面"]')],
+    body: (page) => [heading(page, '#main', 'Sources & credentials'), page.locator('#stats form[aria-label="HD cover"]')],
   },
   // 名字对不上任何一家时要换成空态；骨架一直留着，读起来就是还在取。
-  { path: '/agencies/不存在的事务所', body: (page) => [heading(page, '#index', '找不到这个事务所')] },
+  { path: '/agencies/不存在的事务所', body: (page) => [heading(page, '#index', 'Entry not found')] },
   { path: '/settings/library', body: configurationBody },
-  { path: '/diagnostics', body: page => [page.getByRole('tab', { name: '系统诊断', selected: true }), page.locator('#stats section[aria-label="库健康"]')] },
-  { path: '/settings/diagnostics', body: page => [page.getByRole('tab', { name: '系统诊断', selected: true }), page.locator('#stats section[aria-label="库健康"]')] },
-  { path: '/tasks', body: (page) => [heading(page, '#main', '任务中心'), heading(page, '#stats', '还没有任务记录')] },
+  { path: '/diagnostics', body: page => [page.getByRole('tab', { name: 'System diagnostics', selected: true }), page.locator('#stats section[aria-label="Library health"]')] },
+  { path: '/settings/diagnostics', body: page => [page.getByRole('tab', { name: 'System diagnostics', selected: true }), page.locator('#stats section[aria-label="Library health"]')] },
+  { path: '/tasks', body: (page) => [heading(page, '#main', 'Task center'), heading(page, '#stats', 'No task records yet')] },
   ...['', '/appearance', '/playback', '/jav', '/search', '/content'].map(section => ({ path: '/settings' + section,
-    body: (page: Page) => [page.getByRole('dialog', { name: /外观与导航|浏览与播放|JAV 与新作|搜索与推荐|内容显示/ })] })),
+    body: (page: Page) => [page.getByRole('dialog', { name: /Appearance & navigation|Browsing & playback|JAV & new releases|Search & recommendations|Content display/ })] })),
   ...['subscriptions', 'downloads', 'network', 'maintenance'].map(section => ({ path: `/settings/${section}`, body: configurationBody })),
   {
     path: `/assets/${requiredEnv('PEACH_E2E_ITEM')}`,
     body: (page) => {
-      const stage = page.getByRole('dialog', { name: '作品详情' });
+      const stage = page.getByRole('dialog', { name: 'Work details' });
       return [stage, stage.locator('video.vjs-tech')];
     },
   },
@@ -221,7 +221,7 @@ describe('路由冒烟', () => {
         assert.ok(polls.length >= least, `${what}：只看到 ${polls.length} 次 /api/tasks，要 ${least} 次`);
       };
       await expectBody(opened.page, '/tasks',
-        [heading(opened.page, '#stats', '还没有任务记录')]);
+        [heading(opened.page, '#stats', 'No task records yet')]);
       // 先确认轮询真的在跑，否则下面「停下来了」在它从没开始时也成立。
       await waitForPolls(2, '活动页的轮询没有跑起来');
 
@@ -236,14 +236,14 @@ describe('路由冒烟', () => {
       assert.equal(await opened.page.locator('#stats .peach-react').count(), 1,
         '管理区正文里不是只剩统计页那一棵 React 根');
       assert.equal(
-        await opened.page.locator('#stats').getByRole('heading', { name: '还没有任务记录' }).count(), 0,
+        await opened.page.locator('#stats').getByRole('heading', { name: 'No task records yet' }).count(), 0,
         '换页之后活动页的 React 根还留在管理区正文里');
       await opened.page.waitForTimeout(3_000);
       assert.equal(polls.length, stopped, '离开活动页之后 /api/tasks 还在轮询');
 
       await opened.page.goBack();
       await expectBody(opened.page, '/tasks',
-        [heading(opened.page, '#stats', '还没有任务记录')]);
+        [heading(opened.page, '#stats', 'No task records yet')]);
       await waitForPolls(stopped + 2, '回到活动页之后轮询没有接上');
       await assertHolds(opened.page, opened.problems, '/activity 换页往返');
     } finally {
@@ -360,7 +360,7 @@ describe('路由冒烟', () => {
       });
       const note = opened.page.locator('#feedNew .feednetwork');
       await expectBody(opened.page, '/', [note]);
-      assert.match(await note.innerText(), /3 部新作的封面连不上 DMM 图片主机/);
+      assert.match(await note.innerText(), /Covers for 3 new releases cannot reach the DMM image host/);
       assert.equal(await note.locator('a').getAttribute('href'), '/sources');
       await assertHolds(opened.page, opened.problems, '新作连不上图片主机的提示');
     } finally {

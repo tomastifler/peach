@@ -20,6 +20,6 @@ export function followManagePath(params: FollowManageRoute): string {
 
 export function followManageEntry(search: string, workspace?: FollowManageTab): string {
   if (!workspace && new URLSearchParams(search).get('tab') === 'wants') return '/jav?tab=wants';
-  if (!workspace && new URLSearchParams(search).get('tab') === 'source') return '/settings/library?section=' + encodeURIComponent('来源与订阅');
+  if (!workspace && new URLSearchParams(search).get('tab') === 'source') return '/settings/library?section=' + encodeURIComponent('Sources & subscriptions');
   return followManagePath({ tab: workspace || followManageParams(search).tab, page: 1, sort: '', dir: '' });
 }

@@ -40,7 +40,7 @@ it('首屏一次取回任务快照和媒体库，卡片挂上去不再补取', a
   await prefetchMediaRepair(new AbortController().signal);
   const host = await card();
   expect(fetcher.mock.calls.map((call) => call[0]).sort()).toEqual(['/api/libraries', '/api/media-repair']);
-  expect(host.querySelector('section[aria-label="媒体修复"] h3')?.textContent).toBe('媒体修复');
+  expect(host.querySelector('section[aria-label="Media repair"] h3')?.textContent).toBe('Media repair');
   expect(host.querySelector('[aria-haspopup="listbox"]')?.textContent).toBe('网盘');
 });
 
@@ -78,28 +78,28 @@ it('开始修复先确认，确认后把选中的库发过去，随后按服务�
   vi.stubGlobal('fetch', fetcher);
   const host = await open();
   await choose(host.querySelector('[aria-haspopup="listbox"]'), 'PikPak');
-  await click(buttonNamed('开始修复', host));
+  await click(buttonNamed('Start repair', host));
   await settle();
-  expect(seen[0]?.title).toBe('修复媒体库「PikPak」');
-  expect(seen[0]?.confirmLabel).toBe('修复媒体库');
-  expect(seen[0]?.body).toContain('每修一部都要把片子完整拉一遍');
+  expect(seen[0]?.title).toBe('Repair library "PikPak"');
+  expect(seen[0]?.confirmLabel).toBe('Repair library');
+  expect(seen[0]?.body).toContain('every repaired video must be downloaded in full');
   expect(fetcher.mock.calls[0]?.[0]).toBe('/api/media-repair');
   expect(sentBody(fetcher)).toEqual({ library: 'PikPak', restart: true });
   const bar = host.querySelector('[role="progressbar"]');
   expect([bar?.getAttribute('aria-valuenow'), bar?.getAttribute('aria-valuemax')]).toEqual(['3', '12']);
   expect(host.querySelector('p[role="status"]')?.textContent).toBe('扫描 3 / 12');
-  expect(buttonNamed('停止', host)).not.toBeNull();
+  expect(buttonNamed('Stop', host)).not.toBeNull();
 });
 
 it('不在计费来源上的库，确认正文不提流量', async () => {
   const seen = confirmEverything();
   vi.stubGlobal('fetch', fetchMock(200, idle));
   const host = await open();
-  await click(buttonNamed('开始修复', host));
+  await click(buttonNamed('Start repair', host));
   await settle();
-  expect(seen[0]?.title).toBe('修复媒体库「网盘」');
-  expect(seen[0]?.body).toContain('坏原件改名成同目录的隐藏文件');
-  expect(seen[0]?.body).not.toContain('拉一遍');
+  expect(seen[0]?.title).toBe('Repair library "网盘"');
+  expect(seen[0]?.body).toContain('the damaged original is renamed to a hidden file in the same folder');
+  expect(seen[0]?.body).not.toContain('downloaded in full');
 });
 
 it('修复阶段点名当前这部片，停止之后回到可以再开始的样子', async () => {
@@ -109,18 +109,18 @@ it('修复阶段点名当前这部片，停止之后回到可以再开始的样�
   const host = await open({
     ...idle, status: 'running', library: '网盘', stage: '修复', checked: 1, total: 2, found: 2, message: 'FC2-PPV-1.mp4',
   });
-  expect(host.querySelector('p[role="status"]')?.textContent).toBe('修复 1 / 2 · FC2-PPV-1.mp4');
-  await click(buttonNamed('停止', host));
+  expect(host.querySelector('p[role="status"]')?.textContent).toBe('Repairing 1 / 2 · FC2-PPV-1.mp4');
+  await click(buttonNamed('Stop', host));
   await settle();
   expect(sentBody(fetcher)).toEqual({ stop: true });
-  expect(host.querySelector('p[role="status"]')?.textContent).toBe('修好 2 部');
-  expect(buttonNamed('开始修复', host)).not.toBeNull();
+  expect(host.querySelector('p[role="status"]')?.textContent).toBe('2 repaired');
+  expect(buttonNamed('Start repair', host)).not.toBeNull();
 });
 
 it('一部都没找到时说清楚这个库里的片子都能直接播', async () => {
   vi.useFakeTimers();
   const host = await open({ ...idle, status: 'complete', library: '网盘', stage: '完成' });
-  expect(host.textContent).toContain('这个库里的片子都能直接播');
+  expect(host.textContent).toContain('All videos in this library play fine.');
 });
 
 it('缺索引的片子卡在没装 untrunc 上时，指明去配置页的运行信息里下载', async () => {
@@ -128,8 +128,8 @@ it('缺索引的片子卡在没装 untrunc 上时，指明去配置页的运行�
   const host = await open({
     ...idle, status: 'complete', library: '网盘', stage: '完成', found: 2, failed: 2, missing_tool: 2,
   });
-  expect(host.querySelector('p[role="status"]')?.textContent).toBe('修好 0 部，2 部修不了');
-  expect(host.textContent).toContain('2 部缺索引的片子要装上 untrunc 才修得了，下载入口在配置页的「运行信息」里');
+  expect(host.querySelector('p[role="status"]')?.textContent).toBe('0 repaired, 2 could not be repaired');
+  expect(host.textContent).toContain('2 videos missing an index need untrunc installed to be repaired; the download link is under "Runtime info" on the settings page.');
 });
 
 it('进度读数按总数封顶：服务端报出的已查数超过总数时不写成 1,500 / 1,000', () => {

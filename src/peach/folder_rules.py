@@ -25,10 +25,10 @@ def load(connection) -> tuple[dict, dict]:
     row = connection.execute('SELECT settings_json FROM profile WHERE id=?', (DEFAULT_PROFILE_ID,)).fetchone()
     settings = json.loads(row[0] or '{}') if row else {}
     if not isinstance(settings, dict):
-        raise ValueError('用户设置格式不正确')
+        raise ValueError('Invalid user settings format')
     data = settings.get(KEY, {'revision': 0, 'rules': []})
     if not isinstance(data, dict) or not isinstance(data.get('rules'), list) or type(data.get('revision')) is not int:
-        raise ValueError('目录规则格式不正确')
+        raise ValueError('Invalid folder rule format')
     for rule in data['rules']:
         if rule.get('entity_id'):
             target = resolve_entity_id(connection, rule['entity_id'])
@@ -51,18 +51,18 @@ def effective(rules, location: str, path: str):
 def validate(connection, node, body):
     purpose = body.get('purpose', 'category')
     if purpose not in KINDS:
-        raise ValueError('请选择目录用途')
+        raise ValueError('Choose the folder purpose')
     if not isinstance(body.get('recursive'), bool) or not isinstance(body.get('future'), bool):
-        raise ValueError('目录范围与新文件设置须明确选择')
+        raise ValueError('The folder scope and new-file setting must be chosen explicitly')
     name = body.get('name', '')
     if not isinstance(name, str) or len(name) > 200:
-        raise ValueError('关联名称最多 200 个字符')
+        raise ValueError('The linked name can be at most 200 characters')
     kind = KINDS[purpose]
     canonical = canonicalize_entity_name(kind, name) if kind else ''
     entity_id = None
     if kind:
         if not canonical:
-            raise ValueError('请输入关联名称')
+            raise ValueError('Enter a linked name')
         entity = resolve_entity(connection, kind, canonical)
         if entity is None:
             possible = connection.execute(
@@ -70,7 +70,7 @@ def validate(connection, node, body):
                 'WHERE e.kind=? AND (e.normalized_name=? OR al.normalized_alias=?)',
                 (kind, normalize_entity_name(canonical), normalize_entity_name(canonical))).fetchall()
             if possible:
-                raise ValueError('名称存在多个身份或不同写法，请使用资料页的规范名称')
+                raise ValueError('The name has multiple identities or spellings; use the canonical name from the profile page')
         else:
             entity_id, canonical = entity['id'], entity['canonical_name']
     return {'id': node['id'], 'location': node['location'], 'path': node['path'], 'purpose': purpose,
@@ -97,13 +97,13 @@ def _conflict(connection, asset, rule, relations):
     field = kind if kind in {'creator', 'studio'} else ''
     own = source(rule)
     if field and asset[field] and asset[field] != rule['name'] and owner_of(asset['field_owners'], field) != own:
-        return '已有不同的归属'
+        return 'Already has a different owner'
     if field and owner_of(asset['field_owners'], field).startswith(('user:', 'review:')) and owner_of(asset['field_owners'], field) != source(rule):
-        return '已有逐件确认'
+        return 'Already confirmed item by item'
     if any(row['kind'] == kind and row['canonical_name'] != rule['name'] and row['source'] != own for row in relations):
-        return '已有不同的身份关系'
+        return 'Already has a different identity link'
     if kind == 'creator' and _creator_attribution_rejected(connection, [rule['name']], asset['id'], asset['path']):
-        return '已有归属否定'
+        return 'Already has an ownership denial'
     return ''
 
 
@@ -114,7 +114,7 @@ def plan(connection, rule, data):
     for asset in _asset_rows(connection, rule):
         chosen = effective(rules, asset['location'], asset['path'])
         relations = _relations(connection, asset['id'])
-        reason = '由子目录规则管理' if chosen and chosen['id'] != rule['id'] else _conflict(connection, asset, rule, relations)
+        reason = 'Managed by a subfolder rule' if chosen and chosen['id'] != rule['id'] else _conflict(connection, asset, rule, relations)
         rows.append({**asset, 'reason': reason, 'relations': relations})
     old = next((item for item in data['rules'] if item['id'] == rule['id']), None)
     changing = old and any(old.get(key) != rule[key] for key in ('purpose', 'name', 'entity_id', 'recursive'))
@@ -150,7 +150,7 @@ def _link(connection, asset, rule):
                            (asset['id'], '演员:' + rule['name'], own))
     if rule['purpose'] == 'seller':
         write_claim(connection, entity_id=entity_id, facet='account_role', value='seller', source=own,
-                    evidence='用户确认目录用途：' + rule['path'], status='approved', confidence=1)
+                    evidence='User-confirmed folder purpose: ' + rule['path'], status='approved', confidence=1)
     return True
 
 
@@ -188,7 +188,7 @@ def withdraw(connection, rule):
 
 def save(connection, settings, data, rule, preview, expected):
     if preview['plan_version'] != expected:
-        raise FolderRuleConflict('目录内容或归属已变化，请重新预览')
+        raise FolderRuleConflict('Folder contents or ownership changed; preview again')
     old = next((row for row in data['rules'] if row['id'] == rule['id']), None)
     if old and any(old.get(key) != rule[key] for key in ('purpose', 'name', 'entity_id', 'recursive')):
         withdraw(connection, old)
@@ -204,7 +204,7 @@ def _store(connection, settings):
     changed = connection.execute('UPDATE profile SET settings_json=? WHERE id=?',
                                  (json.dumps(settings, ensure_ascii=False), DEFAULT_PROFILE_ID)).rowcount
     if not changed:
-        raise ValueError('当前用户设置不存在')
+        raise ValueError('The current user settings do not exist')
 
 
 def remove(connection, settings, data, key):

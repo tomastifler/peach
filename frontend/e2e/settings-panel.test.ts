@@ -55,17 +55,17 @@ describe('设置面板', () => {
     try {
       await openPanel(page);
       assert.deepEqual(await page.locator(PANEL).getByRole('tab').allTextContents(),
-        ['外观与导航', '浏览与播放', 'JAV 与新作', '搜索与推荐', '内容显示']);
+        ['Appearance & navigation', 'Browsing & playback', 'JAV & new releases', 'Search & recommendations', 'Content display']);
       for (const [name, field] of [
-        ['外观与导航', '#themeSetting'], ['浏览与播放', '#detailAutoplaySetting'],
-        ['JAV 与新作', '#javImageSetting'], ['搜索与推荐', '#relatedLimitSetting'], ['内容显示', '#censorSetting'],
+        ['Appearance & navigation', '#themeSetting'], ['Browsing & playback', '#detailAutoplaySetting'],
+        ['JAV & new releases', '#javImageSetting'], ['Search & recommendations', '#relatedLimitSetting'], ['Content display', '#censorSetting'],
       ]) {
         await page.locator(PANEL).getByRole('tab', { name, exact: true }).click();
         await page.locator(field!).waitFor({ state: 'visible' });
         assert.deepEqual((await layout(page)).offenders, []);
       }
       assert.equal(await page.locator(`${PANEL} #videoThumbnailSetting, ${PANEL} #followScheduleSetting`).count(), 0);
-      const configuration = page.locator(PANEL).getByRole('button', { name: 'Peach 配置', exact: true });
+      const configuration = page.locator(PANEL).getByRole('button', { name: 'Peach settings', exact: true });
       await configuration.click();
       await page.waitForURL((url) => url.pathname === '/settings/library');
       await page.locator(PANEL).waitFor({ state: 'hidden' });
@@ -156,12 +156,12 @@ describe('设置面板', () => {
       assert.equal(await box.isChecked(), false);
       assert.equal((await stored(page)).uiSounds, false);
       const silent = await tones();
-      await page.locator(PANEL).getByRole('tab', { name: '浏览与播放', exact: true }).click();
-      await page.locator(PANEL).getByRole('tab', { name: '外观与导航', exact: true }).click();
+      await page.locator(PANEL).getByRole('tab', { name: 'Browsing & playback', exact: true }).click();
+      await page.locator(PANEL).getByRole('tab', { name: 'Appearance & navigation', exact: true }).click();
       assert.equal(await tones(), silent, '关掉界面音效之后点分区还在出声');
       await box.click();
       assert.equal((await stored(page)).uiSounds, true);
-      await page.locator(PANEL).getByRole('tab', { name: '浏览与播放', exact: true }).click();
+      await page.locator(PANEL).getByRole('tab', { name: 'Browsing & playback', exact: true }).click();
       assert.ok(await tones() > silent, '打开界面音效之后点分区不出声');
       assert.deepEqual(opened.problems, []);
     } finally {
@@ -211,12 +211,12 @@ describe('设置面板', () => {
     const opened = await openHome(browser);
     const { page } = opened;
     try {
-      await openPanel(page, 'JAV 与新作');
+      await openPanel(page, 'JAV & new releases');
       await page.locator('#javImageSetting label:has(input[value="thumbnail"])').click();
       assert.equal((await stored(page)).javImage, 'thumbnail');
       assert.equal(await page.locator('#javImageSetting input[value="thumbnail"]').isChecked(), true);
 
-      await page.locator(PANEL).getByRole('tab', { name: '浏览与播放', exact: true }).click();
+      await page.locator(PANEL).getByRole('tab', { name: 'Browsing & playback', exact: true }).click();
       await pick(page, '#defaultSortSetting', 'seed');
       await page.locator('#defaultSortDirectionSetting').waitFor({ state: 'hidden', timeout: 5_000 });
 
@@ -224,7 +224,7 @@ describe('设置面板', () => {
       await page.locator('#defaultSortDirectionSetting').waitFor({ state: 'visible', timeout: 5_000 });
       await pick(page, '#defaultSortDirectionSetting', 'asc');
       await page.waitForFunction(() =>
-        document.querySelector('#defaultSortDirectionSetting [data-sort-direction-label]')?.textContent === '升序');
+        document.querySelector('#defaultSortDirectionSetting [data-sort-direction-label]')?.textContent === 'Ascending');
       const saved = await stored(page);
       assert.equal(saved.defaultSort, 'rating');
       assert.equal(saved.defaultSortDirection, 'asc');
@@ -280,7 +280,7 @@ describe('设置面板', () => {
       const tops = await page.locator(PANEL).getByRole('tab').evaluateAll((nodes) =>
         nodes.slice(0, 3).map((node) => Math.round(node.getBoundingClientRect().top)));
       assert.equal(new Set(tops).size, 1, '窄屏下分区没有横排');
-      await page.locator(PANEL).getByRole('tab', { name: 'JAV 与新作', exact: true }).click();
+      await page.locator(PANEL).getByRole('tab', { name: 'JAV & new releases', exact: true }).click();
       await page.locator('#javImageSetting').waitFor({ state: 'visible', timeout: 5_000 });
       assert.deepEqual((await layout(page)).offenders, []);
       assert.deepEqual(opened.problems, []);

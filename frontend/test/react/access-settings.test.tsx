@@ -47,16 +47,16 @@ it('系统口令可直接转为可选密码且关闭需要明确提交', async (
   vi.stubGlobal('fetch', fetcher);
   const host = await mount({ mode: 'legacy', revision: 'legacy' }, receipt);
   expect(host.querySelector('[autocomplete="current-password"]')).toBeNull();
-  expect(host.querySelector('button[type="submit"]')?.textContent).toBe('保存配置');
+  expect(host.querySelector('button[type="submit"]')?.textContent).toBe('Save settings');
   await click(checkbox(host));
   expect(newPasswords(host)).toHaveLength(2);
   expect(newPasswords(host).every((input) => input.disabled)).toBe(true);
-  expect(host.querySelector('[role="note"]')?.textContent).toContain('直接访问馆藏');
+  expect(host.querySelector('[role="note"]')?.textContent).toContain('will open the library directly');
   expect(fetcher).not.toHaveBeenCalled();
   await submit(host);
   expect(sentBody(fetcher)).toMatchObject({ action: 'disable', confirm_disable: true });
-  expect(receipt).toHaveBeenCalledWith('已关闭访问密码');
-  expect(host.querySelector('[role="note"]')?.textContent).toContain('未设置访问密码');
+  expect(receipt).toHaveBeenCalledWith('Access password turned off');
+  expect(host.querySelector('[role="note"]')?.textContent).toContain('No access password set');
 });
 
 it('关闭选项位于输入上方且保留草稿并要求当前密码验证', async () => {
@@ -86,7 +86,7 @@ it('关闭选项位于输入上方且保留草稿并要求当前密码验证', a
 it('服务端按字段给的原因写回对应字段', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => ({
     ok: false, status: 400,
-    json: async () => ({ message: '当前访问密码不正确', errors: { current_password: '当前访问密码不正确' } }),
+    json: async () => ({ message: 'The current access password is incorrect', errors: { current_password: 'The current access password is incorrect' } }),
   })));
   const host = await mount({ mode: 'password', revision: 'one' });
   for (const input of host.querySelectorAll<HTMLInputElement>('input[type="password"]')) await type(input, 'example-password');
@@ -94,22 +94,22 @@ it('服务端按字段给的原因写回对应字段', async () => {
   const current = host.querySelector<HTMLInputElement>('#access-current')!;
   expect(current.getAttribute('aria-invalid')).toBe('true');
   const described = (current.getAttribute('aria-describedby') || '').split(' ').filter(Boolean);
-  expect(described.map((id) => document.getElementById(id)?.textContent)).toContain('当前访问密码不正确');
+  expect(described.map((id) => document.getElementById(id)?.textContent)).toContain('The current access password is incorrect');
 });
 
 it('没有密码时画成警示，提交不合法内容变为字段错误且不发请求', async () => {
   const fetcher = vi.fn();
   vi.stubGlobal('fetch', fetcher);
   const host = await mount({ mode: 'open', revision: 'one' });
-  expect(host.querySelector('[role="note"]')?.textContent).toContain('未设置访问密码');
-  expect(host.textContent).toContain('至少 8 个字符');
+  expect(host.querySelector('[role="note"]')?.textContent).toContain('No access password set');
+  expect(host.textContent).toContain('At least 8 characters');
   const [password, confirm] = newPasswords(host) as [HTMLInputElement, HTMLInputElement];
   await type(password, 'short');
   await type(confirm, 'other');
   await submit(host);
   expect(password.getAttribute('aria-invalid')).toBe('true');
   expect(confirm.getAttribute('aria-invalid')).toBe('true');
-  expect(host.textContent).toContain('访问密码需为 8–256 个字符');
-  expect(host.textContent).toContain('两次输入的密码不一致');
+  expect(host.textContent).toContain('The access password must be 8–256 characters');
+  expect(host.textContent).toContain('The passwords do not match');
   expect(fetcher).not.toHaveBeenCalled();
 });

@@ -23,18 +23,18 @@ const unrelated = (problems: string[]) => problems.filter((line) => !line.includ
 
 /** `[路径, 标题, 面包屑当前项, 窄屏收档]`。数据管理之下的子页标题让给子页自己的名字。 */
 const HEADS = [
-  ['/stats', '统计', '', false],
-  ['/taste', '口味', '', false],
-  ['/review', '人工复核', '人工复核', false],
-  ['/data-cleanup', '数据管理', '', true],
-  ['/junk-files', '垃圾文件', '垃圾文件', false],
-  ['/duplicates', '重复文件', '重复文件', false],
-  ['/quality-goals', '高清版', '高清版', false],
-  ['/sources', '来源和凭证', '来源和凭证', true],
-  ['/trash', '回收站', '回收站', false],
-  ['/subscriptions', '关注管理', '', false],
-  ['/tasks', '任务中心', '', false],
-  ['/settings/library', 'Peach 配置', '', true],
+  ['/stats', 'Stats', '', false],
+  ['/taste', 'Taste', '', false],
+  ['/review', 'Manual review', 'Manual review', false],
+  ['/data-cleanup', 'Data management', '', true],
+  ['/junk-files', 'Junk files', 'Junk files', false],
+  ['/duplicates', 'Duplicate files', 'Duplicate files', false],
+  ['/quality-goals', 'HD versions', 'HD versions', false],
+  ['/sources', 'Sources & credentials', 'Sources & credentials', true],
+  ['/trash', 'Trash', 'Trash', false],
+  ['/subscriptions', 'Manage follows', '', false],
+  ['/tasks', 'Task center', '', false],
+  ['/settings/library', 'Peach configuration', '', true],
 ] as const;
 
 const BLOCKS = '[data-manage-header] > :is([data-manage-bar], [data-manage-crumb], [data-manage-title])';
@@ -130,7 +130,7 @@ describe('管理区页头', () => {
         assert.equal(await link.getAttribute('href'), '/data-cleanup');
         await link.click();
         await page.waitForFunction(() => location.pathname === '/data-cleanup');
-        await page.waitForFunction(() => document.querySelector('[data-manage-title]')?.textContent === '数据管理');
+        await page.waitForFunction(() => document.querySelector('[data-manage-title]')?.textContent === 'Data management');
         assert.equal(await page.evaluate(() => (window as unknown as { stayed?: boolean }).stayed), true, '面包屑整页重载了');
         const head = await readHead(page);
         assert.deepEqual([head.crumb, head.pressed], ['', ['cleanup']]);
@@ -148,7 +148,7 @@ describe('管理区页头', () => {
 const DOCK = '[data-batch-dock] [data-selection-dock]';
 
 async function pickTwo(cards: Locator) {
-  for (const at of [0, 1]) await cards.nth(at).click({ modifiers: ['Control'], position: { x: 20, y: 20 } });
+  for (const at of [0, 1]) await cards.nth(at).click({ modifiers: ['ControlOrMeta'], position: { x: 20, y: 20 } });
 }
 
 async function readDock(page: Page) {
@@ -197,7 +197,7 @@ describe('批量条', () => {
         assert.equal(await page.locator(DOCK).count(), 0, '没选中时批量条就画出来了');
         await pickTwo(cards);
         assert.deepEqual(await readDock(page),
-          { count: '已选 2 项', buttons: ['喜欢', '看过', '稍后看', '判定产地', '移入回收站', '取消'] });
+          { count: '2 selected', buttons: ['Like', 'Seen', 'Watch later', 'Detect region', 'Move to trash', 'Cancel'] });
         await page.locator(`${DOCK} [data-batch-group="clear"]`).click();
         await page.locator(DOCK).waitFor({ state: 'detached', timeout: 10_000 });
 
@@ -209,16 +209,16 @@ describe('批量条', () => {
         const empty = await page.locator('[data-manage-lede] [data-empty-trash]').boundingBox();
         assert.equal(Math.round(empty!.height), viewport.mobile ? 44 : 32, '清空回收站的键高');
         await pickTwo(cards);
-        assert.deepEqual(await readDock(page), { count: '已选 2 项', buttons: ['还原', '彻底删除', '取消'] });
+        assert.deepEqual(await readDock(page), { count: '2 selected', buttons: ['Restore', 'Delete permanently', 'Cancel'] });
 
         await stubJunk(page);
         const junk = page.locator('#grid [data-junk-card]');
-        for (const [path, first] of [['/junk-files', '不是垃圾'], ['/junk-files?view=dismissed', '重新判断']] as const) {
+        for (const [path, first] of [['/junk-files', 'Not junk'], ['/junk-files?view=dismissed', 'Reassess']] as const) {
           await page.goto(new URL(path, page.url()).href, { waitUntil: 'load' });
           await junk.first().waitFor({ timeout: 15_000 });
           await settle(page);
           await pickTwo(junk);
-          assert.deepEqual(await readDock(page), { count: '已选 2 项', buttons: [first, '移入回收站', '取消'] }, path);
+          assert.deepEqual(await readDock(page), { count: '2 selected', buttons: [first, 'Move to trash', 'Cancel'] }, path);
         }
         assert.deepEqual(opened.problems, []);
       } finally {
@@ -230,7 +230,7 @@ describe('批量条', () => {
       const opened = await openFollowFeed(browser, '/follow', viewport);
       try {
         await pickTwo(opened.page.locator('[data-follow-list] > [data-follow-item]'));
-        assert.deepEqual(await readDock(opened.page), { count: '已选 2 项', buttons: ['保存到数据库', '标记已看', '忽略', '取消'] });
+        assert.deepEqual(await readDock(opened.page), { count: '2 selected', buttons: ['Save to database', 'Mark as seen', 'Ignore', 'Cancel'] });
         assert.deepEqual(opened.stub.writes.filter((write) => write.url !== '/api/follow/check'), []);
       } finally {
         await opened.close();

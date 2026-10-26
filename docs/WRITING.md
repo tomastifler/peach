@@ -1,69 +1,69 @@
-# 文档与界面文案
+# Documentation and UI Copy
 
-Peach 使用 [seiso](https://github.com/scarletkc/seiso) 检查 Markdown 的职责、链接和规则例外。中文表达遵循 tech-doc-style-chinese；界面文字还需对照实际操作、错误状态和可用的恢复方式复核。
+Peach uses [seiso](https://github.com/scarletkc/seiso) to check Markdown responsibilities, links, and rule exceptions. Chinese prose follows tech-doc-style-chinese; UI text is also reviewed against the actual operations, error states, and available recovery options.
 
-## 文档职责
+## Document Responsibilities
 
-文件分类由 [seiso.toml](../seiso.toml) 维护。新增文档须选择一种职责；已有路径映射不符合内容时，在 frontmatter 声明 `kind`。
+File classification is maintained in [seiso.toml](../seiso.toml). A new document must choose one responsibility; when an existing path mapping does not match the content, declare `kind` in the frontmatter.
 
-| 内容 | 归属 | kind |
+| Content | Belongs to | kind |
 | --- | --- | --- |
-| 产品用途、安装入口、文档导航 | [README](../README.md)，英文版同步维护 | `readme` |
-| 安装、配置、测试与维护步骤 | [运行与配置](OPERATIONS.md)、[测试与依赖](TESTING.md) 等操作文档 | `howto` |
-| 架构、术语、接口约束、复用依据 | [总体架构](ARCHITECTURE.md)、[开发约定](../AGENTS.md)、[复用清单](REUSE.md) | `reference` |
-| 决策背景、选择与代价 | `adr/` 下按编号命名的决策文件 | `adr` |
-| 尚未完成的工作 | [公开路线图](https://github.com/orgs/peach-mitao/projects/7) | `plan` |
-| 面向使用者的发布记录 | [变更日志](../CHANGELOG.md) | `changelog` |
+| Product purpose, install entry, doc navigation | [README](../README.md), with the English version maintained in sync | `readme` |
+| Install, configuration, testing, and maintenance steps | Operations docs such as [Operations and Configuration](OPERATIONS.md) and [Testing and Dependencies](TESTING.md) | `howto` |
+| Architecture, terminology, interface constraints, reuse rationale | [Architecture](ARCHITECTURE.md), [Development Conventions](../AGENTS.md), [Reuse List](REUSE.md) | `reference` |
+| Decision background, choices, and costs | Numbered decision files under `adr/` | `adr` |
+| Work not yet done | [Public roadmap](https://github.com/orgs/peach-mitao/projects/7) | `plan` |
+| User-facing release records | [Changelog](../CHANGELOG.md) | `changelog` |
 
-同一事实只维护一处，其他页面链接到文件或章节。版本、文件数量、部署状态优先指向清单、代码或查询入口；保留观察值时写明核验日期。代码版本不能用来推断服务已更新。
+Maintain each fact in one place and link to the file or section from other pages. For versions, file counts, and deployment status, prefer pointing to a manifest, code, or query entry; when keeping an observed value, state the verification date. A code version cannot be used to infer that a service has been updated.
 
-README 保留开始使用所需的信息。字段定义放参考文档，操作步骤放 howto，设计理由放 ADR。保留现有章节锚点；移动内容时同步修复引用。
+The README keeps the information needed to get started. Put field definitions in reference docs, procedures in howtos, and design rationale in ADRs. Keep existing section anchors; when moving content, fix references at the same time.
 
-## 公开与私有记录
+## Public and Private Records
 
-- 本机交接、运行状态、个人待办、会话复盘、馆藏盘点和逐条复核记录保存到 `<Peach 数据目录>/state/project-context/`、`review/` 或 `archive/`，不进入 Git。
-- 公开文档使用中性账号、`<项目目录>` 等占位路径与 RFC 5737 文档地址。主机名、网络布局、媒体文件名与馆藏数量不从真实部署复制。
-- 公开参考证据保留来源、许可和复现方法；本机样本清单、原始日志与账号信息留在私有记录中。
+- Local handoffs, run status, personal to-dos, session retrospectives, library inventories, and item-by-item review records are saved to `<Peach data directory>/state/project-context/`, `review/`, or `archive/`, and do not enter Git.
+- Public docs use neutral accounts, placeholder paths such as `<project directory>`, and RFC 5737 documentation addresses. Hostnames, network layout, media file names, and library counts are not copied from a real deployment.
+- Public reference evidence keeps the source, license, and reproduction method; local sample lists, raw logs, and account information stay in private records.
 
-## 界面文字
+## UI Text
 
-- 按钮写动作和对象，如「保存配置」「删除播放列表」。导航、按钮与提示中的同一概念使用同一名称。
-- 空状态区分尚未创建、筛选无结果、没有权限与读取失败。说明下一步时，只写页面实际提供的操作。
-- 错误标题指出对象；正文保留原因，并说明可行的恢复方式。请求超时不能说明后台任务已经停止，先查看任务状态再决定是否重试。
-- 删除、清空、卸载等确认文字说明对象、保留内容和可撤销范围；保留现有安全条件。
-- 界面面向使用者说明行为。数据库列、内部状态码、实现细节放开发文档；配置所需的路径、域名和字段保持准确。
-- 中文使用中文标点，数字与单位、中文与英文间按语义留空格。代码标识、API 字段、URL、站点原名、引用及第三方许可原文不作文字替换。
+- Buttons state the action and object, such as "Save settings" and "Delete playlist". The same concept uses the same name across navigation, buttons, and hints.
+- Empty states distinguish not yet created, filter with no results, no permission, and read failure. When describing the next step, only write operations the page actually provides.
+- An error title names the object; the body keeps the cause and states the feasible recovery. A request timeout does not show that the background task has stopped; check the task status first and then decide whether to retry.
+- Confirmation text for delete, clear, uninstall, and similar actions states the object, what is kept, and the range that can be undone; keep the existing safety conditions.
+- The UI explains behavior to the user. Database columns, internal status codes, and implementation details go in development docs; paths, domains, and fields needed for configuration stay accurate.
+- Chinese text uses Chinese punctuation, with spaces between numbers and units and between Chinese and English left according to meaning. Code identifiers, API fields, URLs, original site names, quotations, and original third-party license text are not replaced.
 
-共享请求错误由 [requestErrorMessage](../frontend/src/core/index.ts) 提供，React 的 [API 封装](../frontend/src/api.ts) 复用它；页面在错误标题中补充操作对象。文案编辑不改变字段值、路由、任务状态或数据写入条件。
+Shared request errors are provided by [requestErrorMessage](../frontend/src/core/index.ts), and React's [API wrapper](../frontend/src/api.ts) reuses it; pages add the operation object to the error title. Copy edits do not change field values, routes, task status, or data write conditions.
 
-配置页外部入口说明由 [configuration-copy.ts](../frontend/src/configuration-copy.ts) 维护，首屏骨架和正式表单共用。修改说明时，两处的换行和高度也须一致，由浏览器几何用例验证。
+The descriptions of external entries on the settings page are maintained in [configuration-copy.ts](../frontend/src/configuration-copy.ts) and shared by the first-screen skeleton and the final form. When editing a description, line breaks and heights in both places must also match, verified by the browser geometry test.
 
-## 检查与复核
+## Checking and Review
 
-先按 [测试与依赖](TESTING.md#环境与锁文件) 安装锁定的开发环境。以下命令在仓库根目录执行，检查全部项目 Markdown：
+First install the locked dev environment per [Testing and Dependencies](TESTING.md#environment-and-lock-files). Run the following commands from the repository root to check all project Markdown:
 
 ```text
 uv run --locked --extra dev seiso check
 ```
 
-查看实验规则提示，逐条核对事实和上下文：
+View experimental rule hints, and check facts and context one by one:
 
 ```text
 uv run --locked --extra dev seiso check --preview --output-format concise
 ```
 
-查看实际分类、排除范围及启用的规则：
+View the actual classification, excluded scope, and enabled rules:
 
 ```text
 uv run --locked --extra dev seiso policy
 ```
 
-正式测试入口的文案检查执行 seiso 稳定规则，并保留 [最终状态检查器](../scripts/check_copy_final_state.py)。预览规则仅供人工复核，不作为 CI 门槛；语言风格、内容真伪和界面适配也不能由 seiso 的通过结果证明。
+The copy check in the official test entry runs seiso's stable rules and keeps the [final-state checker](../scripts/check_copy_final_state.py). Preview rules are for manual review only and are not a CI gate; a seiso pass also cannot prove language style, content accuracy, or UI fit.
 
-最终状态检查共用 `scripts/copy-rules.json`。明确叙述实现变更、测试名称描述变更过程时拒绝通过；可能属于条件说明的词语只提示人工核对。合法条件说明不需要添加豁免标记。明确需要保留的事故原文仍用 `copy-lint-disable-line` 逐行说明例外。
+The final-state check shares `scripts/copy-rules.json`. It rejects text that plainly narrates implementation changes or test names that describe a change process; words that may be conditional statements only prompt manual verification. Legitimate conditional statements need no exemption marker. Incident wording that must be kept still explains the exception line by line with `copy-lint-disable-line`.
 
-Python 检查读取 AST 字符串、f-string 静态片段及注释；HTML 读取正文、注释和可见属性。JS/TS 由 `frontend/scripts/copy-check.mjs` 使用 Oxc 解析注释、字符串、模板及 JSX，忽略变量名、静态属性键和模块路径。前端文案检查随正式入口的前端 lint 用例执行，CI 由 `web-bundle` 执行；纯 Python 文档检查不要求安装 Node。
+The Python check reads AST strings, static parts of f-strings, and comments; HTML reads body text, comments, and visible attributes. JS/TS is parsed by `frontend/scripts/copy-check.mjs` using Oxc for comments, strings, templates, and JSX, ignoring variable names, static property keys, and module paths. The frontend copy check runs with the official entry's frontend lint case, CI runs it through `web-bundle`; the pure-Python doc check does not require installing Node.
 
-提交模板不是成稿；`docs/reference-snapshots/upstream/` 保存第三方原文，相对链接属于上游仓库。这两类在配置中排除。Peach 自己撰写的取证摘要、ADR、技能和依赖来源说明仍接受检查；构建目录、依赖安装目录不属于项目文档。
+Commit templates are not finished text; `docs/reference-snapshots/upstream/` holds original third-party text, and its relative links belong to the upstream repository. These two categories are excluded in the configuration. Forensic summaries, ADRs, skills, and dependency source notes that Peach writes itself are still checked; build directories and dependency install directories are not project docs.
 
-必要例外按 [seiso 的例外语法](https://github.com/scarletkc/seiso/blob/main/docs/guides/checking.md#explain-an-exception) 写明完整规则编号和原因。规则提示需先判断是否成立，不能通过扩大排除范围掩盖项目问题。
+Necessary exceptions follow [seiso's exception syntax](https://github.com/scarletkc/seiso/blob/main/docs/guides/checking.md#explain-an-exception), stating the full rule ID and the reason. A rule hint must first be judged for whether it holds; do not hide project problems by widening the exclusion scope.

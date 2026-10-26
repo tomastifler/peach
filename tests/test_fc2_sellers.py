@@ -70,7 +70,7 @@ class Fc2SellerTests(unittest.TestCase):
         self.assertEqual(len(result['entity_ids']),1)
         contract = WebContract(self.db)
         page = q_index(contract,'creators')
-        self.assertEqual(page['items'][0]['identity_labels'],['卖家'])
+        self.assertEqual(page['items'][0]['identity_labels'],['Seller'])
         self.assertEqual(page['items'][0]['n'],1)
         self.assertEqual(len(q_entity(contract,{'kind':'creator','name':'Seller'})['links']),1)
         self.assertEqual([tuple(row) for row in self.connection.execute('SELECT * FROM asset ORDER BY id')],before)
@@ -88,7 +88,7 @@ class Fc2SellerTests(unittest.TestCase):
         self.snapshot(code='FC2-PPV-7654321')
         plan = fc2_sellers.collect(self.connection,self.cache)
         self.assertEqual(plan['accounts'],[])
-        self.assertEqual(plan['skipped'][0]['reason'],'作品来源给出不同卖家账号')
+        self.assertEqual(plan['skipped'][0]['reason'],'Work sources give different seller accounts')
 
     def test_reuse_by_account_preserves_user_name_metadata_reference_and_seller_claim(self):
         one = self.asset('FC2-PPV-1234567')
@@ -129,7 +129,7 @@ class Fc2SellerTests(unittest.TestCase):
         plan = fc2_sellers.collect(self.connection,self.cache)
         self.assertEqual(plan['accounts'],[])
         self.assertEqual(len(plan['skipped']),2)
-        self.assertTrue(all(row['reason']=='不同 FC2 账号使用相同卖家名称' for row in plan['skipped']))
+        self.assertTrue(all(row['reason']=='Different FC2 accounts use the same seller name' for row in plan['skipped']))
 
     def test_revert_preserves_later_user_account_name(self):
         self.asset('FC2-PPV-1234567')
@@ -151,7 +151,7 @@ class Fc2SellerTests(unittest.TestCase):
         self.snapshot(code='FC2-PPV-7654321',name='Other Seller',account='other')
         result = self.install()
         self.assertEqual(len(result['entity_ids']),1)
-        self.assertEqual([(row['code'],row['reason']) for row in result['skipped']],[('FC2-PPV-1234567','摄取判定不收这个卖家名')])
+        self.assertEqual([(row['code'],row['reason']) for row in result['skipped']],[('FC2-PPV-1234567','Ingest rules do not accept this seller name')])
         names = [row[0] for row in self.connection.execute("SELECT canonical_name FROM entity WHERE kind='creator'")]
         self.assertEqual(names,['Other Seller'])
         self.assertEqual(self.connection.execute("SELECT count(*) FROM entity_external_ref WHERE external_id='seller'").fetchone()[0],0)
@@ -187,7 +187,7 @@ class Fc2SellerTests(unittest.TestCase):
         (self.cache / 'FC2-PPV-7654321-fc2ppvdb.json').unlink()
         self.snapshot(code='FC2-PPV-1234567',name='Studio 4K',account='third')
         plan = fc2_sellers.collect(self.connection,self.cache)
-        self.assertEqual([row['reason'] for row in plan['skipped']],['同名对应不同 FC2 账号'])
+        self.assertEqual([row['reason'] for row in plan['skipped']],['The same name maps to different FC2 accounts'])
 
     def test_works_in_the_recycle_bin_get_no_seller(self):
         asset_id = self.asset('FC2-PPV-1234567')
@@ -202,7 +202,7 @@ class Fc2SellerTests(unittest.TestCase):
         plan = fc2_sellers.collect(self.connection,self.cache)
         self.connection.execute("UPDATE asset SET code='ABW-001' WHERE id=?",(asset_id,))
         self.connection.commit()
-        with self.assertRaisesRegex(ValueError,'已过期'):
+        with self.assertRaisesRegex(ValueError,'out of date'):
             with self.connection:
                 fc2_sellers.install(self.connection,plan,batch=self.batch)
         self.connection.execute("UPDATE asset SET code='FC2-PPV-1234567' WHERE id=?",(asset_id,))

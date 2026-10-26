@@ -216,7 +216,7 @@ class RecordRehomeTests(unittest.TestCase):
             batch = record_rehome.move(connection, 7, 9, source=record_rehome.MANUAL_SOURCE, rule="manual")
             connection.execute("INSERT INTO asset(id,location,path,name,medium,size) "
                                "VALUES(7,'local','R:\\media\\other.mp4','other.mp4','video',10)")
-            with self.assertRaisesRegex(ValueError, "已被占用"):
+            with self.assertRaisesRegex(ValueError, "taken"):
                 record_rehome.revert_one(connection, batch)
             snapshot = json.loads(connection.execute(
                 "SELECT snapshot_json FROM record_rehome WHERE id=?", (batch,)).fetchone()[0])
@@ -313,9 +313,9 @@ class RecordRehomeTests(unittest.TestCase):
         with closing(sqlite3.connect(self.db)) as connection:
             connection.execute("INSERT INTO asset(id,location,path,name,medium,size,disposal) "
                                "VALUES(9,'local','R:\\media\\x.mp4','x.mp4','video',10,'trash')")
-            with self.assertRaisesRegex(ValueError, "在库"):
+            with self.assertRaisesRegex(ValueError, "in the library"):
                 record_rehome.move(connection, 7, 9, source=record_rehome.MANUAL_SOURCE, rule="manual")
-            with self.assertRaisesRegex(ValueError, "已消失"):
+            with self.assertRaisesRegex(ValueError, "has disappeared"):
                 record_rehome.move(connection, 9, 7, source=record_rehome.MANUAL_SOURCE, rule="manual")
 
 

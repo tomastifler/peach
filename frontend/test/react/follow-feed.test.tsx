@@ -157,8 +157,8 @@ describe('媒体与一叠', () => {
       followStack({ cover: '/img/0' }),
     ].map((stack) => [stack.isMix, stack.label, stack.glyph]);
     expect(said).toEqual([
-      [true, '2 个来源', 'play'], [true, '3 个视频', 'play'], [true, '11 张图片', 'pics'], [true, '9 个媒体', 'play'],
-      [true, '9 个媒体', 'pics'], [false, '', 'play'], [false, '', 'play'],
+      [true, '2 sources', 'play'], [true, '3 videos', 'play'], [true, '11 images', 'pics'], [true, '9 media items', 'play'],
+      [true, '9 media items', 'pics'], [false, '', 'play'], [false, '', 'play'],
     ]);
   });
 
@@ -179,18 +179,18 @@ describe('媒体与一叠', () => {
 describe('底栏与排序', () => {
   it('往回抓到第几页：页码从 0 起，给人读的从 1 起', () => {
     expect(backfillState([source(1, 'a', { can_backfill: false })])).toBe('');
-    expect(backfillState([source(1, 'a', { can_backfill: true, backfill_page: 0 })])).toBe('每个来源都只抓了第 1 页');
-    expect(backfillState([source(1, 'a', { can_backfill: true, backfill_page: 2 })])).toBe('每个来源都抓到第 3 页');
+    expect(backfillState([source(1, 'a', { can_backfill: true, backfill_page: 0 })])).toBe('Every source was fetched to page 1 only');
+    expect(backfillState([source(1, 'a', { can_backfill: true, backfill_page: 2 })])).toBe('Every source was fetched to page 3');
     expect(backfillState([
       source(1, 'a', { can_backfill: true, backfill_page: 0 }), source(2, 'b', { can_backfill: true, backfill_page: 2 }),
-    ])).toBe('已抓到第 1–3 页');
+    ])).toBe('Fetched to pages 1–3');
   });
 
   it('点别的列从默认方向起，点生效那列翻方向；无障碍名称播报点下去会得到什么', () => {
     expect(nextSort('hot', 'new', 'desc')).toEqual({ sort: 'hot', dir: 'desc' });
     expect(nextSort('new', 'new', 'desc')).toEqual({ sort: 'new', dir: 'asc' });
-    expect(sortAriaLabel('new', '更新时间', 'new', 'desc')).toBe('按更新时间从旧到新排序');
-    expect(sortAriaLabel('dur', '时长', 'new', 'desc')).toBe('按时长从长到短排序');
+    expect(sortAriaLabel('new', '更新时间', 'new', 'desc')).toBe('Sort by 更新时间 (oldest first)');
+    expect(sortAriaLabel('dur', '时长', 'new', 'desc')).toBe('Sort by 时长 (long to short)');
   });
 
   it('组合条按维度撤条件，同一个字符串在两个维度里各算各的', () => {
@@ -341,7 +341,7 @@ describe('页面', () => {
     const given = props();
     const host = await open(given);
     expect(cardIds(host)).toEqual(['1']);
-    expect(host.querySelector('[data-follow-readout]')?.textContent).toBe('43 项更新 · 显示 1');
+    expect(host.querySelector('[data-follow-readout]')?.textContent).toBe('43 updates · showing 1');
     await act(async () => push({ view: view({ media: 'images' }) }));
     await settle();
     expect(cardIds(host)).toEqual(['2']);
@@ -357,21 +357,21 @@ describe('页面', () => {
     vi.stubGlobal('fetch', fetcher);
     const given = props();
     const host = await open(given);
-    expect(host.querySelector('[data-follow-title]')?.textContent).toBe('关注');
+    expect(host.querySelector('[data-follow-title]')?.textContent).toBe('Follow');
     await click(host.querySelector('[data-follow-manage]'));
     expect(given.actions.openManage).toHaveBeenCalled();
-    expect(host.querySelector('[data-media-error] [data-note-action]')?.textContent).toBe('重试');
+    expect(host.querySelector('[data-media-error] [data-note-action]')?.textContent).toBe('Retry');
   });
 
   it('有来源、一条更新都还没有：没设筛选时说还没有更新，设了筛选才叫人换筛选', async () => {
     serve(feed([]));
     const bare = await open(props());
-    expect(bare.querySelector('[data-follow-empty]')?.textContent).toContain('还没有更新');
-    expect(bare.querySelector('[data-follow-empty]')?.textContent).not.toContain('筛选');
+    expect(bare.querySelector('[data-follow-empty]')?.textContent).toContain('No updates yet');
+    expect(bare.querySelector('[data-follow-empty]')?.textContent).not.toContain('filter');
     queryClient.clear();
     serve(feed([]));
     const filtered = await open(props({ view: view({ status: 'saved' }), revision: 2 }));
-    expect(filtered.querySelector('[data-follow-empty]')?.textContent).toContain('切换状态或来源筛选后再试');
+    expect(filtered.querySelector('[data-follow-empty]')?.textContent).toContain('Try changing the status or source filter.');
   });
 
   it('全部创作者可从同一横滚行访问', async () => {
@@ -390,7 +390,7 @@ describe('页面', () => {
     const fetcher = serve(page);
     const host = await open(props());
     const more = host.querySelector('[data-follow-pagination] button[data-entity-more]');
-    expect(more?.textContent).toBe('加载更多');
+    expect(more?.textContent).toBe('Load more');
     const before = fetcher.mock.calls.filter(([url]) => String(url).startsWith('/api/follow?')).length;
     page.groups = [group(item(FOLLOW_AUTO_LOAD_LIMIT + 1))];
     page.has_more = false;
@@ -405,7 +405,7 @@ describe('页面', () => {
   it('没有关注任何来源时指到添加关注', async () => {
     serve(feed([], { sources: [], facets: {} }));
     const host = await open(props());
-    expect(host.textContent).toContain('还没有关注任何来源');
+    expect(host.textContent).toContain('You are not following any source yet');
     expect(host.querySelector('a[href="/subscriptions?tab=add"]')).not.toBeNull();
   });
 
@@ -419,7 +419,7 @@ describe('页面', () => {
     expect(JSON.parse(String(write?.[1]?.body))).toEqual({ item: 1, to: 'seen' });
     expect(host.querySelector<HTMLElement>('[data-follow-item="1"]')?.dataset.status).toBe('seen');
     const toast = given.actions.toast as ReturnType<typeof vi.fn>;
-    expect(toast.mock.calls[0]![0]).toBe('已标记已看');
+    expect(toast.mock.calls[0]![0]).toBe('Marked as seen');
     await act(async () => { await toast.mock.calls[0]![1].undo() });
     const undo = fetcher.mock.calls.filter(([url]) => url === '/api/follow/status').at(-1);
     expect(JSON.parse(String(undo?.[1]?.body))).toEqual({ item: 1, to: 'new' });
@@ -432,13 +432,13 @@ describe('页面', () => {
     await click(host.querySelector('[data-follow-save="1"]'));
     await settle();
     expect(host.querySelector('[data-follow-item="1"] [data-follow-state]')?.textContent).toBe('只读副本不能写入');
-    expect(given.actions.failure).toHaveBeenCalledWith('保存到数据库', expect.anything());
+    expect(given.actions.failure).toHaveBeenCalledWith('Save to database', expect.anything());
 
     serve(feed([group(item(1))]));
     await click(host.querySelector('[data-follow-save="1"]'));
     await settle();
     const toast = given.actions.toast as ReturnType<typeof vi.fn>;
-    expect(toast).toHaveBeenLastCalledWith('已保存到数据库');
+    expect(toast).toHaveBeenLastCalledWith('Saved to database');
     expect(host.querySelector('[data-follow-item="1"] [data-follow-state]')?.textContent).toBe('');
   });
 
@@ -479,8 +479,8 @@ describe('页面', () => {
     await act(async () => options.complete({ status: 'done', results: [{ ok: true, added: 2 }] }));
     await settle();
     expect(given.actions.checkReport).toHaveBeenCalledWith({ status: 'done', results: [{ ok: true, added: 2 }] });
-    expect(host.textContent).toContain('检查结果');
-    expect(host.textContent).toContain('检查了 1 个来源：新增 2 条');
+    expect(host.textContent).toContain('Check result');
+    expect(host.textContent).toContain('Checked 1 sources: 2 added');
     expect(fetcher.mock.calls.filter(([url]) => String(url).startsWith('/api/follow?')).length).toBeGreaterThan(reads);
   });
 
@@ -494,12 +494,12 @@ describe('页面', () => {
     const start = fetcher.mock.calls.find(([url, init]) => url === '/api/follow/check' && init?.method === 'POST');
     expect(JSON.parse(String(start?.[1]?.body))).toEqual({ older: true, background: true });
     const options = (given.helpers.jobProgress as ReturnType<typeof vi.fn>).mock.calls.at(-1)![0];
-    expect(host.querySelector('[data-follow-older]')?.textContent).toContain('抓取中');
+    expect(host.querySelector('[data-follow-older]')?.textContent).toContain('Fetching');
     expect(host.querySelector('[data-follow-older]')?.getAttribute('aria-busy')).toBe('true');
     expect(host.querySelector('[data-follow-recheck]')?.getAttribute('aria-busy')).toBe('true');
     await act(async () => options.busy(true));
-    expect(host.querySelector('[data-follow-older]')?.textContent).toContain('抓取中');
-    expect(host.querySelector('[data-follow-backfill]')?.textContent).toBe('每个来源都抓到第 2 页');
+    expect(host.querySelector('[data-follow-older]')?.textContent).toContain('Fetching');
+    expect(host.querySelector('[data-follow-backfill]')?.textContent).toBe('Every source was fetched to page 2');
     // 忙着时两枚键只标 aria-busy，不落 BoardUI 的禁用档；再点哪一枚都不另起一趟。
     for (const selector of ['[data-follow-older]', '[data-follow-recheck]']) {
       const button = host.querySelector(selector)!;

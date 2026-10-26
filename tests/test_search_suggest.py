@@ -199,7 +199,7 @@ class SuggestTests(LedgerFixture):
 
     def test_each_group_carries_its_own_label(self):
         labels = {group["kind"]: group["label"] for group in self.suggest("涼森")["groups"]}
-        self.assertEqual(labels["performer"], "女优")
+        self.assertEqual(labels["performer"], "Performer")
 
     def test_a_group_never_exceeds_the_asked_for_size(self):
         """六个标签以「足」开头，一组只给得下五个。"""

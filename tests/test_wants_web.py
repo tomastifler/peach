@@ -305,9 +305,9 @@ class WantListTests(WantWebFixture):
     def test_a_code_already_in_the_library_or_unreadable_text_is_refused(self):
         self.execute("INSERT INTO asset(id,location,path,name,medium,code) VALUES(1,'local','R:\\a.mp4',"
                      "'a.mp4','video','ABP-123')")
-        with self.assertRaisesRegex(ValueError, "已经在库里"):
+        with self.assertRaisesRegex(ValueError, "already in the library"):
             self.post("/api/wants", {"action": "add", "code": "ABP-123"})
-        with self.assertRaisesRegex(ValueError, "认不出番号"):
+        with self.assertRaisesRegex(ValueError, "Release code not recognized"):
             self.post("/api/wants", {"action": "add", "code": "hello"})
         with self.assertRaisesRegex(ValueError, "unknown want action"):
             self.post("/api/wants", {"action": "drop", "ids": [1]})

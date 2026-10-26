@@ -171,7 +171,7 @@ class DmmSourceTests(unittest.TestCase):
         transport = graphql(contents=contents, items={})
         with self.assertRaises(SourceFailure) as caught:
             DmmSource().query("MIDV-012", session=Session(transport))
-        self.assertEqual((caught.exception.reason, str(caught.exception)), (FailureReason.NOT_FOUND, "DMM 没有这个番号"))
+        self.assertEqual((caught.exception.reason, str(caught.exception)), (FailureReason.NOT_FOUND, "DMM has no such code"))
         self.assertEqual(asked(transport), [("detail", "midv00012"), ("search", "MIDV 012"),
                                             ("detail", "48midv00012"), ("detail", "48midv00012ai")])
         self.assertEqual(len(asked(transport)) - 2, DETAIL_ATTEMPTS)
@@ -194,16 +194,16 @@ class DmmSourceTests(unittest.TestCase):
     def test_failures_come_through_the_shared_reason_table(self):
         with self.assertRaises(SourceFailure) as caught:
             DmmSource().query("FC2-PPV-1812235", session=Session(graphql()))
-        self.assertEqual((caught.exception.reason, str(caught.exception)), (FailureReason.NOT_FOUND, "认不出可以问 DMM 的番号"))
+        self.assertEqual((caught.exception.reason, str(caught.exception)), (FailureReason.NOT_FOUND, "Code not recognised for a DMM lookup"))
         with self.assertRaises(SourceFailure) as caught:
             DmmSource().parse(Page(PAGE_URL, json.dumps(dict(ITEM, makerContentId="SSIS-570", id="ssis00570"))), "SSIS-057")
         self.assertEqual((caught.exception.reason, caught.exception.kind, str(caught.exception)),
-                         (FailureReason.PARSE_ERROR, "unavailable", "来源返回的番号不匹配"))
+                         (FailureReason.PARSE_ERROR, "unavailable", "The code returned by the source does not match"))
         for body in (b"<html>maintenance</html>", b"[1, 2]", b'{"title": "no id"}'):
             with self.subTest(body=body), self.assertRaises(SourceFailure) as caught:
                 DmmSource().parse(Page(PAGE_URL, body), "SSIS-057")
             self.assertEqual((caught.exception.reason, str(caught.exception)),
-                             (FailureReason.PARSE_ERROR, "DMM 返回的不是作品 JSON"))
+                             (FailureReason.PARSE_ERROR, "DMM did not return work JSON"))
 
     def test_a_refused_query_and_a_non_json_reply_are_parse_errors(self):
         """字段名过期时接口回 `errors` 且没有 `data`，措辞带上站方那句话。"""
@@ -212,11 +212,11 @@ class DmmSourceTests(unittest.TestCase):
         with self.assertRaises(SourceFailure) as caught:
             DmmSource().query("SSIS-057", session=Session(refused))
         self.assertEqual((caught.exception.reason, str(caught.exception)),
-                         (FailureReason.PARSE_ERROR, 'DMM 拒绝了这条查询：Cannot query field "largeUrl"'))
+                         (FailureReason.PARSE_ERROR, 'DMM rejected this query：Cannot query field "largeUrl"'))
         cloudflare = lambda request, timeout, limit: HttpResponse(200, {}, b"<html>Just a moment</html>", request.url)
         with self.assertRaises(SourceFailure) as caught:
             DmmSource().query("SSIS-057", session=Session(cloudflare))
-        self.assertEqual((caught.exception.reason, str(caught.exception)), (FailureReason.PARSE_ERROR, "DMM 返回的不是作品 JSON"))
+        self.assertEqual((caught.exception.reason, str(caught.exception)), (FailureReason.PARSE_ERROR, "DMM did not return work JSON"))
 
     def test_transport_tiers_keep_their_semantics(self):
         with self.assertRaises(SourceFailure) as caught:

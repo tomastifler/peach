@@ -7,15 +7,15 @@ from urllib.parse import urlsplit
 from .entry_links import EXTERNAL_KIND, JAV_DIRECTORIES
 
 VALUES = {
-    'identity': {'person':'个人', 'account':'发布账号', 'organization':'机构',
-                 'platform':'平台', 'collection':'合集目录', 'release':'作品标识', 'unknown':'身份待核验'},
-    'occupation': {'adult_performer':'成人出演者', 'amateur_performer':'非职业出演者', 'model':'模特', 'actor':'演员',
-                   'artist':'艺术创作者', 'animator':'动画作者', 'content_creator':'内容创作者'},
-    'market': {'japanese_av':'日本 AV', 'western_adult':'西方成人发行'},
-    'account_role': {'seller':'卖家', 'publisher':'发布者', 'studio':'发行厂牌'},
+    'identity': {'person':'Individual', 'account':'Publishing account', 'organization':'Organisation',
+                 'platform':'Platform', 'collection':'Collection directory', 'release':'Release identifier', 'unknown':'Identity pending review'},
+    'occupation': {'adult_performer':'Adult performer', 'amateur_performer':'Non-professional performer', 'model':'Model', 'actor':'Actor',
+                   'artist':'Artist', 'animator':'Animation author', 'content_creator':'Content creator'},
+    'market': {'japanese_av':'Japanese AV', 'western_adult':'Western adult release'},
+    'account_role': {'seller':'Seller', 'publisher':'Publisher', 'studio':'Releasing studio'},
 }
-CATEGORIES = {'japanese_av': '女优', 'amateur': '素人', 'western': '西方',
-              'blogger': '网黄博主', 'seller': '卖家', 'animation': '动画作者'}
+CATEGORIES = {'japanese_av': 'Performer', 'amateur': 'Amateur', 'western': 'Western',
+              'blogger': 'Adult blogger', 'seller': 'Seller', 'animation': 'Animation author'}
 #: observed 只属于代码判据（ADR-0052 决策一）：`source:` 是抓取器从来源页解析出的事实，
 #: `script:fc2-seller@` 由 FC2 作品页快照的卖家字段解析，`script:creator-identity-wiki@` 由查创作者
 #: 身份后继按页名直取资料站、按作品表结构判定（ADR-0098）。研究与检索结论只写 candidate。
@@ -58,22 +58,22 @@ def write_claim(connection, *, entity_id, facet, value, source, evidence,
                 source_url='', status='candidate', confidence=0.5, checked_at=None):
     """目录、检索与研究推断保持 candidate，代码判据事实使用 observed，用户复核使用 approved。"""
     if facet not in VALUES or value not in VALUES[facet]:
-        raise ValueError('未知身份分类')
+        raise ValueError('Unknown identity category')
     if status not in {'candidate','observed','approved','rejected'}:
-        raise ValueError('未知断言状态')
+        raise ValueError('Unknown claim status')
     if not source or not evidence or not 0 <= confidence <= 1:
-        raise ValueError('断言缺少来源、证据或有效置信度')
+        raise ValueError('The claim lacks a source, evidence or a valid confidence')
     if status == 'approved' and not source.startswith(('user:', 'review:')):
-        raise ValueError('approved 只属于用户复核')
+        raise ValueError('approved is reserved for user review')
     if status == 'observed' and urlsplit(source_url).scheme != 'https':
-        raise ValueError('公开事实需要 HTTPS 来源')
+        raise ValueError('Public facts require an HTTPS source')
     if status == 'observed' and not source.startswith(CODE_SOURCES):
-        raise ValueError('observed 只属于代码判据来源')
+        raise ValueError('observed is reserved for code-rule sources')
     # 脚本不覆盖同来源上的用户复核。
     old = connection.execute('SELECT status FROM entity_classification WHERE entity_id=? AND facet=? AND value=? AND source=?',
                              (entity_id,facet,value,source)).fetchone()
     if old and old[0] == 'approved' and status != 'approved':
-        raise ValueError('不能覆盖已复核断言')
+        raise ValueError('Cannot overwrite a reviewed claim')
     connection.execute('INSERT INTO entity_classification VALUES(?,?,?,?,?,?,?,?,?) '
                        'ON CONFLICT(entity_id,facet,value,source) DO UPDATE SET source_url=excluded.source_url,'
                        'evidence=excluded.evidence,status=excluded.status,confidence=excluded.confidence,checked_at=excluded.checked_at',
@@ -240,7 +240,7 @@ def transfer(connection, source_id, target_id):
         old = connection.execute('SELECT source_url,evidence,status,confidence,checked_at FROM entity_classification WHERE entity_id=? AND facet=? AND value=? AND source=?',
                                  (target_id,*row[:3])).fetchone()
         if old and tuple(old)[:-1] != tuple(row[3:-1]):
-            raise ValueError('实体分类来源冲突，需先复核')
+            raise ValueError('Entity classification sources conflict; review first')
         connection.execute('INSERT OR IGNORE INTO entity_classification VALUES(?,?,?,?,?,?,?,?,?)', (target_id,*row))
         if old and row[-1] > old[-1]:
             connection.execute('UPDATE entity_classification SET checked_at=? '
@@ -253,5 +253,5 @@ def transfer(connection, source_id, target_id):
             continue
         old = connection.execute('SELECT * FROM entity_identity_link WHERE left_id=? AND right_id=? AND relation=? AND source=?', row[:4]).fetchone()
         if old and tuple(old) != tuple(row):
-            raise ValueError('身份关联来源冲突，需先复核')
+            raise ValueError('Identity link sources conflict; review first')
         connection.execute('INSERT OR IGNORE INTO entity_identity_link VALUES(?,?,?,?,?,?,?,?)', row)

@@ -140,20 +140,20 @@ describe('读数卡', () => {
 
   it('复核列前三类、其余合成一项；垃圾分项只列有东西的类别', () => {
     expect(reviewSummary({ counts: { metadata_fields: 12, performer_avatars: 3, studio_logos: 2, creator_tags: 1 } }))
-      .toEqual({ figure: '18 条待复核', meta: '元数据字段 12 · 女优头像 3 · 厂牌 Logo 2 · 其余 1' });
+      .toEqual({ figure: '18 to review', meta: 'Metadata fields 12 · Performer avatars 3 · Studio logos 2 · Other 1' });
     expect(junkBreakdown({ pending_total: 5, dismissed_total: 2, counts: { video: 4, image: 0, url: 1 } }))
-      .toBe('视频 4 · 网址 1 · 已忽略 2');
+      .toBe('Video 4 · URL 1 · Dismissed 2');
   });
 
   it('五张卡各读各的；点一张就换到那一页', async () => {
     const { host, open, server } = await openPage();
-    expect(entry(host, 'review')?.textContent).toContain('18 条待复核');
-    expect(entry(host, 'quality')?.textContent).toContain('7 个待升级');
-    expect(entry(host, 'duplicates')?.textContent).toContain('3 组 · 8 个文件');
-    expect(entry(host, 'duplicates')?.textContent).toContain('可回收 2.0 GB');
-    expect(entry(host, 'ads')?.textContent).toContain('5 个待判断');
-    expect(entry(host, 'trash')?.textContent).toContain('9 项在回收站');
-    expect(entry(host, 'trash')?.textContent).toContain('占用 3.0 GB');
+    expect(entry(host, 'review')?.textContent).toContain('18 to review');
+    expect(entry(host, 'quality')?.textContent).toContain('7 to upgrade');
+    expect(entry(host, 'duplicates')?.textContent).toContain('3 groups · 8 files');
+    expect(entry(host, 'duplicates')?.textContent).toContain('2.0 GB reclaimable');
+    expect(entry(host, 'ads')?.textContent).toContain('5 to assess');
+    expect(entry(host, 'trash')?.textContent).toContain('9 items in trash');
+    expect(entry(host, 'trash')?.textContent).toContain('3.0 GB used');
     for (const section of ['review', 'quality', 'duplicates', 'ads', 'trash'] as const) await click(entry(host, section));
     expect(open.mock.calls.map(([section]) => section)).toEqual(['review', 'quality', 'duplicates', 'ads', 'trash']);
     expect(server.unknown).toEqual([]);
@@ -161,8 +161,8 @@ describe('读数卡', () => {
 
   it('一张卡取不到只把那一张写成「读取失败」', async () => {
     const { host } = await openPage(withRoots, { '/api/review?counts=1': failWith(500) });
-    expect(entry(host, 'review')?.textContent).toContain('读取失败');
-    expect(entry(host, 'trash')?.textContent).toContain('9 项在回收站');
+    expect(entry(host, 'review')?.textContent).toContain('Failed to load');
+    expect(entry(host, 'trash')?.textContent).toContain('9 items in trash');
   });
 
   it('回收站计数跟着侧栏选中的媒体库走', async () => {
@@ -224,25 +224,25 @@ describe('资源同步', () => {
     const host = await wrap(<ResourceSyncCard toast={toast} />);
     await settle();
     expect(host.textContent).toContain('本地磁盘');
-    expect(host.textContent).toContain('离线，已跳过');
-    expect(host.textContent).toContain('馆藏中有 30 项');
-    expect(host.textContent).toContain('空文件夹 3 个');
-    expect(host.textContent).toContain('待永久删除');
-    expect(host.textContent).toContain('保留来源根目录');
+    expect(host.textContent).toContain('Offline, skipped');
+    expect(host.textContent).toContain('30 items in the library');
+    expect(host.textContent).toContain('3 empty folders');
+    expect(host.textContent).toContain('To delete permanently');
+    expect(host.textContent).toContain('Source root folders are kept');
     expect(server.posts('/api/resource-sync/apply')).toEqual([]);
-    await click(buttonNamed('清理失效条目', host));
+    await click(buttonNamed('Clean up dead entries', host));
     await settle();
     expect(seen).toHaveLength(1);
-    expect(seen[0]!.title).toBe('清理失效条目');
+    expect(seen[0]!.title).toBe('Clean up dead entries');
     expect(seen[0]!.danger).toBe(true);
     expect(seen[0]!.body).toBe(
-      '将永久删除文件已不在盘上的 4 条记录（含回收站里的）、3 个空文件夹，并清理 2 个闲置缓存。来源根目录保留。这一步不可撤销。');
+      '4 records whose files are no longer on disk (including those in trash) and 3 empty folders will be deleted permanently, and 2 idle caches will be cleaned. Source root folders are kept. This cannot be undone. ');
     expect(server.posts('/api/resource-sync/apply')).toEqual([
       { confirm: true, clean_cache: true, scan_id: 'scan-7', background: true },
     ]);
     await settle();
-    expect(toast).toHaveBeenCalledWith('已清理失效条目');
-    expect(host.textContent).toContain('已永久删除 4 条失效记录和 3 个空文件夹，清理 2 个缓存，释放 5 MB。');
+    expect(toast).toHaveBeenCalledWith('Dead entries cleaned up');
+    expect(host.textContent).toContain('Permanently deleted 4 dead records and 3 empty folders, cleaned 2 caches, freeing 5 MB.');
   });
 
   it('其余来源仍在扫描时显示已确认来源，任务失败也保留这些结果', async () => {
@@ -252,9 +252,9 @@ describe('资源同步', () => {
     const host = await wrap(<ResourceSyncCard toast={vi.fn()} />);
     await settle();
     expect(host.textContent).toContain('本地磁盘');
-    expect(host.textContent).toContain('空文件夹 3 个');
-    expect(buttonNamed('清理失效条目', host)).toBeNull();
-    expect(host.textContent).not.toContain('可清理的缓存');
+    expect(host.textContent).toContain('3 empty folders');
+    expect(buttonNamed('Clean up dead entries', host)).toBeNull();
+    expect(host.textContent).not.toContain('Cache to clean');
     await act(async () => { queryClient.setQueryData(RESOURCE_SCAN_KEY, {
       ...state, status: 'failed', error: '第二个来源无法读取',
     }); });
@@ -277,16 +277,16 @@ describe('资源同步', () => {
     });
     const host = await wrap(<ResourceSyncCard toast={vi.fn()} />);
     await settle();
-    expect(host.textContent).toContain('将标为已消失');
-    expect(host.textContent).toContain('2 项带个人记录');
-    await click(buttonNamed('清理失效条目', host));
+    expect(host.textContent).toContain('To mark as gone');
+    expect(host.textContent).toContain('2 with personal records');
+    await click(buttonNamed('Clean up dead entries', host));
     await settle();
     expect(seen[0]!.body).toBe(
-      '将永久删除文件已不在盘上的 3 条记录（含回收站里的）、3 个空文件夹，并清理 2 个闲置缓存。来源根目录保留。'
-      + '这几样不可撤销。2 条带个人记录的标为已消失，记录留着，可在孤儿记录里接到新文件或彻底删除。');
+      '3 records whose files are no longer on disk (including those in trash) and 3 empty folders will be deleted permanently, and 2 idle caches will be cleaned. Source root folders are kept. These cannot be undone. '
+      + '2 entries with personal records will be marked as gone; the records are kept and can be attached to a new file or deleted permanently under Orphan records.');
     await settle();
     expect(host.textContent).toContain(
-      '1 条带个人记录的已标为已消失，可在孤儿记录里处理。1 条的记录已接到库里的另一个版本。');
+      '1 entries with personal records were marked as gone and can be handled under Orphan records. 1 entries had their records attached to another version in the library.');
   });
 
   it('复核时发现文件还在、目录删不掉的几样留在原地：报警告档，结果条写部分完成', async () => {
@@ -302,12 +302,12 @@ describe('资源同步', () => {
     });
     const host = await wrap(<ResourceSyncCard toast={toast} />);
     await settle();
-    await click(buttonNamed('清理失效条目', host));
+    await click(buttonNamed('Clean up dead entries', host));
     await settle();
     await settle();
-    expect(toast).toHaveBeenCalledWith('已完成 7 项，2 项没有处理', { warning: true });
-    expect(host.textContent).toContain('部分完成');
-    expect(host.textContent).toContain('1 条记录没有删除（「回来了.mp4」），1 个文件夹没有删除，重新检查后可再试。');
+    expect(toast).toHaveBeenCalledWith('7 done, 2 not processed', { warning: true });
+    expect(host.textContent).toContain('Partially done');
+    expect(host.textContent).toContain('1 records not deleted ("回来了.mp4"), 1 folders not deleted; check again and retry.');
   });
 
   it('取消确认就不发 apply', async () => {
@@ -315,7 +315,7 @@ describe('资源同步', () => {
     const server = serve({ '/api/resource-sync/scan': scanned, '/api/resource-sync/apply': { status: 'idle' } });
     const host = await wrap(<ResourceSyncCard toast={vi.fn()} />);
     await settle();
-    await click(buttonNamed('清理失效条目', host));
+    await click(buttonNamed('Clean up dead entries', host));
     await settle();
     expect(server.posts('/api/resource-sync/apply')).toEqual([]);
   });
@@ -327,8 +327,8 @@ describe('资源同步', () => {
     });
     const host = await wrap(<ResourceSyncCard toast={vi.fn()} />);
     await settle();
-    expect(buttonNamed('清理失效条目', host)).toBeNull();
-    expect(host.textContent).toContain('已检查可访问的来源，没有待清理的记录、空文件夹或缓存。');
+    expect(buttonNamed('Clean up dead entries', host)).toBeNull();
+    expect(host.textContent).toContain('Reachable sources were checked; there are no records, empty folders or caches to clean up.');
   });
 
   it('只有空文件夹要删时也给清理键', async () => {
@@ -338,7 +338,7 @@ describe('资源同步', () => {
     });
     const host = await wrap(<ResourceSyncCard toast={vi.fn()} />);
     await settle();
-    expect(buttonNamed('清理失效条目', host)).not.toBeNull();
+    expect(buttonNamed('Clean up dead entries', host)).not.toBeNull();
   });
 });
 
@@ -361,7 +361,7 @@ describe('链接管理', () => {
     await settle();
     const cells = [...host.querySelectorAll('.link-stat-grid > div')].map((cell) => cell.textContent);
     expect(cells).toEqual([
-      '链接总数719分布在 210 个女优、厂牌与系列', '官网/事务所224', '社交账号373', '作品资料站100', '资料出处22',
+      'Total links719Across 210 performers, studios and series', 'Official site / agency224', 'Social account373', 'Work catalog site100', 'Source reference22',
     ]);
     expect(host.textContent).toContain('x.com 300 · instagram.com 70 · linktr.ee 3');
     expect(host.textContent).not.toContain('tiktok.com');
@@ -379,13 +379,13 @@ describe('链接管理', () => {
     });
     const host = await wrap(<LinkManager />);
     await settle();
-    expect(host.querySelector('[aria-label="地址已失效"]')?.textContent).toContain('女优 1');
-    expect(host.querySelector('[aria-label="本次未访问成功"]')?.textContent).toContain('社交账号');
-    await click(buttonNamed('删除 1 条失效链接', host));
+    expect(host.querySelector('[aria-label="Dead addresses"]')?.textContent).toContain('女优 1');
+    expect(host.querySelector('[aria-label="Could not be reached this time"]')?.textContent).toContain('Social account');
+    await click(buttonNamed('Delete 1 dead links', host));
     await settle();
     expect(seen).toHaveLength(1);
     expect(seen[0]!.danger).toBe(true);
-    expect(seen[0]!.body).toBe('将删除 1 条失效链接。删除前会再次检查，删除后无法恢复。');
+    expect(seen[0]!.body).toBe('1 dead links will be deleted. They are re-checked first, and deletion cannot be undone.');
     expect(server.posts('/api/links/prune')).toEqual([{ confirm: true, check_id: 'check-3', background: true }]);
   });
 
@@ -394,7 +394,7 @@ describe('链接管理', () => {
     const server = serve({ '/api/links': stats, '/api/links/check': checked, '/api/links/prune': { status: 'idle' } });
     const host = await wrap(<LinkManager />);
     await settle();
-    await click(buttonNamed('删除 1 条失效链接', host));
+    await click(buttonNamed('Delete 1 dead links', host));
     await settle();
     expect(server.posts('/api/links/prune')).toEqual([]);
   });
@@ -409,7 +409,7 @@ describe('链接管理', () => {
     });
     const host = await wrap(<LinkManager />);
     await settle();
-    await click(buttonNamed('全部重试（2）', host));
+    await click(buttonNamed('Retry all (2)', host));
     await settle();
     expect(server.posts('/api/links/check').filter((body) => !(body as { status_only?: boolean }).status_only))
       .toEqual([{ retry: [2, 3], check_id: 'check-3' }]);
@@ -425,7 +425,7 @@ describe('链接管理', () => {
     });
     const host = await wrap(<LinkManager />);
     await settle();
-    await click(buttonNamed('检查死链', host));
+    await click(buttonNamed('Check dead links', host));
     await settle();
     expect(host.textContent).toContain('清单已过期，请重新检查');
   });
@@ -460,15 +460,15 @@ describe('孤儿记录', () => {
     serve({ '/api/orphan-records': orphans });
     const host = await wrap(<OrphanRecordsCard toast={vi.fn()} />);
     await settle();
-    const rows = [...host.querySelectorAll('[aria-label="文件已消失的作品"] tbody tr')];
+    const rows = [...host.querySelectorAll('[aria-label="Works whose files are gone"] tbody tr')];
     expect(rows).toHaveLength(2);
-    expect(rows[0]!.textContent).toContain('喜欢与理由 1 · 观看历史 3 · 评分 4 · 播放 2 次');
-    expect(rows[0]!.textContent).toContain('ABC-123.mkv · 60 分钟');
+    expect(rows[0]!.textContent).toContain('Likes and reasons 1 · Watch history 3 · Rating 4 · Played 2 times');
+    expect(rows[0]!.textContent).toContain('ABC-123.mkv · 60 min');
     expect(rows[0]!.querySelector('img')?.getAttribute('src')).toBe('/thumb?id=7&c=4');
-    expect(rows[1]!.textContent).toContain('稍后看 1 · 播放过');
-    expect(rows[1]!.textContent).toContain('没有番号或文件名对得上的文件');
-    expect(buttonNamed('接到这个文件', rows[1]!)).toBeFalsy();
-    expect(buttonNamed('彻底删除', rows[1]!)).toBeTruthy();
+    expect(rows[1]!.textContent).toContain('Watch later 1 · Played');
+    expect(rows[1]!.textContent).toContain('No file matches by code or file name');
+    expect(buttonNamed('Attach to this file', rows[1]!)).toBeFalsy();
+    expect(buttonNamed('Delete permanently', rows[1]!)).toBeTruthy();
   });
 
   it('接到这个文件直接发，目标默认是时长最接近的那个', async () => {
@@ -476,10 +476,10 @@ describe('孤儿记录', () => {
     const toast = vi.fn();
     const host = await wrap(<OrphanRecordsCard toast={toast} />);
     await settle();
-    await click(buttonNamed('接到这个文件', host));
+    await click(buttonNamed('Attach to this file', host));
     await settle();
     expect(server.posts('/api/orphan-records/attach')).toEqual([{ id: 7, target: 9 }]);
-    expect(toast).toHaveBeenCalledWith('记录已接到新文件，批次 user:reattach@1');
+    expect(toast).toHaveBeenCalledWith('Records attached to the new file, batch user:reattach@1');
   });
 
   /** 点第二条的「彻底删除」，交回弹层上写的与发出去的批量请求。 */
@@ -488,7 +488,7 @@ describe('孤儿记录', () => {
     const server = serve({ '/api/orphan-records': orphans, '/api/batch': { ok: true, purged: 1, blocked: [] } });
     const host = await wrap(<OrphanRecordsCard toast={vi.fn()} />);
     await settle();
-    await click(buttonNamed('彻底删除', host.querySelectorAll('[aria-label="文件已消失的作品"] tbody tr')[1]!));
+    await click(buttonNamed('Delete permanently', host.querySelectorAll('[aria-label="Works whose files are gone"] tbody tr')[1]!));
     await settle();
     return { seen, posts: server.posts('/api/batch') };
   }
@@ -496,7 +496,7 @@ describe('孤儿记录', () => {
   it('彻底删除是危险确认，正文写明不可撤销，确认了才发批量删除', async () => {
     const { seen, posts } = await purgeSecond(true);
     expect(seen[0]!.danger).toBe(true);
-    expect(seen[0]!.body).toBe('将删除「海边.mp4」这一条和它带的记录（稍后看 1 · 播放过）。此操作不可撤销。');
+    expect(seen[0]!.body).toBe('"海边.mp4" and its records (Watch later 1 · Played) will be deleted. This cannot be undone.');
     expect(posts).toEqual([{ ids: [12], operation: 'delete' }]);
   });
 
@@ -511,18 +511,18 @@ describe('孤儿记录', () => {
     const toast = vi.fn();
     const host = await wrap(<OrphanRecordsCard toast={toast} />);
     await settle();
-    await click(host.querySelector('input[aria-label="选择 作品 0"]'));
-    await click(buttonNamed('下一页', host));
-    await click(host.querySelector('input[aria-label="选择 作品 20"]'));
+    await click(host.querySelector('input[aria-label="Select 作品 0"]'));
+    await click(buttonNamed('Next', host));
+    await click(host.querySelector('input[aria-label="Select 作品 20"]'));
     confirmWith(false);
-    await click(buttonNamed('彻底删除所选（2）', host));
+    await click(buttonNamed('Delete selected permanently (2)', host));
     expect(server.posts('/api/batch')).toEqual([]);
     const seen = confirmWith(true);
-    await click(buttonNamed('彻底删除所选（2）', host));
+    await click(buttonNamed('Delete selected permanently (2)', host));
     await settle();
     expect(seen[0]!.items).toEqual(['作品 0', '作品 20']);
     expect(server.posts('/api/batch')).toEqual([{ ids: [30, 50], operation: 'delete' }]);
-    expect(toast).toHaveBeenCalledWith('已彻底删除 1 条记录，1 条文件已恢复，未删除');
+    expect(toast).toHaveBeenCalledWith('Permanently deleted 1 records; 1 files were restored and not deleted');
   });
 });
 
@@ -552,13 +552,13 @@ describe('整理', () => {
     const file = host.querySelector<HTMLInputElement>('input[placeholder="{number}[ {title}]"]');
     expect(file?.value).toBe('{number}');
     await type(file, ' {number} {title} ');
-    await click(buttonNamed('预览', host));
+    await click(buttonNamed('Preview', host));
     await settle();
     expect(server.posts('/api/organize/preview')).toEqual([
       { location: 'local', file_template: '{number} {title}', dir_template: '' },
     ]);
     expect(server.posts('/api/settings')).toEqual([]);
-    expect(host.textContent).toContain('2 个文件会改名或移动，5 个已经就是目标名字；跳过 缺番号 1。');
+    expect(host.textContent).toContain('2 files will be renamed or moved, 5 already have the target name; skipped 缺番号 1.');
     expect(host.textContent).toContain('ABC-001.mp4');
   });
 
@@ -567,13 +567,13 @@ describe('整理', () => {
     const server = organizeServer();
     queryClient.setQueryData(['organize'], organizeIdle);
     const host = await wrap(<OrganizeCard toast={vi.fn()} failure={vi.fn()} />);
-    expect(buttonNamed('执行整理', host)).toBeNull();
-    await click(buttonNamed('预览', host));
+    expect(buttonNamed('Organize', host)).toBeNull();
+    await click(buttonNamed('Preview', host));
     await settle();
-    await click(buttonNamed('执行整理', host));
+    await click(buttonNamed('Organize', host));
     await settle();
-    expect(seen.map((options) => options.title)).toEqual(['按模板整理文件']);
-    expect(seen[0]!.body).toContain('「本地」上的文件名与目录');
+    expect(seen.map((options) => options.title)).toEqual(['Organize files by template']);
+    expect(seen[0]!.body).toContain('File names and folders of "Local"');
     expect(server.posts('/api/organize/apply')).toEqual([
       { location: 'local', file_template: '{number}', dir_template: '', confirm: true },
     ]);
@@ -587,16 +587,16 @@ describe('整理', () => {
     const server = organizeServer({ ...organizeIdle, last_batch: 'batch-9' });
     queryClient.setQueryData(['organize'], { ...organizeIdle, last_batch: 'batch-9' });
     const host = await wrap(<OrganizeCard toast={vi.fn()} failure={vi.fn()} />);
-    await click(buttonNamed('回滚上一批', host));
+    await click(buttonNamed('Roll back last batch', host));
     await settle();
-    expect(seen.map((options) => options.title)).toEqual(['回滚上一批整理']);
+    expect(seen.map((options) => options.title)).toEqual(['Roll back last batch']);
     expect(server.posts('/api/organize/rollback')).toEqual([]);
     expect(server.posts('/api/organize/apply')).toEqual([]);
 
     queryClient.clear();
     queryClient.setQueryData(['organize'], organizeIdle);
     const fresh = await wrap(<OrganizeCard toast={vi.fn()} failure={vi.fn()} />);
-    expect(buttonNamed('回滚上一批', fresh)).toBeNull();
+    expect(buttonNamed('Roll back last batch', fresh)).toBeNull();
   });
 
   it('回滚确认了才发，请求体只有 confirm', async () => {
@@ -604,7 +604,7 @@ describe('整理', () => {
     const server = organizeServer({ ...organizeIdle, last_batch: 'batch-9' });
     queryClient.setQueryData(['organize'], { ...organizeIdle, last_batch: 'batch-9' });
     const host = await wrap(<OrganizeCard toast={vi.fn()} failure={vi.fn()} />);
-    await click(buttonNamed('回滚上一批', host));
+    await click(buttonNamed('Roll back last batch', host));
     await settle();
     expect(server.posts('/api/organize/rollback')).toEqual([{ confirm: true }]);
   });

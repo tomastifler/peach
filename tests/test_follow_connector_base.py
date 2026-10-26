@@ -258,18 +258,18 @@ class HistoryEndRecognitionTests(unittest.TestCase):
     """
 
     def test_a_declared_status_is_recognised_and_others_are_not(self):
-        self.assertTrue(is_history_end_error("kemono", "kemono 返回 HTTP 400"))
-        self.assertTrue(is_history_end_error("coomer", "coomer 返回 HTTP 404"))
+        self.assertTrue(is_history_end_error("kemono", "kemono returned HTTP 400"))
+        self.assertTrue(is_history_end_error("coomer", "coomer returned HTTP 404"))
         self.assertTrue(is_history_end_error("rule34paheal",
-                                             "rule34paheal 返回 HTTP 404"))
-        self.assertFalse(is_history_end_error("kemono", "kemono 返回 HTTP 500"))
+                                             "rule34paheal returned HTTP 404"))
+        self.assertFalse(is_history_end_error("kemono", "kemono returned HTTP 500"))
         self.assertFalse(is_history_end_error("rule34video",
-                                             "rule34video 返回 HTTP 400"))
+                                             "rule34video returned HTTP 400"))
 
     def test_a_provider_that_never_pages_back_recognises_nothing(self):
-        for message in ("f95zone 返回 HTTP 404", "f95zone 返回 HTTP 400"):
+        for message in ("f95zone returned HTTP 404", "f95zone 返回 HTTP 400"):
             self.assertFalse(is_history_end_error("f95zone", message))
-        self.assertFalse(is_history_end_error("nyaa", "nyaa 返回 HTTP 404"))
+        self.assertFalse(is_history_end_error("nyaa", "nyaa returned HTTP 404"))
 
     def test_it_matches_the_message_check_status_actually_writes(self):
         """判据必须对上真正落盘的那句话。

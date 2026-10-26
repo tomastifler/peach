@@ -9,7 +9,7 @@ describe('配置表单与行间距', () => {
   after(async () => { await browser?.close() });
   for (const viewport of VIEWPORTS) {
     it(`${viewport.name}：应用更新包说明和体积不越出视口`, async () => {
-      const opened = await visit(browser, '/settings/library?section=' + encodeURIComponent('应用与维护'), viewport);
+      const opened = await visit(browser, '/settings/library?section=' + encodeURIComponent('App & maintenance'), viewport);
       const { page } = opened;
       try {
         await page.route('**/api/configuration', async route => {
@@ -20,18 +20,18 @@ describe('配置表单与行间距', () => {
             update_job: { state: 'idle', progress: 0 } } });
         });
         await page.reload();
-        const region = page.getByRole('region', { name: '检查更新', exact: true });
-        await region.getByText('应用更新包 · 12.0 MB', { exact: true }).waitFor();
-        assert.ok((await region.innerText()).includes('工具缺失、损坏或版本变化时会另行下载'));
-        assert.equal(await region.getByRole('link', { name: '完整安装包', exact: true }).count(), 0);
+        const region = page.getByRole('region', { name: 'Check for updates', exact: true });
+        await region.getByText('App update package · 12.0 MB', { exact: true }).waitFor();
+        assert.ok((await region.innerText()).includes('if tools are missing, damaged or change version, the required tool package is downloaded separately'));
+        assert.equal(await region.getByRole('link', { name: 'Full installer', exact: true }).count(), 0);
         await settle(page);
         assert.ok((await layout(page)).scrollWidth <= viewport.width + 1);
         await region.screenshot({ path: `../build/update-download-${viewport.name}.png` });
         assert.deepEqual(opened.problems, []);
       } finally { await opened.close() }
     });
-    it(`${viewport.name}：挂载目录的代理流量保护可切换且不越出视口`, async () => {
-      const opened = await visit(browser, '/settings/library?section=' + encodeURIComponent('这台电脑'), viewport);
+    it(`${viewport.name}：挂载目录的Proxy traffic protection可切换且不越出视口`, async () => {
+      const opened = await visit(browser, '/settings/library?section=' + encodeURIComponent('Library & import'), viewport);
       const { page } = opened;
       try {
         await page.route('**/api/configuration', async route => {
@@ -45,7 +45,7 @@ describe('配置表单与行间距', () => {
           ] } });
         });
         await page.reload();
-        const form = page.getByRole('form', { name: '媒体目录', exact: true });
+        const form = page.getByRole('form', { name: 'Media folders', exact: true });
         const protectedFolder = form.locator('[data-media-read-policy="0"] [aria-haspopup="listbox"]');
         await protectedFolder.waitFor();
         await page.waitForFunction(() => {
@@ -58,13 +58,13 @@ describe('配置表单与行间距', () => {
             width: box.width, height: box.height };
         }));
         assert.deepEqual(marks, Array.from({ length: 8 }, () => ({ inline: true, width: 16, height: 16 })));
-        assert.ok(!(await form.innerText()).includes('（只读）'));
-        assert.ok((await protectedFolder.textContent())?.includes('代理流量保护'));
-        assert.ok((await form.locator('[data-media-read-policy="1"]').textContent())?.includes('正常读取'));
+        assert.ok(!(await form.innerText()).includes('(read-only)'));
+        assert.ok((await protectedFolder.textContent())?.includes('Proxy traffic protection'));
+        assert.ok((await form.locator('[data-media-read-policy="1"]').textContent())?.includes('Normal reads'));
         await protectedFolder.click();
-        await page.getByRole('option', { name: '正常读取', exact: true }).click();
+        await page.getByRole('option', { name: 'Normal reads', exact: true }).click();
         await settle(page);
-        assert.ok((await protectedFolder.textContent())?.includes('正常读取'));
+        assert.ok((await protectedFolder.textContent())?.includes('Normal reads'));
         assert.deepEqual((await layout(page)).offenders, []);
         await form.screenshot({ path: `../build/cloud-source-icons-${viewport.name}.png` });
         assert.deepEqual(opened.problems, []);
@@ -72,7 +72,7 @@ describe('配置表单与行间距', () => {
     });
 
     it(`${viewport.name}：PikPak 表单直接显示，登录按钮同排`, async () => {
-      const opened = await visit(browser, '/settings/library?section=' + encodeURIComponent('下载渠道'), viewport);
+      const opened = await visit(browser, '/settings/library?section=' + encodeURIComponent('Download channels'), viewport);
       const { page } = opened;
       try {
         await page.route('**/api/configuration/downloads', async route => {
@@ -81,11 +81,11 @@ describe('配置表单与行间距', () => {
             pikpak_browser: { available: true, state: 'idle', message: '' } } });
         });
         await page.reload();
-        const form = page.getByRole('form', { name: 'PikPak 账号', exact: true });
-        await form.getByLabel('账号', { exact: true }).waitFor();
+        const form = page.getByRole('form', { name: 'PikPak account', exact: true });
+        await form.getByLabel('Account', { exact: true }).waitFor();
         assert.equal(await form.locator('details').count(), 0);
-        const password = await form.getByRole('button', { name: '登录', exact: true }).boundingBox();
-        const browserLogin = await form.getByRole('button', { name: '用浏览器登录', exact: true }).boundingBox();
+        const password = await form.getByRole('button', { name: 'Sign in', exact: true }).boundingBox();
+        const browserLogin = await form.getByRole('button', { name: 'Sign in with browser', exact: true }).boundingBox();
         assert.ok(password && browserLogin && Math.abs(password.y - browserLogin.y) <= 1);
         assert.ok((await layout(page)).scrollWidth <= viewport.width + 1);
         await form.screenshot({ path: `../build/pikpak-form-${viewport.name}.png` });
@@ -93,7 +93,7 @@ describe('配置表单与行间距', () => {
       } finally { await opened.close() }
     });
     it(`${viewport.name}：完全卸载行与设置卡片正文对齐`, async () => {
-      const opened = await visit(browser, '/settings/library?section=' + encodeURIComponent('应用与维护'), viewport);
+      const opened = await visit(browser, '/settings/library?section=' + encodeURIComponent('App & maintenance'), viewport);
       const { page } = opened;
       try {
         await page.route('**/api/configuration', async route => {
@@ -101,12 +101,12 @@ describe('配置表单与行间距', () => {
           await route.fulfill({ json: { ...data, uninstall: { ...data.uninstall, available: false } } });
         });
         await page.reload();
-        const region = page.getByRole('region', { name: '卸载 Peach', exact: true });
-        await region.getByText('完全卸载', { exact: true }).waitFor();
+        const region = page.getByRole('region', { name: 'Uninstall Peach', exact: true });
+        await region.getByText('Full uninstall', { exact: true }).waitFor();
         await settle(page);
         const geometry = await region.evaluate(node => {
           const card = node.lastElementChild!.getBoundingClientRect();
-          const label = [...node.querySelectorAll('p')].find(item => item.textContent === '完全卸载')!.getBoundingClientRect();
+          const label = [...node.querySelectorAll('p')].find(item => item.textContent === 'Full uninstall')!.getBoundingClientRect();
           return { top: label.top - card.top, left: label.left - card.left };
         });
         assert.ok(geometry.top <= 12 && geometry.top >= 9, JSON.stringify(geometry));

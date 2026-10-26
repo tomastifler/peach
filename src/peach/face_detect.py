@@ -157,7 +157,7 @@ def ensure_model(path: Path | None = None, *, allow_download: bool = True) -> Pa
     """
     target = Path(path) if path is not None else MODEL_PATH
     return fetch_model(target, MODEL_URL, MODEL_SHA256,
-                       allow_download=allow_download, label="人脸模型")
+                       allow_download=allow_download, label="face model")
 
 
 def fetch_model(target: Path, url: str, sha256: str, *, allow_download: bool,
@@ -173,18 +173,18 @@ def fetch_model(target: Path, url: str, sha256: str, *, allow_download: bool,
     if target.is_file():
         target.unlink()
     if not allow_download:
-        raise FaceModelUnavailable(f"缺少{label}：{target}")
+        raise FaceModelUnavailable(f"Missing {label}: {target}")
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix(".part")
     try:
         with urllib.request.urlopen(url, timeout=timeout) as response:
             payload = response.read()
     except OSError as error:
-        raise FaceModelUnavailable(f"取{label}失败：{error}") from error
+        raise FaceModelUnavailable(f"Failed to fetch {label}: {error}") from error
     digest = hashlib.sha256(payload).hexdigest()
     if digest != sha256:
         raise FaceModelUnavailable(
-            f"{label}校验不符：期望 {sha256}，实际 {digest}")
+            f"{label} checksum mismatch: expected {sha256}, got {digest}")
     temporary.write_bytes(payload)
     temporary.replace(target)
     return target
@@ -207,7 +207,7 @@ class FaceDetector:
         create = getattr(cv2, "FaceDetectorYN_create", None)
         if create is None:                       # pragma: no cover - 依赖版本兜底
             raise FaceModelUnavailable(
-                "当前 OpenCV 没有 FaceDetectorYN；需要 4.5.4 以上")
+                "This OpenCV build has no FaceDetectorYN; 4.5.4 or later is required")
         # 模型那道门只管「算不算一次读数」，留不留这张脸由 `detect` 按中位数判。
         self._detector = create(str(self.model_path), "", (320, 320),
                                 min(score, READ_FLOOR), nms, 5000)

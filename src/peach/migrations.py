@@ -33,7 +33,7 @@ def discover(directory: Path) -> list[Migration]:
     # 直接拒绝。目录缺失的真实原因通常是 `pip install .`（非 editable）——wheel 只装
     # `src/` 下的包，仓库根的 `migrations/` 不在里面。
     if not directory.is_dir():
-        raise FileNotFoundError(f"migration 目录不存在：{directory}")
+        raise FileNotFoundError(f"migration directory does not exist: {directory}")
     migrations: list[Migration] = []
     for path in sorted(directory.glob("[0-9][0-9][0-9][0-9]_*.sql")):
         version, name = path.stem.split("_", 1)
@@ -42,7 +42,7 @@ def discover(directory: Path) -> list[Migration]:
         migrations.append(Migration(version, name, path, sql, checksum))
     versions = [m.version for m in migrations]
     if len(versions) != len(set(versions)):
-        raise ValueError("migration 版本重复")
+        raise ValueError("duplicate migration version")
     return migrations
 
 
@@ -68,7 +68,7 @@ def plan(db_path: Path, directory: Path) -> tuple[list[Migration], list[Migratio
         connection.close()
     for migration in all_migrations:
         if migration.version in done and done[migration.version] != migration.checksum:
-            raise RuntimeError(f"已应用 migration {migration.version} 的 checksum 已变化")
+            raise RuntimeError(f"checksum of applied migration {migration.version} has changed")
     return all_migrations, [m for m in all_migrations if m.version not in done]
 
 
@@ -152,8 +152,8 @@ def upgrade(db_path: Path, directory: Path, backup_path: Path | None = None) -> 
                 broken = connection.execute("PRAGMA foreign_key_check").fetchall()
                 if broken:
                     raise RuntimeError(
-                        f"migration {migration.version} 关闭外键后留下 {len(broken)} 条"
-                        f"违约行：{broken[:5]}")
+                        f"migration {migration.version} left {len(broken)} "
+                        f"violating rows after disabling foreign keys: {broken[:5]}")
         connection.execute("PRAGMA optimize")
     finally:
         connection.close()

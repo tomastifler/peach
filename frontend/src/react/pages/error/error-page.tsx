@@ -10,13 +10,13 @@ import { AuthCard } from '../auth-card';
 import type { PageData } from '../page-data';
 
 const TITLES: Readonly<Record<string, string>> = {
-  403: '这里不能打开',
-  404: '四〇四',
-  409: '现在不能这样做',
+  403: 'You can\'t open this here',
+  404: '404',
+  409: 'You can\'t do this right now',
 };
 
 export function errorTitle(status: string | undefined): string {
-  return TITLES[status ?? ''] ?? '出了点问题';
+  return TITLES[status ?? ''] ?? 'Something went wrong';
 }
 
 export function ErrorPage({ data }: { data: PageData }) {
@@ -26,7 +26,7 @@ export function ErrorPage({ data }: { data: PageData }) {
   }, [title]);
   return (
     <AuthCard title={title} lede={data.status === '404' ? undefined : data.detail}>
-      <ButtonLink href="/" className="self-start">返回首页</ButtonLink>
+      <ButtonLink href="/" className="self-start">Back to home</ButtonLink>
     </AuthCard>
   );
 }

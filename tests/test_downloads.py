@@ -206,7 +206,7 @@ class SubmitTests(_Deployment):
 
     def test_the_reader_never_submits(self):
         self.service.available = False
-        with self.assertRaisesRegex(ValueError, "只在允许修改数据库的设备上可用"):
+        with self.assertRaisesRegex(ValueError, "only available on a device allowed to modify the database"):
             self.submit()
 
 
@@ -265,7 +265,7 @@ class PollingTests(_Deployment):
         task = self.service.cancel(task_id)
         self.assertEqual((task.state, self.provider.cancelled), (dl.CANCELLED, [task_id]))
         self.assertEqual(self.tick(900), 0)
-        with self.assertRaisesRegex(ValueError, "已经结束"):
+        with self.assertRaisesRegex(ValueError, "already finished"):
             self.service.cancel(task_id)
 
 
@@ -374,12 +374,12 @@ class LandingTests(_Deployment):
         self.tick(dl.LANDING_GRACE)
         task = self.service.store.get(task_id)
         self.assertEqual((task.state, task.failure), (dl.FAILED, "not_landed"))
-        self.assertIn("云端路径前缀", task.failure_detail)
+        self.assertIn("cloud path prefix", task.failure_detail)
 
 
 class SettingsTests(_Deployment):
     def test_settings_hold_no_credentials_and_check_the_pikpak_root(self):
-        with self.assertRaisesRegex(ValueError, "不是已声明的 PikPak 媒体根"):
+        with self.assertRaisesRegex(ValueError, "is not a declared PikPak media root"):
             self.service.save_settings({"pikpak_root": "Z:\\"}, self.declared)
         config = self.service.save_settings({
             "clouddrive_address": "127.0.0.1:19798", "targets": {"115": "115/云下载/"},

@@ -1,55 +1,55 @@
-# 浏览器添加 JAV
+# Adding JAV from the Browser
 
-在支持站点的影片详情页点击「加入 Peach」，Peach 按番号搜索磁力，自动选择现有质量排序中可确认属于该番号的正片资源，提交到默认网盘。文件落地后由现有云下载流程登记、补资料并整理。
+On a supported site's video detail page, click "Add to Peach". Peach searches for magnets by code, automatically picks the main-feature resource that can be confirmed as belonging to that code under the existing quality ranking, and submits it to the default cloud drive. After the file lands, the existing cloud download flow registers it, fills in metadata, and organizes it.
 
-## 准备
+## Preparation
 
-- 运行 Peach 的账本写入端。
-- 配置 115（经 CloudDrive2）或 PikPak 的云下载账号、目标目录，以及对应的挂载与入库路径。先用 Peach 的云下载完成一次下载，确认文件能入库。配置见[资源搜索](RESOURCE_SEARCH.md)与 [CloudDrive2](CLOUDDRIVE.md)。
-- 浏览器安装支持 GM API 的用户脚本管理器；以 [Tampermonkey 官方安装与浏览器说明](https://www.tampermonkey.net/)为准。
+- Run the ledger writer side of Peach.
+- Configure a 115 (via CloudDrive2) or PikPak cloud download account, a target directory, and the matching mount and ingest paths. First complete one download through Peach's cloud download and confirm the file can be ingested. For configuration see [Resource Search](RESOURCE_SEARCH.md) and [CloudDrive2](CLOUDDRIVE.md).
+- Install a userscript manager that supports the GM API in the browser; follow the [Tampermonkey official installation and browser notes](https://www.tampermonkey.net/).
 
-脚本由 [peach-mitao/peach-userscript](https://github.com/peach-mitao/peach-userscript) 独立维护，覆盖在线播放、数据库与资料、发行销售平台、片商官网、无码发行站和资源索引。各站的域名与识别方式见[完整站点清单](JAV_BROWSER_SITES.md)。镜像域名单独登记，不根据相似名称自动认作同一站。面向使用者的安装、配对和站点说明集中在 [Sleazy 发布页文案](JAV_USERSCRIPT_SLEAZY.md)，Peach 配置页只保留安装与配对操作。
+The script is maintained independently in [peach-mitao/peach-userscript](https://github.com/peach-mitao/peach-userscript), covering online playback, databases and reference data, release and sales platforms, studio sites, uncensored release sites, and resource indexes. Each site's domain and detection method are in the [full site list](JAV_BROWSER_SITES.md). Mirror domains are registered separately and are not automatically treated as the same site based on similar names. User-facing installation, pairing, and site notes are centralized in the [Sleazy release page copy](JAV_USERSCRIPT_SLEAZY.md); the Peach settings page keeps only the install and pairing actions.
 
-自动识别站点只读取作品详情页的主标题与明确番号字段；字段缺失或身份冲突时，使用选中番号的方式。标记为「选中番号」的站点需要先选中一个完整番号，再从脚本菜单选择「选中番号加入 Peach」，最后点击浮出的添加按钮。
+Auto-detected sites only read the main title and explicit code fields of a work detail page; when a field is missing or identities conflict, the selected-code method is used. Sites marked "Selected code" require selecting a complete code first, then choosing "Add selected code to Peach" from the script menu, and finally clicking the floating add button.
 
-## 安装与配对
+## Installation and Pairing
 
-1. 在运行 Peach 的电脑上打开「Peach 配置 → 下载渠道 → 浏览器添加 JAV」。
-2. 点击「安装 Peach 用户脚本」打开 [Sleazy 发布页](https://sleazyfork.org/zh-CN/scripts/600821)，再由脚本管理器安装。
-3. 选择默认下载渠道，点击「启用并生成令牌」，复制专用令牌。令牌只在本次生成后显示；离开页面后需要用「更新渠道与令牌」重新生成。
-4. 打开已登记站点，从脚本管理器菜单选择「配置 Peach 地址与令牌」，填写配置页显示的 Peach 地址和专用令牌。目标浏览器必须信任 Peach 的 HTTPS 证书；HTTP 只允许回环地址。
-5. 允许脚本管理器连接自己的 Peach 地址。远程设备填写该设备能访问的 Peach HTTPS 地址。
+1. On the computer running Peach, open "Peach Settings → Download Channels → Add JAV from Browser".
+2. Click "Install Peach userscript" to open the [Sleazy release page](https://sleazyfork.org/zh-CN/scripts/600821), then install through the script manager.
+3. Choose the default download channel, click "Enable and generate token", and copy the dedicated token. The token is shown only once after generation; after leaving the page, regenerate it with "Update channel and token".
+4. Open a registered site, choose "Configure Peach address and token" from the script manager menu, and enter the Peach address and dedicated token shown on the settings page. The target browser must trust Peach's HTTPS certificate; HTTP is allowed only for loopback addresses.
+5. Allow the script manager to connect to your own Peach address. For remote devices, enter the Peach HTTPS address that device can reach.
 
-专用令牌仅允许查询作品添加状态和发起 JAV 添加，网盘账号仍由 Peach 管理。点击「关闭浏览器添加」会撤销令牌并停止队列里尚未提交的添加；已经提交的云下载从活动页取消。
+The dedicated token only allows querying a work's add status and initiating JAV adds; the cloud drive account is still managed by Peach. Clicking "Turn off browser add" revokes the token and stops adds in the queue that have not yet been submitted; cloud downloads already submitted are cancelled from the activity page.
 
-## 添加与查看进度
+## Adding and Viewing Progress
 
-1. 打开影片详情页，点击「加入 Peach」。
-2. 脚本显示排队、搜索磁力、云下载或已入库状态。馆藏已有的影片直接显示「馆藏已有」。同一番号的进行中任务会复用。
-3. 云下载提交后，在 Peach 活动页查看下载与入库后处理进度。
+1. Open a video detail page and click "Add to Peach".
+2. The script shows queued, searching magnets, cloud download, or ingested status. Videos already in the library directly show "Already in library". An in-progress task for the same code is reused.
+3. After the cloud download is submitted, check download and post-ingest progress on the Peach activity page.
 
-搜索期间可以关闭源站页面，队列由 Peach 保存；Peach 重启后继续尚未完成的搜索。未找到资源和失败的添加，需要在原站点击「重试加入 Peach」。网络超时只提供状态查询，确认服务器结果后再决定是否重试。
+The source site page can be closed during the search; the queue is stored by Peach, and Peach resumes unfinished searches after a restart. Adds with no resource found or that failed must be retried on the original site with "Retry add to Peach". A network timeout offers only a status query; decide whether to retry after confirming the server's result.
 
-## 常见问题
+## FAQ
 
-| 现象 | 处理 |
+| Symptom | What to do |
 | --- | --- |
-| 没有按钮 | 核对域名、脚本启用和脚本管理器的站点访问权限；打开作品详情页，或选中番号后使用脚本菜单 |
-| 番号存在冲突 | 核对地址、标题和详情字段；脚本不会提交多个身份不一致的页面 |
-| 无法连接 Peach | 核对 Peach 地址、证书信任、服务在线状态和脚本管理器连接权限 |
-| 令牌无效或无权限 | 在本机下载渠道更新令牌，并重新配置脚本；reader 不能接收添加 |
-| 下载渠道未配置 | 保存网盘账号与目标目录后启用 |
-| 未找到资源 | 在 Peach 云下载弹层手动查找或选择其他版本，之后可再次主动添加 |
-| 云下载或入库失败 | 在 Peach 活动页查看具体原因，按现有云下载流程重试 |
+| No button | Check the domain, that the script is enabled, and the script manager's site access permission; open a work detail page, or select a code and use the script menu |
+| Code conflict | Check the address, title, and detail fields; the script does not submit multiple pages with inconsistent identities |
+| Cannot connect to Peach | Check the Peach address, certificate trust, that the service is online, and the script manager's connection permission |
+| Token invalid or no permission | Update the token in the local download channel and reconfigure the script; a reader cannot receive adds |
+| Download channel not configured | Save the cloud drive account and target directory, then enable |
+| No resource found | Search manually or pick another version in the Peach cloud download popover, then add again manually |
+| Cloud download or ingest failed | Check the specific reason on the Peach activity page and retry through the existing cloud download flow |
 
-来源地址保存页面协议、主机、路径及清单允许的作品标识参数，例如 JavLibrary 的 `v`、FANZA 的 `id`。其他查询参数、片段、Cookie 和网站播放器地址不提交给 Peach。直接播放外来在线来源属于后续功能，见[公开路线图](https://github.com/orgs/peach-mitao/projects/7)。
+The source address stores the page protocol, host, path, and the work-identifying parameters allowed by the manifest, for example `v` for JavLibrary and `id` for FANZA. Other query parameters, fragments, cookies, and site player addresses are not submitted to Peach. Directly playing external online sources is a later feature; see the [public roadmap](https://github.com/orgs/peach-mitao/projects/7).
 
-## 核验范围
+## Verification Scope
 
-临时账本与模拟网盘完成服务端回归；模拟 GM API 的真实 Chromium 页面覆盖桌面、390×844、SPA 切页、身份冲突、番号规范化与请求重试。真实 Tampermonkey 扩展安装、MissAV／Jable 当前页面和真实网盘下载的联合验收未取得。
+Server-side regression was completed with a temporary ledger and a simulated cloud drive; a real Chromium page with a simulated GM API covered desktop, 390×844, SPA page switches, identity conflicts, code normalization, and request retries. A combined acceptance of the real Tampermonkey extension install, the current MissAV / Jable pages, and real cloud drive downloads was not obtained.
 
-## 制品同步
+## Artifact Sync
 
-脚本与站点规则的唯一维护源在独立仓库。Peach 的 `web/integrations/` 保存同一次发布的完整安装脚本、站点快照与 `jav-userscript-release.json` 来源记录；安装端点直接返回该脚本，服务端使用本地快照独立校验来源地址。运行时不下载远程规则或代码。
+The single maintenance source of the script and site rules is the independent repository. Peach's `web/integrations/` holds the complete install script, site snapshot, and `jav-userscript-release.json` provenance record from the same release; the install endpoint returns that script directly, and the server independently validates source addresses with the local snapshot. Remote rules or code are not downloaded at runtime.
 
-更新时在用户脚本仓库构建、验证并提交，通过其 `scripts/export-peach.mjs` 导出到 Peach 隔离工作树，再按本项目测试和集成入口交付。来源记录包含上游提交、版本与 SHA256；同步方法见[独立仓库说明](https://github.com/peach-mitao/peach-userscript#发布与-peach-同步)。
+To update, build, verify, and commit in the userscript repository, export to the Peach isolated worktree through its `scripts/export-peach.mjs`, then deliver through this project's tests and integration entry. The provenance record contains the upstream commit, version, and SHA256; for the sync method see the [independent repository notes](https://github.com/peach-mitao/peach-userscript#发布与-peach-同步).

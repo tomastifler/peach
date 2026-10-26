@@ -218,7 +218,7 @@ def _consistent_copy(source: Path, destination: Path) -> None:
         started = time.monotonic()
         def progress(_status, _remaining, _total):
             if time.monotonic() - started > 20:
-                raise TimeoutError("浏览器历史快照未取得，请退出该浏览器后重新读取")
+                raise TimeoutError("Browser history snapshot was not obtained; quit that browser and read again")
         with closing(sqlite3.connect(destination)) as destination_db:
             source_db.backup(destination_db, pages=256, progress=progress)
 
@@ -375,20 +375,20 @@ def refresh_history(
             def report(count=0, index=index):
                 if progress:
                     progress(stage="reading", checked=count, total=None,
-                             message=f"读取浏览记录：第 {index + 1} / {len(sources)} 个浏览器资料，已读取 {count:,} 条")
+                             message=f"Reading browsing history: browser profile {index + 1} / {len(sources)}, {count:,} entries read")
             try:
                 with tempfile.TemporaryDirectory(prefix="peach-history-") as temp_dir:
                     snapshot = Path(temp_dir) / "history.sqlite"
                     if progress:
                         progress(stage="snapshot", checked=0, total=None,
-                                 message=f"准备浏览器快照：第 {index + 1} / {len(sources)} 个资料")
+                                 message=f"Preparing browser snapshot: profile {index + 1} / {len(sources)}")
                     _consistent_copy(source.path, snapshot)
                     report()
                     visits = _read_visits(snapshot, source.engine or source.browser, progress=report)
                     report(len(visits))
             except (sqlite3.DatabaseError, OSError, ValueError, TypeError, OverflowError, BrowserexportError) as error:
-                message = ("历史文件正在使用，请退出该浏览器后重新读取" if "locked" in str(error).casefold()
-                           else "浏览器历史未取得，请检查资料目录或退出浏览器后重试")
+                message = ("The history file is in use; quit that browser and read again" if "locked" in str(error).casefold()
+                           else "Browser history was not obtained; check the profile directory or quit the browser and try again")
                 results.append({"browser": source.browser, "profile": source.profile, "visits": 0,
                                 "added": 0, "status": "failed", "error": message})
                 continue
@@ -431,7 +431,7 @@ def _normalize_takeout_url(value: str) -> str:
 def _parse_takeout_date(value: str) -> datetime:
     match = TAKEOUT_DATE_RE.fullmatch(value.replace("\u202f", " "))
     if not match:
-        raise ValueError("Google My Activity 时间格式无法识别")
+        raise ValueError("Google My Activity time format is not recognized")
     naive = datetime.strptime(match.group("date"), "%b %d, %Y, %I:%M:%S %p")
     source_timezone = HONG_KONG_TIMEZONE if match.group("zone") == "HKT" else UTC
     return naive.replace(tzinfo=source_timezone).astimezone(UTC)
@@ -524,16 +524,16 @@ def _read_takeout_archive(path: Path) -> list[tuple[str, str, list[HistoryVisit]
         if TAKEOUT_HISTORY_MEMBER not in members and not any(
             member in members for _browser, _profile, member in TAKEOUT_ACTIVITY_MEMBERS
         ):
-            raise ValueError("Takeout 未包含可识别的浏览或搜索活动")
+            raise ValueError("Takeout contains no recognizable browsing or search activity")
         history_visits: list[HistoryVisit] = []
         if TAKEOUT_HISTORY_MEMBER in members:
             history_payload = json.loads(archive.read(TAKEOUT_HISTORY_MEMBER))
             history_rows = history_payload.get("Browser History")
             if not isinstance(history_rows, list):
-                raise ValueError("Takeout Chrome History 缺少 Browser History 列表")
+                raise ValueError("Takeout Chrome History is missing the Browser History list")
             for index, row in enumerate(history_rows, 1):
                 if not isinstance(row, dict) or not row.get("url") or row.get("time_usec") is None:
-                    raise ValueError("Takeout Chrome History 含无效记录")
+                    raise ValueError("Takeout Chrome History contains an invalid record")
                 url = str(row["url"])
                 time_usec = int(row["time_usec"])
                 digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
@@ -555,7 +555,7 @@ def _read_takeout_archive(path: Path) -> list[tuple[str, str, list[HistoryVisit]
             activity.feed(archive.read(member).decode("utf-8"))
             activity.close()
             if activity.errors:
-                raise ValueError(f"{profile} 含无法解析的活动记录：{activity.errors}")
+                raise ValueError(f"{profile} contains activity records that cannot be parsed: {activity.errors}")
             sources.append((browser, profile, activity.visits, activity.skipped))
     return sources
 
@@ -1180,33 +1180,33 @@ def _taste_analysis(
     browser_only = next((name for name in browser_names if peach_categories[name] <= 0), "")
 
     if browser_names and peach_names:
-        headline = f"浏览兴趣以{browser_names[0]}为主，Peach 中稳定出现{'、'.join(peach_names[:3])}。"
+        headline = f"Browsing interest is mainly {browser_names[0]}, and {', '.join(peach_names[:3])} appears consistently in Peach."
     elif browser_names:
-        headline = f"浏览兴趣目前以{browser_names[0]}为主，Peach 观看证据仍偏少。"
+        headline = f"Browsing interest is currently mainly {browser_names[0]}; Peach viewing evidence is still thin."
     elif peach_names:
-        headline = f"Peach 观看行为目前更集中在{'、'.join(peach_names[:3])}。"
+        headline = f"Peach viewing is currently more concentrated on {', '.join(peach_names[:3])}."
     else:
-        headline = "证据还不足以形成稳定口味结论。"
+        headline = "Evidence is not yet enough for a stable taste conclusion."
 
     points: list[dict[str, str]] = []
     if browser_names:
         points.append({
-            "label": "浏览主线",
-            "text": "、".join(browser_names[:3]),
+            "label": "Browsing focus",
+            "text": ", ".join(browser_names[:3]),
         })
     if peach_names:
         points.append({
-            "label": "Peach 印证",
-            "text": "、".join(peach_names),
+            "label": "Peach corroboration",
+            "text": ", ".join(peach_names),
         })
     if shared:
         points.append({
-            "label": "共同信号",
-            "text": "、".join(shared),
+            "label": "Shared signals",
+            "text": ", ".join(shared),
         })
     elif browser_only:
         points.append({
-            "label": "待验证",
+            "label": "To verify",
             "text": browser_only,
         })
 
@@ -1214,11 +1214,11 @@ def _taste_analysis(
     assets = int(peach["assets"])
     explicit = int(peach["liked"]) + int(peach["disliked"])
     if visits >= 1000 and assets >= 50 and explicit >= 10:
-        confidence = ("high", "可信度较高")
+        confidence = ("high", "Higher confidence")
     elif visits >= 1000 and assets >= 20:
-        confidence = ("medium", "可信度中等")
+        confidence = ("medium", "Medium confidence")
     else:
-        confidence = ("early", "仍在学习")
+        confidence = ("early", "Still learning")
 
     explore: list[dict[str, object]] = []
     used_tags: set[str] = set()
@@ -1230,10 +1230,10 @@ def _taste_analysis(
         used_tags.add(tag)
         corroborated = peach_categories[category] > 0
         explore.append({
-            "kind": "tag", "tag": tag, "title": f"探索 {tag}",
+            "kind": "tag", "tag": tag, "title": f"Explore {tag}",
             "detail": (
-                f"浏览信号 {int(signal):,} 次 · 馆藏 {inventory[tag]:,} 部 · "
-                + ("已有观看印证" if corroborated else "尚无观看印证")
+                f"Browsing signals {int(signal):,} · library {inventory[tag]:,} works · "
+                + ("viewing corroborated" if corroborated else "no viewing corroboration yet")
             ),
             "items": inventory[tag], "signal": int(signal), "corroborated": corroborated,
         })
@@ -1247,23 +1247,23 @@ def _taste_analysis(
     next_steps: list[dict[str, object]] = []
     if creator_leads:
         next_steps.append({
-            "kind": "follow", "title": "追踪常访创作者",
-            "detail": "、".join(str(row["name"]) for row in creator_leads),
+            "kind": "follow", "title": "Follow frequently visited creators",
+            "detail": ", ".join(str(row["name"]) for row in creator_leads),
             "route": "/subscriptions",
         })
     if int(peach["coverage"]["untagged"]) or int(peach["coverage"]["unidentified"]):
         next_steps.append({
-            "kind": "review", "title": "补齐馆藏证据",
+            "kind": "review", "title": "Fill in library evidence",
             "detail": (
-                f"{int(peach['coverage']['untagged'])} 项待补 Tag · "
-                f"{int(peach['coverage']['unidentified'])} 项待补身份"
+                f"{int(peach['coverage']['untagged'])} need tags · "
+                f"{int(peach['coverage']['unidentified'])} need identification"
             ),
             "route": "/review",
         })
     if explicit < 10:
         next_steps.append({
-            "kind": "feedback", "title": "去馆藏评价作品",
-            "detail": f"当前喜欢 {int(peach['liked'])} · 不合口味 {int(peach['disliked'])}",
+            "kind": "feedback", "title": "Rate works in the library",
+            "detail": f"Currently liked {int(peach['liked'])} · disliked {int(peach['disliked'])}",
             "route": "/",
         })
     return {
@@ -1612,7 +1612,7 @@ def analyze_history(store_path: Path, output_dir: Path, *, since: str | None = N
         def report_analysis():
             if progress:
                 progress(stage="analyzing", checked=total, total=ceiling,
-                         message=f"分析浏览记录：已处理 {total:,} / {ceiling:,} 条")
+                         message=f"Analyzing browsing history: processed {total:,} / {ceiling:,} entries")
         report_analysis()
         for source_key, visited_at, url, browser, profile, title, bookmark in db.execute(query, params):
             total += 1
@@ -1644,7 +1644,7 @@ def analyze_history(store_path: Path, output_dir: Path, *, since: str | None = N
         report_analysis()
 
     if progress:
-        progress(stage="reporting", checked=0, total=None, message="正在生成口味分析报告与候选清单")
+        progress(stage="reporting", checked=0, total=None, message="Generating the taste analysis report and candidate list")
 
     stamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
     tag_path = output_dir / f"taste-tag-candidates-{stamp}.csv"
@@ -1656,18 +1656,18 @@ def analyze_history(store_path: Path, output_dir: Path, *, since: str | None = N
     lines = [
         "# 浏览记录口味分析",
         "",
-        f"- 生成时间：{datetime.now().astimezone().isoformat(timespec='seconds')}",
-        f"- 范围：{min_time or '无'} 至 {max_time or '无'}",
-        f"- 访问记录：{total - bookmarks_count:,}",
-        f"- 浏览器书签：{bookmarks_count:,}",
-        f"- 数据源：{source_count}",
-        "- 隐私：报告不含完整 URL、页面标题或原始搜索记录；所有结论均为 candidate。",
+        f"- Generated: {datetime.now().astimezone().isoformat(timespec='seconds')}",
+        f"- Range: {min_time or 'none'} to {max_time or 'none'}",
+        f"- Visits: {total - bookmarks_count:,}",
+        f"- Browser bookmarks: {bookmarks_count:,}",
+        f"- Sources: {source_count}",
+        "- Privacy: the report contains no full URLs, page titles or raw search records; all conclusions are candidates.",
         "",
     ]
-    _append_ranking(lines, "口味维度候选", category_visits)
-    _append_ranking(lines, "Tag 候选", tag_visits)
-    _append_ranking(lines, "创作者候选", creator_visits)
-    _append_ranking(lines, "高频域名", domains)
+    _append_ranking(lines, "Taste dimension candidates", category_visits)
+    _append_ranking(lines, "Tag candidates", tag_visits)
+    _append_ranking(lines, "Creator candidates", creator_visits)
+    _append_ranking(lines, "Frequent domains", domains)
     report_path.write_text("\n".join(lines), encoding="utf-8")
     return {
         "visits": total - bookmarks_count,
@@ -1714,7 +1714,7 @@ def _append_ranking(lines: list[str], title: str, values: Counter[str], limit: i
     if values:
         lines.extend(f"| {name.replace('|', '\\|')} | {count:,} |" for name, count in values.most_common(limit))
     else:
-        lines.append("| 未提取到 | 0 |")
+        lines.append("| Nothing extracted | 0 |")
     lines.append("")
 
 

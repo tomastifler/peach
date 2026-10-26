@@ -74,7 +74,7 @@ class OrphanRecordsTests(unittest.TestCase):
             self.assertEqual(len(record_rehome.planned_revert(connection, record_rehome.MANUAL_SOURCE)), 1)
 
     def test_attaching_refuses_a_target_outside_the_library(self):
-        with self.assertRaisesRegex(ValueError, "在库"):
+        with self.assertRaisesRegex(ValueError, "in the library"):
             w_orphan_attach(self.contract, {"id": 7, "target": 14})
         self.assertEqual(self.owners("asset_preference"), [7])
 

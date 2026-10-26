@@ -56,7 +56,7 @@ def context_fields(width: int, height: int, duration: float) -> tuple[str | None
 
 def probe_file(ffprobe: str, path: str, timeout: float = TIMEOUT_SECONDS) -> tuple:
     if skip_background_read(path):
-        raise ValueError('STRM 和 ISO 不执行视频探测')
+        raise ValueError('STRM and ISO files are not probed for video')
     result = subprocess.run(
         [
             ffprobe, "-v", "error", "-rw_timeout", "8000000",

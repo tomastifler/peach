@@ -10,10 +10,10 @@ describe('原位改字', () => {
   after(async () => { await browser?.close(); });
   for (const viewport of VIEWPORTS) {
     it(`改字浮条与多选操作条共享玻璃、排版与按钮（${viewport.name}）`, async () => {
-      const opened = await visit(browser, '/settings/library?section=' + encodeURIComponent('应用与维护') + '&edit', viewport);
+      const opened = await visit(browser, '/settings/library?section=' + encodeURIComponent('App & maintenance') + '&edit', viewport);
       try {
         const { page } = opened;
-        await page.getByRole('region', { name: '数据上传', exact: true }).waitFor();
+        await page.getByRole('region', { name: 'Data upload', exact: true }).waitFor();
         await settle(page);
         const dock = page.getByRole('group', { name: '文案编辑', exact: true });
         await dock.waitFor();

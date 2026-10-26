@@ -265,7 +265,7 @@ class WebJsBehaviourTests(unittest.TestCase):
              [{"is_jav": True, "code": "ABC-123", "display_title": "",
                "name": "ABC-123", "edition_badges": ["无码"]}],
              '<span class="ui-javidentity"><strong class="ui-javcode">ABC-123</strong>'
-             '<small class="javedition uncensored">无码</small></span>'),
+             '<small class="javedition uncensored">Uncensored</small></span>'),
         ])
 
     # ── 标签显示名 ──────────────────────────────────────────────────────────
@@ -468,8 +468,8 @@ class WebJsBehaviourTests(unittest.TestCase):
             ("core.js", "fmtDur", [3661], "1:01:01"),
             # 48 小时起按天读：「1284:00:00」没人一眼读得出是五十多天。
             ("core.js", "fmtDur", [48 * 3600 - 1], "47:59:59"),
-            ("core.js", "fmtDur", [48 * 3600], "2 天"),
-            ("core.js", "fmtDur", [4622400], "53 天 12 小时"),
+            ("core.js", "fmtDur", [48 * 3600], "2 d"),
+            ("core.js", "fmtDur", [4622400], "53 d 12 h"),
             # fmtClock 是播放器时间轴，0 秒是真的 0 秒。
             ("core.js", "fmtClock", [0], "0:00"),
             ("core.js", "fmtClock", [-5], "0:00"),
@@ -482,9 +482,9 @@ class WebJsBehaviourTests(unittest.TestCase):
             ("core.js", "fmtSize", [512 * 1024], "512 KB"),
             # 0 是真的 0（可回收空间、已下载量）；缺值与坏值是未知。
             ("core.js", "fmtSize", [0], "0 B"),
-            ("core.js", "fmtSize", [None], "大小未知"),
-            ("core.js", "fmtSize", ["不是数字"], "大小未知"),
-            ("core.js", "fmtSize", [-1], "大小未知"),
+            ("core.js", "fmtSize", [None], "Size unknown"),
+            ("core.js", "fmtSize", ["不是数字"], "Size unknown"),
+            ("core.js", "fmtSize", [-1], "Size unknown"),
             # 首字母按字素取：emoji、肤色与 ZWJ 组合整枚取，不劈成半个代理对。
             ("core.js", "firstGrapheme", ["🦊 Fox"], "🦊"),
             ("core.js", "firstGrapheme", ["👩🏽‍💻 Priya"], "👩🏽‍💻"),

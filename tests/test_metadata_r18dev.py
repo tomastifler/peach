@@ -166,12 +166,12 @@ class R18DevSourceTests(unittest.TestCase):
         with self.assertRaises(SourceFailure) as caught:
             R18DevSource().parse(Page(DETAIL_URL, encoded(dict(DETAIL, content_id="118abw359"))), "ABW-358")
         self.assertEqual((caught.exception.reason, caught.exception.kind, str(caught.exception)),
-                         (FailureReason.PARSE_ERROR, "unavailable", "来源返回的番号不匹配"))
+                         (FailureReason.PARSE_ERROR, "unavailable", "The code returned by the source does not match"))
         for body in (b"<html>cloudflare</html>", b"[1, 2]"):
             with self.subTest(body=body), self.assertRaises(SourceFailure) as caught:
                 R18DevSource().parse(Page(DETAIL_URL, body), "ABW-358")
             self.assertEqual((caught.exception.reason, str(caught.exception)),
-                             (FailureReason.PARSE_ERROR, "r18.dev 返回的不是作品 JSON"))
+                             (FailureReason.PARSE_ERROR, "r18.dev did not return work JSON"))
         with self.assertRaises(SourceFailure) as caught:
             R18DevSource().query("ABW-358", session=Session(serve({DETAIL_URL: Unavailable("HTTP 503")})))
         self.assertEqual((caught.exception.reason, caught.exception.status_code), (FailureReason.SERVER_ERROR, 503))
@@ -238,8 +238,8 @@ class FailureWordingTests(unittest.TestCase):
         self.assertEqual(describe_failure(SourceFailure(FailureReason.SERVER_ERROR, "HTTP 503", status_code=503)),
                          "来源返回 HTTP 503")
         self.assertEqual(describe_failure(SourceFailure(FailureReason.AUTH_REQUIRED, "javdb 要求登录")), "javdb 要求登录")
-        self.assertEqual(describe_failure(SourceFailure(FailureReason.PARSE_ERROR, "来源返回的番号不匹配")),
-                         "来源返回的番号不匹配")
+        self.assertEqual(describe_failure(SourceFailure(FailureReason.PARSE_ERROR, "The code returned by the source does not match")),
+                         "The code returned by the source does not match")
         self.assertEqual(describe_failure(Unavailable("HTTP 503")), "来源返回 HTTP 503")
         self.assertEqual(describe_failure(ValueError("x")), "处理出错（ValueError）")
 

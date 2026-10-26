@@ -1,49 +1,49 @@
-# 资源搜索配置
+# Resource Search Configuration
 
-Peach 通过 Prowlarr 或 Jackett 提供的 Torznab 接口查询资源。先在索引器管理器里配置站点，再把接口地址和 API key 填入 Peach。
+Peach queries resources through the Torznab interface provided by Prowlarr or Jackett. First configure sites in the indexer manager, then enter the interface address and API key in Peach.
 
-## 准备索引器
+## Preparing the Indexer
 
-1. 在运行 Peach 的机器或它能访问的服务器上启动 Prowlarr 或 Jackett。
-2. 在管理器中添加需要的站点，完成该站要求的登录或连接配置。
-3. 使用管理器的测试、手动搜索功能，确认站点能返回结果。
-4. 复制该站的 Torznab 地址，并取得管理器的 API key。Jackett 的入口名为 **Copy Torznab Feed**；使用所选站点的接口。
+1. Start Prowlarr or Jackett on the machine running Peach or on a server it can reach.
+2. Add the sites you need in the manager and complete the login or connection setup that site requires.
+3. Use the manager's test and manual search features to confirm the site can return results.
+4. Copy the site's Torznab address and get the manager's API key. In Jackett the entry is named **Copy Torznab Feed**; use the interface of the selected site.
 
-界面和安装说明以 [Prowlarr 官方文档](https://wiki.servarr.com/prowlarr)与 [Jackett 官方说明](https://github.com/Jackett/Jackett#configuration)为准。
+For UI and installation instructions, follow the [Prowlarr official documentation](https://wiki.servarr.com/prowlarr) and the [Jackett official notes](https://github.com/Jackett/Jackett#configuration).
 
-## 填入 Peach
+## Entering It in Peach
 
-打开 **配置 → 来源与订阅 → 资源搜索**，添加索引器：
+Open **Settings → Sources and Subscriptions → Resource Search** and add an indexer:
 
-| 字段 | 填写内容 |
+| Field | What to enter |
 | --- | --- |
-| 名称 | 便于识别的管理器与站点名称 |
-| Torznab 地址 | 该站的 HTTP 或 HTTPS API 地址 |
-| API key | 管理器提供的密钥，单独填写 |
-| 启用 | 参与资源搜索的索引器打开此项 |
+| Name | A manager and site name that is easy to recognize |
+| Torznab URL | The site's HTTP or HTTPS API address |
+| API key | The key provided by the manager, entered separately |
+| Enabled | Turn this on for indexers that take part in resource search |
 
-复制的地址若包含 `?apikey=…`、`&t=…` 等查询参数，把查询部分去掉，只保留协议、主机、端口和路径。API key 填入独立字段。地址不能包含用户名、密码、查询参数或片段。
+If the copied address contains query parameters such as `?apikey=…` or `&t=…`, remove the query part and keep only the protocol, host, port, and path. Enter the API key in its own field. The address must not contain a username, password, query parameters, or a fragment.
 
-地址由 Peach 服务访问。`127.0.0.1` 指运行 Peach 的机器；Peach 在容器中运行时，它指容器本身。索引器位于另一台机器时，填写 Peach 能访问的主机名或局域网地址。
+The address is accessed by the Peach service. `127.0.0.1` refers to the machine running Peach; when Peach runs in a container, it refers to the container itself. When the indexer is on another machine, enter a hostname or LAN address Peach can reach.
 
-最多配置 4 个索引器。填写后点 **保存索引器**。读取配置只显示 API key 是否已保存；同一接口保留原密钥时，密钥字段留空即可。
+Up to 4 indexers can be configured. After filling in, click **Save indexers**. Reading the configuration only shows whether the API key is saved; to keep the original key for the same interface, leave the key field empty.
 
-## 验证搜索
+## Verifying Search
 
-1. 找到一部已知在索引器中可搜到的作品，在 Peach 的云下载界面执行资源搜索。
-2. 检查候选的番号、体积、做种与质量信息。
-3. 选中所需候选后提交下载。
+1. Find a work known to be searchable in the indexer and run a resource search in Peach's cloud download interface.
+2. Check the candidate's code, size, seeders, and quality information.
+3. Select the candidate you want and submit the download.
 
-有候选表示搜索链路可用；提交下载还需要独立配置 115 或 PikPak。CloudDrive2 的设置见 [完整配置与调优说明](CLOUDDRIVE.md)。
+Having candidates means the search path works; submitting a download also needs 115 or PikPak configured separately. For CloudDrive2 settings see the [full configuration and tuning notes](CLOUDDRIVE.md).
 
-## 常见问题
+## FAQ
 
-| 现象 | 检查位置 |
+| Symptom | Where to check |
 | --- | --- |
-| 连接失败 | 索引器进程、地址和端口；确认 Peach 所在机器或容器能访问 |
-| 认证失败 | API key 是否正确、保存后是否仍标记为已配置 |
-| 地址被拒绝 | 去掉地址中的查询参数、用户名、密码和片段 |
-| 管理器也搜不到 | 先处理站点登录、来源连接和搜索能力 |
-| 管理器有结果，Peach 没有候选 | 核对是否为同一番号，以及候选的体积、做种和版本信息 |
+| Connection failed | The indexer process, address, and port; confirm the machine or container running Peach can reach it |
+| Authentication failed | Whether the API key is correct and still marked as configured after saving |
+| Address rejected | Remove query parameters, username, password, and fragment from the address |
+| The manager can't find it either | First fix the site login, source connection, and search capability |
+| The manager has results but Peach has no candidates | Check that it is the same code, and the candidate's size, seeders, and version information |
 
-排查时不要在截图或问题报告中暴露 API key。
+When troubleshooting, do not expose the API key in screenshots or issue reports.

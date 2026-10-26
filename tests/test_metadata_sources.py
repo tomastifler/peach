@@ -246,7 +246,7 @@ class FailureReasonTests(unittest.TestCase):
         self.assertIsInstance(error, MetadataProviderError)
         self.assertEqual((error.kind, error.status_code, error.retryable, error.temporary, error.detail),
                          ("auth", 403, False, True, "cloudflare_challenge"))
-        self.assertEqual(str(error), "AVSOX 需要登录或已被拒绝：撞上 Cloudflare 挑战页")
+        self.assertEqual(str(error), "AVSOX requires login or was rejected: 撞上 Cloudflare 挑战页")
         missing = SourceFailure(FailureReason.NOT_FOUND, "javdb 没有这个番号").provider_error("javdb")
         self.assertEqual((missing.kind, str(missing)), ("not_found", "javdb 没有这个番号"))
         parse = SourceFailure(FailureReason.PARSE_ERROR, "结构对不上").provider_error("javdb")

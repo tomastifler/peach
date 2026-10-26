@@ -1,59 +1,59 @@
-# 安全说明
+# Security
 
-Peach is a single-user, self-hosted application: one deployment serves one person, with no accounts, roles or tenant isolation. The threat model covers one thing only: other devices on the same LAN being let in by accident. Browser access is protected by an optional access password (scrypt-hashed, login attempts limited per client); scripts use an internal token under `<data root>/secrets/`, and `peach serve` refuses to start on a non-loopback address when it has no token. Source deployments serve HTTPS with a self-signed local CA (only the CA certificate is ever distributed); the standalone Windows package serves plain HTTP on the LAN. Do not expose Peach to the public internet through port forwarding or a reverse proxy: there is no audit log and no second factor. The built-in Cloudflare entry refuses to start without an access password and is meant for temporary previews. Report vulnerabilities through the repository's GitHub **Security** tab (**Private vulnerability reporting**), not a public issue. The rest of this document is in Chinese.
+Peach is a single-user, self-hosted application: one deployment serves one person, with no accounts, roles or tenant isolation. The threat model covers one thing only: other devices on the same LAN being let in by accident. Browser access is protected by an optional access password (scrypt-hashed, login attempts limited per client); scripts use an internal token under `<data root>/secrets/`, and `peach serve` refuses to start on a non-loopback address when it has no token. Source deployments serve HTTPS with a self-signed local CA (only the CA certificate is ever distributed); the standalone Windows package serves plain HTTP on the LAN. Do not expose Peach to the public internet through port forwarding or a reverse proxy: there is no audit log and no second factor. The built-in Cloudflare entry refuses to start without an access password and is meant for temporary previews. Report vulnerabilities through the repository's GitHub **Security** tab (**Private vulnerability reporting**), not a public issue.
 
-## 威胁模型
+## Threat model
 
-Peach 是单人自托管应用：一个部署只服务一个人，没有账号体系、没有权限分级，也没有多租户隔离。
+Peach is a single-user, self-hosted application: one deployment serves one person, with no account system, no permission tiers and no multi-tenant isolation.
 
-Linux 无桌面部署的配置管理接受经过鉴权的回环与私有网络连接，拒绝公网、链路本地、保留地址和携带转发头的管理请求。地址分类使用 Python 标准库。容器端口默认发布到宿主机回环，部署方式见 [Docker 部署](docs/DOCKER.md)。
+Configuration management on a headless Linux deployment accepts authenticated loopback and private-network connections, and rejects management requests from public, link-local or reserved addresses or carrying forwarding headers. Address classification uses the Python standard library. Container ports are published to the host loopback by default; see [Docker deployment](docs/DOCKER.md) for how to deploy.
 
-能打开 Peach 的人，就能看到整个馆藏，也能做任何修改。Peach 只防一件事：同一局域网里的其他设备被无意放进来。多人共用和云端托管不在考虑范围内。
+Anyone who can open Peach can see the whole library and make any change. Peach guards against one thing only: other devices on the same LAN being let in by accident. Shared use by several people and cloud hosting are out of scope.
 
-## 访问密码
+## Access password
 
-访问密码决定浏览器打开 Peach 时要不要登录。
+The access password decides whether a browser has to sign in to open Peach.
 
-- 首次设置页可以设访问密码，也可以留空。之后在配置页「网络与访问 → 访问密码」里修改或关闭。
-- **不设密码时，任何能连到 Peach 的设备打开地址就能进入。** 局域网里有其他人时，请务必设置。
-- 密码长度 8–256 个字符。修改密码需要输入当前密码；关闭密码还要勾选确认访问范围。
-- 登录时勾选「保持登录」可保持 30 天；不勾选只在这次浏览器会话内有效，最长 12 小时。刷新页面不会延长有效期。
-- 修改密码后，其他浏览器的登录全部失效，当前设备保持登录。
-- 同一来源每分钟最多尝试登录 10 次，超出后要等一分钟。
-- 密码以 scrypt 哈希保存在本机 `<Peach 数据目录>/secrets/access.json`，不进数据库，也不参与任何同步。
+- The first-run setup page lets you set an access password or leave it blank. Afterwards, change or turn it off under "Network & Access → Access password" on the configuration page.
+- **With no password set, any device that can reach Peach gets in just by opening the address.** If other people are on your LAN, be sure to set one.
+- The password must be 8–256 characters. Changing it requires the current password; turning it off also requires ticking a confirmation of the access scope.
+- Ticking "Stay signed in" at login keeps you signed in for 30 days; otherwise the session lasts only for that browser session, 12 hours at most. Refreshing the page does not extend it.
+- After a password change, sign-ins in all other browsers are invalidated; the current device stays signed in.
+- Each source may attempt at most 10 logins per minute; beyond that it must wait a minute.
+- The password is stored as an scrypt hash in `<Peach data root>/secrets/access.json` on this machine. It never enters the database and is never synced.
 
-没有 `access.json` 的已有部署，登录页使用下面的访问口令。
+For existing deployments without an `access.json`, the login page uses the access token below.
 
-## 访问口令
+## Access token
 
-访问口令供脚本和 API 调用使用，和访问密码是两套凭据。
+The access token is for scripts and API calls. It is a separate credential from the access password.
 
-- 口令保存在 `<Peach 数据目录>/secrets/auth-token`，由 `peach init` 自动生成。
-- `peach token` 查看口令，`peach token --rotate` 换一个新的，换完要重启服务。换口令会让旧口令和用旧口令登录的会话失效；用访问密码登录的浏览器不受影响。
-- 读取顺序是 `--token` 参数、`PEACH_TOKEN` 环境变量、口令文件。不要长期用 `--token <口令>` 传递，同一台电脑上的其他程序能从进程列表看到命令行。口令也不写进 `config.toml`，因为那份文件可能会被贴进 issue。
-- 脚本用 `X-Token` 请求头携带口令。`?t=<口令>` 查询参数也能用，但口令会留在访问日志、代理日志和浏览历史里，只在一次性场合用。
-- **`peach serve` 监听非回环地址却没有口令时，会直接拒绝启动**，而不是只打印警告：托盘在后台启动服务，警告没人看得见，服务却已经对整个局域网开放了。只监听 `127.0.0.1` 时可以没有口令。
-- 开启两台电脑之间的复制时，两台要用同一份口令文件，复制过去即可。
+- The token is stored in `<Peach data root>/secrets/auth-token` and is generated automatically by `peach init`.
+- `peach token` shows the token; `peach token --rotate` replaces it with a new one, and the service must be restarted afterwards. Rotating invalidates the old token and any sessions signed in with it; browsers signed in with the access password are unaffected.
+- The lookup order is the `--token` argument, the `PEACH_TOKEN` environment variable, then the token file. Do not pass `--token <token>` for long-term use: other programs on the same computer can see the command line in the process list. The token is also never written to `config.toml`, because that file may get pasted into an issue.
+- Scripts send the token in the `X-Token` request header. The `?t=<token>` query parameter also works, but the token then stays in access logs, proxy logs and browsing history, so use it only for one-off cases.
+- **`peach serve` refuses to start when it listens on a non-loopback address without a token**, rather than just printing a warning: the tray starts the service in the background where nobody sees a warning, yet the service would already be open to the whole LAN. Listening on `127.0.0.1` only is fine without a token.
+- When replication between two computers is enabled, both must use the same token file; just copy it over.
 
-口令与密码的比对都用常量时间比较。
+Both the token and the password are compared with a constant-time comparison.
 
-## 网络暴露
+## Network exposure
 
-- `peach serve` 默认只监听 `127.0.0.1`，地址和端口在 `<Peach 数据目录>/config.toml` 的 `[server]` 段。只有把 `host` 改成 `0.0.0.0` 或某个局域网地址，同一网段的设备才能访问。独立测试包在首次设置里选「同一局域网的设备」时监听 `0.0.0.0`。
-- 源码部署使用 HTTPS，证书由本机自签的 CA 签发，不用公开 CA。`peach init` 在 `<Peach 数据目录>/secrets/tls/` 生成 CA 与服务器证书。服务器证书有效期 397 天（Apple 对 TLS 服务器证书的上限是 398 天）；本机地址变化时 Peach 用同一个 CA 重新签发，已经信任过这个 CA 的设备不用重装。
-- 需要访问的设备只安装并信任 `peach-local-ca.crt`，任何私钥都不外发。安装与指纹核对方法见 [运行与配置](docs/OPERATIONS.md)。
-- Windows 独立测试包在局域网里使用 HTTP，传输不加密。
-- **不要用端口转发或反向代理把 Peach 直接放到公网。** Peach 没有审计日志，也没有第二道认证，这样做等于把整个馆藏和所有修改权限交出去。
-- 配置页的「Cloudflare 公网入口」必须先设访问密码才能启动，只适合临时预览。长期从外网访问，请用 VPN 一类的私有通道。
-- 每个响应都要求搜索引擎不收录（`X-Robots-Tag: noindex`，`/robots.txt` 禁止抓取），这一项不能关闭。
+- `peach serve` listens on `127.0.0.1` only by default; the address and port are in the `[server]` section of `<Peach data root>/config.toml`. Devices on the same network segment can connect only after you change `host` to `0.0.0.0` or a LAN address. The standalone test package listens on `0.0.0.0` when you pick "Devices on the same LAN" in first-run setup.
+- Source deployments use HTTPS, with certificates issued by a locally self-signed CA rather than a public CA. `peach init` generates the CA and server certificate under `<Peach data root>/secrets/tls/`. The server certificate is valid for 397 days (Apple caps TLS server certificates at 398 days); when this machine's address changes, Peach reissues it from the same CA, so devices that already trust the CA need no reinstall.
+- Devices that need access install and trust only `peach-local-ca.crt`; no private key is ever distributed. For installation and fingerprint verification, see [Operations and configuration](docs/OPERATIONS.md).
+- The standalone Windows test package uses HTTP on the LAN, so traffic is not encrypted.
+- **Do not put Peach directly on the public internet with port forwarding or a reverse proxy.** Peach has no audit log and no second authentication factor, so doing so hands over the entire library and all modification rights.
+- The "Cloudflare public entry" on the configuration page can only be started after an access password is set, and is suitable only for temporary previews. For long-term access from outside, use a private channel such as a VPN.
+- Every response asks search engines not to index it (`X-Robots-Tag: noindex`, and `/robots.txt` disallows crawling); this cannot be turned off.
 
-## 凭据与数据
+## Credentials and data
 
-- 站点 Cookie、令牌、访问密码和 TLS 私钥都放在 `<Peach 数据目录>/secrets/`，不进 Git、不写日志、不出现在任何 API 返回里。备份数据目录就等于备份了这些凭据，请按保管凭据的标准存放备份。
-- 数据库 `<Peach 数据目录>/database/ledger.db` 记录了文件路径、演员等资料和观看记录。它和媒体一样不属于代码仓库。提交 issue、日志或截图之前，先去掉路径、局域网地址和账号名。
+- Site cookies, tokens, the access password and TLS private keys all live in `<Peach data root>/secrets/`. They stay out of Git, out of logs and out of every API response. Backing up the data root also backs up these credentials, so store backups to the standard you would apply to credentials.
+- The database `<Peach data root>/database/ledger.db` records file paths, performer and other metadata, and watch history. Like the media, it does not belong in the code repository. Before submitting an issue, log or screenshot, strip out paths, LAN addresses and account names.
 
-## 报告漏洞
+## Reporting vulnerabilities
 
-请用本仓库 GitHub **Security** 标签页里的 **Private vulnerability reporting** 提交，不要开公开 issue。
+Please submit through **Private vulnerability reporting** on this repository's GitHub **Security** tab, not as a public issue.
 
-报告里请写清受影响的版本或提交、复现步骤和实际影响。仓库由一个人维护，响应尽力而为，修复顺序按实际影响排。
+Include the affected version or commit, reproduction steps and the actual impact. The repository is maintained by one person, so responses are best-effort and fixes are ordered by real impact.

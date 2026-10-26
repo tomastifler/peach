@@ -73,7 +73,7 @@ def script_owner(name: str) -> str:
 def _identifier(value: str) -> str:
     text = str(value or "").strip()
     if not _IDENTIFIER.fullmatch(text):
-        raise ValueError(f"归属标识只能是小写字母、数字、下划线和连字符：{value!r}")
+        raise ValueError(f"An owner identifier may only contain lowercase letters, digits, underscores and hyphens: {value!r}")
     return text
 
 
@@ -116,15 +116,15 @@ def owner_label(owner: str | None) -> str:
     """
     kind, _, identifier = str(owner or "").partition(":")
     if kind == "user":
-        return "手动填写"
+        return "Entered manually"
     if kind == "review":
-        return f"复核批准 {identifier}"
+        return f"Review approved {identifier}"
     if kind == "auto":
-        return f"{identifier} 免复核落库"
+        return f"{identifier} stored without review"
     if kind == "scan":
-        return "文件名推导"
+        return "Derived from filename"
     if kind == "script":
-        return f"维护脚本 {identifier}"
+        return f"Maintenance script {identifier}"
     return ""
 
 
@@ -138,8 +138,8 @@ class RevisionConflict(ValueError):
     def __init__(self, expected: int, revisions: Mapping[int, int]):
         self.expected = int(expected)
         self.revisions = {int(key): int(value) for key, value in revisions.items()}
-        current = "、".join(f"{key}={value}" for key, value in sorted(self.revisions.items()))
-        super().__init__(f"资产已被改过：期望 revision {expected}，数据库现值 {current}")
+        current = ", ".join(f"{key}={value}" for key, value in sorted(self.revisions.items()))
+        super().__init__(f"The asset has been modified: expected revision {expected}, database has {current}")
 
 
 @dataclass(frozen=True)
@@ -211,12 +211,12 @@ def write_owned_fields(
     fields = list(values)
     unknown = [name for name in fields if name not in OWNED_FIELDS]
     if unknown:
-        raise ValueError(f"不是受归属保护的真相字段：{sorted(unknown)}")
+        raise ValueError(f"Not an owner-protected truth field: {sorted(unknown)}")
     if not fields:
-        raise ValueError("要写的字段是空的")
+        raise ValueError("The fields to write are empty")
     kind, _, identifier = str(owner or "").partition(":")
     if kind not in {"user", "review", "auto", "scan", "script"}:
-        raise ValueError(f"归属串的类别不在清单里：{owner!r}")
+        raise ValueError(f"The owner string category is not in the list: {owner!r}")
     _identifier(identifier)
 
     marks = ",".join("?" * len(ids))

@@ -136,11 +136,11 @@ class CommunityCatalogTests(unittest.TestCase):
         with self.assertRaises(SourceFailure) as caught:
             work(AVBaseSource(), {AVBASE_SEARCH: avbase_page(empty)}, "ABW-358")
         self.assertEqual((caught.exception.reason, str(caught.exception)),
-                         (FailureReason.NOT_FOUND, "AVBase 没有这个番号"))
-        with self.assertRaisesRegex(SourceFailure, "AVBase 页面结构未识别") as caught:
+                         (FailureReason.NOT_FOUND, "AVBase has no such code"))
+        with self.assertRaisesRegex(SourceFailure, "AVBase page structure not recognised") as caught:
             work(AVBaseSource(), {AVBASE_SEARCH: b"<html><title>Just a moment...</title></html>"}, "ABW-358")
         self.assertEqual(caught.exception.reason, FailureReason.CLOUDFLARE_CHALLENGE)
-        with self.assertRaisesRegex(SourceFailure, "AVBase 页面结构未识别") as caught:
+        with self.assertRaisesRegex(SourceFailure, "AVBase page structure not recognised") as caught:
             work(AVBaseSource(), {AVBASE_SEARCH: b"<html><body>redesigned</body></html>"}, "ABW-358")
         self.assertEqual(caught.exception.reason, FailureReason.PARSE_ERROR)
 
@@ -171,13 +171,13 @@ class CommunityCatalogTests(unittest.TestCase):
 
     def test_javbus_tells_a_missing_code_apart_from_its_age_gate(self):
         """番号页 404 是没有；年龄门回 200 却没有「識別碼」，要让人去贴 Cookie，而不是记成没有。"""
-        with self.assertRaisesRegex(SourceFailure, "JavBus 没有这个番号") as caught:
+        with self.assertRaisesRegex(SourceFailure, "JavBus has no such code") as caught:
             work(JavBusSource(), {}, "ABW-358")
         self.assertEqual(caught.exception.reason, FailureReason.NOT_FOUND)
-        with self.assertRaisesRegex(SourceFailure, "JavBus 没有这个番号") as caught:
+        with self.assertRaisesRegex(SourceFailure, "JavBus has no such code") as caught:
             work(JavBusSource(), {JAVBUS_WORK: JAVBUS_PAGE.replace(b">ABW-358</span>", b">ABW-359</span>")}, "ABW-358")
         self.assertEqual(caught.exception.reason, FailureReason.NOT_FOUND)
-        with self.assertRaisesRegex(SourceFailure, "贴上浏览器里的 Cookie") as caught:
+        with self.assertRaisesRegex(SourceFailure, "paste the browser Cookie for JavBus") as caught:
             work(JavBusSource(), {JAVBUS_WORK: b"<html><title>Age Verification JavBus</title></html>"}, "ABW-358")
         self.assertEqual(caught.exception.reason, FailureReason.AUTH_REQUIRED)
 
@@ -235,7 +235,7 @@ class CommunityCatalogTests(unittest.TestCase):
             work(JavDBSource(), {JAVDB_SEARCH: JAVDB_RESULTS.replace(b"<strong>ABW-358</strong>", b"<strong>ABW-359</strong>")},
                  "ABW-358")
         self.assertEqual(caught.exception.reason, FailureReason.NOT_FOUND)
-        with self.assertRaisesRegex(SourceFailure, "javdb 要求登录") as caught:
+        with self.assertRaisesRegex(SourceFailure, "javdb requires login") as caught:
             work(JavDBSource(), {JAVDB_SEARCH: "<title>登入 | JavDB</title>".encode()}, "ABW-358")
         self.assertEqual(caught.exception.reason, FailureReason.AUTH_REQUIRED)
 
@@ -268,10 +268,10 @@ class CommunityCatalogTests(unittest.TestCase):
         self.assertEqual(caught.exception.reason, FailureReason.AUTH_REQUIRED)
         with self.assertRaises(SourceFailure) as caught:
             JavBusSource().query("ABW-358", session=Session(serve({})))
-        self.assertEqual((caught.exception.reason, str(caught.exception)), (FailureReason.NOT_FOUND, "JavBus 没有这个番号"))
+        self.assertEqual((caught.exception.reason, str(caught.exception)), (FailureReason.NOT_FOUND, "JavBus has no such code"))
         with self.assertRaises(SourceFailure) as caught:
             JavDBSource().query("ABW-358", session=Session(serve({JAVDB_SEARCH: "<title>登入 | JavDB</title>".encode()})))
-        self.assertEqual((caught.exception.reason, str(caught.exception)), (FailureReason.AUTH_REQUIRED, "javdb 要求登录"))
+        self.assertEqual((caught.exception.reason, str(caught.exception)), (FailureReason.AUTH_REQUIRED, "javdb requires login"))
         with self.assertRaises(SourceFailure) as caught:
             JavDBSource().query("ABW-358", session=Session(serve({JAVDB_SEARCH: JAVDB_RESULTS})))
         self.assertEqual((caught.exception.reason, str(caught.exception)), (FailureReason.NOT_FOUND, "HTTP 404"))
@@ -279,7 +279,7 @@ class CommunityCatalogTests(unittest.TestCase):
         with self.assertRaises(SourceFailure) as caught:
             JavDBSource().parse(Page("https://javdb.com/v/Zb7mX", mismatched), "ABW-358")
         self.assertEqual((caught.exception.reason, caught.exception.kind, str(caught.exception)),
-                         (FailureReason.PARSE_ERROR, "unavailable", "javdb 详情页的番号与搜索结果不一致"))
+                         (FailureReason.PARSE_ERROR, "unavailable", "The code on the javdb detail page does not match the search result"))
 
     def test_a_redirect_to_the_now_printing_placeholder_is_not_a_cover(self):
         """DMM 没图时 302 到 590×800 的「准备中」，尺寸够门槛，只能按最终地址认。"""
@@ -297,7 +297,7 @@ class VerifiedCoverTests(unittest.TestCase):
         self.assertEqual((candidate.url, size, origins), (DMM_COVER, (400, 267), ("dmm", "javdb")))
         self.assertEqual(candidate.referer, "https://www.dmm.co.jp/")
         pages[DMM_COVER] = gradient(400, 267, rising=False)
-        with self.assertRaisesRegex(NotFound, "^dmm、javdb 给的封面不是同一张图"):
+        with self.assertRaisesRegex(NotFound, "^The covers from dmm, javdb are not the same image"):
             verified_cover(serve(pages), "ABW-358", works)
 
     def test_javbus_is_an_origin_of_its_own(self):
@@ -309,7 +309,7 @@ class VerifiedCoverTests(unittest.TestCase):
 
     def test_a_javdb_only_cover_waits_for_an_eligible_image(self):
         works = [("avbase", {"cover_urls": []}), ("javdb", {"cover_urls": [JAVDB_COVER]})]
-        with self.assertRaisesRegex(NotFound, '无 JavDB 水印'):
+        with self.assertRaisesRegex(NotFound, 'without a JavDB watermark'):
             verified_cover(serve({JAVDB_COVER: gradient(800, 534)}), "IPX-060", works)
 
     def test_a_small_official_cover_counts_as_the_second_origin(self):
@@ -319,12 +319,12 @@ class VerifiedCoverTests(unittest.TestCase):
         candidate, _size, _data, origins = verified_cover(serve({JAVDB_COVER: gradient(900, 600)}), "ORETD-615",
                                                           works, reference=reference)
         self.assertEqual((candidate.url, origins), (small.url, ("javdb", "mgstage")))
-        with self.assertRaisesRegex(Unavailable, "下载失败"):
+        with self.assertRaisesRegex(Unavailable, "download from community sources failed"):
             verified_cover(serve({}), "ORETD-615", works, reference=reference)
-        with self.assertRaisesRegex(NotFound, "^javdb、mgstage 给的封面不是同一张图"):
+        with self.assertRaisesRegex(NotFound, "^The covers from javdb, mgstage are not the same image"):
             verified_cover(serve({JAVDB_COVER: gradient(900, 600, rising=False)}), "ORETD-615",
                            works, reference=reference)
-        with self.assertRaisesRegex(Unavailable, "下载失败"):
+        with self.assertRaisesRegex(Unavailable, "download from community sources failed"):
             verified_cover(serve({}), "ORETD-615", works)
         with self.assertRaises(NotFound):
             verified_cover(serve({}), "ORETD-615", [("javdb", {"cover_urls": []})])
@@ -338,7 +338,7 @@ class VerifiedCoverTests(unittest.TestCase):
         frames[0].save(buffer, format="GIF", save_all=True, append_images=frames[1:])
         works = [("javarchive", {"cover_urls": [own_gif, other]})]
         pages = {own_gif: buffer.getvalue(), other: gradient(800, 450)}
-        with self.assertRaisesRegex(NotFound, "动图或太小"):
+        with self.assertRaisesRegex(NotFound, "animated or too small"):
             verified_cover(serve(pages), "FC2-PPV-2543627", works)
         still = "https://img.javstore.net/images/2022/01/03/fc2ppv-2543627.jpg"
         pages[still] = gradient(800, 450)
@@ -388,7 +388,7 @@ class SameSceneTests(unittest.TestCase):
                  square: photo(1, crop=(100, 150, 700, 750), size=(276, 276))}
         works = [("javdb", {"cover_urls": [square]})]
         reference = (screenshot, (605, 364), photo(3, size=(605, 364)))
-        with self.assertRaisesRegex(Unavailable, "不是同一张图"):
+        with self.assertRaisesRegex(Unavailable, "are not the same image"):
             verified_cover(serve(pages), "FC2-PPV-3264420", works, reference=reference)
         candidate, size, _data, origins = verified_cover(
             serve(pages), "FC2-PPV-3264420", works, reference=reference,

@@ -58,7 +58,7 @@ class RestartWindowsTrayTests(unittest.TestCase):
             self.target, find_windows=lambda _target: (), start=start,
         )
         self.assertFalse(result.ok)
-        self.assertIn("唯一", result.message)
+        self.assertIn("unique", result.message)
         start.assert_not_called()
 
     BOOTSTRAP = ("import os,runpy;os.environ['PEACH_DATA_ROOT']=r'X'"
@@ -147,7 +147,7 @@ class RestartWindowsTrayTests(unittest.TestCase):
             start=start, sleep=lambda _seconds: None,
         )
         self.assertFalse(result.ok)
-        self.assertIn("未强杀、未另启", result.message)
+        self.assertIn("not force-killed and no new one started", result.message)
         start.assert_not_called()
 
     def test_normal_exit_restarts_and_requires_tray_owned_services(self):
@@ -246,7 +246,7 @@ class RestartWindowsTrayTests(unittest.TestCase):
             timeout=0.001, alive=lambda pid: pid in (51, 52), start=start,
         )
         self.assertFalse(result.ok)
-        self.assertIn("子服务未在期限内退出", result.message)
+        self.assertIn("child services did not exit in time", result.message)
         self.assertEqual(result.service_pids, (51, 52))
         start.assert_not_called()
 
@@ -260,7 +260,7 @@ class RestartWindowsTrayTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertEqual(result.new_tray_pid, 30)
         self.assertIn("PID 30", result.message)
-        self.assertIn("名下只有 0 个子服务", result.message)
+        self.assertIn("owns only 0 child services", result.message)
 
     @unittest.skipUnless(sys.platform == "win32", "进程快照只在 Windows 上有")
     def test_strays_are_serve_launchers_outside_the_tray(self):
@@ -323,7 +323,7 @@ class RestartWindowsTrayTests(unittest.TestCase):
             sleep=lambda _seconds: None,
         )
         self.assertFalse(result.ok)
-        self.assertIn("已回滚到备份并重开旧托盘", result.message)
+        self.assertIn("rolled back to the backup and reopened the old tray", result.message)
         self.assertEqual(self.target.read_bytes(), b"tray")
         self.assertEqual(Path(result.backup).read_bytes(), b"tray",
                          "备份留在原地，下一次失败还有得退")
@@ -478,7 +478,7 @@ class RestartEntryTests(unittest.TestCase):
         code, printed, _restart = self.run_entry(
             [], windows_restart.RestartResult(True, "源码托盘已重启", new_tray_pid=30))
         self.assertEqual(code, 0)
-        self.assertIn("未取得新托盘的启动准备记录", printed["message"])
+        self.assertIn("the new tray's startup preparation record was not obtained", printed["message"])
 
     def test_the_entry_hands_the_package_to_swap_and_prints_the_outcome(self):
         entry = load_entry()
@@ -533,7 +533,7 @@ class RestartEntryTests(unittest.TestCase):
                 entry.main(["--source", "--swap-from", "staged.exe"])
         source.assert_not_called()
         packaged.assert_not_called()
-        self.assertIn("--source 不能与 --swap-from 同用", complaint.getvalue())
+        self.assertIn("--source cannot be combined with --swap-from", complaint.getvalue())
 
 
 if __name__ == "__main__":

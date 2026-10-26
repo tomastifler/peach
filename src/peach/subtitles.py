@@ -278,7 +278,7 @@ def decode(data: bytes) -> str:
             return data.decode(encoding)
         except UnicodeDecodeError:
             continue
-    raise SubtitleUndecodable("编码未识别")
+    raise SubtitleUndecodable("Encoding not recognized")
 
 
 _TIME = re.compile(r"(\d{1,3}):([0-5]\d):([0-5]\d)[,.](\d{1,3})")
@@ -382,7 +382,7 @@ def _wrap(cues: Sequence[str]) -> str:
 def to_webvtt(data: bytes, fmt: str) -> str:
     """字幕字节 → WebVTT 文本。格式不可播或编码认不出来都抛异常。"""
     if not is_playable_format(fmt):
-        raise SubtitleUndecodable("图形字幕不能作为文本轨播放")
+        raise SubtitleUndecodable("Graphical subtitles cannot be played as a text track")
     text = decode(data)
     if fmt == "vtt":
         return vtt_passthrough(text)

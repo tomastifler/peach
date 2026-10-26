@@ -87,13 +87,13 @@ def classify(name: str, assets: list) -> tuple[str, str, str]:
     post = site_post_id(name)
     code = canonical_code(name)
     if not all(is_filesystem_path(str(row["path"] or "")) for row in assets):
-        return VERDICT_KEEP, "", "存在 URL 身份（如 pixiv 画师），不是发行目录"
+        return VERDICT_KEEP, "", "Has a URL identity (such as a pixiv artist); not a release folder"
     if not post and not code:
         embedded = embedded_code(name, assets)
         if not embedded:
-            return VERDICT_KEEP, "", "名字不是番号形态"
+            return VERDICT_KEEP, "", "The name is not in code form"
         return (VERDICT_CODE, embedded,
-                f"目录名里嵌着番号 {embedded}，与目录内文件对得上")
+                f"The folder name embeds code {embedded}, which matches the files inside")
 
     identity = post or code or ""
     hit = any(
@@ -106,8 +106,8 @@ def classify(name: str, assets: list) -> tuple[str, str, str]:
         return (VERDICT_UNCLEAR, identity,
                 "名字像番号，但目录内没有同番号文件；可能是真实账号名")
     if post:
-        return VERDICT_SITE, identity, f"目录与文件同为站点作品号 {identity}"
-    return VERDICT_CODE, identity, f"目录与文件同为番号 {identity}"
+        return VERDICT_SITE, identity, f"Folder and file share the site work number {identity}"
+    return VERDICT_CODE, identity, f"Folder and file share the code {identity}"
 
 
 #: 来源片长与本地时长的容差。片源前后常挂一两分钟广告（用户 2026-09-16），来源本身
@@ -136,7 +136,7 @@ def duration_confirms_code(local_seconds: float | None,
     对得上就是这部片，对不上（`bbsxv.xyz-DOCP-324` 目录里只有一条 90 秒的广告）留人工。
     """
     if local_seconds is None:
-        return False, "目录里没有量到时长的视频"
+        return False, "No video with a measured duration in the folder"
     if not runtime_minutes:
         return False, "来源没有给片长"
     delta = abs(local_seconds - float(runtime_minutes) * 60)
@@ -173,7 +173,7 @@ def collect(connection: sqlite3.Connection) -> list[dict[str, object]]:
             "identity": identity,
             "assets": len(assets),
             "sample_path": str(assets[0]["path"] or ""),
-            "code_action": (f"补 code {identity}（{missing} 条为空）"
+            "code_action": (f"Fill code {identity} ({missing} empty)"
                             if verdict == VERDICT_CODE and missing else ""),
             "reason": reason,
         })

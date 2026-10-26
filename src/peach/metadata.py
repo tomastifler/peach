@@ -71,7 +71,7 @@ CREDENTIAL_STATUS_CODES = frozenset({401})
 AMBIGUOUS_AUTH_STATUS_CODES = frozenset({403})
 
 #: 判据明确时给出的下一步。措辞只有这一处。
-CREDENTIAL_ADVICE = "换一份凭据后重跑"
+CREDENTIAL_ADVICE = "switch to another credential and rerun"
 
 #: 重定向终点落在这些路径上就是登录墙或年龄闸。站方不一定回 401：javdb 对未登录
 #: 用户访问部分详情页直接 302 到 `/login`，DMM 把未过年龄闸的请求送去
@@ -86,7 +86,7 @@ LOGIN_LOCATIONS = re.compile(
 #: 站方自己给出的登录页标记。只认页面身份这种固定结构，不按「正文里出现登录二字」
 #: 猜——搜索结果页和页脚都会出现那两个字。javdb 那条判据留在 `peach.javdb`，
 #: 采集脚本按页判「这一页是不是登录墙」用的是同一份。
-_AUTH_PAGE_MARKERS = ((JAVDB_LOGIN_PAGE, "javdb 登录页"),)
+_AUTH_PAGE_MARKERS = ((JAVDB_LOGIN_PAGE, "javdb login page"),)
 
 
 def auth_wall_reason(*, status_code: int = 0, final_url: str = "",
@@ -100,17 +100,17 @@ def auth_wall_reason(*, status_code: int = 0, final_url: str = "",
     那就不必按「成因不明」措辞了，直接说换凭据。
     """
     if status_code in CREDENTIAL_STATUS_CODES:
-        return f"来源返回 {status_code}，{CREDENTIAL_ADVICE}"
+        return f"Source returned {status_code}: {CREDENTIAL_ADVICE}"
     path = urlsplit(str(final_url or "")).path
     if path and LOGIN_LOCATIONS.search(path):
-        return f"重定向终点落在 {path}，{CREDENTIAL_ADVICE}"
+        return f"Redirect ended at {path}: {CREDENTIAL_ADVICE}"
     text = body_text(body) if isinstance(body, bytes) else str(body)
     for pattern, label in _AUTH_PAGE_MARKERS:
         if pattern.search(text):
-            return f"{label}，{CREDENTIAL_ADVICE}"
+            return f"{label}: {CREDENTIAL_ADVICE}"
     if status_code in AMBIGUOUS_AUTH_STATUS_CODES:
-        return (f"来源返回 {status_code}：可能是凭据失效，也可能是出口 IP 被封，"
-                "先看站点是否要求登录再决定换凭据还是等")
+        return (f"Source returned {status_code}: the credential may have expired or the egress IP may be blocked; "
+                "first check whether the site requires login, then decide whether to switch credentials or wait")
     return ""
 
 
@@ -128,7 +128,7 @@ def auth_error(source: str, reason: str, *, status_code: int = 0,
                detail: str = "") -> MetadataProviderError:
     """把一次鉴权失败包成 `kind="auth"` 的错误。措辞只有这一处。"""
     return MetadataProviderError(
-        f"{source} 需要登录或已被拒绝：{reason}", kind="auth",
+        f"{source} requires login or was rejected: {reason}", kind="auth",
         status_code=status_code, retryable=False, temporary=True, detail=detail,
     )
 
@@ -142,7 +142,7 @@ def validate_provider_code(code: str) -> str:
         return tokyo
     value = raw.upper()
     if not _SAFE_CODE.fullmatch(value):
-        raise ValueError("metadata provider 只接受规范化番号，不接受路径、URL 或任意文本")
+        raise ValueError("The metadata provider only accepts a normalized code, not a path, URL or arbitrary text")
     return value
 
 
@@ -267,7 +267,7 @@ def normalized_performers(raw: object) -> tuple[list[dict], list[str]]:
         name = canonicalize_entity_name("performer", current)
         repeated = bool(name and name != current)
         if repeated:
-            warnings.append(f"来源演员名含重复片段，已规范化：{preferred} → {name}")
+            warnings.append(f"Source performer name contained repeated fragments and was normalized: {preferred} → {name}")
         key = normalize_entity_name(name)
         if not name or key in seen:
             continue
@@ -309,8 +309,8 @@ def normalized_release_date(raw: object) -> tuple[str, list[str]]:
     try:
         normalized = date.fromisoformat(candidate).isoformat()
     except ValueError:
-        return "", [f"来源发行日期无效，已忽略：{value}"]
-    warnings = [] if value == normalized else [f"来源发行时间已规范化为日期：{value} → {normalized}"]
+        return "", [f"Source release date is invalid and was ignored: {value}"]
+    warnings = [] if value == normalized else [f"Source release time was normalized to a date: {value} → {normalized}"]
     return normalized, warnings
 
 
@@ -385,7 +385,7 @@ def _runtime_evidence(raw: object) -> dict | None:
     if not 0 < minutes <= 24 * 60:
         return None
     value: int | float = int(minutes) if minutes.is_integer() else round(minutes, 2)
-    return {"value": value, "display_value": f"{value:g} 分钟", "warnings": []}
+    return {"value": value, "display_value": f"{value:g} min", "warnings": []}
 
 
 def _safe_evidence_url(raw: object) -> str:
@@ -404,8 +404,8 @@ def _url_evidence(raw: object, label: str) -> dict | None:
     value = _safe_evidence_url(raw)
     if not value:
         return None
-    host = urlsplit(value).hostname or "外部来源"
-    return {"value": value, "display_value": f"{label}（{host}）", "warnings": []}
+    host = urlsplit(value).hostname or "external source"
+    return {"value": value, "display_value": f"{label} ({host})", "warnings": []}
 
 
 def _url_list_evidence(raw: object, label: str) -> dict | None:
@@ -419,14 +419,14 @@ def _url_list_evidence(raw: object, label: str) -> dict | None:
     warnings = []
     if len(values) > MAX_EVIDENCE_URLS:
         warnings.append(
-            f"来源返回 {len(values)} 个链接；候选只保留前 {MAX_EVIDENCE_URLS} 个，完整值仍在原始快照"
+            f"Source returned {len(values)} links; the candidate keeps only the first {MAX_EVIDENCE_URLS}; the full value stays in the raw snapshot"
         )
         values = values[:MAX_EVIDENCE_URLS]
-    hosts = list(dict.fromkeys(urlsplit(value).hostname or "外部来源" for value in values))
-    host_label = "、".join(hosts[:2]) + (" 等" if len(hosts) > 2 else "")
+    hosts = list(dict.fromkeys(urlsplit(value).hostname or "external source" for value in values))
+    host_label = ", ".join(hosts[:2]) + (" and others" if len(hosts) > 2 else "")
     return {
         "value": values,
-        "display_value": f"{len(values)} {label}（{host_label}）",
+        "display_value": f"{len(values)} {label} ({host_label})",
         "warnings": warnings,
     }
 
@@ -458,12 +458,12 @@ def extract_catalog_evidence(payload: dict) -> dict[str, dict]:
     if runtime is not None:
         out["runtime"] = runtime
     for field, label in {
-        "poster_url": "海报", "cover_url": "封面", "trailer_url": "预告片",
+        "poster_url": "Poster", "cover_url": "Cover", "trailer_url": "Trailer",
     }.items():
         evidence = _url_evidence(payload.get(field), label)
         if evidence is not None:
             out[field] = evidence
-    screenshots = _url_list_evidence(payload.get("screenshot_urls"), "张截图")
+    screenshots = _url_list_evidence(payload.get("screenshot_urls"), "screenshots")
     if screenshots is not None:
         out["screenshot_urls"] = screenshots
     return out
@@ -483,7 +483,7 @@ def extract_peach_fields(payload: dict, genre_decisions=None) -> dict[str, dict]
     if performers:
         out["performers"] = {
             "value": performers,
-            "display_value": "、".join(item["name"] for item in performers),
+            "display_value": ", ".join(item["name"] for item in performers),
             "warnings": warnings,
         }
     japanese = japanese_view(payload)
@@ -497,7 +497,7 @@ def extract_peach_fields(payload: dict, genre_decisions=None) -> dict[str, dict]
             out[field] = {
                 "value": name,
                 "display_value": name,
-                "warnings": ([f"来源值含重复片段，已规范化：{raw_name} → {name}"]
+                "warnings": ([f"Source value contained repeated fragments and was normalized: {raw_name} → {name}"]
                              if repeated else []),
             }
     release_date, date_warnings = normalized_release_date(payload.get("release_date"))
@@ -515,7 +515,7 @@ def extract_peach_fields(payload: dict, genre_decisions=None) -> dict[str, dict]
     if mapped or unmapped:
         out["tags"] = {
             "value": mapped,
-            "display_value": "、".join(mapped),
+            "display_value": ", ".join(mapped),
             "unmapped_genres": unmapped,
             "warnings": [unmapped_genre_warning(unmapped)] if unmapped else [],
         }

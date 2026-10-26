@@ -117,25 +117,25 @@ def _validated_paths(row: dict, *, windows: bool) -> tuple[PureWindowsPath, Pure
     text = str(row.get("path", "")).strip()
     root = text if windows else str(row.get("root", "")).strip()
     if any(ord(char) < 32 for char in text + root):
-        raise ValueError("路径不能包含控制字符")
+        raise ValueError("The path must not contain control characters")
     if not windows and not root:
-        raise ValueError("无法自动配置媒体目录，请检查配置文件中的目录对应关系")
+        raise ValueError("Media folders could not be configured automatically; check the folder mapping in the configuration file")
     if not platform.is_windows_path(root) or ".." in PureWindowsPath(root).parts:
-        raise ValueError("媒体路径必须包含盘符，例如 B:\\；网络共享请先映射为 Windows 盘符" if windows
-                         else "配置文件中 [media.locations] 的路径格式无效；请使用 Windows 格式，例如 R:\\media")
+        raise ValueError("A media path must include a drive letter, for example B:\\; map network shares to a Windows drive letter first" if windows
+                         else "The path format in [media.locations] of the configuration file is invalid; use Windows format, for example R:\\media")
     path = PureWindowsPath(text) if windows else PurePosixPath(text)
     if not text or not (platform.is_windows_path(text) if windows else text.startswith("/")):
-        raise ValueError("请填写媒体目录的完整路径，例如 D:\\Movies" if windows
-                         else "请填写媒体目录的完整路径，例如 /media")
+        raise ValueError("Enter the full path of the media folder, for example D:\\Movies" if windows
+                         else "Enter the full path of the media folder, for example /media")
     if ".." in path.parts:
-        raise ValueError("媒体目录路径不能包含上级目录 ..")
+        raise ValueError("The media folder path must not contain a parent folder ..")
     return PureWindowsPath(root), path
 
 
 def validate(raws: object, *, windows: bool, config=None) -> tuple[dict, dict, list[str]]:
     """离线来源允许保存；绝对路径、盘符根与来源间重叠在保存前校验。"""
     if not isinstance(raws, list) or not raws or len(raws) > 100:
-        return {}, {}, ["请添加 1 到 100 个媒体目录"]
+        return {}, {}, ["Add 1 to 100 media folders"]
     raws = prepare_sources(raws, windows=windows, config=config)
     locations: dict[str, list[str]] = {}
     mounts: dict[str, list[str]] = {}
@@ -144,20 +144,20 @@ def validate(raws: object, *, windows: bool, config=None) -> tuple[dict, dict, l
     for index, row in enumerate(raws):
         try:
             if not isinstance(row, dict):
-                raise ValueError("媒体来源格式不正确")
+                raise ValueError("The media source format is incorrect")
             location = row.get("location")
             if not isinstance(location, str) or location not in dict(SOURCE_OPTIONS):
-                raise ValueError("请选择列表中的媒体来源")
+                raise ValueError("Choose a media source from the list")
             if "cost" in row and row["cost"] not in ("free", "metered"):
-                raise ValueError("请选择代理流量保护设置")
+                raise ValueError("Choose a proxy traffic protection setting")
             declared, path = _validated_paths(row, windows=windows)
             for other_root, other_path in seen:
                 if (declared == other_root or declared.is_relative_to(other_root)
                         or other_root.is_relative_to(declared)):
-                    raise ValueError("媒体路径与另一文件夹重复或互相包含" if windows
-                                     else "配置文件中的目录对应关系重复或互相包含")
+                    raise ValueError("The media path duplicates or contains another folder" if windows
+                                     else "Folder mappings in the configuration file are duplicated or contain each other")
                 if path == other_path or path.is_relative_to(other_path) or other_path.is_relative_to(path):
-                    raise ValueError("媒体目录与另一行重复或互相包含")
+                    raise ValueError("The media folder duplicates or contains another row")
             seen.append((declared, path))
             locations.setdefault(location, []).append(str(declared))
             if not windows:

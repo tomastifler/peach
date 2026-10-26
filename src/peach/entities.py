@@ -375,10 +375,10 @@ def merge_entity(
     改指 target，链条始终只有一跳；`resolve_entity_id` 按它把旧 id 解析到 target。
     """
     if source_id == target_id:
-        raise ValueError("不能合并到同一份档案")
+        raise ValueError("Cannot merge into the same record")
     target = connection.execute("SELECT kind FROM entity WHERE id=?", (target_id,)).fetchone()
     if target is None:
-        raise ValueError(f"合并目标档案 {target_id} 不存在")
+        raise ValueError(f"Merge target record {target_id} does not exist")
     target_kind = str(target[0])
     stamp = now or datetime.now(timezone.utc).isoformat()
     moved = {"assets": 0, "aliases": 0, "refs": 0, "links": 0, "terms": 0,
@@ -596,7 +596,7 @@ def derived_directory_rejections(connection) -> list[dict]:
             if key not in existing:
                 proposals.append({'item_key': key, 'name': name, 'directory': spelled[folded],
                                   'subtree_assets': len(members[folded]), 'name_rejections': len(ids),
-                                  'note': f'由 {len(members[folded])} 条作品级否定派生：' + '；'.join(sorted(notes[name]))})
+                                  'note': f'Derived from {len(members[folded])} work-level rejections: ' + '; '.join(sorted(notes[name]))})
     return proposals
 
 

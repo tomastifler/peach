@@ -197,9 +197,9 @@ class ResourceJunkQueueTests(unittest.TestCase):
             {"video", "image", "audio", "archive", "other"},
         )
         by_id = {item["id"]: item for item in result["items"]}
-        self.assertIn("网址快捷方式", by_id[3]["why"])
+        self.assertIn("URL shortcut", by_id[3]["why"])
         self.assertEqual(by_id[3]["junk_kind"], "url")
-        self.assertIn("整个名字都是推广语", by_id[2]["why"])
+        self.assertIn("The whole name is promotional text", by_id[2]["why"])
         self.assertNotIn(6, by_id)
         self.assertNotIn(7, by_id)
         self.assertTrue(all("path" not in item for item in result["items"]))
@@ -302,8 +302,8 @@ class ResourceJunkQueueTests(unittest.TestCase):
         self.assertNotIn(51, {item["id"] for item in result["items"]})
         by_id = {item["id"]: item for item in result["items"]}
         # 游戏名有六个字，单看名字只够中间档；同目录另外九个同类推广名补齐证据。
-        self.assertIn("同目录另有 9 个同类推广名", by_id[38]["why"])
-        self.assertIn("整个名字都是推广语", by_id[30]["why"])
+        self.assertIn("9 more promotional names of the same kind in the same directory", by_id[38]["why"])
+        self.assertIn("The whole name is promotional text", by_id[30]["why"])
 
     def test_bundled_photo_set_is_a_resource_not_an_ad(self):
         """域名+序号是打包渠道给整包起的名；几十上百张成套的图是资源。"""
@@ -388,9 +388,9 @@ class ResourceJunkQueueTests(unittest.TestCase):
             {102, 103, 104, 105, 106},
         )
         by_id = {item["id"]: item for item in result["items"]}
-        self.assertIn("装饰符小图", by_id[102]["why"])
-        self.assertIn("推广品牌名", by_id[103]["why"])
-        self.assertIn("网页存档", by_id[104]["why"])
+        self.assertIn("Small decorative image", by_id[102]["why"])
+        self.assertIn("Promotional brand name", by_id[103]["why"])
+        self.assertIn("web page", by_id[104]["why"])
 
     def test_brand_word_in_a_video_title_is_not_promo_by_itself(self):
         """`麻豆传媒` 一类品牌词也可以是正片标题的一部分，视频单独命中不算证据。"""
@@ -431,9 +431,9 @@ class ResourceJunkQueueTests(unittest.TestCase):
             db.commit()
         items = q_ads(self.contract, limit=200)['items']
         self.assertEqual([item['id'] for item in items], [201])
-        self.assertIn('导航图片', items[0]['why'])
+        self.assertIn('Banner, logo or navigation image of a promotional saved web page', items[0]['why'])
         self.assertEqual(web_batch._attachment_junk_reason('.gif', page + r'\1.gif', 974),
-                         '推广网页存档的横幅、标志或导航图片')
+                         'Banner, logo or navigation image of a promotional saved web page')
         self.assertEqual(web_batch._attachment_junk_reason('.gif', page + r'\1.gif', 6000), '')
         self.assertTrue(web_batch._attachment_junk_reason('.gif', page + r'\1000x90yunding.gif', 97843))
 

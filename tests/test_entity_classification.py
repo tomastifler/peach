@@ -89,7 +89,7 @@ class EntityClassificationTests(unittest.TestCase):
             self.claim(entity_id,facet,value)
         self.connection.commit()
         data=q_entity(WebContract(self.db),{'kind':'performer','name':'Known Person'})
-        self.assertEqual(data['identity_labels'],['女优','西方'])
+        self.assertEqual(data['identity_labels'],['Performer','Western'])
         self.assertEqual(len(classification.classifications(self.connection,[entity_id])[entity_id]),5)
         self.assertNotIn('classifications',data)
 
@@ -140,7 +140,7 @@ class EntityClassificationTests(unittest.TestCase):
         before = self.connection.total_changes
         for provider in sorted(classification.JAV_DIRECTORIES):
             profile = q_entity(WebContract(self.db),{'kind':'performer','name':provider})
-            self.assertEqual(profile['identity_labels'],['女优'])
+            self.assertEqual(profile['identity_labels'],['Performer'])
             self.assertEqual(classification.classifications(self.connection,[profile['id']])[profile['id']],[])
         found = []
         for offset in range(len(expected)):
@@ -183,12 +183,12 @@ class EntityClassificationTests(unittest.TestCase):
         for category in ('japanese_av','western'):
             page = q_index(WebContract(self.db),'performers',category=category,limit=1)
             self.assertEqual(page['categories'],{'japanese_av':1,'western':1})
-            self.assertEqual(page['items'][0]['identity_labels'],['女优','西方'])
+            self.assertEqual(page['items'][0]['identity_labels'],['Performer','Western'])
             self.assertEqual(page['items'][0]['identity_categories'],['japanese_av','western'])
         self.assertEqual(q_index(WebContract(self.db),'performers',category='amateur')['items'],[])
         self.connection.execute("UPDATE asset SET disposal='vanished' WHERE id=?",(asset_id,))
         self.connection.commit()
-        self.assertEqual(classification.summaries(self.connection,[entity_id])[entity_id]['identity_labels'],['女优'])
+        self.assertEqual(classification.summaries(self.connection,[entity_id])[entity_id]['identity_labels'],['Performer'])
 
     def test_amateur_scene_tag_does_not_classify_a_jav_performer_as_amateur(self):
         asset_id, entity_id = self.entity('JAV Performer',kind='performer')
@@ -199,7 +199,7 @@ class EntityClassificationTests(unittest.TestCase):
         self.connection.commit()
         contract=WebContract(self.db)
         profile=q_entity(contract,{'kind':'performer','name':'JAV Performer'})
-        self.assertEqual(profile['identity_labels'],['女优'])
+        self.assertEqual(profile['identity_labels'],['Performer'])
         self.assertEqual(q_index(contract,'performers',category='amateur')['items'],[])
         self.assertEqual(q_index(contract,'performers')['categories'],{'japanese_av':1})
 
@@ -236,7 +236,7 @@ class EntityClassificationTests(unittest.TestCase):
         self.assertEqual(page['categories']['amateur'],2)
         self.assertEqual(q_entity(contract,{'kind':'performer','name':'Mixed Cast'})['identity_labels'],[])
         self.assertEqual(q_entity(contract,{'kind':'performer','name':'Guessed Cast'})['identity_labels'],[])
-        self.assertEqual(q_entity(contract,{'kind':'performer','name':'Known JAV Cast'})['identity_labels'],['女优'])
+        self.assertEqual(q_entity(contract,{'kind':'performer','name':'Known JAV Cast'})['identity_labels'],['Performer'])
         self.claim(confirmed,'occupation','adult_performer')
         self.claim(fc2_only,'market','western_adult')
         self.connection.commit()
@@ -286,7 +286,7 @@ class EntityClassificationTests(unittest.TestCase):
         contract = WebContract(self.db)
         self.assertEqual(q_index(contract,'performers')['items'][0]['entity_id'],person)
         self.assertEqual(q_index(contract,'creators')['items'][0]['entity_id'],person)
-        self.assertEqual(q_entity(contract,{'kind':'creator','name':'Person Account'})['identity_labels'],['网黄博主','卖家'])
+        self.assertEqual(q_entity(contract,{'kind':'creator','name':'Person Account'})['identity_labels'],['Adult blogger','Seller'])
 
     def test_western_cast_occupation_does_not_assert_a_japanese_av_career(self):
         _, entity_id = self.entity('Western Performer',kind='performer')
@@ -294,7 +294,7 @@ class EntityClassificationTests(unittest.TestCase):
         self.claim(entity_id,'market','western_adult')
         self.connection.commit()
         profile = q_entity(WebContract(self.db),{'kind':'performer','name':'Western Performer'})
-        self.assertEqual(profile['identity_labels'],['西方'])
+        self.assertEqual(profile['identity_labels'],['Western'])
         self.assertEqual(q_index(WebContract(self.db),'performers',category='japanese_av')['items'],[])
 
     def test_script_cannot_approve_or_supply_unvalidated_values(self):
@@ -304,7 +304,7 @@ class EntityClassificationTests(unittest.TestCase):
                 classification.write_claim(self.connection,entity_id=entity_id,facet='identity',value='person',source='script:lookup',evidence='推断',**patch)
         with self.assertRaises(ValueError):
             self.claim(entity_id,'occupation','unknown_profession')
-        with self.assertRaisesRegex(ValueError,'代码判据'):
+        with self.assertRaisesRegex(ValueError,'code-rule sources'):
             classification.write_claim(self.connection,entity_id=entity_id,facet='identity',value='person',
                 source='script:identity-research',source_url='https://publisher.test/profile',
                 evidence='研究清单判断',status='observed',confidence=1)
@@ -359,13 +359,13 @@ class EntityClassificationTests(unittest.TestCase):
     def test_name_wiki_lookup_records_pages_asked_and_leaves_failed_fetches_unfetched(self):
         missing=research.wiki_finding(7,'lucky',['lucky'],{'sougouwiki':_Pages(),'av_neme':_Pages()})
         self.assertEqual([(claim['value'],claim['status']) for claim in missing['claims']],[('unknown','candidate')])
-        self.assertIn('sougouwiki「lucky」（页不存在）',missing['claims'][0]['evidence'])
-        self.assertIn('av_neme「lucky」（页不存在）',missing['claims'][0]['evidence'])
+        self.assertIn('sougouwiki "lucky"(page does not exist)',missing['claims'][0]['evidence'])
+        self.assertIn('av_neme "lucky"(page does not exist)',missing['claims'][0]['evidence'])
         broken=_Pages(failing=[SOUGOU+'lucky'])
         self.assertIsNone(research.wiki_finding(7,'lucky',['lucky'],{'sougouwiki':broken,'av_neme':_Pages()}))
         few=_Pages({SOUGOU+'lucky':_work_table('八ッ橋さい子','本多由奈')})
         finding=research.wiki_finding(7,'lucky',['lucky'],{'sougouwiki':few,'av_neme':_Pages()})
-        self.assertIn('sougouwiki「lucky」（不是作品一览）',finding['claims'][0]['evidence'])
+        self.assertIn('sougouwiki "lucky"(not a work list)',finding['claims'][0]['evidence'])
 
     def test_cast_role_repair_and_restore_preserve_all_business_fields(self):
         asset_id,entity_id=self.entity('Known Person')
@@ -392,12 +392,12 @@ class EntityClassificationTests(unittest.TestCase):
         asset_id,entity_id=self.entity('Known Person')
         frozen=research.plan(self.connection,[self.finding('Known Person',entity_id)])
         self.connection.execute('UPDATE asset SET creator=? WHERE id=?',('User choice',asset_id));self.connection.commit()
-        with self.assertRaisesRegex(ValueError,'已过期'):
+        with self.assertRaisesRegex(ValueError,'out of date'):
             with self.connection: research.apply(self.connection,frozen)
         frozen=research.plan(self.connection,[self.finding('Known Person',entity_id)])
         with self.connection: receipt=research.apply(self.connection,frozen)
         self.connection.execute('UPDATE asset SET play_count=9 WHERE id=?',(asset_id,));self.connection.commit()
-        with self.assertRaisesRegex(ValueError,'后续改动'):
+        with self.assertRaisesRegex(ValueError,'has changed since'):
             with self.connection: research.restore(self.connection,receipt)
 
     def test_manual_creator_relation_is_not_reclassified_as_cast(self):
@@ -410,7 +410,7 @@ class EntityClassificationTests(unittest.TestCase):
         self.claim(source,'occupation','model');self.connection.commit()
         with self.connection:
             merge_entity(self.connection,target_id=target,source_id=source,source_name='Old Name',alias_source='user:review')
-        self.assertEqual(classification.classifications(self.connection,[target])[target][0]['label'],'模特')
+        self.assertEqual(classification.classifications(self.connection,[target])[target][0]['label'],'Model')
         self.assertEqual(self.connection.execute('PRAGMA foreign_key_check').fetchall(),[])
 
     def part(self, number, code='FC2-PPV-3312576', disposal=None):
@@ -445,7 +445,7 @@ class EntityClassificationTests(unittest.TestCase):
                 value='person', source='source:official', evidence=evidence, status='observed', confidence=1,
                 source_url='https://publisher.test/person')
         self.connection.commit()
-        with self.assertRaisesRegex(ValueError, '来源冲突'), self.connection:
+        with self.assertRaisesRegex(ValueError, 'sources conflict'), self.connection:
             merge_entity(self.connection, target_id=target, source_id=source,
                          source_name='Source', alias_source='user:review')
         self.assertEqual(self.connection.execute('SELECT count(*) FROM entity WHERE id IN (?,?)',

@@ -351,7 +351,7 @@ class RunCheckTests(_CheckCase):
                            older=True)
         self.assertTrue(result.ok)
         self.assertTrue(result.exhausted)
-        self.assertEqual(result.message, "没有更多历史内容")
+        self.assertEqual(result.message, "No more history")
         self.assertEqual(self._row(source_id)["last_status"], "not_modified")
         self.assertEqual(self._row(source_id)["backfill_page"], 0,
                          "翻到尽头不推进游标，否则下一次会跳过真实存在的一页")
@@ -387,7 +387,7 @@ class RunCheckTests(_CheckCase):
         connector = _Connector(_fetch(ref="another"))
         skipped = self._run(second, connector, cooldown=cooldown)
         self.assertFalse(skipped.ok)
-        self.assertIn("冷却", skipped.error)
+        self.assertIn("cooling down", skipped.error)
         self.assertEqual(connector.calls, [])
         self.assertIsNone(self._row(second)["last_status"])
         clock[0] += 121

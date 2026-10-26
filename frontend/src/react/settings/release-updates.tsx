@@ -36,8 +36,8 @@ export function ReleaseUpdates({ initial, initialJob }: { initial: ReleaseState;
     if (mounted.current) setJob(result);
   };
   const confirmRestart = () => void confirmModal({
-    title: '更新已准备好', body: `Peach ${job.version || ''} 将在重启后安装。`,
-    confirmLabel: '立即重启', cancelLabel: '稍后', onConfirm: restart,
+    title: 'Update ready', body: `Peach ${job.version || ''} will be installed after restart.`,
+    confirmLabel: 'Restart now', cancelLabel: 'Later', onConfirm: restart,
   });
 
   useEffect(() => {
@@ -58,13 +58,13 @@ export function ReleaseUpdates({ initial, initialJob }: { initial: ReleaseState;
         setJob(result);
         failures = 0;
         if (result.state === 'complete') {
-          setData((current) => ({ ...current, current_version: result.version || current.current_version, state: 'current', message: '已是最新测试版。' }));
+          setData((current) => ({ ...current, current_version: result.version || current.current_version, state: 'current', message: 'You are on the latest beta.' }));
         }
         const automatic = await apiGet<{ result?: ReleaseState }>('/api/configuration/automatic-updates', controller.signal);
         if (!controller.signal.aborted && automatic.result) setData(automatic.result);
       } catch {
         failures += 1;
-        if (failures >= MAX_FAILURES && !controller.signal.aborted) setPollError('尚未连接到 Peach，请检查托盘后刷新页面。');
+        if (failures >= MAX_FAILURES && !controller.signal.aborted) setPollError('Not connected to Peach yet. Check the tray, then refresh the page.');
       }
       if (!controller.signal.aborted && failures < MAX_FAILURES) timer = setTimeout(poll, delay);
     };
@@ -86,44 +86,44 @@ export function ReleaseUpdates({ initial, initialJob }: { initial: ReleaseState;
     ? `${((job.downloaded || 0) / 1048576).toFixed(1)} / ${(job.total / 1048576).toFixed(1)} MB`
     : `${job.progress}%`;
   return (
-    <Section title="检查更新">
+    <Section title="Check for updates">
       <FactList>
-        <Fact term="当前版本">{data.current_version}</Fact>
-        <Fact term="安装方式">{data.installation}</Fact>
-        <Fact term="更新通道">{data.channel}</Fact>
-        <Fact term="最新版本">{data.latest_version || (data.state === 'unchecked' ? '尚未检查' : '未取得')}</Fact>
-        {data.package_kind ? <Fact term="下载内容">
-          {data.package_kind === 'update' ? '应用更新包' : '应用与工具'}
+        <Fact term="Current version">{data.current_version}</Fact>
+        <Fact term="Installation">{data.installation}</Fact>
+        <Fact term="Update channel">{data.channel}</Fact>
+        <Fact term="Latest version">{data.latest_version || (data.state === 'unchecked' ? 'Not checked yet' : 'Unavailable')}</Fact>
+        {data.package_kind ? <Fact term="Download contents">
+          {data.package_kind === 'update' ? 'App update package' : 'App and tools'}
           {data.asset_size ? ` · ${(data.asset_size / 1048576).toFixed(1)} MB` : ''}
         </Fact> : null}
       </FactList>
       {data.package_kind === 'update'
-        ? <Help>应用更新包复用已安装工具；工具缺失、损坏或版本变化时会另行下载所需工具包。</Help>
-        : data.package_kind === 'full' ? <Help>本次更新包含媒体工具。</Help> : null}
+        ? <Help>The app update package reuses the installed tools; if tools are missing, damaged or change version, the required tool package is downloaded separately.</Help>
+        : data.package_kind === 'full' ? <Help>This update includes the media tools.</Help> : null}
       {/* 还没检查过时「最新版本」那一行已经写着「尚未检查」，下面不再说一遍。 */}
       {data.state === 'unchecked' && !data.checked_at && !error && job.state === 'idle' ? null : <Stack divided>
-        {data.checked_at ? <Help>检查于 {new Date(data.checked_at * 1000).toLocaleString()}</Help> : null}
+        {data.checked_at ? <Help>Checked at {new Date(data.checked_at * 1000).toLocaleString()}</Help> : null}
         {data.state === 'available' && !error
-          ? <Note tone="info" title="有可用更新">{data.message}</Note>
+          ? <Note tone="info" title="Update available">{data.message}</Note>
           : error || data.state === 'error'
             ? <ErrorText>{error || data.message}</ErrorText>
             : data.state === 'unchecked' ? null : <Help role="status">{data.message}</Help>}
         {job.state === 'error' ? <ErrorText>{job.message}</ErrorText> : null}
         {job.state !== 'idle' && job.state !== 'error' ? (
           <div aria-live="polite" className="flex flex-col gap-2">
-            <Progress label="更新准备进度" value={job.progress} stops={STOPS} />
-            <Help>下载 → 校验 → 解压 → 准备安装 · {job.message}</Help>
+            <Progress label="Update preparation progress" value={job.progress} stops={STOPS} />
+            <Help>Download → Verify → Extract → Prepare install · {job.message}</Help>
             <Help>{reading}</Help>
           </div>
         ) : null}
       </Stack>}
-      <Footer status={<ExternalLink href={data.release_url}>查看发布页</ExternalLink>}>
-        {job.state === 'ready' ? <Button onClick={confirmRestart}>重启安装</Button> : null}
+      <Footer status={<ExternalLink href={data.release_url}>View release page</ExternalLink>}>
+        {job.state === 'ready' ? <Button onClick={confirmRestart}>Restart and install</Button> : null}
         {data.state === 'available' && data.installation === '独立测试包' && job.state !== 'ready'
-          ? <Button onClick={download} {...busyProps(running || action.busy === 'download')}>下载并安装</Button>
+          ? <Button onClick={download} {...busyProps(running || action.busy === 'download')}>Download and install</Button>
           : null}
         <Button variant={job.state === 'ready' || (data.state === 'available' && data.installation === '独立测试包') ? 'secondary' : 'primary'}
-          disabled={running} onClick={check} {...busyProps(action.busy === 'check')}>检查更新</Button>
+          disabled={running} onClick={check} {...busyProps(action.busy === 'check')}>Check for updates</Button>
       </Footer>
     </Section>
   );

@@ -303,7 +303,7 @@ def ingest_results(
             "value": value,
             "display_value": "、".join(entry["name"] for entry in value)
             if field == "performers" else str(value),
-            "warnings": ["联网识别候选，需核对来源页"],
+            "warnings": ["Candidate identified online; verify against the source page"],
             "catalog_evidence": {},
             "wiki_evidence": {},
             "raw_snapshot": note or source_url,

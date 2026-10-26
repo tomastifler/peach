@@ -123,12 +123,12 @@ describe('侧栏岛', () => {
     try {
       const seen = await scopeFacets(page);
       await page.reload({ waitUntil: 'load' });
-      await page.locator('#drawer [data-sidebar-group="内容标签"]').waitFor({ state: 'attached', timeout: 15_000 });
+      await page.locator('#drawer [data-sidebar-group="Content tags"]').waitFor({ state: 'attached', timeout: 15_000 });
       await settle(page);
-      assert.deepEqual(await chips(page, '内容标签'), HOME_TAGS.map(([k, n]) => [k, String(n)]), '首页的内容标签不是全库那一份');
-      assert.ok((await chips(page, '来源')).some(([value, count]) => value === 'local' && Number(count) > 0), '来源那一组没有本机的计数');
+      assert.deepEqual(await chips(page, 'Content tags'), HOME_TAGS.map(([k, n]) => [k, String(n)]), '首页的内容标签不是全库那一份');
+      assert.ok((await chips(page, 'Source')).some(([value, count]) => value === 'local' && Number(count) > 0), '来源那一组没有本机的计数');
 
-      await openGroup(page, '内容标签');
+      await openGroup(page, 'Content tags');
       const chip = page.locator(`#drawer [data-sidebar-chip][data-key="tag"][data-val="${HOME_TAGS[0][0]}"]`);
       await chip.click();
       await page.waitForFunction((tag) => new URL(location.href).searchParams.get('tag') === tag, HOME_TAGS[0][0], { timeout: 5_000 });
@@ -137,13 +137,13 @@ describe('侧栏岛', () => {
 
       await serveEntity(page);
       await page.goto(new URL(`/performers/${encodeURIComponent(PERFORMER)}`, page.url()).toString(), { waitUntil: 'load' });
-      await page.locator('#drawer [data-sidebar-group="内容标签"]').waitFor({ state: 'attached', timeout: 15_000 });
+      await page.locator('#drawer [data-sidebar-group="Content tags"]').waitFor({ state: 'attached', timeout: 15_000 });
       await settle(page);
       assert.ok(seen.some((query) => {
         const params = new URLSearchParams(query);
         return params.get('scope_kind') === 'performer' && params.get('scope_name') === PERFORMER;
       }), `实体页没有按实体口径取聚合：${seen.join(' | ')}`);
-      assert.deepEqual(await chips(page, '内容标签'), ENTITY_TAGS.map(([k, n]) => [k, String(n)]), '实体页列的不是这个实体的计数');
+      assert.deepEqual(await chips(page, 'Content tags'), ENTITY_TAGS.map(([k, n]) => [k, String(n)]), '实体页列的不是这个实体的计数');
       assert.deepEqual(opened.problems, []);
     } finally {
       await page.unrouteAll({ behavior: 'ignoreErrors' });
@@ -155,8 +155,8 @@ describe('侧栏岛', () => {
     const opened = await openFollowFeed(browser, '/follow', DESKTOP);
     const { page } = opened;
     try {
-      await page.locator('#drawer [data-sidebar-group="内容标签"] [data-follow-drawer-tag]').first().waitFor({ state: 'attached', timeout: 10_000 });
-      const listed = await chips(page, '内容标签');
+      await page.locator('#drawer [data-sidebar-group="Content tags"] [data-follow-drawer-tag]').first().waitFor({ state: 'attached', timeout: 10_000 });
+      const listed = await chips(page, 'Content tags');
       const shown = await page.locator('[data-follow-list] > [data-follow-item]').count();
       assert.ok(listed.length > 1, '关注页的标签组是空的');
       assert.ok(listed.every(([, count]) => Number(count) >= 1), `关注页有标签没带计数：${JSON.stringify(listed)}`);
@@ -166,14 +166,14 @@ describe('侧栏岛', () => {
       await page.locator('[data-follow-item="1002"] [data-follow-open]').click();
       await page.locator('#stage[open] [data-follow-detail-side]').waitFor({ timeout: 10_000 });
       await page.waitForFunction(() => document.querySelectorAll('#drawer [data-follow-drawer-tag]').length === 2, undefined, { timeout: 5_000 });
-      assert.deepEqual((await chips(page, '内容标签')).sort(), [['3d', '1'], ['outdoor', '1']], '关注详情列的不是这一条的标签');
+      assert.deepEqual((await chips(page, 'Content tags')).sort(), [['3d', '1'], ['outdoor', '1']], '关注详情列的不是这一条的标签');
       await page.locator('#closeStage').click();
       await page.waitForFunction((count) => document.querySelectorAll('#drawer [data-follow-drawer-tag]').length === count,
         listed.length, { timeout: 5_000 });
-      assert.deepEqual(await chips(page, '内容标签'), listed, '关掉详情之后关注页的标签计数变了');
+      assert.deepEqual(await chips(page, 'Content tags'), listed, '关掉详情之后关注页的标签计数变了');
 
       /* 抽屉里的关注标签是单选：点一枚就只按这一枚筛，抽屉随之收起，让出来的是筛过的列表。 */
-      await openGroup(page, '内容标签');
+      await openGroup(page, 'Content tags');
       const [tag] = listed[0]!;
       await page.locator(`#drawer [data-follow-drawer-tag="${tag}"]`).click();
       await page.waitForFunction((want) => new URL(location.href).searchParams.get('tag') === want
@@ -199,20 +199,20 @@ describe('侧栏岛', () => {
     const groups = () => page.locator('#drawer [data-sidebar-group]').evaluateAll((nodes) =>
       nodes.map((node) => node.getAttribute('data-sidebar-group')));
     try {
-      await page.locator('#drawer [data-sidebar-group="来源"] [data-sidebar-chip]').first().waitFor({ state: 'attached', timeout: 10_000 });
-      assert.deepEqual(await groups(), ['来源', '时长', '内容标签'], '关注页侧栏的分组不对');
-      assert.deepEqual((await chips(page, '来源')).map(([value]) => value), ['kemono', 'rule34xxx', 'fanbox'],
+      await page.locator('#drawer [data-sidebar-group="Source"] [data-sidebar-chip]').first().waitFor({ state: 'attached', timeout: 10_000 });
+      assert.deepEqual(await groups(), ['Source', 'Duration', 'Content tags'], '关注页侧栏的分组不对');
+      assert.deepEqual((await chips(page, 'Source')).map(([value]) => value), ['kemono', 'rule34xxx', 'fanbox'],
         '来源组不是全库那几个站');
 
-      await openGroup(page, '来源');
+      await openGroup(page, 'Source');
       await page.locator('#drawer [data-sidebar-chip][data-key="provider"][data-val="rule34xxx"]').click();
       await page.waitForFunction(() => new URL(location.href).searchParams.get('provider') === 'rule34xxx', undefined, { timeout: 5_000 });
       await page.locator('#drawer.open [data-sidebar-chip][data-val="rule34xxx"][aria-pressed="true"]').waitFor({ timeout: 5_000 });
-      await page.waitForFunction(() => document.querySelectorAll('#drawer [data-sidebar-group="来源"] [data-sidebar-chip]').length === 3,
+      await page.waitForFunction(() => document.querySelectorAll('#drawer [data-sidebar-group="Source"] [data-sidebar-chip]').length === 3,
         undefined, { timeout: 5_000 });
       assert.ok(lists.some((params) => params.get('provider') === 'rule34xxx'), '按下来源之后没有按它向服务端取数');
 
-      await openGroup(page, '时长');
+      await openGroup(page, 'Duration');
       await page.locator('#durMin').focus();
       await page.keyboard.press('ArrowRight');
       await page.waitForFunction(() => new URL(location.href).searchParams.get('dur_min') === '300', undefined, { timeout: 5_000 });
@@ -237,7 +237,7 @@ describe('侧栏岛', () => {
       await page.locator('#drawer [data-sidebar-group]').first().waitFor({ state: 'attached', timeout: 10_000 });
       const groups = () => page.locator('#drawer [data-sidebar-group]').evaluateAll((nodes) => nodes.map((node) => node.getAttribute('data-sidebar-group')));
       const before = await groups();
-      const sources = await chips(page, '来源');
+      const sources = await chips(page, 'Source');
       assert.ok(before.length > 1, `首页的分组不全：${before.join('、')}`);
       await page.locator(`#grid [data-media-card][data-id="${ITEM.plain}"] [data-media-title]`).first().click();
       await page.locator('#stage[open] [data-item-side]').waitFor({ timeout: 10_000 });
@@ -246,7 +246,7 @@ describe('侧栏岛', () => {
       await page.locator('#closeStage').click();
       await page.waitForFunction((want) => JSON.stringify([...document.querySelectorAll('#drawer [data-sidebar-group]')]
         .map((node) => node.getAttribute('data-sidebar-group'))) === want, JSON.stringify(before), { timeout: 10_000 });
-      assert.deepEqual(await chips(page, '来源'), sources, '关掉详情之后来源那一组的计数变了');
+      assert.deepEqual(await chips(page, 'Source'), sources, '关掉详情之后来源那一组的计数变了');
       assert.deepEqual(withoutPlayer(opened.problems), []);
     } finally {
       await opened.close();

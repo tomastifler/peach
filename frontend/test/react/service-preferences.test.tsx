@@ -33,36 +33,36 @@ it('首次采集范围写入服务端，头像和 favicon 使用固定刷新周�
   const receipt = vi.fn();
   const host = await mount(<QueryClientProvider client={queryClient}><FollowPreferenceRows receipt={receipt} /></QueryClientProvider>);
   await settle();
-  await choose(host.querySelector('#followInitialDaysSetting [aria-haspopup="listbox"]'), '最近 7 天');
+  await choose(host.querySelector('#followInitialDaysSetting [aria-haspopup="listbox"]'), 'Last 7 days');
   await settle();
-  expect(host.textContent).toContain('每 3 个月');
-  expect(host.textContent).toContain('每年');
+  expect(host.textContent).toContain('Every 3 months');
+  expect(host.textContent).toContain('Yearly');
   expect(posts).toEqual([
     { url: '/api/settings', body: { followInitialDays: 7 } },
   ]);
   expect(appSettingsStore().value.followInitialDays).toBe(7);
-  expect(receipt.mock.calls).toEqual([['已保存首次采集范围']]);
+  expect(receipt.mock.calls).toEqual([['Initial collection range saved']]);
 });
 
 it('缩略图选择提交原档位，保存后的控件显示采集间隔', async () => {
   const { posts } = server();
   const host = await mount(<QueryClientProvider client={queryClient}><VideoThumbnailRow /></QueryClientProvider>);
   await settle();
-  await choose(host.querySelector('[aria-haspopup="listbox"]'), '每 30 秒一张');
+  await choose(host.querySelector('[aria-haspopup="listbox"]'), 'One every 30 seconds');
   await settle();
   expect(posts).toEqual([{ url: '/api/thumbnail-jobs', body: { mode: 'coarse' } }]);
-  expect(host.querySelector('[aria-haspopup="listbox"]')?.textContent).toContain('每 30 秒一张');
+  expect(host.querySelector('[aria-haspopup="listbox"]')?.textContent).toContain('One every 30 seconds');
 });
 
 it('自动检查间隔拒绝范围外值，只在有效提交时写入原接口', async () => {
   const { posts } = server();
   const host = await mount(<QueryClientProvider client={queryClient}><FollowPreferenceRows receipt={vi.fn()} /></QueryClientProvider>);
   await settle();
-  const input = host.querySelector<HTMLInputElement>('input[aria-label="自动检查间隔"]')!;
+  const input = host.querySelector<HTMLInputElement>('input[aria-label="Automatic check interval"]')!;
   await type(input, '2');
   await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
   expect(posts).toEqual([]);
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain('15–10080');
+  expect(host.querySelector('[role="alert"]')?.textContent).toContain('15 to 10080');
   await type(input, '240');
   await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
   await settle();
@@ -84,9 +84,9 @@ it('服务设置重新进入时读取最新状态，关闭自动检查后保留�
   thumbnails.mode = 'coarse';
   const second = await mount(view());
   await settle();
-  expect(second.querySelector('#followInitialDaysSetting [aria-haspopup="listbox"]')?.textContent).toContain('最近 7 天');
-  expect(second.textContent).toContain('每 3 个月');
-  expect(second.querySelector('#videoThumbnailSetting [aria-haspopup="listbox"]')?.textContent).toContain('每 30 秒一张');
+  expect(second.querySelector('#followInitialDaysSetting [aria-haspopup="listbox"]')?.textContent).toContain('Last 7 days');
+  expect(second.textContent).toContain('Every 3 months');
+  expect(second.querySelector('#videoThumbnailSetting [aria-haspopup="listbox"]')?.textContent).toContain('One every 30 seconds');
   expect(second.querySelector<HTMLInputElement>('input[role="switch"]')?.checked).toBe(false);
   await click(second.querySelector('input[role="switch"]'));
   await settle();
@@ -94,5 +94,5 @@ it('服务设置重新进入时读取最新状态，关闭自动检查后保留�
     { url: '/api/follow/schedule', body: { enabled: false, interval_minutes: 60 } },
     { url: '/api/follow/schedule', body: { enabled: true, interval_minutes: 180 } },
   ]);
-  expect(second.querySelector<HTMLInputElement>('input[aria-label="自动检查间隔"]')?.value).toBe('180');
+  expect(second.querySelector<HTMLInputElement>('input[aria-label="Automatic check interval"]')?.value).toBe('180');
 });

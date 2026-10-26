@@ -20,13 +20,13 @@ export function ProcessingActions({ busy, scan = false, metadataOnly = false, sp
   const prompt = useRef<ReturnType<typeof formModal> | null>(null);
   useEffect(() => () => prompt.current?.close(), []);
   const [open, setOpen] = useState(false);
-  const primary: { label: string; icon: typeof RiDatabase2Line; command: LibraryProcessingCommand } = { label: scan ? '同步媒体库' : '同步这些影片', icon: RiDatabase2Line,
+  const primary: { label: string; icon: typeof RiDatabase2Line; command: LibraryProcessingCommand } = { label: scan ? 'Sync library' : 'Sync these videos', icon: RiDatabase2Line,
     command: scan ? {} : { stage: 'collect' as const } };
   const options: typeof primary[] = [primary,
-    ...(scan ? [{ label: '仅扫描文件', icon: RiHardDrive2Line, command: { stage: 'scan' as const } }] : []),
-    ...(scan ? [{ label: '仅同步已入库影片', icon: RiDatabase2Line, command: { stage: 'collect' as const } }] : []),
-    { label: '仅生成视频预览', icon: RiHardDrive2Line, command: { stage: 'previews' as const } },
-    { label: '仅补全资料', icon: RiGlobalLine, command: { stage: 'metadata' as const } },
+    ...(scan ? [{ label: 'Scan files only', icon: RiHardDrive2Line, command: { stage: 'scan' as const } }] : []),
+    ...(scan ? [{ label: 'Sync library videos only', icon: RiDatabase2Line, command: { stage: 'collect' as const } }] : []),
+    { label: 'Generate video previews only', icon: RiHardDrive2Line, command: { stage: 'previews' as const } },
+    { label: 'Complete metadata only', icon: RiGlobalLine, command: { stage: 'metadata' as const } },
   ];
   const run = (command: LibraryProcessingCommand) => {
     if (busy) return;
@@ -39,13 +39,13 @@ export function ProcessingActions({ busy, scan = false, metadataOnly = false, sp
     }
     if (prompt.current) return;
     const previews = command.stage === 'previews';
-    const title = previews ? '生成视频预览' : command.stage === 'scan' ? '扫描媒体文件' : '同步媒体库';
+    const title = previews ? 'Generate video previews' : command.stage === 'scan' ? 'Scan media files' : 'Sync library';
     const dialog = formModal({
       title,
       description: previews
-        ? '生成视频预览会读取视频并占用处理器，可能让电脑变慢。需要同时使用电脑时，可选择低占用模式。'
-        : `处理会读取媒体文件${command.stage === 'scan' ? '' : metadataOnly ? '并下载资料' : '、下载资料并生成视频预览'}，可能让电脑变慢。需要同时使用电脑时，可选择低占用模式。`,
-      body: iconSwitchHtml('processing-speed', '处理模式', [['low', '低占用'], ['standard', '标准'], ['high', '全速']], speedMode, { text: true }),
+        ? 'Generating video previews reads videos and uses the processor, which may slow down your computer. Choose low-usage mode if you need to use the computer at the same time.'
+        : `Processing reads media files${command.stage === 'scan' ? '' : metadataOnly ? ' and downloads metadata' : ', downloads metadata and generates video previews'}, which may slow down your computer. Choose low-usage mode if you need to use the computer at the same time.`,
+      body: iconSwitchHtml('processing-speed', 'Processing mode', [['low', 'Low usage'], ['standard', 'Standard'], ['high', 'Full speed']], speedMode, { text: true }),
       confirmLabel: title,
       onConfirm: async () => {
         const selected = dialog.dialog.querySelector<HTMLInputElement>('input[name="processing-speed"]:checked')?.value;
@@ -59,16 +59,16 @@ export function ProcessingActions({ busy, scan = false, metadataOnly = false, sp
   return <>
     <span data-button-group data-split-button data-variant="primary">
       <Button leadingIcon={primary.icon} {...busyProps(busy)} onClick={() => run(primary.command)}>{primary.label}</Button>
-      <Button ref={trigger} iconOnly leadingIcon={RiArrowDownSLine} aria-label="更多同步方式"
+      <Button ref={trigger} iconOnly leadingIcon={RiArrowDownSLine} aria-label="More sync options"
         aria-haspopup="dialog" aria-expanded={open} {...busyProps(busy)} onClick={() => { if (!busy) setOpen(!open) }} />
     </span>
     <Popover triggerRef={trigger} isOpen={open} onOpenChange={setOpen} placement="bottom end" offset={4}
       className={MENU_POPOVER_SURFACE}>
-      <MenuDialog aria-label="同步方式" className="flex w-56 flex-col gap-1 outline-none">
+      <MenuDialog aria-label="Sync options" className="flex w-56 flex-col gap-1 outline-none">
         {options.map(({ label, icon: Icon, command }) => {
           const blocked = metadataOnly && 'stage' in command && command.stage === 'previews';
           return <button key={label} type="button" disabled={blocked}
-            title={blocked ? '请先在媒体库设置中开启视频预览生成' : undefined}
+            title={blocked ? 'Enable video preview generation in the library settings first' : undefined}
             className={cx(MENU_ITEM, MENU_ITEM_INTERACTIVE, 'text-body-2-medium')}
             onClick={() => run(command)}><Icon aria-hidden className="size-4 shrink-0" />{label}</button>;
         })}

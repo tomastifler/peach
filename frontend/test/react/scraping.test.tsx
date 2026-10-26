@@ -107,27 +107,27 @@ it('首屏用 prefetch 缓存画出来源与任务，挂载时不重复请求', 
   const { calls, host } = await open(quiet());
   expect(calls.map((call) => call.path)).toEqual(FIRST_SCREEN);
   expect(section(host, 'JavBus')).not.toBeNull();
-  expect(section(host, '高清封面')).not.toBeNull();
+  expect(section(host, 'HD cover')).not.toBeNull();
   const bridge = section(host, 'amane');
   expect(bridge).not.toBeNull();
-  expect(bridge?.textContent).toContain('已安装版本0.16.1');
-  expect(bridge?.textContent).toContain('FC2PPVDB、AVSOX');
-  expect(buttonNamed('重新安装', bridge!)).not.toBeNull();
+  expect(bridge?.textContent).toContain('Installed version0.16.1');
+  expect(bridge?.textContent).toContain('FC2PPVDB, AVSOX');
+  expect(buttonNamed('Reinstall', bridge!)).not.toBeNull();
   // 连接方式是 BoardUI 的 Select，画出来的是按钮；原生 select 是 React Aria 藏在后面
   // 供表单取值的那一个，不是这一行的长相。
-  expect(host.querySelector('[aria-haspopup=listbox]')?.textContent?.trim()).toBe('Peach 代理');
+  expect(host.querySelector('[aria-haspopup=listbox]')?.textContent?.trim()).toBe('Peach proxy');
   expect(host.querySelector<HTMLAnchorElement>('a[href="/settings/library#peachProxy"]')?.textContent)
-    .toContain('配置 Peach 代理');
+    .toContain('Configure Peach proxy');
   expect(host.querySelector<HTMLAnchorElement>('a[href="https://www.javbus.com/"]')?.target).toBe('_blank');
 });
 
 it('走本机浏览器的来源只说明验证怎么过，不画 Cookie 输入', async () => {
   const { host } = await open(quiet({ source: 'fc2ppvdb', label: 'FC2PPV-DB', browser: true }));
   const card = section(host, 'FC2PPV-DB');
-  expect(card?.textContent).toContain('人机验证由本机浏览器自动完成');
-  expect(card?.textContent).toContain('这台机器上不需要 Cookie');
+  expect(card?.textContent).toContain('Human verification is completed automatically by the local browser');
+  expect(card?.textContent).toContain('No cookie is needed on this machine');
   expect(password(host), '浏览器自己带 Cookie，这一格不该出现').toBeNull();
-  expect(card?.textContent).not.toContain('任选一种方式提供 Cookie');
+  expect(card?.textContent).not.toContain('provide a cookie in either way');
   expect(host.querySelector('[aria-haspopup=listbox]'), '连接方式仍由用户选，浏览器按它换出口').not.toBeNull();
 });
 
@@ -148,9 +148,9 @@ it('保存后清空秘密输入，列表就地换成服务端回的那一条，�
     },
   });
   expect(password(host)?.value, '保存回来之后页面上不再留着刚交上去的那一份').toBe('');
-  expect(host.textContent).toContain('登录是否有效要到抓取时才知道');
-  expect(buttonNamed('撤销 Cookie', host)).not.toBeNull();
-  expect(toast).toHaveBeenCalledWith('来源设置已保存');
+  expect(host.textContent).toContain('whether the login is valid is only known when fetching');
+  expect(buttonNamed('Revoke cookie', host)).not.toBeNull();
+  expect(toast).toHaveBeenCalledWith('Source settings saved');
   expect(calls.filter((call) => call.path === '/api/scraping' && call.method === 'GET'),
     '保存换的是列表里的一条，不为它把整页重取一遍').toHaveLength(1);
 });
@@ -160,11 +160,11 @@ it('撤销走同一条写入，回执说的是撤销', async () => {
     ...quiet({ cookie_saved: true }),
     'POST /api/scraping/settings': () => ({ body: { saved: source({ cookie_saved: false }) } }),
   });
-  await click(buttonNamed('撤销 Cookie', host));
+  await click(buttonNamed('Revoke cookie', host));
   await settle();
   expect(calls[FIRST_SCREEN.length]?.body).toMatchObject({ source: 'javbus', revoke: true });
-  expect(toast).toHaveBeenCalledWith('Cookie 已撤销');
-  expect(buttonNamed('撤销 Cookie', host), '撤销之后这颗键没有对象可撤了').toBeNull();
+  expect(toast).toHaveBeenCalledWith('Cookie revoked');
+  expect(buttonNamed('Revoke cookie', host), '撤销之后这颗键没有对象可撤了').toBeNull();
 });
 
 it('保存失败时原因留在卡内，列表和刚填的内容都不动', async () => {
@@ -178,7 +178,7 @@ it('保存失败时原因留在卡内，列表和刚填的内容都不动', asyn
 
   expect(host.querySelector('[role=alert]')?.textContent).toContain('Cookie 不是 Netscape 格式');
   expect(password(host)?.value, '失败了还清空输入，等于让人重打一遍').toBe('session=fixture');
-  expect(buttonNamed('撤销 Cookie', host)).toBeNull();
+  expect(buttonNamed('Revoke cookie', host)).toBeNull();
   expect(toast).not.toHaveBeenCalled();
 });
 
@@ -191,11 +191,11 @@ it('连接结果按来源名称与这一跳查的是什么说成一句话', asyn
     ...quiet(),
     'POST /api/scraping/check': () => ({ body: { results } }),
   });
-  await click(buttonNamed('检查连接', host));
+  await click(buttonNamed('Check connection', host));
   await settle();
 
-  expect(host.querySelector('[role=status]')?.textContent).toBe('JavBus：可连接 · 800 × 538');
-  expect(host.querySelector('[role=alert]')?.textContent).toBe('JavBus 高清图片：不能连接。需要登录');
+  expect(host.querySelector('[role=status]')?.textContent).toBe('JavBus: reachable · 800 × 538');
+  expect(host.querySelector('[role=alert]')?.textContent).toBe('JavBus HD images: unreachable. 需要登录');
 });
 
 it('Cookie 二选一：切过去的那一种才交，另一种连输入都不留', async () => {
@@ -208,7 +208,7 @@ it('Cookie 二选一：切过去的那一种才交，另一种连输入都不留
   await click(radio('file'));
   expect(password(host), '粘贴框还在页面上就会跟着提交').toBeNull();
   expect(host.querySelector('input[type=file]')).not.toBeNull();
-  expect(host.textContent).toContain('未选择文件');
+  expect(host.textContent).toContain('No file chosen');
 
   await submit(section(host, 'JavBus'));
   await settle();
@@ -227,8 +227,8 @@ it('Cookie 文件超过上限时当场拦住，不拿它去占一次请求', asy
   await act(async () => { input.dispatchEvent(new Event('change', { bubbles: true })) });
   await settle();
 
-  expect(host.querySelector('[role=alert]')?.textContent).toBe('Cookie 文本超过 256 KiB');
-  expect(host.textContent).toContain('未选择文件');
+  expect(host.querySelector('[role=alert]')?.textContent).toBe('Cookie text exceeds 256 KiB');
+  expect(host.textContent).toContain('No file chosen');
   expect(calls).toHaveLength(FIRST_SCREEN.length);
 });
 
@@ -239,7 +239,7 @@ it('首屏读到的旧结果不冒充新结果：不画、也不发回执', asyn
   });
   expect(toast).not.toHaveBeenCalled();
   expect(host.textContent).not.toContain('上一趟的封面');
-  expect(host.textContent).not.toContain('正在抓取封面');
+  expect(host.textContent).not.toContain('Fetching cover');
 });
 
 it('抓封面跟到终态：跑的时候两秒一次，跑完发一次回执就不再问', async () => {
@@ -254,15 +254,15 @@ it('抓封面跟到终态：跑的时候两秒一次，跑完发一次回执就�
   await prefetchScraping(new AbortController().signal);
   const host = await mount(page(toast));
 
-  await type(host.querySelector<HTMLInputElement>('input[aria-label=馆藏番号]'), 'ABW-232');
-  await click(buttonNamed('抓取封面', host));
+  await type(host.querySelector<HTMLInputElement>('input[aria-label="Library code"]'), 'ABW-232');
+  await click(buttonNamed('Fetch cover', host));
   await settle();
   expect(calls[FIRST_SCREEN.length]).toMatchObject({ path: '/api/scraping/cover', method: 'POST', body: { code: 'ABW-232' } });
-  expect(host.textContent).toContain('正在抓取封面');
+  expect(host.textContent).toContain('Fetching cover');
 
   await tick(2000);
   expect(host.textContent).toContain('已取得 1600 × 1077 封面');
-  expect(host.textContent).not.toContain('正在抓取封面');
+  expect(host.textContent).not.toContain('Fetching cover');
   expect(toast).toHaveBeenCalledTimes(1);
   expect(toast).toHaveBeenCalledWith('已取得 1600 × 1077 封面');
 
@@ -303,18 +303,18 @@ it('amane 桥：检查上游只填「上游最新版本」那一行，重建跟�
   await prefetchScraping(new AbortController().signal);
   const host = await mount(page(toast));
   const bridge = section(host, 'amane')!;
-  expect(bridge.textContent).toContain('尚未检查');
+  expect(bridge.textContent).toContain('Not checked yet');
 
-  await click(buttonNamed('检查上游版本', bridge));
+  await click(buttonNamed('Check upstream version', bridge));
   await settle();
   expect(calls[FIRST_SCREEN.length]).toMatchObject({ path: '/api/scraping/amane-bridge/check', method: 'POST' });
   expect(bridge.textContent).toContain('v0.17.0');
-  expect(bridge.textContent, '检查上游不改变已安装版本').toContain('已安装版本0.16.1');
+  expect(bridge.textContent, '检查上游不改变已安装版本').toContain('Installed version0.16.1');
 
-  await click(buttonNamed('重新安装', bridge));
+  await click(buttonNamed('Reinstall', bridge));
   await settle();
   expect(calls[FIRST_SCREEN.length + 1]).toMatchObject({ path: '/api/scraping/amane-bridge/rebuild', method: 'POST' });
-  expect(bridge.textContent).toContain('正在重建运行环境');
+  expect(bridge.textContent).toContain('Rebuilding runtime');
   await tick(2000);
   expect(bridge.textContent).toContain('amane 桥已按 79ecfa763cc7 重建');
   expect(toast).toHaveBeenCalledTimes(1);
@@ -325,5 +325,5 @@ it('登录外链只写主机名；数据库里认不出的连接方式原样列�
   expect(linkHost('https://www.javbus.com/login?next=%2F')).toBe('www.javbus.com');
   expect(linkHost('不是地址')).toBe('不是地址');
   expect(networkOptions('peach').map(([key]) => key)).toEqual(['peach', 'direct']);
-  expect(networkOptions('socks-legacy')).toEqual([['peach', 'Peach 代理'], ['direct', '直接连接'], ['socks-legacy', 'socks-legacy']]);
+  expect(networkOptions('socks-legacy')).toEqual([['peach', 'Peach proxy'], ['direct', 'Direct connection'], ['socks-legacy', 'socks-legacy']]);
 });

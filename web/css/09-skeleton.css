@@ -130,7 +130,7 @@ img.cover:not([data-frame]),img[data-facebox]:not([data-face-framed]){visibility
   background:var(--hover)}
 /* 索引页这一枚等的是「118 项」，四五个字。150px 是照筛选条那句长读数定的，摆到
    标题右边就是一条明显长过答案的灰条，看着像还有一整句没回来。 */
-.index .ihead .countskeleton{width:54px}
+.index .ihead .countskeleton{width:42px}
 
 /* 顶部三层与标签条的首屏骨架。形状照 Geist 的判据选：头像走 pill（圆），
    胶囊走 rounded。几何不另算一套，直接套 .av/.ring/.nm、.brandpill、.pill 本身，

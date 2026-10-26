@@ -142,7 +142,7 @@ describe('关注的出处用站点图标', () => {
     try {
       const [badge] = await lineGeometry(opened.page, '[data-follow-item] [data-follow-seealso]');
       assert.ok(badge, '卡片上没有「另见」徽章');
-      assert.equal(badge.text, '另见');
+      assert.equal(badge.text, 'Also on');
       assert.equal(badge.alt, 'Rule34.xxx');
       assert.ok(Math.abs(badge.icon! - badge.line!) <= 1, `图标偏离徽章中线 ${Math.abs(badge.icon! - badge.line!)}px`);
       await opened.page.locator('[data-follow-item]:has([data-follow-seealso])').first().hover();
@@ -172,7 +172,7 @@ describe('关注的出处用站点图标', () => {
         probe.remove();
         const title = badge.closest('[data-follow-item]')!.querySelector('[data-media-title]') ?? badge.parentElement!;
         title.insertAdjacentHTML('afterbegin', '<small class="javedition" data-follow-edition="wip">WIP</small>'
-          + '<small class="javedition" data-follow-edition="has-wip">含 WIP</small>');
+          + '<small class="javedition" data-follow-edition="has-wip">Includes WIP</small>');
         const [wip, hasWip] = [...title.querySelectorAll('[data-follow-edition]')].map((node) => getComputedStyle(node));
         const shape = getComputedStyle(badge);
         const source = badge.closest('[data-follow-sources]')!.querySelector('[data-media-badge]')!;

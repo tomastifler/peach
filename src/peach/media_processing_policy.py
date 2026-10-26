@@ -24,6 +24,6 @@ def metadata_only(state_root: Path | None = None) -> bool:
 
 def save(state_root: Path, value: bool) -> None:
     if not isinstance(value, bool):
-        raise ValueError('请选择视频预览生成状态')
+        raise ValueError('Choose a video preview generation state')
     atomic_write_text(Path(state_root) / FILENAME,
                       json.dumps({'metadata_only': value}) + '\n')

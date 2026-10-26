@@ -145,7 +145,7 @@ describe('混排作品的画面框',()=>{
     part_group:{key:'p',seed_id:91000,count:128},
    }:{});
    const first=page.locator('#grid [data-media-grid] > [data-media-card]').first();
-   await first.click({modifiers:['Control']});
+   await first.click({modifiers:['ControlOrMeta']});
    await first.locator('[data-media-check]').waitFor();
    const box=await first.evaluate(card=>{
     const rect=(selector:string)=>card.querySelector(selector)!.getBoundingClientRect();
@@ -195,7 +195,7 @@ describe('混排作品的画面框',()=>{
    const page=await context.newPage();
    await openHome(page,'big');
    const titles=page.locator('#grid [data-media-grid] > [data-media-card] [data-media-title]');
-   await titles.nth(0).click({modifiers:['Control']});
+   await titles.nth(0).click({modifiers:['ControlOrMeta']});
    assert.equal(await titles.nth(0).evaluate(node=>getComputedStyle(node.closest('[data-media-card]')!).userSelect),'none');
    /* 多选态的 `user-select: none` 之外，Shift 按下那一下本身也不起选区：撤掉前者再点，两道各验一次。 */
    await page.addStyleTag({content:'.peach-react [data-media-card]{user-select:text !important}'});

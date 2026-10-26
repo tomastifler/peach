@@ -168,7 +168,7 @@ class TunnelPlanTests(unittest.TestCase):
         self.assertEqual(origin.url, "https://[2001:db8::5]:443")
 
     def test_source_without_tls_is_rejected_before_starting_a_tunnel(self):
-        with self.assertRaisesRegex(tunnel.TunnelError, "需要正在运行的 HTTPS"):
+        with self.assertRaisesRegex(tunnel.TunnelError, "needs a running HTTPS service"):
             tunnel.plan_for_config(
                 self.config, access_path=self.access_path, token="internal-token",
                 standalone_mode=False, lan_address="192.0.2.162",
@@ -177,13 +177,13 @@ class TunnelPlanTests(unittest.TestCase):
 
     def test_open_access_and_missing_token_are_rejected_before_binary_lookup(self):
         access.save(self.access_path, "")
-        with self.assertRaisesRegex(tunnel.TunnelError, "访问密码"):
+        with self.assertRaisesRegex(tunnel.TunnelError, "access password"):
             tunnel.plan_for_config(
                 self.config, access_path=self.access_path, token="internal-token",
                 standalone_mode=True,
             )
         access.save(self.access_path, "a-strong-test-password")
-        with self.assertRaisesRegex(tunnel.TunnelError, "内部访问令牌"):
+        with self.assertRaisesRegex(tunnel.TunnelError, "internal Peach access token"):
             tunnel.plan_for_config(
                 self.config, access_path=self.access_path, token="",
                 standalone_mode=True,
@@ -192,7 +192,7 @@ class TunnelPlanTests(unittest.TestCase):
     def test_missing_binary_is_rejected(self):
         self.binary.unlink()
         self.config.tunnel.binary = str(self.root / "missing.exe")
-        with self.assertRaisesRegex(tunnel.TunnelError, "找不到 cloudflared"):
+        with self.assertRaisesRegex(tunnel.TunnelError, "cloudflared not found"):
             tunnel.plan_for_config(
                 self.config, access_path=self.access_path, token="internal-token",
                 standalone_mode=True, environ={}, which=lambda _name: None,
@@ -200,7 +200,7 @@ class TunnelPlanTests(unittest.TestCase):
 
     def test_a_binary_dropped_into_the_data_root_is_not_picked_up(self):
         self.config.tunnel.binary = ""
-        with self.assertRaisesRegex(tunnel.TunnelError, "找不到 cloudflared"):
+        with self.assertRaisesRegex(tunnel.TunnelError, "cloudflared not found"):
             tunnel.plan_for_config(
                 self.config, access_path=self.access_path, token="internal-token",
                 standalone_mode=True, environ={}, which=lambda _name: None,
@@ -230,7 +230,7 @@ class TunnelPlanTests(unittest.TestCase):
             tunnel_ca_path=self.root / "ca.crt", tls_enabled=False,
             mdns_name="peach",
         )
-        with self.assertRaisesRegex(tunnel.TunnelError, "需要正在运行的 HTTPS"):
+        with self.assertRaisesRegex(tunnel.TunnelError, "needs a running HTTPS service"):
             tunnel.plan_for_settings(settings, environ={})
 
     def named_config(self, **overrides):
@@ -264,12 +264,12 @@ class TunnelPlanTests(unittest.TestCase):
             )
 
     def test_named_mode_needs_both_a_token_and_a_hostname(self):
-        with self.assertRaisesRegex(tunnel.TunnelError, "隧道令牌"):
+        with self.assertRaisesRegex(tunnel.TunnelError, "Cloudflare tunnel token"):
             tunnel.plan_for_config(
                 self.named_config(token="  "), access_path=self.access_path,
                 token="internal-token", standalone_mode=False,
             )
-        with self.assertRaisesRegex(tunnel.TunnelError, "公开主机名"):
+        with self.assertRaisesRegex(tunnel.TunnelError, "public hostname"):
             tunnel.plan_for_config(
                 self.named_config(hostname=""), access_path=self.access_path,
                 token="internal-token", standalone_mode=False,
@@ -285,7 +285,7 @@ class TunnelPlanTests(unittest.TestCase):
             tunnel.normalize_hostname(" https://Peach.Example.COM/ "), "peach.example.com")
 
     def test_an_unknown_mode_is_refused_instead_of_falling_back(self):
-        with self.assertRaisesRegex(tunnel.TunnelError, "quick 或 named"):
+        with self.assertRaisesRegex(tunnel.TunnelError, "quick or named"):
             tunnel.normalize_mode("tunnel")
         self.assertEqual(tunnel.normalize_mode(""), "quick")
 
@@ -415,7 +415,7 @@ class TunnelManagerTests(unittest.TestCase):
         )
         snapshot = tunnel.saved_snapshot(state_dir)
         self.assertEqual(snapshot.state, "stopped")
-        self.assertIn("上一次", snapshot.error)
+        self.assertIn("previous Tunnel", snapshot.error)
 
     def test_missing_state_file_is_a_clean_stopped_snapshot(self):
         snapshot = tunnel.saved_snapshot(self.root / "state")
@@ -428,7 +428,7 @@ class TunnelManagerTests(unittest.TestCase):
         (state_dir / tunnel.STATE_FILENAME).write_text("{", encoding="utf-8")
         snapshot = tunnel.saved_snapshot(state_dir)
         self.assertEqual(snapshot.state, "stopped")
-        self.assertEqual(snapshot.error, "Tunnel 状态文件不可读")
+        self.assertEqual(snapshot.error, "Tunnel state file is unreadable")
 
     def test_pidfile_for_another_process_does_not_mark_tunnel_ready(self):
         manager = tunnel.TunnelManager(
@@ -442,7 +442,7 @@ class TunnelManagerTests(unittest.TestCase):
             return process
 
         manager._popen = mismatched_popen
-        with self.assertRaisesRegex(tunnel.TunnelError, "连接到 Cloudflare"):
+        with self.assertRaisesRegex(tunnel.TunnelError, "Cloudflare edge"):
             manager.start(self.plan())
         self.assertTrue(self.processes[0].terminated)
         self.assertFalse((self.root / "state" / tunnel.PID_FILENAME).exists())
@@ -1015,7 +1015,7 @@ class AccessTunnelInterlockTests(unittest.TestCase):
         response, write = self.save(manager)
         manager.stop.assert_called_once_with()
         self.assertFalse(write.call_args.args[0].tunnel.enabled)
-        self.assertIn("临时远程链接", json.loads(response.body)["tunnel_notice"])
+        self.assertIn("Temporary remote link", json.loads(response.body)["tunnel_notice"])
 
     def test_disabling_the_password_without_a_tunnel_changes_nothing(self):
         manager = self.manager("stopped")

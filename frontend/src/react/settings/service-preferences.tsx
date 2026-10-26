@@ -17,10 +17,10 @@ import {
 } from '../settings-panel/settings-data';
 import { ErrorText, Help, Rows, Section, Stack } from './section';
 
-const THUMBNAIL_OPTIONS = [['off', '关闭'], ['precise', '每 10 秒一张'], ['coarse', '每 30 秒一张']] as const;
+const THUMBNAIL_OPTIONS = [['off', 'Off'], ['precise', 'One every 10 seconds'], ['coarse', 'One every 30 seconds']] as const;
 
 export function VideoThumbnailRow({ epoch = 0 }: { epoch?: number }) {
-  return <Section title="时间轴缩略图"><VideoThumbnailControls epoch={epoch} /></Section>;
+  return <Section title="Timeline thumbnails"><VideoThumbnailControls epoch={epoch} /></Section>;
 }
 
 export function VideoThumbnailControls({ epoch = 0, disabled = false }: { epoch?: number; disabled?: boolean }) {
@@ -33,9 +33,9 @@ export function VideoThumbnailControls({ epoch = 0, disabled = false }: { epoch?
   return (
     <>
       <Rows>
-        <SettingsRow label="时间轴预览" description="按所选间隔抽帧，仅处理本机磁盘上的视频。">
+        <SettingsRow label="Timeline preview" description="Samples frames at the chosen interval; only videos on local disks are processed.">
           <div id="videoThumbnailSetting">
-            <Select aria-label="缩略图采集间隔" selectedKey={data?.mode || 'off'}
+            <Select aria-label="Thumbnail capture interval" selectedKey={data?.mode || 'off'}
               isDisabled={disabled || !data || status.isFetching || save.isPending}
               onSelectionChange={(key) => { if (key !== null) save.mutate(String(key)) }}>
               {THUMBNAIL_OPTIONS.map(([key, label]) => <SelectItem key={key} id={key}>{label}</SelectItem>)}
@@ -44,7 +44,7 @@ export function VideoThumbnailControls({ epoch = 0, disabled = false }: { epoch?
         </SettingsRow>
       </Rows>
       {save.isPending || data?.status === 'running'
-        ? <Stack divided><Help role="status">{save.isPending ? '正在保存…' : '正在采集，进度在活动页查看。'}</Help></Stack>
+        ? <Stack divided><Help role="status">{save.isPending ? 'Saving…' : 'Capturing; see progress on the Activity page.'}</Help></Stack>
         : null}
       {error ? <Stack divided><ErrorText>{errorMessage(error)}</ErrorText></Stack> : null}
     </>
@@ -59,27 +59,27 @@ export function FollowPreferenceRows({ receipt }: { receipt(message: string): vo
   const initialDays = settings.data?.followInitialDays ?? store.value.followInitialDays;
   const error = initial.error || settings.error;
   return (
-    <Section title="关注采集">
+    <Section title="Follow collection">
       <Rows>
         <FollowScheduleRow />
-        <SettingsRow label="首次采集范围">
+        <SettingsRow label="Initial collection range">
           <div id="followInitialDaysSetting">
-            <Select aria-label="首次采集范围" selectedKey={String(initialDays)}
+            <Select aria-label="Initial collection range" selectedKey={String(initialDays)}
               isDisabled={settings.isFetching || initial.isPending}
               onSelectionChange={(key) => {
                 if (key === null) return;
                 initial.mutate({ followInitialDays: Number(key) }, { onSuccess: (saved) => {
                   if (typeof saved.followInitialDays === 'number') store.value.followInitialDays = saved.followInitialDays;
                   store.save();
-                  receipt('已保存首次采集范围');
+                  receipt('Initial collection range saved');
                 } });
               }}>
               {FOLLOW_INITIAL_RANGE_OPTIONS.map(([key, label]) => <SelectItem key={key} id={key}>{label}</SelectItem>)}
             </Select>
           </div>
         </SettingsRow>
-        <SettingsRow label="头像刷新">每 3 个月</SettingsRow>
-        <SettingsRow label="favicon 刷新">每年</SettingsRow>
+        <SettingsRow label="Avatar refresh">Every 3 months</SettingsRow>
+        <SettingsRow label="Favicon refresh">Yearly</SettingsRow>
       </Rows>
       {error ? <Stack divided><ErrorText>{errorMessage(error)}</ErrorText></Stack> : null}
     </Section>
@@ -112,26 +112,26 @@ function FollowScheduleRow() {
   const error = save.error || status.error;
   return (
     <>
-      <SettingsRow label="自动检查更新">
+      <SettingsRow label="Check for updates automatically">
         <div id="followScheduleSetting" className="flex min-w-0 flex-wrap items-center justify-end gap-2">
-          <Switch aria-label="自动检查更新" isSelected={data?.enabled === true} isDisabled={blocked}
+          <Switch aria-label="Check for updates automatically" isSelected={data?.enabled === true} isDisabled={blocked}
             onChange={(on) => {
               localStorage.setItem('peach.number.followScheduleSetting', String(remembered.current));
               save.mutate(on ? remembered.current : 0);
             }} />
           {data?.enabled ? <div className="flex items-center gap-2">
             <Input type="number" inputMode="numeric" name="follow-interval" autoComplete="off"
-              aria-label="自动检查间隔" size="small" className="w-24"
+              aria-label="Automatic check interval" size="small" className="w-24"
               value={draft} onChange={(value) => { setDraft(value); setInvalid(false) }} onBlur={commit}
               onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); commit() } }}
               isDisabled={blocked} isInvalid={invalid} />
-            <span className="text-body-2-regular text-text-secondary">分钟</span>
+            <span className="text-body-2-regular text-text-secondary">minutes</span>
           </div> : null}
         </div>
       </SettingsRow>
-      {invalid ? <Stack><ErrorText>请输入 15–10080 的整数（分钟）。</ErrorText></Stack> : null}
+      {invalid ? <Stack><ErrorText>Enter a whole number from 15 to 10080 (minutes).</ErrorText></Stack> : null}
       {save.isPending || data?.running
-        ? <Stack><Help role="status">{save.isPending ? '正在保存…' : '正在检查来源更新…'}</Help></Stack> : null}
+        ? <Stack><Help role="status">{save.isPending ? 'Saving…' : 'Checking sources for updates…'}</Help></Stack> : null}
       {error ? <Stack><ErrorText>{errorMessage(error)}</ErrorText></Stack> : null}
     </>
   );

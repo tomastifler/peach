@@ -39,7 +39,7 @@ class JavBusSource(SiteSource):
         try:
             return session.get(self.work_url(code), config=self.config)
         except NotFound:
-            raise SourceFailure(FailureReason.NOT_FOUND, "JavBus 没有这个番号", status_code=404) from None
+            raise SourceFailure(FailureReason.NOT_FOUND, "JavBus has no such code", status_code=404) from None
 
     def parse(self, page: Page, code: str) -> SiteRecord:
         text = page.text
@@ -47,9 +47,9 @@ class JavBusSource(SiteSource):
         shown = fields.get("識別碼", "").replace(" ", "")
         if not shown:
             raise SourceFailure(FailureReason.AUTH_REQUIRED,
-                                "JavBus 回的不是作品页，多半是年龄确认页：到采集设置给 JavBus 贴上浏览器里的 Cookie")
+                                "JavBus did not return a work page, most likely the age-confirmation page: paste the browser Cookie for JavBus in the scrape settings")
         if not same_release_code(code, shown):
-            raise SourceFailure(FailureReason.NOT_FOUND, "JavBus 没有这个番号")
+            raise SourceFailure(FailureReason.NOT_FOUND, "JavBus has no such code")
         heading = _TITLE.search(text)
         cover = _COVER.search(text)
         runtime = re.search(r"\d+", fields.get("長度", ""))

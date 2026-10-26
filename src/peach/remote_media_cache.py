@@ -137,7 +137,7 @@ class RemoteMediaCache:
             expected = int(headers.get("content-length", size))
             if not size or size != expected or (content_range and
                     size != int(content_range[2]) - int(content_range[1]) + 1):
-                raise OSError("媒体响应长度不完整")
+                raise OSError("Media response length is incomplete")
         atomic_write_text(slot.with_suffix(".json"), json.dumps({
             "status": 200 if complete_range else upstream.status_code, "size": size, "headers": {
                 name: value for name, value in headers.items() if name in MEDIA_HEADERS
@@ -159,11 +159,11 @@ class RemoteMediaCache:
             if failed.is_file() and time.time() - failed.stat().st_mtime < 3600:
                 if path.is_file():
                     return path.read_bytes()
-                raise RemoteMediaUnavailable("媒体未取得")
+                raise RemoteMediaUnavailable("Media not obtained")
             try:
                 data = fetch()
                 if not data:
-                    raise RemoteMediaUnavailable("媒体未取得")
+                    raise RemoteMediaUnavailable("Media not obtained")
                 with atomic_path(path) as temporary:
                     temporary.write_bytes(data)
                 failed.unlink(missing_ok=True)

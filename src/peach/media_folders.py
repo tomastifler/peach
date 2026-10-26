@@ -77,7 +77,7 @@ def directory_index(connection, config, *, locations: str = '', library: str = '
 def browse(index: dict[str, dict], key: str = '', search: str = '') -> dict:
     selected = index.get(key)
     if key and selected is None:
-        raise ValueError('目录不存在或已移出媒体库')
+        raise ValueError('The folder does not exist or has been removed from the media library')
     ancestors = []
     node = selected
     while node:

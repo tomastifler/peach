@@ -71,7 +71,7 @@ class DownloadPostprocessTests(unittest.TestCase):
     def test_occupied_target_is_a_retryable_failure(self):
         self.target.parent.mkdir()
         self.target.write_bytes(b'existing file')
-        with self.assertRaisesRegex(RuntimeError, '整理'):
+        with self.assertRaisesRegex(RuntimeError, 'File organising did not finish'):
             self.run_task()
         self.assertEqual(self.store.get(self.task.id).postprocess_state, 'failed')
         self.assertTrue(self.source.exists())
@@ -85,7 +85,7 @@ class DownloadPostprocessTests(unittest.TestCase):
             connection.commit()
             return result
         with patch.object(post.organize, 'apply_plan', side_effect=corrupt), \
-                self.assertRaisesRegex(RuntimeError, '校验'):
+                self.assertRaisesRegex(RuntimeError, 'Ledger check after organising failed'):
             self.run_task()
         self.assertEqual(self.store.get(self.task.id).postprocess_state, 'failed')
 
@@ -93,6 +93,6 @@ class DownloadPostprocessTests(unittest.TestCase):
         with patch.object(post.organize, 'build_plan', return_value={
                 'rows': [{'action': 'skip', 'reason': post.organize.SKIP_TARGET_EXISTS}],
                 'reasons': {post.organize.SKIP_TARGET_EXISTS: 1}}), \
-                self.assertRaisesRegex(RuntimeError, '整理'):
+                self.assertRaisesRegex(RuntimeError, 'File organising did not finish'):
             self.run_task()
         self.assertTrue(self.source.exists())

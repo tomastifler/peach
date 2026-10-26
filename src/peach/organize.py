@@ -34,18 +34,18 @@ PLAN_FIELDS = ["asset_id", "location", "current_path", "target_path", "action", 
 
 #: 界面上给的几组模板。第一组是最小可用的一套，后两组演示目录分层。
 PRESETS: tuple[dict[str, str], ...] = (
-    {"label": "番号 标题", "file": "{number}[ {title}]", "dir": ""},
-    {"label": "厂牌分目录", "file": "{number}[ {title}]", "dir": "{studio}"},
-    {"label": "厂牌 / 番号目录", "file": "{number}[ {title}][ CD{cd}]", "dir": "{studio}/{number}"},
+    {"label": "Code Title", "file": "{number}[ {title}]", "dir": ""},
+    {"label": "Studio folders", "file": "{number}[ {title}]", "dir": "{studio}"},
+    {"label": "Studio / Code folders", "file": "{number}[ {title}][ CD{cd}]", "dir": "{studio}/{number}"},
 )
 
 #: 跳过原因的固定写法。界面按这几个键分组计数，所以它们是契约的一部分。
-SKIP_OFFLINE = "来源未挂载"
-SKIP_MISSING_FIELD = "字段缺失"
-SKIP_OUTSIDE_ROOT = "不在来源根内"
-SKIP_TARGET_EXISTS = "目标已存在"
-SKIP_CROSS_VOLUME = "跨盘"
-SKIP_TOO_LONG = "路径过长"
+SKIP_OFFLINE = "Source not mounted"
+SKIP_MISSING_FIELD = "Field missing"
+SKIP_OUTSIDE_ROOT = "Outside source root"
+SKIP_TARGET_EXISTS = "Target already exists"
+SKIP_CROSS_VOLUME = "Cross-volume"
+SKIP_TOO_LONG = "Path too long"
 
 
 #: 挂载上的 `os.rename` 证明不了云端真的改了名的来源：PikPak 挂载对大文件常报 WinError 50，
@@ -66,7 +66,7 @@ class UnverifiedRename(OSError):
 def verified_renames(location: str, rename: Callable[[str, str], None]):
     """在这段上下文里，`location` 的改名交给 `rename`（它自己确认云端结果）。"""
     if location in _verified_renames:
-        raise RuntimeError(f"来源 {location} 已注入核验改名")
+        raise RuntimeError(f"Source {location} already has verified rename injected")
     _verified_renames[location] = rename
     try:
         yield
@@ -96,8 +96,8 @@ def refuse_unverified(paths: Iterable[str]) -> None:
     blocked = sorted({location for location in locations
                       if unverified_location(location)})
     if blocked:
-        raise OrganizeError(f"来源 {'、'.join(blocked)} 的挂载改名无法核验云端结果，整批未执行；"
-                            "须经官方核验通道（如 organize_library_dirs.py --pikpak-webdav）")
+        raise OrganizeError(f"Mounted rename for source(s) {', '.join(blocked)} cannot verify the cloud result; the whole batch was not executed; "
+                            "use the official verification channel (e.g. organize_library_dirs.py --pikpak-webdav)")
 
 
 def _definition(width, height) -> str:
@@ -197,7 +197,7 @@ def build_plan(connection: sqlite3.Connection, *, location: str,
     file_template = validate_template(file_template)
     dir_template = validate_template(dir_template, directory=True)
     if not file_template and not dir_template:
-        raise OrganizeError("至少要给一个模板")
+        raise OrganizeError("At least one template is required")
 
     declared = dict(location_roots() if roots is None else roots)
     rows = _rows(connection, location, asset_ids)
@@ -308,7 +308,7 @@ def _rename(source: str, target: str) -> None:
     if location in VERIFIED_RENAME_LOCATIONS:
         verified = _verified_renames.get(location)
         if verified is None:
-            raise UnverifiedRename(f"来源 {location} 的挂载改名无法核验云端结果，须经官方核验通道")
+            raise UnverifiedRename(f"Mounted rename for source {location} cannot verify the cloud result; use the official verification channel")
         verified(str(source), str(target))
         return
     local_source = translate_ledger_path(source)
@@ -340,24 +340,24 @@ def _move_one(connection: sqlite3.Connection, asset_id: int,
     local_source = translate_ledger_path(old_path)
     local_target = translate_ledger_path(new_path)
     if not local_source.exists():
-        return "源文件不存在"
+        return "Source file does not exist"
     if local_target.exists():
         return SKIP_TARGET_EXISTS
     try:
         _rename(old_path, new_path)
     except OSError as error:
-        return f"改名失败：{error.strerror or error}"
+        return f"Rename failed: {error.strerror or error}"
     try:
         if not _update_row(connection, asset_id, old_path, new_path):
-            raise OrganizeError("数据库里这一行已经变了")
+            raise OrganizeError("This row has changed in the database")
         connection.commit()
     except Exception as error:
         connection.rollback()
         try:
             _rename(new_path, old_path)
-            return f"数据库写入失败，已改回原名：{error}"
+            return f"Database write failed; renamed back: {error}"
         except OSError:
-            return f"数据库写入失败且改不回原名，需要人工处理：{error}"
+            return f"Database write failed and rename could not be reverted; manual handling required: {error}"
     return "ok"
 
 

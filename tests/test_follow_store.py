@@ -288,7 +288,7 @@ class RecordTests(_StoreCase):
                                moment=MOMENT)
         self.assertEqual(outcome.added, 1)
         self.assertIsNone(outcome.evidence_path)
-        self.assertIn("证据未取得", outcome.evidence_error)
+        self.assertIn("Evidence not obtained", outcome.evidence_error)
         item = store.items()[0]
         self.assertEqual(item.title, "Fiona - Paizuri")
         self.assertIsNone(item.metadata.get("evidence_path"))

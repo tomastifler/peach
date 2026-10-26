@@ -193,13 +193,13 @@ class ServiceStatusTests(unittest.TestCase):
     def test_all_healthy(self):
         self.assertEqual(
             self.manager({"http": (True, ""), "https": (True, "")}).status(),
-            "HTTP 正常 · HTTPS 正常",
+            "HTTP OK · HTTPS OK",
         )
 
     def test_none_healthy(self):
         self.assertEqual(
             self.manager({"http": (False, "无响应"), "https": (False, "无响应")}).status(),
-            "HTTP 异常（无响应） · HTTPS 异常（无响应）",
+            "HTTP Error (无响应) · HTTPS Error (无响应)",
         )
 
     def test_mount_failure_names_the_source_without_restarting_the_healthy_service(self):
@@ -210,7 +210,7 @@ class ServiceStatusTests(unittest.TestCase):
         popen = Mock()
         manager = ServiceManager((spec,), popen=popen, health_get=lambda *a, **k: response)
         manager.start_missing()
-        self.assertEqual(manager.status(), "HTTPS 正常（CloudDrive · 115：没有权限读取）")
+        self.assertEqual(manager.status(), "HTTPS OK (CloudDrive · 115：没有权限读取)")
         popen.assert_not_called()
 
     def test_short_summary_deduplicates_mount_warnings_and_recovers(self):
@@ -221,43 +221,43 @@ class ServiceStatusTests(unittest.TestCase):
         manager._health_get = lambda *a, **k: response
         for spec in manager.specs:
             self.assertTrue(manager.healthy(spec))
-        self.assertEqual(manager.status_summary(), "运行中 · 2 项提醒")
-        self.assertEqual(manager.status_details()[:3], ("HTTP 正常", "HTTPS 正常", warnings[0]))
+        self.assertEqual(manager.status_summary(), "Running · 2 warnings")
+        self.assertEqual(manager.status_details()[:3], ("HTTP OK", "HTTPS OK", warnings[0]))
         self.assertTrue(manager.status_details()[-1].endswith("…"))
         self.assertTrue(all(len(line) <= 48 for line in manager.status_details()))
         response.json.return_value = {"ok": True, "media_mounts": {"warnings": []}}
         for spec in manager.specs:
             manager.healthy(spec)
-        self.assertEqual(manager.status_summary(), "运行中")
-        self.assertEqual(manager.status_details(), ("HTTP 正常", "HTTPS 正常"))
+        self.assertEqual(manager.status_summary(), "Running")
+        self.assertEqual(manager.status_details(), ("HTTP OK", "HTTPS OK"))
 
     def test_short_summary_preserves_service_failures(self):
         manager = self.manager({"http": (True, ""), "https": (False, "状态码 503")})
-        self.assertEqual(manager.status_summary(), "部分服务异常")
-        self.assertEqual(manager.status_details(), ("HTTP 正常", "HTTPS 异常（状态码 503）"))
-        self.assertEqual(self.manager({"http": (False, "无响应")}).status_summary(), "服务未运行")
+        self.assertEqual(manager.status_summary(), "Some services in error")
+        self.assertEqual(manager.status_details(), ("HTTP OK", "HTTPS Error (状态码 503)"))
+        self.assertEqual(self.manager({"http": (False, "无响应")}).status_summary(), "Services not running")
 
     def test_windows_style_menu_keeps_details_out_of_the_root_and_refreshes(self):
         manager = self.manager({"http": (True, "")})
         with patch("peach.tray.pystray.Icon") as icon:
             tray = PeachTray(manager)
         root = icon.call_args.args[3]
-        status = next(item for item in root.items if item.text.startswith("状态："))
-        self.assertEqual(status.text, "状态：运行中")
-        self.assertIn("HTTP 正常", [item.text for item in status.submenu.items])
+        status = next(item for item in root.items if item.text.startswith("Status: "))
+        self.assertEqual(status.text, "Status: Running")
+        self.assertIn("HTTP OK", [item.text for item in status.submenu.items])
         manager._last_health["http"] = (False, "无响应")
-        self.assertEqual(status.text, "状态：服务未运行")
-        self.assertIn("HTTP 异常（无响应）", [item.text for item in status.submenu.items])
+        self.assertEqual(status.text, "Status: Services not running")
+        self.assertIn("HTTP Error (无响应)", [item.text for item in status.submenu.items])
         self.assertIs(tray.manager, manager)
 
     def test_partial_names_the_broken_one_with_reason(self):
         self.assertEqual(
             self.manager({"http": (True, ""), "https": (False, "状态码 503")}).status(),
-            "HTTP 正常 · HTTPS 异常（状态码 503）",
+            "HTTP OK · HTTPS Error (状态码 503)",
         )
         self.assertEqual(
             self.manager({"http": (False, "状态码 503"), "https": (True, "")}).status(),
-            "HTTP 异常（状态码 503） · HTTPS 正常",
+            "HTTP Error (状态码 503) · HTTPS OK",
         )
 
     def test_health_check_never_goes_through_a_proxy(self):
@@ -326,7 +326,7 @@ class ServiceStatusTests(unittest.TestCase):
         )
         ok, message = manager.sync_ledger(Path("/venv/peach"))
         self.assertFalse(ok)
-        self.assertIn("不归本托盘管理", message)
+        self.assertIn("not managed by this tray", message)
         runner.assert_not_called()
 
     def test_an_unreachable_share_never_stops_the_services(self):
@@ -392,7 +392,7 @@ class ServiceStatusTests(unittest.TestCase):
         )
         ok, message = manager.sync_ledger(Path("/venv/peach"), take_ownership=True)
         self.assertFalse(ok)
-        self.assertIn("先挂上共享副本所在的盘", message)
+        self.assertIn("mount the drive holding the shared copy first", message)
         runner.assert_not_called()
 
     def test_an_unmounted_share_is_mounted_once_and_then_synced(self):
@@ -490,7 +490,7 @@ class ReplicationSwitchTests(unittest.TestCase):
 
     def test_menu_items_are_assembled_when_replication_is_on(self):
         labels = [label for label, _ in self.items(True)]
-        self.assertEqual(labels, ["同步数据库", "由本机接管数据库写入"])
+        self.assertEqual(labels, ["Sync database", "Take over database writes on this machine"])
 
     def test_sync_ledger_refuses_instead_of_probing_a_share(self):
         """菜单项没了，但托盘还有别的入口；这条路径会去探一个不存在的共享。"""
@@ -562,8 +562,8 @@ class SetupGateTests(unittest.TestCase):
         gate = SetupGate(manager, config, waiting=True, load=self._config)
         self.assertTrue(gate.waiting)
         self.assertEqual(gate.open_url(), "http://127.0.0.1:8900/")
-        self.assertEqual(gate.open_label(), "重新打开设置页")
-        self.assertIn("等待完成首次设置", gate.status_line())
+        self.assertEqual(gate.open_label(), "Reopen setup page")
+        self.assertIn("Waiting for first-run setup", gate.status_line())
         self.assertFalse(gate.poll(), "设置还没做完，轮询不动任何东西")
         self.assertEqual([spec.name for spec in manager.specs], ["setup"])
 
@@ -606,7 +606,7 @@ class SetupGateTests(unittest.TestCase):
         self.assertTrue(manager.specs, "切换之后必须有正常服务规格")
         self.assertEqual(manager.log_dir, self.data_root / "logs")
         self.assertEqual(manager.child_environment()["PEACH_DATA_ROOT"], str(self.data_root))
-        self.assertEqual(gate.open_label(), "打开 Peach")
+        self.assertEqual(gate.open_label(), "Open Peach")
         self.assertEqual(gate.open_url(), "https://peach-writer.local/")
 
         scan = scan_popen.call_args
@@ -745,10 +745,10 @@ class SourceSyncTests(unittest.TestCase):
 
     def test_windows_tray_lists_source_sync_next_to_ledger(self):
         source = inspect.getsource(PeachTray.__init__)
-        self.assertIn('MenuItem("同步开发进度", self.sync_source,', source)
+        self.assertIn('MenuItem("Sync dev progress", self.sync_source,', source)
         self.assertIn('visible=lambda _: not standalone()', source)
-        self.assertLess(source.index("同步开发进度"), source.index("ledger_menu_items"))
-        self.assertLess(source.index("ledger_menu_items"), source.index("重启服务"))
+        self.assertLess(source.index("Sync dev progress"), source.index("ledger_menu_items"))
+        self.assertLess(source.index("ledger_menu_items"), source.index("Restart services"))
 
     def test_windows_source_sync_tests_then_restarts_services(self):
         snapshot = VersionSnapshot("0.6.4", "master", "abc12345", False, True, "origin/master")
@@ -946,7 +946,7 @@ class LocalRebuildTests(unittest.TestCase):
             tray.sync_source(icon)
             self.drain(tray)
         self.assertEqual(updates.prepared, [])
-        self.assertIn("托盘无需重建", self.messages(icon))
+        self.assertIn("no tray rebuild is needed", self.messages(icon))
 
     def test_a_tray_built_from_the_current_head_reports_that_it_matches(self):
         versions = FakeVersions(self.snapshot(behind=0))
@@ -958,7 +958,7 @@ class LocalRebuildTests(unittest.TestCase):
             tray.sync_source(icon)
             self.drain(tray)
         self.assertEqual(updates.prepared, [])
-        self.assertIn("托盘构建与检出一致", self.messages(icon))
+        self.assertIn("The tray build matches the checkout", self.messages(icon))
 
     def test_a_source_checkout_has_nothing_to_rebuild(self):
         versions = FakeVersions(self.snapshot(behind=5))
@@ -970,7 +970,7 @@ class LocalRebuildTests(unittest.TestCase):
             tray.sync_source(icon)
             self.drain(tray)
         self.assertEqual(updates.prepared, [])
-        self.assertIn("当前不是打包托盘", self.messages(icon))
+        self.assertIn("This is not a packaged tray", self.messages(icon))
 
     def test_a_standalone_test_package_is_replaced_by_hand_not_rebuilt(self):
         versions = FakeVersions(self.snapshot(behind=5))
@@ -982,7 +982,7 @@ class LocalRebuildTests(unittest.TestCase):
             tray.sync_source(icon)
             self.drain(tray)
         self.assertEqual(updates.prepared, [])
-        self.assertIn("独立测试包", self.messages(icon))
+        self.assertIn("standalone beta package", self.messages(icon))
 
     def test_a_fast_forward_from_the_channel_still_uses_the_paths_it_pulled(self):
         """`updated` 那条路不变：远端真有新提交时，重建范围就是这次快进带来的改动。"""
@@ -1302,7 +1302,7 @@ class TrayCommandLineTests(unittest.TestCase):
         code, stdout, _ = self._run(["--help"])
         self.assertEqual(code, 0)
         self.assertIn("peach-tray", stdout)
-        self.assertIn("托盘", stdout)
+        self.assertIn("peach-tray", stdout)
         self._assert_nothing_touched()
 
     def test_unknown_argument_exits_two_and_leaves_the_state_directory_alone(self):
@@ -1369,7 +1369,7 @@ class ServiceRevivalTests(unittest.TestCase):
             with self.assertLogs("peach.tray", "WARNING") as logs:
                 manager.start_missing()
         popen.assert_not_called()
-        self.assertIn("不是本托盘拉起的", logs.output[0])
+        self.assertIn("not started by this tray", logs.output[0])
 
     def test_log_handles_go_to_the_child_and_are_closed_in_the_tray(self):
         """补拉会反复发生，父进程每拉一次就多握两个日志句柄的话会越攒越多。"""
@@ -1520,11 +1520,11 @@ class TrayPreparationTests(unittest.TestCase):
 
     def test_startup_reports_a_failed_migration_and_an_unready_schema(self):
         failed = runtime_prepare.Step("migrations", "failed", "migrate status 失败：database is locked")
-        manager = self.manager(problems=["HTTPS 未就绪：数据库结构与迁移不一致"])
+        manager = self.manager(problems=["HTTPS not ready: Database schema does not match migrations"])
         tray = self.tray(manager, self.preparation(migration=failed))
         self.run_tray(tray)
         self.assertIn("database is locked", tray._startup_warning)
-        self.assertIn("数据库结构与迁移不一致", tray._startup_warning)
+        self.assertIn("Database schema does not match migrations", tray._startup_warning)
         self.assertFalse(runtime_prepare.read_record(self.root / "state", pid=os.getpid())["ok"])
 
     def test_restart_migrates_while_the_services_are_stopped(self):
@@ -1542,7 +1542,7 @@ class TrayPreparationTests(unittest.TestCase):
         icon = self.press_restart(tray)
         self.assertEqual(self.spawned, [True])
         manager.restart.assert_not_called()
-        self.assertIn("整体重启托盘", icon.notify.call_args_list[0].args[0])
+        self.assertIn("restarting the whole tray", icon.notify.call_args_list[0].args[0])
 
     def test_a_refused_whole_tray_restart_falls_back_to_the_services(self):
         log = self.root / "logs" / "tray-restart.out.log"
@@ -1597,7 +1597,7 @@ class TrayPreparationTests(unittest.TestCase):
         specs = (ServiceSpec("http", "http://127.0.0.1/healthz", ("peach",), True),
                  ServiceSpec("https", "https://192.0.2.10/healthz", ("peach",), "ca.crt"))
         manager = ServiceManager(specs, health_get=get, log_dir=self.root)
-        self.assertEqual(manager.readiness_problems(), ["HTTPS 未就绪：数据库结构与迁移不一致"])
+        self.assertEqual(manager.readiness_problems(), ["HTTPS not ready: Database schema does not match migrations"])
         self.assertEqual(asked, [("http://127.0.0.1/healthz?ready=1", True),
                                  ("https://192.0.2.10/healthz?ready=1", "ca.crt")])
 

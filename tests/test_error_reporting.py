@@ -258,7 +258,7 @@ class ErrorReportingTests(unittest.TestCase):
 
     def test_failure_dialog_points_to_an_existing_report_and_cli_needs_no_service(self):
         message = error_reporting.failure_details("tray-handoff", OSError("desktop unavailable"))
-        self.assertIn("诊断报告", message)
+        self.assertIn("Diagnostic report", message)
         self.assertEqual(len(list(self.logs.glob("peach-support-*.zip"))), 1)
         destination = self.root / "share.zip"
         result = self.probe(f"from peach.support_bundle import main; raise SystemExit(main([{str(destination)!r}]))")

@@ -27,7 +27,7 @@ class LocalPosterTests(unittest.TestCase):
 
     def test_unreadable_image_returns_a_retryable_error(self):
         self.source.write_bytes(b'not an image')
-        with self.assertRaisesRegex(ValueError, '无法读取'):
+        with self.assertRaisesRegex(ValueError, 'cannot be read'):
             read_jpeg(self.source)
 
     def test_local_disk_picture_decodes_without_starting_a_process(self):

@@ -36,20 +36,20 @@ const PORTRAIT_RATIO = 9 / 16;
 export type MediaCardVariant = 'grid' | 'short' | 'next' | 'resource';
 
 /** 片名空着时卡片标题与读屏名的兜底，资源卡那一档是「未命名资源」。 */
-const UNNAMED = '未命名视频';
+const UNNAMED = 'Untitled video';
 
 /** 雪碧图里的一枚字形，写法同遗留层 `icon()`：尺寸与描边由 `./media-card.css` 按位置给。 */
 function Icon({ name }: { name: string }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><use href={`#i-${name}`} /></svg>;
 }
 
-const RESOURCE_LABELS: Record<string, string> = { image: '图片', audio: '音频', archive: '压缩包', other: '其它文件' };
-const DISPOSAL_LABELS = { manual: '手动', junk: '垃圾', duplicate: '重复', missing: '文件缺失' };
+const RESOURCE_LABELS: Record<string, string> = { image: 'Image', audio: 'Audio', archive: 'Archive', other: 'Other file' };
+const DISPOSAL_LABELS = { manual: 'Manual', junk: 'Junk', duplicate: 'Duplicate', missing: 'File missing' };
 
 function DisposalReason({ item }: { item: MediaItem }) {
   if (item.disposal !== 'trash') return null;
-  const label = (item.disposal_reason && DISPOSAL_LABELS[item.disposal_reason]) || '原因未记录';
-  return <span data-media-disposal-reason="" title={`归入原因：${label}`}>{label}</span>;
+  const label = (item.disposal_reason && DISPOSAL_LABELS[item.disposal_reason]) || 'Reason not recorded';
+  return <span data-media-disposal-reason="" title={`Reason: ${label}`}>{label}</span>;
 }
 
 /** 视频与资源共用回收站操作，失败原因留在卡片上供重试。 */
@@ -57,7 +57,7 @@ function ResourceAction({ item, actions }: { item: MediaItem; actions: MediaCard
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const operation = item.disposal === 'trash' ? 'restore' : 'dispose';
-  const label = operation === 'restore' ? '还原' : '移入回收站';
+  const label = operation === 'restore' ? 'Restore' : 'Move to trash';
   const run = (event: MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
@@ -65,13 +65,13 @@ function ResourceAction({ item, actions }: { item: MediaItem; actions: MediaCard
     setBusy(true);
     setError('');
     void actions.resourceOperation(item, operation)
-      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : '操作失败，请重试'))
+      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'Action failed. Try again.'))
       .finally(() => setBusy(false));
   };
   return <>
-    <button type="button" data-media-resource-action={operation} aria-label={`${label} ${item.name || '未命名资源'}`}
+    <button type="button" data-media-resource-action={operation} aria-label={`${label} ${item.name || 'Untitled file'}`}
       title={label} onClick={run} aria-busy={busy || undefined} aria-disabled={busy || undefined}>
-      {busy ? <><span dangerouslySetInnerHTML={{ __html: spinnerHtml(`正在${label}`) }} /><span>{`正在${label}`}</span></>
+      {busy ? <><span dangerouslySetInnerHTML={{ __html: spinnerHtml(`${label}…`) }} /><span>{`${label}…`}</span></>
         : <span>{label}</span>}
     </button>
     {error ? <span data-media-operation-error="" role="alert">{error}</span> : null}
@@ -107,7 +107,7 @@ function identityParts(item: MediaItem): { avatar: ReactNode; who: ReactNode } {
       <div data-media-avatars="">
         {performers.slice(0, 5).map((nm, index) => (
           <button key={`${nm}:${index}`} type="button" data-media-avatar="" data-entity-kind="performer"
-            data-entity-name={nm} title={`打开${label}页：${nm}`}
+            data-entity-name={nm} title={`Open ${label} page: ${nm}`}
             dangerouslySetInnerHTML={{ __html: entityAvatar(nm, refs[index] ?? null, 'performer') }} />
         ))}
       </div>
@@ -115,7 +115,7 @@ function identityParts(item: MediaItem): { avatar: ReactNode; who: ReactNode } {
     : kind
       ? (
         <button type="button" data-media-avatar="" data-entity-kind={kind} data-entity-name={name}
-          title={`打开${kind === 'performer' ? label : '资料'}页`}
+          title={`Open ${kind === 'performer' ? label : 'profile'} page`}
           dangerouslySetInnerHTML={{
             __html: entityAvatar(name, kind === 'performer' ? refs[0] ?? null : item.creator_entity ?? null, kind),
           }} />
@@ -125,7 +125,7 @@ function identityParts(item: MediaItem): { avatar: ReactNode; who: ReactNode } {
     ? (
       <>
         <button type="button" data-media-who="" data-entity-kind="performer" data-entity-name={performer}><Icon name="user-round" /><span>{performer}</span></button>
-        <span data-media-who-more="">{`等 ${total} 人`}</span>
+        <span data-media-who-more="">{`+${total} total`}</span>
       </>
     )
     : kind
@@ -138,7 +138,7 @@ function identityParts(item: MediaItem): { avatar: ReactNode; who: ReactNode } {
 /** 悬停时右上角那一圈倒计时，走完就放大；点它直接打开。 */
 function PreviewCounter() {
   return (
-    <button type="button" data-media-preview="" data-open="" title="打开预览" aria-label="打开预览">
+    <button type="button" data-media-preview="" data-open="" title="Open preview" aria-label="Open preview">
       <svg viewBox="-18 -18 36 36" aria-hidden="true"><circle r="17" /><circle r="17" /></svg>
       <svg data-media-ring-play="" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-play" /></svg>
     </button>
@@ -159,7 +159,7 @@ function LaterButton({ item, actions }: { item: MediaItem; actions: MediaCardAct
   };
   return (
     <div data-media-later="">
-      <button type="button" data-later="" aria-pressed={on} title="稍后看" aria-label="稍后看" onClick={click}
+      <button type="button" data-later="" aria-pressed={on} title="Watch later" aria-label="Watch later" onClick={click}
         aria-busy={busy || undefined} aria-disabled={busy || undefined}>
         <Icon name={on ? 'check' : 'bookmark-plus'} />
       </button>
@@ -233,19 +233,19 @@ function VideoCard({ item, variant, layout, selected, selectMode, seekSeconds, h
     <div data-media-pic="" style={{ '--card-ratio': String(cardRatio(item, variant, layout)) } as CSSProperties}>
       {artwork.html
         ? <ArtSlot artwork={artwork} identity={identity} relayout={(root) => relayoutCovers(root, size)} />
-        : <span data-media-nopic="">无预览</span>}
+        : <span data-media-nopic="">No preview</span>}
       <div data-media-badge="" dangerouslySetInnerHTML={{ __html: helpers.badgeHtml(item.location || '', item.cost || '') }} />
       <span data-media-check=""><Icon name="check" /></span>
-      <span data-media-trash-mark=""><Icon name="trash" /><b>回收站</b></span>
-      {parts && !editions ? <span data-media-group="">{`${Number(parts.count).toLocaleString()} 卷`}</span> : null}
+      <span data-media-trash-mark=""><Icon name="trash" /><b>Trash</b></span>
+      {parts && !editions ? <span data-media-group="">{`${Number(parts.count).toLocaleString()} parts`}</span> : null}
       {editions
-        ? <span data-media-group="" title={editions.editions.join(' · ')}>{`${Number(editions.count).toLocaleString()} 个版本`}</span>
+        ? <span data-media-group="" title={editions.editions.join(' · ')}>{`${Number(editions.count).toLocaleString()} editions`}</span>
         : null}
       <span data-media-duration="">{fmtDur(shownDuration)}</span>
       {!selectMode && item.disposal === 'trash' ? <ResourceAction item={item} actions={actions} /> : null}
       {watched > 0
         ? (
-          <div data-media-progress="" role="progressbar" aria-label="观看进度" aria-valuemin={0} aria-valuemax={100}
+          <div data-media-progress="" role="progressbar" aria-label="Watch progress" aria-valuemin={0} aria-valuemax={100}
             aria-valuenow={Math.round(watched * 100)}>
             <i style={{ '--media-fill': `${(watched * 100).toFixed(1)}%` } as CSSProperties} />
           </div>
@@ -261,10 +261,10 @@ function VideoCard({ item, variant, layout, selected, selectMode, seekSeconds, h
       {!selectMode ? <LaterButton item={item} actions={actions} /> : null}
       {!selectMode ? <div data-media-seek="">
         <button type="button" onClick={(event) => { event.stopPropagation(); seekPreview(card.current, -seekSeconds) }}
-          title={`后退 ${seekSeconds} 秒`} aria-label={`后退 ${seekSeconds} 秒`}><Icon name="rotate-ccw" /></button>
+          title={`Back ${seekSeconds}s`} aria-label={`Back ${seekSeconds}s`}><Icon name="rotate-ccw" /></button>
         <button type="button" onClick={(event) => { event.stopPropagation(); seekPreview(card.current, seekSeconds) }}
-          title={`前进 ${seekSeconds} 秒`} aria-label={`前进 ${seekSeconds} 秒`}><Icon name="rotate-cw" /></button>
-        <button type="button" data-open="" title="打开详情" aria-label="打开详情"><Icon name="expand" /></button>
+          title={`Forward ${seekSeconds}s`} aria-label={`Forward ${seekSeconds}s`}><Icon name="rotate-cw" /></button>
+        <button type="button" data-open="" title="Open details" aria-label="Open details"><Icon name="expand" /></button>
       </div> : null}
     </div>
   );
@@ -276,7 +276,7 @@ function VideoCard({ item, variant, layout, selected, selectMode, seekSeconds, h
       data-pending-delete={item.disposal === 'trash' ? '' : undefined} data-selected={selected ? '' : undefined}
       onClick={click} onMouseDown={suppressShiftTextSelection}>
       <button type="button" data-media-open="" data-open=""
-        aria-label={`打开 ${shownName}${editions ? '版本' : parts ? '分卷' : '详情'}`} />
+        aria-label={`Open ${shownName} ${editions ? 'editions' : parts ? 'parts' : 'details'}`} />
       {stacked ? <div data-media-stack="">{pic}</div> : pic}
       <div data-media-meta="">
         {avatar}
@@ -289,8 +289,8 @@ function VideoCard({ item, variant, layout, selected, selectMode, seekSeconds, h
             {who}
             {item.why ? <span data-media-why="">{item.why}</span> : null}
             {item.is_jav && item.release_date ? <time data-media-release="" dateTime={item.release_date}><Icon name="calendar" />{item.release_date}</time> : null}
-            <span data-media-size=""><Icon name="hard-drive" />{Number(shownSize) > 0 ? fmtSize(Number(shownSize)) : '大小未知'}</span>
-            {item.play_count ? <span data-media-watch-count="">{`看过 ${item.play_count}`}</span> : null}
+            <span data-media-size=""><Icon name="hard-drive" />{Number(shownSize) > 0 ? fmtSize(Number(shownSize)) : 'Unknown size'}</span>
+            {item.play_count ? <span data-media-watch-count="">{`Watched ${item.play_count}`}</span> : null}
             <span data-media-flags="">{flags.map((flag) => <i key={flag} data-flag={flag} />)}</span>
           </div>
           {tags.length || item.disposal === 'trash'
@@ -316,8 +316,8 @@ function ResourceCard({ item, selected, selectMode, helpers, actions, onOpen }: 
   const card = useRef<HTMLElement | null>(null);
   const image = item.medium === 'image' && item.location !== 'online';
   const name = String(item.name || '');
-  const label = name.toLowerCase().endsWith('.url') ? '网址快捷方式' : RESOURCE_LABELS[item.medium || ''] || '其它文件';
-  const glyph = image ? 'pics' : label === '网址快捷方式' ? 'globe' : 'hard-drive';
+  const label = name.toLowerCase().endsWith('.url') ? 'URL shortcut' : RESOURCE_LABELS[item.medium || ''] || 'Other file';
+  const glyph = image ? 'pics' : label === 'URL shortcut' ? 'globe' : 'hard-drive';
   const click = (event: MouseEvent<HTMLElement>) => {
     if (!card.current) return;
     if (selectMode || event.shiftKey || event.ctrlKey || event.metaKey) {
@@ -340,18 +340,18 @@ function ResourceCard({ item, selected, selectMode, helpers, actions, onOpen }: 
           : null}
         <div data-media-badge="" dangerouslySetInnerHTML={{ __html: helpers.badgeHtml(item.location || '', item.cost || '') }} />
         <span data-media-check=""><Icon name="check" /></span>
-        <span data-media-trash-mark=""><Icon name="trash" /><b>回收站</b></span>
+        <span data-media-trash-mark=""><Icon name="trash" /><b>Trash</b></span>
         {!selectMode ? <ResourceAction item={item} actions={actions} /> : null}
       </div>
       <div data-media-meta="">
         <span data-media-avatar="" data-media-kind-glyph="" aria-hidden="true"><Icon name={glyph} /></span>
         <div data-media-text="">
           <span data-media-title="" data-middle-truncate="" title={name}
-            dangerouslySetInnerHTML={{ __html: esc(name || '未命名资源') }} />
+            dangerouslySetInnerHTML={{ __html: esc(name || 'Untitled file') }} />
           <div data-media-byline="">
             <span data-media-who="">{label}</span>
             {item.why ? <span data-media-why="">{item.why}</span> : null}
-            <span data-media-size="">{Number(item.size) > 0 ? fmtSize(Number(item.size)) : '大小未知'}</span>
+            <span data-media-size="">{Number(item.size) > 0 ? fmtSize(Number(item.size)) : 'Unknown size'}</span>
           </div>
           {item.disposal === 'trash' ? <div data-media-tags="" /> : null}
           <DisposalReason item={item} />

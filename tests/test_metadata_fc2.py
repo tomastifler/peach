@@ -244,12 +244,12 @@ class Fc2ShopPageTests(unittest.TestCase):
         with self.assertRaises(SourceFailure) as caught:
             article(shop_page(video="4470851"), "FC2-PPV-4364209")
         self.assertEqual((caught.exception.reason, str(caught.exception)),
-                         (FailureReason.NOT_FOUND, "FC2 上没有这个商品"))
+                         (FailureReason.NOT_FOUND, "No such product on FC2"))
 
     def test_a_delisted_product_reads_as_absent_not_as_a_broken_page(self):
         with self.assertRaises(SourceFailure) as caught:
             article(gone_page(), "FC2-PPV-4364209")
-        self.assertEqual((caught.exception.kind, str(caught.exception)), ("not_found", "FC2 上没有这个商品"))
+        self.assertEqual((caught.exception.kind, str(caught.exception)), ("not_found", "No such product on FC2"))
 
     def test_a_seller_without_a_name_keeps_the_page_that_identifies_it(self):
         html = shop_page(seller="").replace(
@@ -357,7 +357,7 @@ class Fc2MirrorPageTests(unittest.TestCase):
             with self.subTest(html=html[:40]), self.assertRaises(SourceFailure) as caught:
                 mirror(html, "FC2-PPV-3189161")
             self.assertEqual((caught.exception.reason, str(caught.exception)),
-                             (FailureReason.NOT_FOUND, "FC2CMADB 上没有这个商品"))
+                             (FailureReason.NOT_FOUND, "No such product on FC2CMADB"))
 
     def test_the_two_pages_hand_back_the_same_shape(self):
         # 两处的资料落进同一条候选流水线，字段少一个就是复核卡上少一格。
@@ -408,14 +408,14 @@ class JavArchiveTests(unittest.TestCase):
         with self.assertRaises(SourceFailure) as caught:
             JavArchiveSource().records("FC2-PPV-4137487", session=Session(stray))
         self.assertEqual((caught.exception.reason, str(caught.exception)),
-                         (FailureReason.NOT_FOUND, "JavArchive 上没有这个商品"))
+                         (FailureReason.NOT_FOUND, "No such product on JavArchive"))
 
     def test_a_search_without_this_shop_number_is_absent_and_a_refusal_keeps_its_tier(self):
         search = "https://javarchive.com/search?q=FC2-PPV-4137487"
         with self.assertRaises(SourceFailure) as caught:
             JavArchiveSource().records("FC2-PPV-4137487",
                                        session=Session(serve({search: search_page(video="41374870")})))
-        self.assertEqual(str(caught.exception), "JavArchive 上没有这个商品")
+        self.assertEqual(str(caught.exception), "No such product on JavArchive")
 
         def refused(request, timeout, limit):
             return HttpResponse(403, {}, b"", request.url)
@@ -480,8 +480,8 @@ class JavArchiveTests(unittest.TestCase):
         self.assertEqual(archive(archive_page(tags="--"), "FC2-PPV-4137487")["genres"], [])
 
     def test_another_products_archive_page_is_not_this_ones_data(self):
-        for html, code, wording in ((archive_page(video="4364209"), "FC2-PPV-4137487", "JavArchive 上没有这个商品"),
-                                    ("<div class='news'></div>", "FC2-PPV-4137487", "JavArchive 上没有这个商品"),
+        for html, code, wording in ((archive_page(video="4364209"), "FC2-PPV-4137487", "No such product on JavArchive"),
+                                    ("<div class='news'></div>", "FC2-PPV-4137487", "No such product on JavArchive"),
                                     (archive_page(), "ORETD-615", UNRECOGNISED)):
             with self.subTest(code=code, html=html[:40]), self.assertRaises(SourceFailure) as caught:
                 archive(html, code)
@@ -586,11 +586,11 @@ class Fc2ppvdbTests(unittest.TestCase):
 
     def test_a_missing_product_and_a_challenge_page_each_keep_their_tier(self):
         for html, code, reason, wording in (
-                (db_missing_page(), "FC2-PPV-99999999", FailureReason.NOT_FOUND, "FC2PPV-DB 上没有这个商品"),
-                (db_page(video="48988370"), "FC2-PPV-4898837", FailureReason.NOT_FOUND, "FC2PPV-DB 上没有这个商品"),
+                (db_missing_page(), "FC2-PPV-99999999", FailureReason.NOT_FOUND, "No such product on FC2PPV-DB"),
+                (db_page(video="48988370"), "FC2-PPV-4898837", FailureReason.NOT_FOUND, "No such product on FC2PPV-DB"),
                 (db_page(), "ORETD-615", FailureReason.NOT_FOUND, UNRECOGNISED),
                 (CHALLENGE, "FC2-PPV-4898837", FailureReason.CLOUDFLARE_CHALLENGE,
-                 "FC2PPV-DB 要求 Cloudflare 验证，请在采集设置里更新 Cookie")):
+                 "FC2PPV-DB requires Cloudflare verification; update the Cookie in the scrape settings")):
             with self.subTest(code=code, html=html[:40]), self.assertRaises(SourceFailure) as caught:
                 database(html, code)
             self.assertEqual((caught.exception.reason, str(caught.exception)), (reason, wording))
@@ -599,7 +599,7 @@ class Fc2ppvdbTests(unittest.TestCase):
         with self.assertRaises(SourceFailure) as caught:
             Fc2ppvdbSource().parse(gate, "FC2-PPV-4898837")
         self.assertEqual((caught.exception.reason, str(caught.exception)),
-                         (FailureReason.AUTH_REQUIRED, "FC2PPV-DB 送到了年齢確認页，浏览器没有点过去"),
+                         (FailureReason.AUTH_REQUIRED, "FC2PPV-DB sent us to the age-confirmation page and the browser did not click through"),
                          "年龄门是会话状态不是这部片没有，不落 not_found")
 
     def test_the_database_is_asked_once_on_its_own_host_and_hands_back_the_same_shape(self):
@@ -692,18 +692,18 @@ class JavtenTests(unittest.TestCase):
         with self.assertRaises(SourceFailure) as caught:
             ten(ten_page(url="https://javten.com/tw/video/1234567/id4898837/x", title="兩個巨乳美少女的3P"), "FC2-PPV-4898837")
         self.assertEqual((caught.exception.reason, str(caught.exception)),
-                         (FailureReason.PARSE_ERROR, "JAVten 回的是译文页，只收日文原页"))
+                         (FailureReason.PARSE_ERROR, "JAVten returned a translated page; only the original Japanese page is accepted"))
 
     def test_a_missing_product_and_a_challenge_page_each_keep_their_tier(self):
         search = "https://javten.com/search?kw=4898837"
         with self.assertRaises(SourceFailure) as caught:
             JavtenSource().query("FC2-PPV-4898837", session=Session(serve({search: ten_results("1111111")})))
-        self.assertEqual((caught.exception.reason, str(caught.exception)), (FailureReason.NOT_FOUND, "JAVten 上没有这个商品"))
+        self.assertEqual((caught.exception.reason, str(caught.exception)), (FailureReason.NOT_FOUND, "No such product on JAVten"))
         with self.assertRaises(SourceFailure) as caught:
             JavtenSource().query("FC2-PPV-4898837", session=Session(serve({search: CHALLENGE})))
         self.assertEqual((caught.exception.reason, caught.exception.status_code),
                          (FailureReason.CLOUDFLARE_CHALLENGE, 403))
-        for html, code, wording in ((ten_page(video="48988370"), "FC2-PPV-4898837", "JAVten 上没有这个商品"),
+        for html, code, wording in ((ten_page(video="48988370"), "FC2-PPV-4898837", "No such product on JAVten"),
                                     (ten_page(), "ORETD-615", UNRECOGNISED)):
             with self.subTest(code=code), self.assertRaises(SourceFailure) as caught:
                 ten(html, code)

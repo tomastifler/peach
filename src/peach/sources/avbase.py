@@ -30,7 +30,7 @@ AVBASE = SiteConfig(name="avbase", label="AVBase", provider="avbase-search",
 #: `mgstage`、`duga`）；写错的名字不会报错，只是那家店排到末位。
 PRODUCT_ORDER = ("fanza", "mgstage", "duga")
 #: 页面结构对不上时的那一句。Cloudflare 验证页与站点改版都走这一句，细档分开记。
-UNRECOGNISED = "AVBase 页面结构未识别，可能在验证访问"
+UNRECOGNISED = "AVBase page structure not recognised; it may be showing a verification check"
 
 _NEXT_DATA = re.compile(r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>', re.S)
 _DATE = re.compile(r"^[A-Za-z]{3} ([A-Za-z]{3}) (\d{1,2}) (\d{4})")
@@ -103,7 +103,7 @@ class AVBaseSource(SiteSource):
         works = [work for work in props.get("works") or []
                  if isinstance(work, dict) and same_release_code(code, str(work.get("work_id") or ""))]
         if not works:
-            raise SourceFailure(FailureReason.NOT_FOUND, "AVBase 没有这个番号")
+            raise SourceFailure(FailureReason.NOT_FOUND, "AVBase has no such code")
         work = works[0]
         products = own_products(code, work)
         first = lambda pick: next((value for value in map(pick, products) if value), "")

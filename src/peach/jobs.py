@@ -51,7 +51,7 @@ class TaskRunConflict(JobAlreadyRunning):
     """
 
     def __init__(self, task_key: str, blocking_run_id: int | None):
-        super().__init__(f"{task_key} 已有一轮在进行")
+        super().__init__(f"{task_key} already has a run in progress")
         self.task_key = task_key
         self.blocking_run_id = blocking_run_id
 
@@ -86,7 +86,7 @@ class SourceAccessPolicy:
         """返回参数化 location 条件；显式计费授权是唯一放行入口。"""
         if location and not allow_metered and self.requires_budget(location):
             raise MeteredSourceDenied(
-                f"{location} 的目录已开启代理流量保护；确认预算后显式加 --allow-metered"
+                f"{location} has proxy traffic protection enabled; confirm the budget, then pass --allow-metered explicitly"
             )
 
         clauses: list[str] = []
@@ -115,10 +115,10 @@ def require_free_space(path: Path | str, minimum_gb: float) -> float:
     try:
         free_gb = shutil.disk_usage(path).free / 1024**3
     except OSError as exc:
-        raise DiskSpaceDenied(f"无法读取 {path} 的磁盘余量") from exc
+        raise DiskSpaceDenied(f"Cannot read the free disk space of {path}") from exc
     if free_gb < minimum_gb:
         raise DiskSpaceDenied(
-            f"{path} 仅剩 {free_gb:.1f} GiB（阈值 {minimum_gb:.1f} GiB）"
+            f"{path} has only {free_gb:.1f} GiB left (threshold {minimum_gb:.1f} GiB)"
         )
     return free_gb
 
@@ -154,11 +154,11 @@ class DiskGuard:
         try:
             free_gb = self.free_gb()
         except OSError as exc:
-            raise DiskSpaceDenied(f"无法读取 {self.path} 的磁盘余量") from exc
+            raise DiskSpaceDenied(f"Cannot read the free disk space of {self.path}") from exc
         if free_gb < self.minimum_gb:
             raise DiskSpaceDenied(
-                f"运行中 {self.path} 仅剩 {free_gb:.1f} GiB（阈值 {self.minimum_gb:.1f} GiB）；"
-                "已停止任务。检查第三方缓存目录，本任务的产物目录未必是消耗方"
+                f"While running, {self.path} has only {free_gb:.1f} GiB left (threshold {self.minimum_gb:.1f} GiB); "
+                "task stopped. Check third-party cache folders; the output folder of this task may not be the one consuming space"
             )
         return free_gb
 
@@ -240,7 +240,7 @@ class PidFileLock:
             except (OSError, ValueError):
                 old_pid = 0
             if old_pid and self._running(old_pid):
-                raise JobAlreadyRunning(f"已有实例在跑（PID {old_pid}）")
+                raise JobAlreadyRunning(f"An instance is already running (PID {old_pid})")
             try:
                 self.path.unlink()
             except FileNotFoundError:
@@ -401,7 +401,7 @@ class BackgroundJob:
     def _progress_label(state: dict) -> str:
         """一行「此刻在做什么」。域各有各的字段名，这里按可读性从具体到笼统取第一个。"""
         if state.get('status') in ('paused', 'pausing'):
-            return ('已暂停' if state['status'] == 'paused' else '正在暂停') + ' · ' + str(state.get('stage') or '')
+            return ('Paused' if state['status'] == 'paused' else 'Pausing') + ' · ' + str(state.get('stage') or '')
         current = state.get("current")
         if isinstance(current, dict):
             for key in ("label", "provider"):
@@ -449,8 +449,8 @@ class BackgroundJob:
                 save(db, self.task_key, job_id, recovery, waiting=True)
             self.state = {self.id_key: job_id, 'status': 'running', 'run_id': None,
                           **(initial or {}), 'waiting_for_update': True,
-                          'stage': '等待安装完成后继续', 'error': '',
-                          'message': '任务将在安装完成后自动继续。'}
+                          'stage': 'Waiting for the installation to finish', 'error': '',
+                          'message': 'The task will resume automatically after installation finishes.'}
             return copy.deepcopy(self.state)
 
     def _start(self, fn: Callable[[str], None], *, initial: dict | None = None,
@@ -508,7 +508,7 @@ class BackgroundJob:
                     from .job_recovery import checkpoint
                     checkpoint(db, self.task_key, job_id, self.snapshot() or snapshot)
         except Exception:
-            self._close_run(job_id, 'failed', error='任务未能启动')
+            self._close_run(job_id, 'failed', error='The task failed to start')
             activity = self._activity_files.pop(job_id, None)
             if activity is not None:
                 activity.unlink(missing_ok=True)
@@ -593,7 +593,7 @@ class BackgroundJob:
             if self.runs is not None and run_id is not None:
                 self._suspend_run(job_id, run_id)
             return
-        self._close_run(job_id, 'cancelled', error='服务关停，这一轮没有跑完')
+        self._close_run(job_id, 'cancelled', error='The service shut down; this run did not finish')
 
     def _suspend_run(self, job_id, run_id):
         from .processing_control import user_paused
@@ -609,7 +609,7 @@ class BackgroundJob:
             if not result.get('ok', True):
                 from .error_reporting import event
                 event('background-result', job_id=job_id, task_key=self.task_key,
-                      message=result.get('error') or result.get('message') or '任务失败')
+                      message=result.get('error') or result.get('message') or 'Task failed')
             self.update(job_id, **result, status=(
                 "complete" if result.get("ok", True) else "failed"),
                 completed_at=time.time())
@@ -628,8 +628,8 @@ class BackgroundJob:
         except JobPaused:
             with self.lock:
                 if self.state is not None and self.state.get(self.id_key) == job_id:
-                    self.state.update(waiting_for_update=True, stage='等待安装完成后继续', error='',
-                                      message='任务已暂停，安装完成后自动继续。')
+                    self.state.update(waiting_for_update=True, stage='Waiting for the installation to finish', error='',
+                                      message='The task is paused and will resume automatically after installation finishes.')
         except Exception as error:   # 后台失败必须变成可轮询的状态，不能只留在日志里
             from .error_reporting import event
             event('background-job', error, job_id=job_id, task_key=self.task_key,
@@ -687,7 +687,7 @@ class BackgroundJob:
             return
         if state.get(self.id_key) != job_id:
             # 已经被 `start` 在顶替的那一刻收过尾了，这里再收一次是空操作。
-            self._close_run(job_id, "cancelled", error="这一轮已被新的任务顶替")
+            self._close_run(job_id, "cancelled", error="This run was superseded by a new task")
             return
         self._settle_from(job_id, state)
 
@@ -702,13 +702,13 @@ class BackgroundJob:
         if status == "failed":
             # 声明了后继就是结算到了底，只是留下了要人处理的项（ADR-0053）：后继照派。
             # 中途抛异常的那一轮走不到声明那一步，一条都不派。
-            self._close_run(job_id, "failed", error=str(state.get("error") or "任务失败"),
+            self._close_run(job_id, "failed", error=str(state.get("error") or "Task failed"),
                             summary={**self._summary(state),
                                      **self._dispatch_followups(job_id, state)})
             return
         if superseded and status == "running":
             # 还在跑就被顶掉：它的结果没人要了，记成取消而不是成功。
-            self._close_run(job_id, "cancelled", error="这一轮已被新的任务顶替")
+            self._close_run(job_id, "cancelled", error="This run was superseded by a new task")
             return
         # `fn` 正常返回就是跑完了。域没有把状态推到 `complete` 只说明它不靠状态报结果
         # （`w_links` 这类直接返回 payload），不代表这一轮失败。
@@ -777,5 +777,5 @@ def _run_batch_with_updates(db, label, run, args):
                 return result
         except (JobPaused, UpdateBusy):
             pass
-        print('[pause] 任务进度已保留，安装完成后自动继续。')
+        print('[pause] Task progress is kept and will resume automatically after installation finishes.')
         wait_for_installation(db)

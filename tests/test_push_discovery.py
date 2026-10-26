@@ -462,13 +462,13 @@ class IngestNotifiesTests(_ServiceCase):
 class SettingsTests(_ServiceCase):
     def test_a_prefix_pointing_at_an_unknown_root_is_refused_on_save(self):
         service = self.service()
-        with self.assertRaisesRegex(ValueError, "不是已声明的媒体根"):
+        with self.assertRaisesRegex(ValueError, "is not a declared media root"):
             service.save({"enabled": True, "prefixes": [{"prefix": "/115", "root": "Z:\\"}]})
         self.assertFalse(service.config.enabled)
 
     def test_the_same_prefix_cannot_be_registered_twice(self):
         service = self.service()
-        with self.assertRaisesRegex(ValueError, "不止一次"):
+        with self.assertRaisesRegex(ValueError, "registered more than once"):
             service.save({"enabled": True, "prefixes": [
                 {"prefix": "/115", "root": self.declared["115"][0]},
                 {"prefix": "115/", "root": self.declared["115"][0]}]})
@@ -500,7 +500,7 @@ class SettingsTests(_ServiceCase):
 
     def test_the_reader_never_starts_a_channel(self):
         service = self.service(available=False)
-        with self.assertRaisesRegex(ValueError, "只在允许修改数据库的设备上可用"):
+        with self.assertRaisesRegex(ValueError, "only available on devices allowed to modify the database"):
             service.save({"enabled": True})
         service.start()
         self.assertFalse(service.local_channel.running)

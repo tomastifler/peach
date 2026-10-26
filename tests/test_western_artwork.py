@@ -73,7 +73,7 @@ class WesternSourceTests(unittest.TestCase):
 
     def test_graphql_errors_are_unavailable(self):
         def error(*args): return HttpResponse(200, {}, b'{"errors":[{"message":"blocked"}]}')
-        with self.assertRaisesRegex(ValueError, '未取得'):
+        with self.assertRaisesRegex(ValueError, 'not obtained'):
             artwork.official_scene(error, 'tushy', 'Lena Anderson', '2019-08-14')
 
     def test_main_portraits_exclude_related_people_and_user_uploads(self):
@@ -88,7 +88,7 @@ class WesternSourceTests(unittest.TestCase):
 
     def test_a_different_profile_or_challenge_page_is_unavailable(self):
         for page in (b'<h1 id="babename">Melody Other</h1>', b'<title>Just a moment</title>'):
-            with self.assertRaisesRegex(ValueError, '未取得'):
+            with self.assertRaisesRegex(ValueError, 'not obtained'):
                 artwork.babepedia_portraits(lambda *a, body=page: HttpResponse(200, {}, body), 'Melody Marks')
 
     def test_explicit_profile_alias_binds_a_different_stage_name(self):
@@ -104,7 +104,7 @@ class WesternSourceTests(unittest.TestCase):
 
     def test_a_profile_url_from_another_site_is_rejected_before_request(self):
         calls = []
-        with self.assertRaisesRegex(ValueError, '档案地址'):
+        with self.assertRaisesRegex(ValueError, 'profile address'):
             artwork.babepedia_portraits(lambda *a: calls.append(a), 'Lena Anderson',
                                         profile_url='https://other.com/babe/Blaire_Ivory')
         self.assertEqual(calls, [])

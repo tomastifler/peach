@@ -182,8 +182,8 @@ class RegionLedgerTests(unittest.TestCase):
         facets = {row["k"]: row for row in rm_web.q_facets(self.contract)["regions"]}
         self.assertEqual({key: row["n"] for key, row in facets.items()},
                          {"kr": 2, "cn": 1, "jp": 1, "none": 1})
-        self.assertEqual(facets["none"]["label"], "未判定")
-        self.assertEqual(facets["kr"]["label"], "韩国")
+        self.assertEqual(facets["none"]["label"], "Undetermined")
+        self.assertEqual(facets["kr"]["label"], "Korea")
 
     def test_the_facet_follows_the_other_filters(self):
         """筛选项必须和作品列表同源，否则右栏会给出点进去是 0 条的项。"""

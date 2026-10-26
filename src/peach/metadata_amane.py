@@ -50,7 +50,7 @@ DEFAULT_TIMEOUT = 60
 COMMUNITY_SITES = (("fc2club", "FC2Club"), ("freejavbt", "FreeJavBT"), ("airav", "AIRAV"), ("avsox", "AVSOX"))
 #: `makers` 是 amane 的 `official`：按系列前缀路由到二十九家片商官网（S1、MOODYZ、IDEA POCKET……），
 #: 前缀不在它的表里就不发请求。另外三家片商各有自己的解析器；MGStage 是 MGS 素人系的发行渠道。
-OFFICIAL_SITES = (("makers", "片商官网"), ("prestige", "Prestige"), ("faleno", "FALENO"),
+OFFICIAL_SITES = (("makers", "Studio official sites"), ("prestige", "Prestige"), ("faleno", "FALENO"),
                   ("dahlia", "DAHLIA"), ("mgstage", "MGStage"))
 SITE_CONFIGS: dict[str, SiteConfig] = {
     name: SiteConfig(name=name, label=label, provider="amane-" + name, base_url="", domains=(), stage=stage)
@@ -91,12 +91,12 @@ AMANE_REASONS: dict[str, FailureReason] = {
 }
 #: `auth` 一档的措辞，按上游 reason 写。
 AUTH_MESSAGES: dict[str, str] = {
-    "age_verification": "站方要求年龄验证",
-    "geo_restricted": "站方按地区拒绝了这个出口",
-    "cloudflare_challenge": "撞上 Cloudflare 挑战页",
-    "cloudflare_blocked": "被 Cloudflare 拦下",
-    "ip_banned": "出口 IP 已被站方封禁",
-    "http_error": "站方拒绝了这个出口",
+    "age_verification": "The site requires age verification",
+    "geo_restricted": "The site rejected this egress by region",
+    "cloudflare_challenge": "Hit a Cloudflare challenge page",
+    "cloudflare_blocked": "Blocked by Cloudflare",
+    "ip_banned": "The egress IP has been banned by the site",
+    "http_error": "The site rejected this egress",
 }
 
 Runner = Callable[..., subprocess.CompletedProcess[str]]
@@ -122,7 +122,7 @@ def pinned_revision(root: Path = BRIDGE_ROOT) -> str:
         matched = re.fullmatch(r"amane\s*@\s*git\+\S+@([0-9a-f]{40})", requirement.strip())
         if matched:
             return matched.group(1)
-    raise ValueError("amane 桥的清单没有钉住 amane 的 revision")
+    raise ValueError("The amane bridge manifest does not pin an amane revision")
 
 
 def locked_version(root: Path = BRIDGE_ROOT) -> str:
@@ -172,20 +172,20 @@ def rebuild(tools_root: Path, *, runner: Runner = subprocess.run, timeout: int =
     """重建桥 venv，返回给设置页的回执。首次要下载约 98 MB，之后只校验。"""
     uv = find_uv()
     if uv is None:
-        return {"ok": False, "error": "未找到 uv，请先安装 uv 再重建 amane 桥"}
+        return {"ok": False, "error": "uv was not found; install uv first, then rebuild the amane bridge"}
     command, env = rebuild_command(tools_root, uv=uv, root=root)
     bridge_home(tools_root).mkdir(parents=True, exist_ok=True)
     try:
         completed = runner(command, capture_output=True, text=True, encoding="utf-8",
                            errors="replace", timeout=timeout, check=False, shell=False, env=env)
     except subprocess.TimeoutExpired:
-        return {"ok": False, "error": f"重建 amane 桥超过 {timeout} 秒未完成"}
+        return {"ok": False, "error": f"Rebuilding the amane bridge did not finish within {timeout} seconds"}
     except OSError as exc:
-        return {"ok": False, "error": f"无法启动 uv：{exc}"}
+        return {"ok": False, "error": f"Could not start uv: {exc}"}
     if completed.returncode:
         detail = (completed.stderr or completed.stdout or "").strip()[-800:]
-        return {"ok": False, "error": f"uv sync 失败（exit {completed.returncode}）：{detail}"}
-    return {"ok": True, "result": f"amane 桥已按 {pinned_revision(root)[:12]} 重建",
+        return {"ok": False, "error": f"uv sync failed (exit {completed.returncode}): {detail}"}
+    return {"ok": True, "result": f"amane bridge rebuilt from {pinned_revision(root)[:12]}",
             **describe(tools_root, root=root)}
 
 
@@ -268,9 +268,9 @@ class AmaneBridge:
         python = bridge_python(tools_root)
         if not python.is_file():
             raise MetadataProviderError(
-                f"amane 桥未安装：在「来源和凭证」页重建，或放到 {python}")
+                f"amane bridge is not installed: rebuild it on the Sources and Credentials page, or place it at {python}")
         if not BRIDGE_SCRIPT.is_file():
-            raise MetadataProviderError(f"amane 桥脚本缺失：{BRIDGE_SCRIPT}")
+            raise MetadataProviderError(f"amane bridge script is missing: {BRIDGE_SCRIPT}")
         return cls(python, BRIDGE_SCRIPT, timeout, runner)
 
     def query(self, code: str, sites: Sequence[str], *, language: str = "jp",
@@ -282,9 +282,9 @@ class AmaneBridge:
         names = [str(site).strip() for site in sites]
         unknown = [site for site in names if site not in SITES]
         if not names or unknown:
-            raise ValueError("未开放的 amane 站点：" + "、".join(unknown or ["（空）"]))
+            raise ValueError("amane sites not enabled: " + ", ".join(unknown or ["(empty)"]))
         if set(direct_sites) - set(names):
-            raise ValueError("直连站点必须属于本次查询来源")
+            raise ValueError("Direct-connect sites must belong to this query source")
         from .processing_control import low_mode, checkpoint
         if low_mode() and len(names) > 1:
             return self._serial_query(code, names, language=language, proxy_options=proxy_options,
@@ -303,19 +303,19 @@ class AmaneBridge:
                 timeout=min(timeout, self.timeout) if timeout else self.timeout,
                 check=False, shell=False, env=env)
         except subprocess.TimeoutExpired as exc:
-            raise MetadataProviderError("amane 桥查询超时", kind="unavailable",
+            raise MetadataProviderError("amane bridge query timed out", kind="unavailable",
                                         retryable=True, temporary=True) from exc
         except OSError as exc:
-            raise MetadataProviderError(f"无法启动 amane 桥：{exc}") from exc
+            raise MetadataProviderError(f"Could not start the amane bridge: {exc}") from exc
         line = next((row for row in reversed(completed.stdout.splitlines()) if row.strip()), "")
         try:
             report = json.loads(line)
         except (TypeError, json.JSONDecodeError) as exc:
             detail = (completed.stderr or completed.stdout or "empty output").strip()[-800:]
-            raise MetadataProviderError(f"amane 桥返回了非 JSON 输出：{detail}") from exc
+            raise MetadataProviderError(f"amane bridge returned non-JSON output: {detail}") from exc
         if not isinstance(report, dict) or "sites" not in report:
             message = report.get("error") if isinstance(report, dict) else ""
-            raise MetadataProviderError(str(message or f"amane 桥查询失败（exit {completed.returncode}）"))
+            raise MetadataProviderError(str(message or f"amane bridge query failed (exit {completed.returncode})"))
         return report
 
     def _serial_query(self, code, sites, *, language, proxy_options, direct_sites, timeout):
@@ -327,7 +327,7 @@ class AmaneBridge:
             checkpoint('network')
             remaining = deadline - time.monotonic() if deadline is not None else None
             if remaining is not None and remaining <= 1:
-                raise MetadataProviderError('amane 桥查询超时', kind='unavailable', retryable=True, temporary=True)
+                raise MetadataProviderError('amane bridge query timed out', kind='unavailable', retryable=True, temporary=True)
             report = self.query(code, [site], language=language, proxy_options=proxy_options,
                                 direct_sites=[site] if site in direct_sites else [], timeout=remaining)
             records.update(report.get('sites') or {})
@@ -347,15 +347,15 @@ def site_failure(site: str, record: Mapping[str, object]) -> SourceFailure:
     translated = contract_reason(reason, status)
     kind = REASON_KINDS[translated]
     if kind == "auth":
-        message = AUTH_MESSAGES.get(reason, "站方拒绝了这个出口") + f"（{reason}" + (
-            f"，HTTP {status}" if status else "") + "）"
+        message = AUTH_MESSAGES.get(reason, "The site rejected this egress") + f": ({reason}" + (
+            f", HTTP {status}" if status else "") + ")"
     elif kind == "not_found":
-        message = f"{label} 上没有这个番号（{reason}）"
+        message = f"{label} has no such code ({reason})"
     else:
         text = str(record.get("detail") or "").strip()
-        message = f"{label} 未取得资料（{reason}" + (f"，HTTP {status}" if status else "") + "）"
+        message = f"{label} returned no data ({reason}" + (f", HTTP {status}" if status else "") + ")"
         if text and reason in {"unexpected", "parse_error"}:
-            message += f"：{text[:160]}"
+            message += f": {text[:160]}"
     return SourceFailure(translated, message, status_code=status, detail=reason)
 
 
@@ -459,7 +459,7 @@ def split_report(code: str, report: Mapping[str, object]) -> tuple[list[tuple[st
                 found.append((site, payload))
                 continue
             failures[site] = MetadataProviderError(
-                f"{SITES.get(site, site)} 返回的商品不是 {code}：content_id={payload['content_id']!r}",
+                f"{SITES.get(site, site)} returned a product that is not {code}: content_id={payload['content_id']!r}",
                 kind="not_found", detail="not_found")
             continue
         failures[site] = failure_error(site, record)

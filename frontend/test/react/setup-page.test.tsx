@@ -68,8 +68,8 @@ const paths = (root: ParentNode) => [...root.querySelectorAll<HTMLInputElement>(
 const field = (root: ParentNode, key: string) => root.querySelector<HTMLInputElement>(`#f-${key}`);
 const radio = (root: ParentNode, label: string) =>
   [...root.querySelectorAll('label')].find((node) => node.textContent?.trim() === label);
-const advanced = (root: ParentNode) => [...root.querySelectorAll('summary')].find((node) => node.textContent === '高级设置');
-const submitForm = async (root: ParentNode) => { await click(buttonNamed('完成设置', root)); await settle(); };
+const advanced = (root: ParentNode) => [...root.querySelectorAll('summary')].find((node) => node.textContent === 'Advanced settings');
+const submitForm = async (root: ParentNode) => { await click(buttonNamed('Finish setup', root)); await settle(); };
 const alertsWith = (root: ParentNode, message: string) =>
   [...root.querySelectorAll('[role="alert"]')].filter((node) => node.textContent?.includes(message));
 const occurrences = (root: HTMLElement, message: string) => (root.textContent ?? '').split(message).length - 1;
@@ -79,7 +79,7 @@ it('首启版本统计与错误诊断默认勾选，取消后共同关闭', asyn
     fields: { usage: '版本与系统', errors: '异常链与错误码' }, notice: '不发送媒体信息' };
   const { host, sent } = await open({ remote_reporting: reporting, access_enabled: false },
     { [SETUP_URL]: { status: 200, body: done() } });
-  const reportingSwitches = host.querySelectorAll<HTMLInputElement>('input[aria-label="发送版本统计与错误诊断（推荐）"]');
+  const reportingSwitches = host.querySelectorAll<HTMLInputElement>('input[aria-label="Send version statistics and error diagnostics (recommended)"]');
   expect(reportingSwitches).toHaveLength(1);
   expect(reportingSwitches[0]!.checked).toBe(true);
   await click(reportingSwitches[0]!);
@@ -99,12 +99,12 @@ function expectAnnounced(root: HTMLElement, input: Element | null | undefined, m
 
 it('题目、默认值与题面来自读题接口：媒体库一行在外面，其余折进高级设置', async () => {
   const { host } = await open();
-  expect(host.querySelector('h1')?.textContent).toBe('欢迎使用 Peach');
+  expect(host.querySelector('h1')?.textContent).toBe('Welcome to Peach');
   expect(paths(host).map((input) => input.value)).toEqual(['D:\\Videos']);
   expect(advanced(host)?.getAttribute('aria-expanded')).toBe('false');
   expect(field(host, 'port')?.value).toBe('8900');
   expect(host.textContent).toContain('localhost:');
-  expect(host.textContent).toContain('完成设置后扫描并补全资料：D:\\Videos');
+  expect(host.textContent).toContain('Scan and fill in metadata after setup: D:\\Videos');
   // 「谁可以访问」是两段式单选，局域网在左边并且默认选中。
   const group = host.querySelector('[role="radiogroup"]')!;
   expect([...group.querySelectorAll('input[type="radio"]')].map((input) => [
@@ -153,10 +153,10 @@ describe('媒体库', () => {
     const { host, sent } = await open({}, { [SETUP_URL]: { status: 200, body: done() } });
     await choose(rows(host)[0]!.querySelector('[aria-haspopup="listbox"]'), 'OneDrive');
     const policy = rows(host)[0]!.querySelector('[data-media-read-policy] [aria-haspopup="listbox"]');
-    expect(policy?.textContent).toContain('选择读取策略');
+    expect(policy?.textContent).toContain('Choose a read policy');
     await submitForm(host);
-    expect(host.textContent).toContain('请选择媒体读取策略');
-    await choose(policy, '正常读取');
+    expect(host.textContent).toContain('Choose a media read policy');
+    await choose(policy, 'Normal reads');
     await submitForm(host);
     expect(sent(SETUP_URL).media_dir).toEqual([
       { path: 'D:\\Videos', location: 'onedrive', root: '', cost: 'free' },
@@ -165,21 +165,21 @@ describe('媒体库', () => {
 
   it('加一行、删一行，扫描说明跟着行数走，提交按行带上来源', async () => {
     const { host, sent } = await open({}, { [SETUP_URL]: { status: 200, body: done() } });
-    await click(buttonNamed('添加媒体库', host));
+    await click(buttonNamed('Add library', host));
     expect(rows(host)).toHaveLength(2);
     expect(document.activeElement).toBe(paths(host)[1]);
     await type(paths(host)[1], 'E:\\More');
-    expect(host.textContent).toContain('完成设置后扫描这 2 个文件夹并补全资料');
-    await click(rows(host)[0]!.querySelector('button[aria-label="移除这个文件夹"]'));
+    expect(host.textContent).toContain('Scan these 2 folders and fill in metadata after setup');
+    await click(rows(host)[0]!.querySelector('button[aria-label="Remove this folder"]'));
     expect(paths(host).map((input) => input.value)).toEqual(['E:\\More']);
-    expect(rows(host)[0]!.querySelector('button[aria-label="移除这个文件夹"]')).toBeNull();
+    expect(rows(host)[0]!.querySelector('button[aria-label="Remove this folder"]')).toBeNull();
     await submitForm(host);
     expect(sent(SETUP_URL).media_dir).toEqual([{ path: 'E:\\More', location: 'local', root: '', cost: 'free' }]);
   });
 
   it('选择文件夹让这台电脑弹对话框，选中的路径填回这一行', async () => {
     const { host, sent } = await open({}, { [PICK_FOLDER_URL]: { status: 200, body: { path: 'F:\\Picked' } } });
-    await click(rows(host)[0]!.querySelector('button[aria-label="选择文件夹"]'));
+    await click(rows(host)[0]!.querySelector('button[aria-label="Choose folder"]'));
     await settle();
     expect(sent(PICK_FOLDER_URL)).toEqual({ initial: 'D:\\Videos' });
     expect(paths(host)[0]!.value).toBe('F:\\Picked');
@@ -228,7 +228,7 @@ describe('填错时原位标错', () => {
   it('整表不成立的那一句写在目录区上方，不挂到某一行', async () => {
     const { host } = await open({}, { [SETUP_URL]: { status: 400, body: {
       error: '有几项需要修改', errors: { media_dir: ['请添加 1 到 100 个媒体目录'] } } } });
-    await click(buttonNamed('添加媒体库', host));
+    await click(buttonNamed('Add library', host));
     await submitForm(host);
     const [alert, ...more] = alertsWith(host, '请添加 1 到 100 个媒体目录');
     expect(alert).toBeDefined();
@@ -259,23 +259,23 @@ describe('完成态', () => {
   it('成功后同一页换成完成态：扫描说明、入口链接、运行信息默认收起', async () => {
     const { host } = await open({}, { [SETUP_URL]: { status: 200, body: done() } });
     await submitForm(host);
-    expect(host.querySelector('h1')?.textContent).toBe('设置完成');
-    expect(host.textContent).toContain('正在启动馆藏。');
-    expect(host.textContent).toContain('首次扫描已排队，在后台整理媒体库，期间可以照常使用 Peach。');
-    const entry = [...host.querySelectorAll('a')].find((link) => link.textContent === '进入 Peach');
+    expect(host.querySelector('h1')?.textContent).toBe('Setup complete');
+    expect(host.textContent).toContain('Starting your library.');
+    expect(host.textContent).toContain('The first scan is queued and will organize your library in the background; you can keep using Peach meanwhile.');
+    const entry = [...host.querySelectorAll('a')].find((link) => link.textContent === 'Enter Peach');
     expect(entry?.getAttribute('href')).toBe('http://127.0.0.1:8900/?onboarding=1');
     expect(document.activeElement).toBe(entry);
-    const facts = [...host.querySelectorAll('summary')].find((node) => node.textContent === '运行信息');
+    const facts = [...host.querySelectorAll('summary')].find((node) => node.textContent === 'Runtime info');
     expect(facts?.getAttribute('aria-expanded')).toBe('false');
-    expect(document.title).toBe('Peach · 设置完成');
+    expect(document.title).toBe('Peach · Setup complete');
   });
 
   it('选了导入浏览器历史又没扫描时，入口换成导入历史', async () => {
     const { host } = await open({}, { [SETUP_URL]: { status: 200, body: done({
       url: 'http://127.0.0.1:8900/taste?onboarding=1', scan_requested: false, history_guide: true }) } });
     await submitForm(host);
-    expect(host.textContent).toContain('稍后在配置页开始扫描媒体库。');
-    const entry = [...host.querySelectorAll('a')].find((link) => link.textContent === '导入浏览器历史记录');
+    expect(host.textContent).toContain('Start scanning your library later from the settings page.');
+    const entry = [...host.querySelectorAll('a')].find((link) => link.textContent === 'Import browser history');
     expect(entry?.getAttribute('href')).toBe('http://127.0.0.1:8900/taste?onboarding=1');
   });
 
@@ -308,7 +308,7 @@ it('别的设备打开时读题接口回 403，只说去哪里打开、不画表
   const host = await mount(<SetupPage />);
   await settle();
   expect(host.querySelector('form')).toBeNull();
-  expect(host.querySelector('[role="alert"]')?.textContent).toBe('请在运行 Peach 的这台电脑上打开设置。');
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe('Open setup on the computer running Peach.');
 });
 
 it('读题失败时给原因和重试', async () => {
@@ -317,7 +317,7 @@ it('读题失败时给原因和重试', async () => {
   const host = await mount(<SetupPage />);
   await settle();
   expect(host.querySelector('[role="alert"]')?.textContent).toContain('服务出错了');
-  await click(buttonNamed('重试', host));
+  await click(buttonNamed('Retry', host));
   await settle();
   expect(fetcher).toHaveBeenCalledTimes(2);
   expect(paths(host)).toHaveLength(1);

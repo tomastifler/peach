@@ -301,7 +301,7 @@ def _scan_sources(
         if progress is not None:
             progress(source)
         if checkpoint and not checkpoint(scan_checkpoint={'parts': parts}, sources=sources):
-            raise InterruptedError('资源检查已停止')
+            raise InterruptedError('Resource check stopped')
     sources = [part['source'] for part in parts.values()]
     vanished_ids = sorted({value for part in parts.values() for value in part['vanished_ids']})
     keep_ids = {value for part in parts.values() for value in part['keep_ids']}
@@ -464,7 +464,7 @@ def _resource_orphan_plan(
 
 def clean_resource_orphans(contract: ResourceSyncContract, *, progress=None, checkpoint=None, resume_state=None) -> dict:
     if progress:
-        progress(checked=0, total=None, message="正在核对可重建缓存清单")
+        progress(checked=0, total=None, message="Verifying the rebuildable cache list")
     plan = _resource_orphan_plan(contract)
     previous = (resume_state or {}).get('cache_checkpoint') or {}
     removed = previous.get('cache_removed', 0)
@@ -472,7 +472,7 @@ def clean_resource_orphans(contract: ResourceSyncContract, *, progress=None, che
     blocked = list(previous.get('cache_blocked') or [])
     for index, (kind, path, size) in enumerate(plan["files"]):
         if progress:
-            progress(checked=index, total=len(plan["files"]), message=f"清理缓存：已处理 {index} / {len(plan['files'])} 个")
+            progress(checked=index, total=len(plan["files"]), message=f"Cleaning cache: {index} / {len(plan['files'])} processed")
         try:
             path.unlink(missing_ok=True)
             removed += 1
@@ -482,9 +482,9 @@ def clean_resource_orphans(contract: ResourceSyncContract, *, progress=None, che
                             "reason": error.strerror or str(error)})
         if checkpoint and not checkpoint(cache_checkpoint=dict(cache_removed=removed, bytes_reclaimed=reclaimed,
                                                                 cache_blocked=blocked)):
-            raise InterruptedError('缓存清理已停止')
+            raise InterruptedError('Cache cleanup stopped')
     if progress:
-        progress(checked=0, total=None, message="正在整理缓存目录并汇总释放空间")
+        progress(checked=0, total=None, message="Tidying the cache directory and totaling freed space")
     for directory in sorted(plan["dirs"], key=lambda item: len(item.parts), reverse=True):
         try:
             shutil.rmtree(directory)
@@ -572,10 +572,10 @@ def w_resource_sync_scan(contract: ResourceSyncContract, body=None):
                 }
             return _resource_scan_public(state)
         if not configured_resource_locations():
-            raise ValueError("请先在配置页添加媒体目录")
+            raise ValueError("Add a media directory on the settings page first")
         return _background_resource_scan(contract, restart=body.get("restart") is True)
     if not configured_resource_locations():
-        raise ValueError("请先在配置页添加媒体目录")
+        raise ValueError("Add a media directory on the settings page first")
     return _scan_result(contract, _scan_sources(contract))
 
 
@@ -662,7 +662,7 @@ def _apply_missing_records(contract, state, report, checkpoint, resume_state):
     """逐批复核失效记录，保存完成集合与累计回执。"""
     saved = (resume_state or {}).get('apply_checkpoint') or {}
     processed = set(saved.get('processed') or [])
-    report(checked=len(processed), total=len(state['vanished_ids']), message="正在逐条复核失效记录")
+    report(checked=len(processed), total=len(state['vanished_ids']), message="Reviewing dead records one by one")
     marked, reattached = list(saved.get('marked') or []), list(saved.get('reattached') or [])
     purge = dict(saved.get('purge') or {'purged': 0, 'blocked': [], 'empty_dirs_removed': 0})
     pending = [value for value in state['vanished_ids'] if value not in processed]
@@ -678,10 +678,10 @@ def _apply_missing_records(contract, state, report, checkpoint, resume_state):
                 purge[field] += int(result.get(field) or 0)
             purge['blocked'].extend(result.get('blocked') or [])
         processed.update(selected)
-        report(checked=len(processed), total=len(state['vanished_ids']), message='正在处理失效记录')
+        report(checked=len(processed), total=len(state['vanished_ids']), message='Processing dead records')
         if checkpoint and not checkpoint(apply_checkpoint=dict(processed=sorted(processed), marked=marked,
                                                                 reattached=reattached, purge=purge)):
-            raise InterruptedError('资源清理已停止')
+            raise InterruptedError('Resource cleanup stopped')
     return marked, reattached, purge
 
 
@@ -694,7 +694,7 @@ def w_resource_sync_apply(contract: ResourceSyncContract, body, *, progress=None
     `blocked`；删除这一档不可撤销，所以只认检查给的候选集合。
     """
     if not configured_resource_locations():
-        raise ValueError("请先在配置页添加媒体目录")
+        raise ValueError("Add a media directory on the settings page first")
     if body.get("confirm") is not True:
         raise ValueError("resource sync requires confirmation")
     scan_id = str(body.get("scan_id") or "")
@@ -709,14 +709,14 @@ def w_resource_sync_apply(contract: ResourceSyncContract, body, *, progress=None
                 progress=lambda **fields: job.update(job_id, **fields),
                 checkpoint=lambda **fields: job.checkpoint(job_id, **fields), resume_state=job.snapshot())
             job.update(job_id, **result, status="complete", completed_at=time.time())
-        return job.start(work, restart=True, initial={"message": "正在逐条复核失效记录"}, recovery=body)
+        return job.start(work, restart=True, initial={"message": "Reviewing dead records one by one"}, recovery=body)
     if (resume_state or {}).get('apply_receipt'):
         return resume_state['apply_receipt']
     state = _completed_scan(contract, scan_id)
     report = progress or (lambda **_fields: None)
     marked, reattached, purge = _apply_missing_records(
         contract, state, report, checkpoint, resume_state)
-    report(checked=0, total=None, message="正在删除空文件夹")
+    report(checked=0, total=None, message="Deleting empty folders")
     dirs_removed, dir_errors = 0, 0
     for location, paths in state["empty_dirs"].items():
         if location not in configured_resource_locations() or not source_is_online(location):

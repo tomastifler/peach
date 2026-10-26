@@ -103,7 +103,7 @@ class MediaFolderTests(unittest.TestCase):
         preview = web_folders.w_folder_preview(self.contract, body)
         with self.contract.write_transaction() as connection:
             write_owned_fields(connection, [1], {'creator': '其他人'}, 'user:manual')
-        with self.assertRaisesRegex(ValueError, '重新预览'):
+        with self.assertRaisesRegex(ValueError, 'preview again'):
             web_folders.w_folder_rule(self.contract, {**body, 'action': 'save', 'expected_revision': 0,
                                                      'plan_version': preview['plan_version']})
 
@@ -151,7 +151,7 @@ class MediaFolderTests(unittest.TestCase):
         self.assertEqual(self.save(name='作者乙')['applied'], 2)
         with self.contract.read_connection() as connection:
             self.assertEqual(connection.execute('SELECT creator FROM asset WHERE id=1').fetchone()[0], '作者乙')
-        with self.assertRaisesRegex(ValueError, '规则已变化'):
+        with self.assertRaisesRegex(ValueError, 'rule has changed'):
             web_folders.w_folder_rule(self.contract, {'folder': self.key(), 'action': 'remove', 'expected_revision': 0})
 
     def test_narrowing_rule_previews_withdrawal_and_binds_omitted_descendants(self):
@@ -161,7 +161,7 @@ class MediaFolderTests(unittest.TestCase):
         self.assertEqual((preview['total'], preview['withdrawn']), (1, 2))
         with self.contract.write_transaction() as connection:
             write_owned_fields(connection, [2], {'creator': '逐件确认'}, 'user:manual')
-        with self.assertRaisesRegex(ValueError, '重新预览'):
+        with self.assertRaisesRegex(ValueError, 'preview again'):
             web_folders.w_folder_rule(self.contract, {**body, 'action': 'save', 'expected_revision': 1,
                                                      'plan_version': preview['plan_version']})
         self.save(recursive=False)
@@ -178,11 +178,11 @@ class MediaFolderTests(unittest.TestCase):
             self.assertEqual(connection.execute('SELECT count(*) FROM asset_tag').fetchone()[0], 0)
 
     def test_unknown_and_removed_directories_are_rejected(self):
-        with self.assertRaisesRegex(ValueError, '目录不存在'):
+        with self.assertRaisesRegex(ValueError, 'folder does not exist'):
             self.read(folder='missing')
         with self.contract.write_transaction() as connection:
             connection.execute("UPDATE asset SET disposal='trash' WHERE id IN (1,2)")
-        with self.assertRaisesRegex(ValueError, '目录不存在'):
+        with self.assertRaisesRegex(ValueError, 'folder does not exist'):
             self.read(folder=self.key())
 
     def test_scan_inherits_only_explicitly_enabled_directory_rule(self):

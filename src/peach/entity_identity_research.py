@@ -95,22 +95,22 @@ def wiki_finding(entity_id, name, keys, pages):
             try:
                 url = root + 'd/' + quote(key.encode('euc_jp'))
             except UnicodeEncodeError:
-                queried.append(f'{wiki}「{key}」（写不成站上编码）')
+                queried.append(f'{wiki} "{key}"(cannot be encoded for the site)')
                 continue
             try:
                 page = pages[wiki].get(url)
             except LookupError:
-                queried.append(f'{wiki}「{key}」（页不存在）')
+                queried.append(f'{wiki} "{key}"(page does not exist)')
                 continue
             except RuntimeError:
                 return None
             found = _label_page(page, source)
             if not found:
-                queried.append(f'{wiki}「{key}」（不是作品一览）')
+                queried.append(f'{wiki} "{key}"(not a work list)')
                 continue
             works, cast, prefix = found
-            evidence = (f'{wiki}「{key}」页是作品一览：{works} 部、出演者 {cast} 位'
-                        + (f'，番号前缀 {prefix}' if prefix else '') + '；名称指向厂牌或系列，不是个人账号')
+            evidence = (f'{wiki} page "{key}" is a work list: {works} titles, {cast} performers'
+                        + (f', code prefix {prefix}' if prefix else '') + '; the name points to a studio or series, not an individual account')
             return {'entity_id': entity_id, 'name': name, 'claims': [
                 {'facet': 'identity', 'value': 'release', 'status': 'observed', 'confidence': 0.8,
                  'source_url': url, 'evidence': evidence},
@@ -118,7 +118,7 @@ def wiki_finding(entity_id, name, keys, pages):
                  'source_url': url, 'evidence': evidence}]}
     return {'entity_id': entity_id, 'name': name, 'claims': [
         {'facet': 'identity', 'value': 'unknown', 'status': 'candidate', 'confidence': 0.5,
-         'evidence': '公开身份来源未取得；已按页名直取 ' + '、'.join(queried) + '。同名命中不构成唯一身份依据。'}]}
+         'evidence': 'No public identity source obtained; looked up page names directly: ' + ', '.join(queried) + '. A same-name hit is not sufficient grounds for a unique identity.'}]}
 
 
 def _rows(connection, table, clause, params):
@@ -133,7 +133,7 @@ def plan(connection, findings):
         entity_id = int(finding['entity_id'])
         entity = _rows(connection, 'entity', 'id=?', (entity_id,))
         if not entity or entity[0]['canonical_name'] != finding['name']:
-            raise ValueError('身份清单与实体名称不一致')
+            raise ValueError('The identity list does not match the entity name')
         relations = _rows(connection, 'asset_entity', "entity_id=? AND role='creator'", (entity_id,)) if finding.get('cast_studios') else []
         cast = []
         for relation in relations:
@@ -145,7 +145,7 @@ def plan(connection, findings):
                 continue
             if not any(claim['facet']=='occupation' and claim['value'] in {'adult_performer','actor','model'}
                        and claim['status']=='observed' for claim in finding['claims']):
-                raise ValueError('出演者迁移需要已取得的公开职业来源')
+                raise ValueError('Performer migration requires an obtained public occupation source')
             name = re.escape(finding['name']).replace(r'\ ', r'[ ._-]+')
             publisher = re.escape(asset['studio']).replace(r'\ ', r'[ ._-]+')
             parts = re.split(r'[\\/]', asset['path'])
@@ -159,7 +159,7 @@ def plan(connection, findings):
 
 def apply(connection, frozen):
     if plan(connection, [row['finding'] for row in frozen]) != frozen:
-        raise ValueError('身份计划已过期')
+        raise ValueError('Identity plan is out of date')
     receipt = {'source':SOURCE, 'changes':[], 'created_entities':[]}
     stamp = datetime.now(timezone.utc).isoformat()
     for row in frozen:
@@ -183,7 +183,7 @@ def apply(connection, frozen):
                 'params':[entity_id,performer_id,SOURCE], 'before':_rows(connection,'entity_identity_link','left_id=? AND right_id=? AND source=?',(entity_id,performer_id,SOURCE))})
             connection.execute('INSERT OR IGNORE INTO entity_identity_link VALUES(?,?,?,?,?,?,?,?)',
                 (entity_id,performer_id,'same_person',SOURCE,finding['cast_source_url'],
-                 '发行文件完整署名与公开出演者身份一致','candidate',stamp))
+                 'The full credit in the release file matches the public performer identity','candidate',stamp))
             for cast in row['cast']:
                 asset_id = cast['asset']['id']
                 receipt['changes'].append({'table':'asset_entity','clause':"asset_id=? AND (entity_id=? OR (entity_id=? AND source=?))",
@@ -192,13 +192,13 @@ def apply(connection, frozen):
                 receipt['changes'].append({'table':'asset','clause':'id=?','params':[asset_id],
                     'before':_rows(connection,'asset','id=?',(asset_id,))})
                 upsert_asset_entity(connection, kind='performer',name=finding['name'],asset_id=asset_id,
-                    role='performer',source=SOURCE,metadata={'source_url':finding['cast_source_url'], 'evidence':'厂牌发行文件完整署名'},update_entity_metadata=False)
+                    role='performer',source=SOURCE,metadata={'source_url':finding['cast_source_url'], 'evidence':'Full credit in the studio release file'},update_entity_metadata=False)
                 connection.execute("DELETE FROM asset_entity WHERE asset_id=? AND entity_id=? AND role='creator' AND source='legacy:asset'",(asset_id,entity_id))
                 survivors = connection.execute("SELECT e.canonical_name FROM asset_entity ae JOIN entity e ON e.id=ae.entity_id WHERE ae.asset_id=? AND ae.role='creator'", (asset_id,)).fetchall()
                 if cast['asset']['creator'] == finding['name']:
                     names = {item[0] for item in survivors}
                     if len(names)>1:
-                        raise ValueError('作品存在多个发布者，需复核')
+                        raise ValueError('The work has multiple publishers; review needed')
                     write_owned_fields(connection,[asset_id],{'creator':next(iter(names),None)},SOURCE,
                                        expected_revision=cast['asset']['mutation_revision'])
         for target in targets:
@@ -216,10 +216,10 @@ def restore(connection, receipt):
     """有后续修改就拒绝撤回，不覆盖观看历史或人的判断。"""
     for change in receipt['changes']:
         if _rows(connection,change['table'],change['clause'],change['params']) != change['after']:
-            raise ValueError('身份修复记录已发生后续改动')
+            raise ValueError('The identity repair record has changed since')
     for entity in receipt['created_entities']:
         if _rows(connection,'entity','id=?',(entity['id'],)) != [entity]:
-            raise ValueError('新身份已发生后续改动')
+            raise ValueError('The new identity has changed since')
     for change in reversed(receipt['changes']):
         table = change['table']
         if table == 'asset':
@@ -236,12 +236,12 @@ def restore(connection, receipt):
         # 新身份的任何其他引用都需要用户保留；只撤回本批创建的空身份。
         references = connection.execute('SELECT count(*) FROM asset_entity WHERE entity_id=?',(entity['id'],)).fetchone()[0]
         if references:
-            raise ValueError('新身份出现额外作品关系')
+            raise ValueError('The new identity has extra work links')
         tables = [row[0] for row in connection.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%'")]
         for table in tables:
             if not re.fullmatch(r'[a-zA-Z0-9_]+',table):
                 continue
             for foreign in connection.execute(f'PRAGMA foreign_key_list({table})'):
                 if foreign[2]=='entity' and connection.execute(f'SELECT 1 FROM {table} WHERE {foreign[3]}=?',(entity['id'],)).fetchone():
-                    raise ValueError('新身份出现额外资料')
+                    raise ValueError('The new identity has extra data')
         connection.execute('DELETE FROM entity WHERE id=?',(entity['id'],))

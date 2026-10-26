@@ -357,7 +357,7 @@ class TastePreferenceTests(unittest.TestCase):
                 self.assertEqual(db.execute("SELECT count(*) FROM history_visit").fetchone()[0], 1)
             configure_browser(self.store, "enable", {"id": key})
             self.assertEqual(len(enabled_history_sources(self.store)), 1)
-            with self.assertRaisesRegex(ValueError, "未找到"):
+            with self.assertRaisesRegex(ValueError, "No browser history or bookmarks file found"):
                 configure_browser(self.store, "add", {"name": "缺失", "path": str(self.root / "missing")})
 
     def test_preference_cache_survives_process_cache_loss_and_refreshes_after_evidence_changes(self):
@@ -431,5 +431,5 @@ class TastePreferenceTests(unittest.TestCase):
             result = refresh_history([HistorySource('aside', 'busy', locked, engine='chrome'),
                                       HistorySource('chrome', 'ready', path)], self.store)
         self.assertEqual(result[0]["status"], "failed")
-        self.assertIn("退出该浏览器", result[0]["error"])
+        self.assertIn("quit that browser", result[0]["error"])
         self.assertEqual(result[1]["added"], 1)

@@ -21,7 +21,7 @@ from . import sample_images
 from .followups import FollowupType, register
 
 TASK_KEY = "code-samples"
-TASK_LABEL = "补番号样张"
+TASK_LABEL = "Release sample backfill"
 
 #: 一轮只派一条，key 固定：同一件事同时只会有一条在排队或在跑。
 FOLLOWUP_KEY = f"{TASK_KEY}:stock"
@@ -96,7 +96,7 @@ def run(contract, key: str, handle, *, transport=None, clock=time.monotonic) -> 
     checkpoint = _SampleCheckpoint(contract, handle, misses, snapshots)
     codes = checkpoint.codes
     if not codes:
-        return {"outcome": "没有要补的番号", "codes": 0}
+        return {"outcome": "No release codes to fill", "codes": 0}
     batch = sample_images.batch_for(getattr(handle, "run_id", None))
     owned = transport is None
     if owned:
@@ -192,15 +192,15 @@ def run(contract, key: str, handle, *, transport=None, clock=time.monotonic) -> 
 def _outcome(summary: dict) -> str:
     """活动页上那一行：补上几部、跳过几部各为什么、还剩几部、接不接着跑。"""
     skipped, deferred, remaining = summary["skipped"], summary["deferred"], summary["remaining"]
-    text = f"补上 {summary['landed']} 部的样张（{summary['images']} 张）" if summary["landed"] else "这一轮没有补上样张"
-    reasons = [line for count, line in ((skipped["no_site"], f"{skipped['no_site']} 部没有可问的官方站"),
-                                        (skipped["recent_miss"], f"{skipped['recent_miss']} 部那一站近期说过没有"),
-                                        (skipped["paused"], f"{skipped['paused']} 部因来源冷却"),
-                                        (deferred, f"{deferred} 部联网名额用完留到下一轮")) if count]
+    text = f"Filled samples for {summary['landed']} works ({summary['images']} images)" if summary["landed"] else "No samples filled this round"
+    reasons = [line for count, line in ((skipped["no_site"], f"{skipped['no_site']} works have no official site to query"),
+                                        (skipped["recent_miss"], f"{skipped['recent_miss']} works were recently reported missing by that site"),
+                                        (skipped["paused"], f"{skipped['paused']} works paused by source cooldown"),
+                                        (deferred, f"{deferred} works deferred to the next round (network quota used up)")) if count]
     if reasons:
-        text += "；跳过 " + "、".join(reasons)
+        text += "; skipped: " + ", ".join(reasons)
     if remaining:
-        text += f"；还有 {remaining} 部待补，" + ("接着排下一轮" if summary["continue"] else "等下一次处理")
+        text += f"; {remaining} works still to fill, " + ("next round queued" if summary["continue"] else "waiting for the next processing run")
     return text
 
 

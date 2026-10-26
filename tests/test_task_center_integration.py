@@ -146,7 +146,7 @@ class BackgroundJobTaskRunTests(unittest.TestCase):
         skipped = [run for run in self.store.query() if run.trigger == "scheduled"]
         self.assertEqual(len(skipped), 1)
         self.assertEqual(skipped[0].status, "cancelled")
-        self.assertIn("跳过", skipped[0].error)
+        self.assertIn("skipping", skipped[0].error)
 
     def test_a_superseded_round_is_settled_instead_of_hanging_on_the_mutex(self):
         """被顶掉的那一轮也得有人收尾，否则互斥键堵到下次重启。"""
@@ -192,7 +192,7 @@ class BackgroundJobTaskRunTests(unittest.TestCase):
         job.stop(timeout=0.1)
         run = self.store.get(run_id)
         self.assertEqual(run.status, "cancelled")
-        self.assertIn("关停", run.error)
+        self.assertIn("shut down", run.error)
 
     def test_a_job_without_a_store_still_runs(self):
         """裸 `BackgroundJob`（测试与老调用点）不带 store，一切照旧。"""
@@ -282,7 +282,7 @@ class TasksEndpointTests(unittest.TestCase):
         self.assertTrue(payload["available"])
         self.assertEqual([row["id"] for row in payload["running"]], [running.id])
         self.assertEqual(payload["running"][0]["progress_current"], 2)
-        self.assertEqual(payload["running"][0]["task_label"], "追更检查")
+        self.assertEqual(payload["running"][0]["task_label"], "Follow check")
         self.assertIsNotNone(payload["running"][0]["elapsed_seconds"])
         self.assertEqual([row["result_summary"]["blocked_by"]
                           for row in payload["skipped"]], [running.id])
@@ -422,7 +422,7 @@ class ConflictStatusTests(unittest.TestCase):
         self.assertIn(f'"blocking_run_id":{blocking.id}', body)
         self.assertIn("follow-check", body)
         # 机器读的是 `error` 与 `task_key`，人读的是 `message`：后者里不留英文任务键。
-        self.assertIn("追更检查已有一轮在进行", json.loads(body)["message"])
+        self.assertIn("Follow check already has a run in progress", json.loads(body)["message"])
 
     def test_a_get_that_conflicts_returns_409_too(self):
         error = TaskRunConflict("demo", 7)

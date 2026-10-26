@@ -125,12 +125,12 @@ class ScrapingAccessTests(unittest.TestCase):
         """
         contract = SimpleNamespace(follow_secrets_root=self.root)
         login = "https://fc2cmadb.com/"
-        cases = ((HttpResponse(403, {}, b"", login), "auth", False, "出口 IP", "请在官网"),
+        cases = ((HttpResponse(403, {}, b"", login), "auth", False, "egress IP", "sign in on the official site"),
                  (HttpResponse(200, {}, b"<html>login</html>",
                                "https://fc2cmadb.com/users/sign_in"), "auth", False,
-                  "请在官网完成登录后重试", "出口 IP"),
-                 (HttpResponse(503, {}, b"", login), "unavailable", False, "稍后重试", "登录"),
-                 (HttpResponse(200, {}, b"<html>ok</html>", login), "ok", True, "", "登录"))
+                  "sign in on the official site and try again", "egress IP"),
+                 (HttpResponse(503, {}, b"", login), "unavailable", False, "try again later", "sign-in"),
+                 (HttpResponse(200, {}, b"<html>ok</html>", login), "ok", True, "", "sign-in"))
         for response, kind, ok, says, avoids in cases:
             with self.subTest(status=response.status, url=response.url), \
                     patch("peach.web_scraping.SourceTransport") as factory:
@@ -204,8 +204,8 @@ class ScrapingAccessTests(unittest.TestCase):
         for transport in budgets:
             with self.assertRaises(SourcePaused) as spent:
                 transport(request, 1, 100)
-            self.assertIn("本趟", str(spent.exception))
-            self.assertIn("再跑一次接着采", str(spent.exception))
+            self.assertIn("This run's", str(spent.exception))
+            self.assertIn("run again to continue", str(spent.exception))
             self.assertNotIn("预算", str(spent.exception))
 
     def test_a_library_scan_asks_for_enough_to_carry_a_batch_of_covers(self):
@@ -364,7 +364,7 @@ class ScrapingAccessTests(unittest.TestCase):
         transport.transports["fc2ppvdb"] = unsolved
         with self.assertRaises(SourcePaused) as caught:
             transport(request, 1, 100)
-        self.assertIn("点一下验证", str(caught.exception))
+        self.assertIn("click the verification", str(caught.exception))
         self.assertTrue(cooldown.exists())
         cooldown.unlink()
 
@@ -434,7 +434,7 @@ class ScrapingAccessTests(unittest.TestCase):
         refused.transports["javten"] = lambda *args: HttpResponse(403, {}, b"")
         with self.assertRaises(SourcePaused) as caught:
             refused(request, 1, 100)
-        self.assertIn("更新它的 Cookie", str(caught.exception))
+        self.assertIn("update its cookie", str(caught.exception))
         self.assertTrue(cooldown.exists())
         save(self.root, "javten", {"network": "peach"})
         self.assertTrue(cooldown.exists(), "只改连接方式不算换了 Cookie")

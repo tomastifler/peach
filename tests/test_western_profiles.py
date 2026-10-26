@@ -66,7 +66,7 @@ class WesternProfileTests(unittest.TestCase):
             record = profile(lambda *a: HttpResponse(200, {}, body), 'Christy White')
             with connection:
                 result = land(connection, entity_id, 'Christy White', record, batch='auto:babepedia-profile@links')
-            self.assertEqual([item['reason'] for item in result['link_conflicts']], ['X 已登记另一个账号', '已有官网'])
+            self.assertEqual([item['reason'] for item in result['link_conflicts']], ['X already has another account registered', 'An official site already exists'])
             self.assertEqual(len(result['added_links']), 1)
             self.assertEqual(connection.execute('SELECT count(*) FROM entity_link WHERE entity_id=?', (entity_id,)).fetchone()[0], 3)
 
@@ -91,7 +91,7 @@ class WesternProfileTests(unittest.TestCase):
             self.assertEqual(len(waits), 2)
 
     def test_babepedia_alias_identity_is_required_for_all_profile_fields(self):
-        with self.assertRaisesRegex(ValueError,'身份不一致'):
+        with self.assertRaisesRegex(ValueError,'identity mismatch'):
             profile(lambda *a:HttpResponse(200,{},self.page()),'Someone Else')
 
     def test_creator_profile_and_aliases_share_the_person_header(self):

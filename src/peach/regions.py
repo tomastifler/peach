@@ -58,11 +58,11 @@ REGIONS: tuple[str, ...] = (JAPAN, KOREA, CHINA, WEST, OTHER)
 #: 给人看的写法。`cn` 叫「国产」不叫「中国」：中文资源圈里这个词就指这批片，
 #: 换成「中国」反而要多解释一句它包不包括港台。
 REGION_LABELS: dict[str, str] = {
-    JAPAN: "日本",
-    KOREA: "韩国",
-    CHINA: "国产",
-    WEST: "欧美",
-    OTHER: "其他",
+    JAPAN: "Japan",
+    KOREA: "Korea",
+    CHINA: "China",
+    WEST: "Western",
+    OTHER: "Other",
 }
 
 #: 国产厂牌的番号前缀。这批片的番号写法完全照搬 JAV，只有名单能把它们分开。

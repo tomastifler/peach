@@ -20,7 +20,7 @@ LOGGER = logging.getLogger(__name__)
 
 
 #: 补头像这一段在页面上的阶段名。它每张都要联网，和前面按资产计数的几段不是一回事。
-PROFILE_STAGE = "补齐女优资料"
+PROFILE_STAGE = "Fill in performer profiles"
 PROFILE_ALIAS_SOURCE = "r18dev:performer-profile"
 OFFICIAL_AVATAR_HOST = "pics.dmm.co.jp"
 OFFICIAL_AVATAR_PREFIX = "/mono/actjpgs/"
@@ -203,7 +203,7 @@ def enrich_performer_profiles(database, groups, avatar_root: Path,
                 reason = describe_failure(error)
                 LOGGER.warning("performer avatar failed: entity=%s url=%s: %s",
                                entity_id, profile["avatar_url"], reason, exc_info=True)
-                issue(profile["asset_id"], f'{profile["name"]} 的头像未取得：{reason}')
+                issue(profile["asset_id"], f'{profile["name"]} avatar not retrieved: {reason}')
             # 每张之后上报一次：这一段每张都要联网，不报进度就会被判成「长时间没有进展」。
             progress(stage=PROFILE_STAGE, performer_avatars=result["avatars"],
                      performer_profile_failed=result["failed"])

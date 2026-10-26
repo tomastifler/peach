@@ -88,7 +88,7 @@ class JavDBSource(SiteSource):
                 parts, original = urllib.parse.urlsplit(url), urllib.parse.urlsplit(page.url)
                 if (parts.netloc != original.netloc or parts.scheme != "https"
                         or not parts.path.startswith(original.path + "/reviews/") or url in seen):
-                    warnings.append("部分评论未取得，请打开来源页查看。")
+                    warnings.append("Some reviews could not be fetched; open the source page to view them.")
                     break
                 seen.add(url)
                 try:
@@ -96,20 +96,20 @@ class JavDBSource(SiteSource):
                         comments = self._page(url, session=session)
                     body = BeautifulSoup(comments.text, "html.parser")
                     if not body.select_one('.review-items'):
-                        raise SourceFailure(FailureReason.PARSE_ERROR, "评论区域未取得")
+                        raise SourceFailure(FailureReason.PARSE_ERROR, "Review section could not be fetched")
                     items.extend(parse_comment_links(comments))
                 except Exception:
-                    warnings.append("评论链接未取得，请打开来源页查看。")
+                    warnings.append("Review link could not be fetched; open the source page to view it.")
                     break
                 if body.select_one('.more a[href="/plans"]'):
-                    warnings.append("来源只返回了部分评论，资源链接可能不完整。")
+                    warnings.append("The source returned only some reviews; resource links may be incomplete.")
                 following = body.select_one('a[rel="next"], .pagination-next:not([disabled])')
                 next_url = str(following.get('href', '')) if following else ""
             else:
                 if next_url:
-                    warnings.append("已读取前三页评论，其余请打开来源页查看。")
+                    warnings.append("Read the first three pages of reviews; open the source page to see the rest.")
             if not entry and not soup.select_one('.review-items'):
-                warnings.append("评论入口未取得。")
+                warnings.append("Review entry could not be fetched.")
             return {"items": merge_resources(items), "warnings": list(dict.fromkeys(warnings)),
                     "source_url": page.url}
 
@@ -119,7 +119,7 @@ class JavDBSource(SiteSource):
     def _page(self, url: str, *, session: Session) -> Page:
         page = session.get(url, config=self.config)
         if LOGIN.search(page.text):
-            raise SourceFailure(FailureReason.AUTH_REQUIRED, "javdb 要求登录")
+            raise SourceFailure(FailureReason.AUTH_REQUIRED, "javdb requires login")
         return page
 
     def fetch(self, code: str, *, session: Session) -> Page:
@@ -127,7 +127,7 @@ class JavDBSource(SiteSource):
         path = next((path for path, shown in _BOX.findall(search.text)
                      if same_release_code(code, clean(shown))), None)
         if path is None:
-            raise SourceFailure(FailureReason.NOT_FOUND, "javdb 没有这个番号")
+            raise SourceFailure(FailureReason.NOT_FOUND, "javdb has no such code")
         detail = self._page(self.config.base_url + path + "?locale=zh", session=session)
         # `source_url` 记不带界面语言参数的详情页地址。
         return Page(self.config.base_url + path, detail.body)
@@ -137,7 +137,7 @@ class JavDBSource(SiteSource):
         panel = {clean(label): value for label, value in _PANEL.findall(text)}
         shown = clean(panel.get("番號", "")).replace(" ", "")
         if not same_release_code(code, shown):
-            raise SourceFailure(FailureReason.PARSE_ERROR, "javdb 详情页的番号与搜索结果不一致")
+            raise SourceFailure(FailureReason.PARSE_ERROR, "The code on the javdb detail page does not match the search result")
         runtime = re.search(r"\d+", clean(panel.get("時長", "")))
         title = _TITLE.search(text)
         tag = _COVER.search(text)
@@ -164,7 +164,7 @@ def parse_magnets(page: Page) -> list[dict]:
     soup = BeautifulSoup(page.text, "html.parser")
     container = soup.select_one("#magnets-content")
     if container is None:
-        raise SourceFailure(FailureReason.PARSE_ERROR, "JavDB 磁链区域未取得")
+        raise SourceFailure(FailureReason.PARSE_ERROR, "JavDB magnet section could not be fetched")
     found: dict[str, dict] = {}
     invalid = False
     for row in container.select(".item"):
@@ -191,7 +191,7 @@ def parse_magnets(page: Page) -> list[dict]:
             "source": "JavDB", "source_url": page.url, "origins": [page.url],
         })
     if invalid and not found:
-        raise SourceFailure(FailureReason.PARSE_ERROR, "JavDB 磁链格式无法识别")
+        raise SourceFailure(FailureReason.PARSE_ERROR, "JavDB magnet format not recognised")
     return list(found.values())
 
 

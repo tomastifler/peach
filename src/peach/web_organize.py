@@ -28,7 +28,7 @@ def _templates(contract, body) -> tuple[str, str, str]:
     """取出这一次要用的来源与两份模板；模板缺省时用账本里存着的那一份。"""
     location = str(body.get("location") or "").strip()
     if location not in ORGANIZE_LOCATIONS:
-        raise ValueError(f"不认识的来源：{location or '(空)'}")
+        raise ValueError(f"Unknown source: {location or '(empty)'}")
     stored = organize_templates(contract).get(location, {})
     file_template = body.get("file_template")
     dir_template = body.get("dir_template")
@@ -92,19 +92,19 @@ def _run_write(contract, job_id: str, work) -> dict:
     contract.cache_bust()
     if integrity != "ok" or violations:
         raise RuntimeError(
-            f"写入后 ledger 校验失败：integrity={integrity} foreign_keys={violations}")
+            f"Ledger check failed after writing: integrity={integrity} foreign_keys={violations}")
     return {**result, "backup": str(backup)}
 
 
 def w_organize_apply(contract, body) -> dict:
     """按确认过的模板执行整理。重跑一次计划，不信任界面手上那份。"""
     if body.get("confirm") is not True:
-        raise ValueError("整理需要确认")
+        raise ValueError("Organizing needs confirmation")
     location, file_template, dir_template = _templates(contract, body)
     if not file_template and not dir_template:
-        raise ValueError("至少要给一个模板")
+        raise ValueError("At least one template is required")
     if organize.unverified_location(location):
-        raise ValueError(f"{location} 挂载上的改名无法核验云端结果，界面只出预览，不执行")
+        raise ValueError(f"{location}: renaming on this mount cannot verify the cloud result, so the UI only shows a preview and does not execute it")
     job = contract.organize_job
 
     def work(job_id: str) -> None:
@@ -116,8 +116,8 @@ def w_organize_apply(contract, body) -> dict:
                                            file_template=file_template,
                                            dir_template=dir_template)
             if not job.checkpoint(job_id, plan=plan, batch_stamp=batch_stamp):
-                raise InterruptedError('整理已停止')
-        job.update(job_id, total=plan["counts"]["change"], stage="正在整理")
+                raise InterruptedError('Organizing stopped')
+        job.update(job_id, total=plan["counts"]["change"], stage="Organizing")
         result = _run_write(contract, job_id, lambda connection: organize.apply_plan(
             connection, plan["rows"], generated_root=contract.candidate_root,
             stamp=batch_stamp,
@@ -126,7 +126,7 @@ def w_organize_apply(contract, body) -> dict:
                    completed_at=time.time())
 
     started = job.start(work, restart=True,
-                     initial={"stage": "正在核对计划", "location": location},
+                     initial={"stage": "Verifying the plan", "location": location},
                      recovery={'confirm': True, 'location': location, 'file_template': file_template,
                                'dir_template': dir_template, 'action': 'apply'})
     return {key: value for key, value in started.items() if key not in ('plan', 'batch_stamp')}
@@ -135,19 +135,19 @@ def w_organize_apply(contract, body) -> dict:
 def w_organize_rollback(contract, body) -> dict:
     """把上一批整理原样退回去。"""
     if body.get("confirm") is not True:
-        raise ValueError("回滚需要确认")
+        raise ValueError("Rollback needs confirmation")
     from .job_recovery import current_job_id, read
     saved = read(contract.db_path, 'organize') if current_job_id.get() else {}
     batch = (saved.get('checkpoint') or {}).get('rollback_batch')
     latest = (organize.batch_log_dir(contract.candidate_root) / batch if batch
               else organize.latest_batch(contract.candidate_root))
     if latest is None:
-        raise ValueError("没有可以回滚的批次")
+        raise ValueError("No batch to roll back")
     job = contract.organize_job
 
     def work(job_id: str) -> None:
         if not job.checkpoint(job_id, rollback_batch=latest.name):
-            raise InterruptedError('整理回滚已停止')
+            raise InterruptedError('Organize rollback stopped')
         if not latest.exists():
             job.update(job_id, status='complete', restored=0, failed=0)
             return
@@ -156,7 +156,7 @@ def w_organize_rollback(contract, body) -> dict:
         job.update(job_id, **result, status="complete", completed_at=time.time())
 
     return job.start(work, restart=True,
-                     initial={"stage": "正在回滚上一批", "batch": latest.name},
+                     initial={"stage": "Rolling back the last batch", "batch": latest.name},
                      recovery={'confirm': True, 'action': 'rollback'})
 
 

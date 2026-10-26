@@ -350,7 +350,7 @@ class CreatorAttributionTests(unittest.TestCase):
         plan = self.plan()
         write_owned_fields(self.connection, [asset_id], {'creator':'Seller'}, 'user:manual')
         self.connection.commit()
-        with self.assertRaisesRegex(ValueError, '计划'):
+        with self.assertRaisesRegex(ValueError, 'audit plan'):
             with self.connection:
                 apply_plan(self.connection, plan)
         self.assertEqual(self.connection.execute('SELECT count(*) FROM asset_entity').fetchone()[0], 2)
@@ -358,7 +358,7 @@ class CreatorAttributionTests(unittest.TestCase):
             manifest = apply_plan(self.connection, self.plan())
         write_owned_fields(self.connection, [other_id], {'creator':'VerifiedSeller'}, 'user:manual')
         self.connection.commit()
-        with self.assertRaisesRegex(ValueError, '后续改动'):
+        with self.assertRaisesRegex(ValueError, 'changed afterwards'):
             with self.connection:
                 restore(self.connection, manifest)
         self.assertEqual(self.connection.execute('SELECT creator FROM asset WHERE id=?', (other_id,)).fetchone()[0], 'VerifiedSeller')

@@ -25,7 +25,7 @@ def q_library_processing(contract, _args):
     from .job_recovery import read
     recovery = read(contract.db_path, 'library-processing')
     if state.get('status') not in ACTIVE and recovery.get('status') == 'blocked':
-        state.update(status='failed', error=f"任务未能自动恢复：{recovery.get('error') or '请重新发起任务'}")
+        state.update(status='failed', error=f"The task could not be recovered automatically: {recovery.get('error') or 'Start the task again'}")
     # 上一趟任务的状态文件里没有这个字段，而它那份完整清单还在磁盘上：按 job_id
     # 推出地址补回去，界面才有得可给。
     if state.get('issue_count') and state.get('job_id') and not state.get('issues_log'):
@@ -38,15 +38,15 @@ def q_library_processing(contract, _args):
 def _control_action(contract, config, body):
     action = body['action']
     if action not in ('pause', 'resume', 'set_speed'):
-        raise ValueError('处理动作无效')
+        raise ValueError('Invalid processing action')
     previous = _current(contract)
     job_id = body.get('job_id')
     if action != 'set_speed' and not job_id:
-        raise ValueError('请选择正在处理的任务')
+        raise ValueError('Choose the task being processed')
     if job_id and str(job_id) != str(previous.get('job_id') or ''):
-        raise ValueError('任务已变化，请刷新页面后重试')
+        raise ValueError('The task has changed; refresh the page and try again')
     if action != 'set_speed' and previous.get('status') not in ACTIVE:
-        raise ValueError('当前没有可暂停或继续的任务')
+        raise ValueError('There is no task to pause or resume')
     control = control_for(config)
     control.refresh(force=True)
     if job_id:
@@ -107,7 +107,7 @@ def q_library_processing_issues(contract, args):
     state = _current(contract)
     job_id = str(args.get('job_id') or '')
     if not job_id or job_id != str(state.get('job_id') or ''):
-        raise ValueError('任务已变化，请刷新页面后重试')
+        raise ValueError('The task has changed; refresh the page and try again')
     rows = []
     path = issues_path(settings_file.active(), job_id)
     if path.is_file():
@@ -132,17 +132,17 @@ def _retry_ids(previous, body):
         return None
     job_id = str(body.get('job_id') or '')
     if not job_id or job_id != str(previous.get('job_id') or ''):
-        raise ValueError('原任务已变化，请刷新页面后重试')
+        raise ValueError('The original task has changed; refresh the page and try again')
     requested = body.get('retry')
     if not isinstance(requested, list):
-        raise ValueError('重试项目格式无效')
+        raise ValueError('Retry item format is invalid')
     allowed = list(previous.get('retryable_asset_ids') or [])
     if not requested:
         return allowed
     chosen = []
     for value in requested:
         if not isinstance(value, int) or value not in allowed:
-            raise ValueError('重试项目不属于原任务的失败集合')
+            raise ValueError('Retry items do not belong to the failure set of the original task')
         chosen.append(value)
     return chosen
 
@@ -150,22 +150,22 @@ def _retry_ids(previous, body):
 def _processing_request(contract, config, previous, body):
     """校验馆藏、阶段与互斥的处理范围。"""
     if not config.configured or not config.locations:
-        raise ValueError('请先添加媒体目录')
+        raise ValueError('Add a media directory first')
     if contract.db_path.resolve() != (config.directory('database') / 'ledger.db').resolve():
-        raise ValueError('当前馆藏与媒体配置不一致')
+        raise ValueError('The current library does not match the media configuration')
     retry_ids = _retry_ids(previous, body)
     if 'asset_ids' in (body or {}) and body['asset_ids'] is None:
-        raise ValueError('请选择有效的视频项目')
+        raise ValueError('Choose valid video items')
     asset_ids = _asset_selection(contract.db_path, (body or {}).get('asset_ids'))
     if asset_ids is not None and retry_ids is not None:
-        raise ValueError('选择项目与失败重试不能同时使用')
+        raise ValueError('Selected items and failure retry cannot be used together')
     stage = str((body or {}).get('stage') or
                 (previous.get('requested_stage') if retry_ids is not None else None) or ALL_STAGES)
     if stage not in STAGES:
-        raise ValueError('处理阶段无效')
+        raise ValueError('Invalid processing stage')
     from .media_processing_policy import metadata_only
     if stage == PREVIEWS_STAGE and metadata_only(config.directory('state')):
-        raise ValueError('视频预览生成已关闭，请先在媒体库设置中开启')
+        raise ValueError('Video preview generation is turned off; turn it on in the library settings first')
     return retry_ids, asset_ids, stage
 
 
@@ -199,8 +199,8 @@ def w_library_processing(contract, body, *, resume=False):
             contract.cache_bust()
     # 起步那行字按这一趟真正要做的事写：点了「只扫描」却看到「读取本地资料」，
     # 人会以为点错了。
-    labels = {ALL_STAGES: '准备处理', SCAN_STAGE: '准备扫描文件', COLLECT_STAGE: '准备采集资料',
-              METADATA_STAGE: '准备采集资料', PREVIEWS_STAGE: '准备生成预览图'}
+    labels = {ALL_STAGES: 'Preparing to process', SCAN_STAGE: 'Preparing to scan files', COLLECT_STAGE: 'Preparing to collect metadata',
+              METADATA_STAGE: 'Preparing to collect metadata', PREVIEWS_STAGE: 'Preparing to generate previews'}
     return contract.library_processing_job.start(
         work, restart=True, initial={'stage': labels[stage], 'requested_stage': stage,
                                     **initial_estimate(config, contract.db_path, stage, asset_ids or retry_ids, mode)},

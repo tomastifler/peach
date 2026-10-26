@@ -23,7 +23,7 @@ if [ -z "$TLS_DIR" ]; then
         PEACH_TLS_COMMON_GIT="$(git -C "$PEACH_REPO_ROOT" rev-parse --path-format=absolute --git-common-dir)"
         PEACH_TLS_PYTHON="$(dirname "$PEACH_TLS_COMMON_GIT")/.venv/bin/python"
     fi
-    [ -x "$PEACH_TLS_PYTHON" ] || { echo "找不到项目 Python：$PEACH_TLS_PYTHON" >&2; exit 1; }
+    [ -x "$PEACH_TLS_PYTHON" ] || { echo "Project Python not found: $PEACH_TLS_PYTHON" >&2; exit 1; }
     TLS_DIR="$("$PEACH_TLS_PYTHON" -X utf8 "$PEACH_REPO_ROOT/scripts/resolve_tls_directory.py")"
 fi
 CA_CRT="$TLS_DIR/peach-local-ca.crt"
@@ -38,8 +38,8 @@ LAN_IP="${PEACH_LAN_IP:-$(ipconfig getifaddr "$(route -n get default 2>/dev/null
 # setup_local_tls.ps1 用的也是 397。CA 本身不受这条限制（它是 3650 天）。
 DAYS="${PEACH_CERT_DAYS:-397}"
 
-[ -f "$CA_CRT" ] || { echo "找不到 CA 证书：$CA_CRT" >&2; exit 1; }
-[ -f "$CA_KEY" ] || { echo "找不到 CA 私钥：$CA_KEY（只有它能重签）" >&2; exit 1; }
+[ -f "$CA_CRT" ] || { echo "CA certificate not found: $CA_CRT" >&2; exit 1; }
+[ -f "$CA_KEY" ] || { echo "CA private key not found: $CA_KEY (only it can re-issue)" >&2; exit 1; }
 
 SAN="DNS:${NAME},DNS:localhost,IP:127.0.0.1"
 [ -n "$LAN_IP" ] && SAN="${SAN},IP:${LAN_IP}"
@@ -79,8 +79,8 @@ cp "$WORK/peach.crt" "$TLS_DIR/peach.crt"
 cp "$WORK/peach.key" "$TLS_DIR/peach.key"
 chmod 600 "$TLS_DIR/peach.key"
 
-echo "已用现有 CA 重签服务器证书（CA 未改动，已装的信任继续有效）"
+echo "Re-issued the server certificate with the existing CA (CA unchanged; installed trust remains valid)"
 echo "  SAN: ${SAN}"
 openssl x509 -in "$TLS_DIR/peach.crt" -noout -serial -dates | sed 's/^/  /'
-echo "  重启服务后生效：python scripts/install_macos_agent.py install"
-[ -n "$LAN_IP" ] && echo "  注意：${LAN_IP} 是当前的局域网地址，换网络后需要重跑本脚本；peach.local 不受影响"
+echo "  Takes effect after restarting the service: python scripts/install_macos_agent.py install"
+[ -n "$LAN_IP" ] && echo "  Note: ${LAN_IP} is the current LAN address; re-run this script after changing networks; peach.local is unaffected"

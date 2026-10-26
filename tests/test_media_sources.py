@@ -103,5 +103,5 @@ class MediaSourceCostTests(unittest.TestCase):
         settings_file.write(replace(self.config, media_costs={"G:/": "unknown"}))
         with self.assertRaisesRegex(settings_file.SettingsFileError, "free.*metered"):
             settings_file.load_config(environ={"PEACH_DATA_ROOT": str(self.root)})
-        with self.assertRaisesRegex(ValueError, "列名"):
+        with self.assertRaisesRegex(ValueError, "column names"):
             media_sources.cost_sql("a.location; DROP TABLE asset", config=self.config)

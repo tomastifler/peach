@@ -154,7 +154,7 @@ def recover(source: Path, references: list[Path], *, untrunc: Path, ffmpeg: Path
         if best.coverage >= GOOD_ENOUGH:
             break
     if best is None:
-        raise RepairUnavailable("没有一个参照切得出能解码的片子")
+        raise RepairUnavailable("No reference could be cut into a decodable clip")
     return best
 
 
@@ -166,12 +166,12 @@ def replace_original(source: Path, repaired: Path) -> Path:
     """
     kept = source.with_name(f".{source.name}{ORIGINAL_SUFFIX}")
     if kept.exists():
-        raise RepairUnavailable(f"同目录已有一份留档：{kept.name}")
+        raise RepairUnavailable(f"A backup already exists in the same directory: {kept.name}")
     staged = source.with_name(f".{source.name}.peach-repair.tmp")
     try:
         shutil.copyfile(repaired, staged)
         if staged.stat().st_size != repaired.stat().st_size:
-            raise OSError("写到原目录的副本大小不对")
+            raise OSError("Copy written to the original directory has the wrong size")
         os.replace(source, kept)
     except BaseException:
         staged.unlink(missing_ok=True)

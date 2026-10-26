@@ -18,10 +18,10 @@ from urllib.parse import urlsplit
 from . import __version__
 
 FIELDS = {
-    "usage": "Peach 版本、操作系统类型；每天最多一次，不含安装标识。",
-    "errors": "Peach 版本、系统类型、Python 版本、CPU 架构、故障环节、异常链、Peach 代码文件名/函数名/行号、结构化错误码、媒体工具故障类别、HTTP 方法/路由模板/关联错误编号、同类故障次数与统计日期；首次立即上传，重复次数每小时或退出时合并，每天最多 20 批。",
+    "usage": "Peach version and operating system type; at most once a day, with no installation identifier.",
+    "errors": "Peach version, system type, Python version, CPU architecture, failing stage, exception chain, Peach source file/function names/line numbers, structured error codes, media tool failure category, HTTP method/route template/correlation error ID, count of similar failures and stats date; the first occurrence is uploaded immediately, repeat counts are merged hourly or on exit, at most 20 batches per day.",
 }
-NOTICE = "发送至 Sentry。不上报错误原文、完整日志、诊断 ZIP、媒体名称、路径、网址、观看记录或凭据。接收服务会接触连接 IP；关闭后停止新发送，已发送的信息无法撤回。"
+NOTICE = "Sent to Sentry. Raw error text, full logs, diagnostic ZIPs, media names, paths, URLs, watch history and credentials are not reported. The receiving service sees the connecting IP; turning this off stops new sends, but information already sent cannot be withdrawn."
 _lock = threading.RLock()
 _client = None
 _client_dsn = ""
@@ -95,13 +95,13 @@ def snapshot(config=None):
 
 def parse_choices(body, *, partial=False):
     if not isinstance(body, dict):
-        raise ValueError("遥测和自动错误诊断必须是布尔值")
+        raise ValueError("Telemetry and automatic error diagnostics must be boolean values")
     defaults = consent() if partial else {}
     choices = {key: body.get(key, defaults.get(key)) for key in FIELDS}
     if any(type(value) is not bool for value in choices.values()):
-        raise ValueError("遥测和自动错误诊断必须是布尔值")
+        raise ValueError("Telemetry and automatic error diagnostics must be boolean values")
     if choices["usage"] != choices["errors"]:
-        raise ValueError("版本统计与错误诊断须同时开启或关闭")
+        raise ValueError("Version statistics and error diagnostics must be turned on or off together")
     return choices
 
 

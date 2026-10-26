@@ -300,7 +300,7 @@ class InteractiveInitTests(unittest.TestCase):
         self.assertEqual(self._ledger_paths(),
                          sorted([str(self.media / "b.jpg"), str(self.media / "sub" / "a.mp4"),
                                  str(second / "c.mp4")]))
-        self.assertIn("✓ local: 2 文件", output)
+        self.assertIn("✓ local: 2 files", output)
         self.assertIn("✓ local: 1 文件", output)
         self.assertIn("下一步", output)
         self.assertEqual(output.count("扫描结果："), 2, "每个目录各报一行")
@@ -315,7 +315,7 @@ class InteractiveInitTests(unittest.TestCase):
         self.assertEqual(loaded.mounts, {"local": (str(self.media),)})
         self.assertEqual((loaded.server.host, loaded.server.port, loaded.server.mdns_name),
                          ("0.0.0.0", 9443, "peach-two"))
-        self.assertIn("媒体目录", output)
+        self.assertIn("media directories", output)
         paths = self._ledger_paths()
         self.assertEqual(paths, [r"R:\media\b.jpg", r"R:\media\sub\a.mp4"])
         # 读取文件时，将数据库路径前缀之后的层级拼到本机媒体目录。
@@ -328,14 +328,14 @@ class InteractiveInitTests(unittest.TestCase):
         code, output, prompts = self._run(
             ["", str(missing), str(self.media), "", "", "", "", "n"], windows=NATIVE_WINDOWS)
         self.assertEqual(code, 0)
-        self.assertEqual(prompts.count("媒体目录（必须已经存在，可以在外置硬盘上）"), 2)
-        self.assertIn("目录不存在", output)
+        self.assertEqual(prompts.count("Media directory (must already exist; may be on an external drive)"), 2)
+        self.assertIn("Directory does not exist", output)
         self.assertFalse(missing.exists(), "问答不替人建媒体目录")
 
     def test_three_bad_answers_abort_before_anything_is_written(self):
         with self.assertRaises(SystemExit) as caught:
             self._run(["", "/nope1", "/nope2", "/nope3"], windows=NATIVE_WINDOWS)
-        self.assertIn("3 次", str(caught.exception))
+        self.assertIn("after 3 attempts", str(caught.exception))
         self.assertIn("没有写任何文件", str(caught.exception))
         self.assertFalse(self.data_root.exists())
 
@@ -490,7 +490,7 @@ class ScanCommandTests(unittest.TestCase):
     def test_root_defaults_to_the_declared_root(self):
         code, output = self._run(["scan", "local", "--db", str(self.db)])
         self.assertEqual(code, 0)
-        self.assertIn("✓ local: 2 文件", output)
+        self.assertIn("✓ local: 2 files", output)
         self.assertEqual(self._count(), 2)
 
     def test_configured_scan_uses_each_online_source_id(self):

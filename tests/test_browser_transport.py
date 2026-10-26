@@ -572,7 +572,7 @@ class BrowserTransportTests(unittest.TestCase):
         self.addCleanup(transport.close)
         with self.assertRaises(BrowserUnavailable) as caught:
             transport(HttpRequest("GET", "https://javten.com/", {}), 10, 4096)
-        self.assertIn("退出", str(caught.exception))
+        self.assertIn("exited", str(caught.exception))
 
 
 class WebSocketTests(unittest.TestCase):

@@ -131,7 +131,7 @@ class SeesaaMetadataTests(unittest.TestCase):
         source.tables['one'] = source.rows(Page(ROOT+'d/One', fixture()))
         self.assertIsNone(source.match('ABC-008'))
         source.tables['two'] = source.rows(Page(ROOT+'d/Two', fixture(actors='<a href="/w/sougouwiki/d/C">架空夏子</a>')))
-        with self.assertRaisesRegex(MetadataProviderError, '冲突'):
+        with self.assertRaisesRegex(MetadataProviderError, 'conflicting rows'):
             source.match('ABC-007')
 
     def test_mgs_and_dvd_rows_keep_separate_release_identities(self):
@@ -180,7 +180,7 @@ ROW = {
     'id': 'ABC-007', 'source_url': ROOT+'d/Label', 'title': '架空の作品', 'release_date': '2024-11-20',
     'actresses': [{'japanese_name': '架空花子'}, {'japanese_name': '架空春子'}],
     'cover_url': 'https://example.org/cover.jpg',
-    'source_warnings': ['社区 Wiki 的出演断言需要人工复核；人物页链接不自动合并艺名'],
+    'source_warnings': ['Cast claims from the community Wiki need manual review; person-page links do not auto-merge stage names'],
     'wiki_evidence': {'table': 'table_edit_1', 'row': 1,
                       'performer_links': [{'name': '架空花子', 'source_url': ROOT+'d/OtherName'},
                                           {'name': '架空春子', 'source_url': ROOT+'d/B'}],
@@ -191,18 +191,19 @@ CONTRACT_KEYS = {'maker': '', 'label': '', 'series': '', 'director': '', 'runtim
                  'cover_urls': ['https://example.org/cover.jpg']}
 #: 每种失败的 `(kind, 措辞, status_code, retryable, temporary)`，`scrape_codes` 的错误表与健康表记的就是这几项。
 FAILURES = {
-    'http403': ('auth', 'sougouwiki 需要登录或已被拒绝：来源返回 403：可能是凭据失效，也可能是出口 IP 被封，'
-                '先看站点是否要求登录再决定换凭据还是等', 403, False, True),
-    'http401': ('auth', 'sougouwiki 需要登录或已被拒绝：来源返回 401，换一份凭据后重跑', 401, False, True),
-    'login': ('auth', 'sougouwiki 需要登录或已被拒绝：重定向终点落在 /auth/login，换一份凭据后重跑', 200, False, True),
-    'http429': ('unavailable', 'Wiki HTTP 请求未取得', 429, True, False),
-    'http404': ('unavailable', 'Wiki HTTP 请求未取得', 404, True, False),
-    'http500': ('unavailable', 'Wiki HTTP 请求未取得', 500, True, False),
-    'challenge': ('blocked', 'Wiki 机器人验证未取得', 403, False, False),
-    'redirect': ('redirect', 'Wiki 重定向页面未取得身份验证', 0, False, False),
-    'size': ('size_limit', 'Wiki 页面超过读取上限', 0, False, False),
-    'timeout': ('unavailable', 'Wiki 网络请求未取得', 0, True, False),
-    'budget': ('budget', 'Wiki 本批请求已停止或达到限额', 0, True, False),
+    'http403': ('auth', 'sougouwiki requires login or was rejected: Source returned 403: the credential may have expired '
+                'or the egress IP may be blocked; first check whether the site requires login, '
+                'then decide whether to switch credentials or wait', 403, False, True),
+    'http401': ('auth', 'sougouwiki requires login or was rejected: Source returned 401: switch to another credential and rerun', 401, False, True),
+    'login': ('auth', 'sougouwiki requires login or was rejected: Redirect ended at /auth/login: switch to another credential and rerun', 200, False, True),
+    'http429': ('unavailable', 'Wiki HTTP request failed', 429, True, False),
+    'http404': ('unavailable', 'Wiki HTTP request failed', 404, True, False),
+    'http500': ('unavailable', 'Wiki HTTP request failed', 500, True, False),
+    'challenge': ('blocked', 'Wiki bot verification not passed', 403, False, False),
+    'redirect': ('redirect', 'Wiki redirect page did not pass authentication', 0, False, False),
+    'size': ('size_limit', 'Wiki page exceeds the read limit', 0, False, False),
+    'timeout': ('unavailable', 'Wiki network request failed', 0, True, False),
+    'budget': ('budget', 'Wiki requests for this batch were stopped or hit the quota', 0, True, False),
 }
 FAILURE_RESPONSES = {
     'http403': HttpResponse(403, {}, b''), 'http401': HttpResponse(401, {}, b''),
@@ -230,8 +231,8 @@ class SeesaaContractTests(unittest.TestCase):
         dvd = parse_page(fixture('JAC-040', actors='未詳'), ROOT+'d/Jackson')[0]
         self.assertEqual({key: dvd[key] for key in ('id', 'actresses', 'source_warnings')},
                          {'id': 'JAC-040', 'actresses': [],
-                          'source_warnings': ['社区 Wiki 的出演断言需要人工复核；人物页链接不自动合并艺名',
-                                              '出演栏含未识别或不确定内容，完整出演名单未取得']})
+                          'source_warnings': ['Cast claims from the community Wiki need manual review; person-page links do not auto-merge stage names',
+                                              'The cast field contains unrecognised or uncertain entries; the full cast list was not obtained']})
         self.assertEqual(dvd['wiki_evidence'], {'table': 'table_edit_1', 'row': 1, 'performer_links': [],
                                                 'performers_complete': False, 'actress_text': '未詳',
                                                 'notes': '別版 ABC-008'})
@@ -259,7 +260,7 @@ class SeesaaContractTests(unittest.TestCase):
         source.tables['two'] = source.rows(Page(ROOT+'d/Two', fixture(actors='<a href="/w/sougouwiki/d/C">架空夏子</a>')))
         with self.assertRaises(MetadataProviderError) as caught:
             source.match('ABC-007')
-        self.assertEqual(described(caught.exception), ('ambiguous', 'Wiki 精确番号存在冲突行，需复核原页', 0, False, False))
+        self.assertEqual(described(caught.exception), ('ambiguous', 'The Wiki has conflicting rows for the exact code; review the original page', 0, False, False))
 
     def test_search_requests_cache_keys_and_the_unfound_code_are_fixed(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -281,7 +282,7 @@ class SeesaaContractTests(unittest.TestCase):
             with self.assertRaises(MetadataProviderError) as caught:
                 source.query('ABC-009', session=session)
             self.assertEqual(described(caught.exception),
-                             ('incomplete_search', 'Wiki 搜索范围内未取得精确作品表格行', 0, True, False))
+                             ('incomplete_search', 'No exact work table row found within the Wiki search scope', 0, True, False))
 
     def test_parse_reads_one_page_without_any_transport(self):
         record = SeesaaSource().parse(Page(ROOT+'d/Label', fixture()), 'abc-007')

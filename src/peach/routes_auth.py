@@ -49,7 +49,7 @@ def _login_attempt(request: Request) -> None:
         attempts = [stamp for stamp in _ATTEMPTS.pop(peer, []) if now - stamp < 60]
         _ATTEMPTS[peer] = attempts
         if len(attempts) >= 10:
-            raise HTTPException(429, "尝试次数较多，请一分钟后重试", headers={"Retry-After": "60"})
+            raise HTTPException(429, "Too many attempts; try again in a minute", headers={"Retry-After": "60"})
         attempts.append(now)
         while len(_ATTEMPTS) > 1024:
             _ATTEMPTS.popitem(last=False)
@@ -149,13 +149,13 @@ def same_origin(request: Request) -> None:
     """
     origin = request.headers.get("origin")
     if request.headers.get("sec-fetch-site") == "cross-site":
-        raise HTTPException(403, "请从 Peach 配置页提交")
+        raise HTTPException(403, "Submit from the Peach settings page")
     if origin:
         supplied = _origin_key(origin)
         local = _origin_key(str(request.base_url))
         allowed = {local, _tunnel_origin(request), _named_origin(request)}
         if supplied is None or supplied not in allowed:
-            raise HTTPException(403, "请从 Peach 配置页提交")
+            raise HTTPException(403, "Submit from the Peach settings page")
 
 
 def require_auth(request: Request) -> dict[str, str]:
@@ -229,7 +229,7 @@ def login_html(next_path: str, *, invalid: bool = False, error: str = "") -> str
         data["invalid"] = "true"
     if error:
         data["error"] = error
-    return page_shell("登录 Peach", "login", data)
+    return page_shell("Sign in to Peach", "login", data)
 
 
 def _safe_next(value: str) -> str:
@@ -275,7 +275,7 @@ async def login_submit(request: Request):
         if not 0 <= days <= 365:
             raise ValueError
     except ValueError:
-        message = "请选择有效的保持登录时间"
+        message = "Choose a valid stay-signed-in duration"
         if _wants_page(request):
             return HTMLResponse(login_html(next_path, error=message), status_code=400)
         raise HTTPException(400, message) from None

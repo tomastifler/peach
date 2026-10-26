@@ -23,15 +23,15 @@ export const REVIEW_KEY = ['review'] as const;
 
 /** 复核分类与它们在界面上的名字。次序就是页签次序。 */
 export const REVIEW_LABELS = {
-  metadata_fields: '元数据字段',
-  creator_tags: '创作者标签',
-  studio_logos: '厂牌 Logo',
-  performer_avatars: '女优头像',
-  western_identity: '西方身份回配',
-  code_creators: '番号目录存疑',
-  fc2_markings: 'FC2 评论标记',
-  fc2_similarity: 'FC2 跨号相似',
-  video_endcards: '片尾/出处证据',
+  metadata_fields: 'Metadata fields',
+  creator_tags: 'Creator tags',
+  studio_logos: 'Studio logos',
+  performer_avatars: 'Performer avatars',
+  western_identity: 'Western identity matching',
+  code_creators: 'Questionable code directory',
+  fc2_markings: 'FC2 review markings',
+  fc2_similarity: 'FC2 cross-code similarity',
+  video_endcards: 'End card / source evidence',
 } as const;
 
 export type ReviewCategory = keyof typeof REVIEW_LABELS;
@@ -153,12 +153,12 @@ export interface ReviewGroup { key: string; title: string; rows: ReviewRow[] }
 /** 这一批队列能按什么分组。按来源、按字段两档要队列里真有那一项才出现。 */
 export function reviewGroupingOptions(rows: ReviewRow[], metadata: boolean): [ReviewGrouping, string][] {
   const options: [ReviewGrouping, string][] = [
-    ['candidates', metadata ? '按来源数量' : '全部待复核'],
+    ['candidates', metadata ? 'By source count' : 'All pending review'],
   ];
   if (rows.some((row) => row.source || row.candidates?.some((candidate) => candidate.source))) {
-    options.push(['source', '按来源']);
+    options.push(['source', 'By source']);
   }
-  if (rows.some((row) => row.field)) options.push(['field', '按字段']);
+  if (rows.some((row) => row.field)) options.push(['field', 'By field']);
   return options;
 }
 
@@ -170,15 +170,15 @@ export function groupReviewRows(rows: ReviewRow[], by: ReviewGrouping): ReviewGr
     let title: string;
     if (by === 'field') {
       key = row.field || '__unspecified_field';
-      title = row.field_label || row.field || '未标注字段';
+      title = row.field_label || row.field || 'Unlabeled field';
     } else if (by === 'source') {
       const sources = [...new Set((row.candidates?.map((candidate) => candidate.source || '')
         || [row.source || '']).filter(Boolean))].sort();
       key = JSON.stringify(sources);
-      title = sources.join(' / ') || '未标注来源';
+      title = sources.join(' / ') || 'Unlabeled source';
     } else {
       key = row.candidates ? (row.candidates.length === 1 ? 'single' : 'multiple') : 'pending';
-      title = key === 'single' ? '单一来源' : key === 'multiple' ? '需选择来源' : '待复核';
+      title = key === 'single' ? 'Single source' : key === 'multiple' ? 'Source choice needed' : 'Pending review';
     }
     if (!groups.has(key)) groups.set(key, { key, title, rows: [] });
     groups.get(key)!.rows.push(row);
@@ -296,7 +296,7 @@ export function decisionPayload(
 }
 
 export const decisionReceipt = (status: DecisionStatus): string =>
-  (status === 'approved' ? '已通过资料' : status === 'rejected' ? '已拒绝资料' : '已跳过资料');
+  (status === 'approved' ? 'Details approved' : status === 'rejected' ? 'Details rejected' : 'Details skipped');
 
 /* ── 取数与写操作 ── */
 
@@ -371,7 +371,7 @@ export const reloadReview = (): Promise<void> =>
 export function mirrorText(
   mirror: ReviewMirror | null | undefined, readOnlyMessage: string,
 ): string {
-  if (mirror?.state === 'live') return '正在显示写入端的实时复核队列';
-  if (mirror?.state === 'cached') return `写入端暂时不可达，显示 ${localTime(mirror.fetched_at)} 的缓存`;
+  if (mirror?.state === 'live') return 'Showing the live review queue of the writing device';
+  if (mirror?.state === 'cached') return `The writing device is unreachable; showing the cache from ${localTime(mirror.fetched_at)}`;
   return mirror?.error || readOnlyMessage;
 }

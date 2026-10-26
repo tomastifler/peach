@@ -95,7 +95,7 @@ export function TagCloud({ tags, actions }: { tags: TagEntry[]; actions: TagActi
 }
 
 const VIEWS: readonly (readonly [TagView, string, string])[] = [
-  ['cloud', '标签云', 'tags'], ['alphabet', '字母表', 'text-aa'],
+  ['cloud', 'Tag cloud', 'tags'], ['alphabet', 'Alphabet', 'text-aa'],
 ];
 
 /** 筛选浮层：上排类型药丸，下排读数、按首字跳转与视图切换。只摆数得到的那几类。 */
@@ -114,7 +114,7 @@ export function TagFilters(
 ) {
   const alphaScroll = useHorizontalScroller<HTMLElement>();
   return (
-    <FilterGlassRows label="标签筛选" topLabel="标签类型"
+    <FilterGlassRows label="Tag filters" topLabel="Tag type"
       top={categories.map(([key, label]) => (
         <FilterPill key={key} data-tag-pill="" data-tag-cat={key === 'all' ? 'all' : tagColorKey(online, key)}
           pressed={category === key} onPress={() => onCategory(key)}>
@@ -126,7 +126,7 @@ export function TagFilters(
           {readout}
         </span>
         {letters.length > 1 ? (
-          <nav ref={alphaScroll} aria-label="按首字跳转" data-alpha-jump=""
+          <nav ref={alphaScroll} aria-label="Jump by first letter" data-alpha-jump=""
             className="flex min-w-0 gap-0.5 overflow-x-auto overscroll-x-contain">
             {letters.map((letter, at) => (
               <button key={letter} type="button" onClick={() => onJump(at)}
@@ -136,7 +136,7 @@ export function TagFilters(
             ))}
           </nav>
         ) : null}
-        <RadioGroup aria-label="标签视图" orientation="horizontal" value={view}
+        <RadioGroup aria-label="Tag view" orientation="horizontal" value={view}
           onChange={(next) => onView(next as TagView)} className={`ml-auto ${SEGMENTED_GLASS_TRACK}`}>
           {VIEWS.map(([value, label, symbol]) => {
             const Glyph = spriteGlyph(symbol);
@@ -159,15 +159,15 @@ export function TagDock(
   { count: number; match: 'any' | 'all'; onMatch(match: 'any' | 'all'): void; onClear(): void; onApply(): void },
 ) {
   return (
-    <SelectionDock visible={count > 0} label="所选标签操作" count={`已选 ${count.toLocaleString()} 个标签`}>
+    <SelectionDock visible={count > 0} label="Selected tag actions" count={`${count.toLocaleString()} ${count === 1 ? "tag" : "tags"} selected`}>
       <Checkbox isSelected={match === 'any'} onChange={(on) => onMatch(on ? 'any' : 'all')}>
         <span className="flex flex-col">
-          <span className="text-body-medium">广泛匹配</span>
-          <span className="text-caption-1-regular text-text-secondary">开启后匹配任一所选标签；关闭后必须同时包含全部标签。</span>
+          <span className="text-body-medium">Broad match</span>
+          <span className="text-caption-1-regular text-text-secondary">When on, matches any selected tag; when off, must include all selected tags.</span>
         </span>
       </Checkbox>
-      <Button variant="secondary" size="small" onClick={onClear}>清空</Button>
-      <Button variant="primary" size="small" disabled={!count} onClick={onApply}>显示结果</Button>
+      <Button variant="secondary" size="small" onClick={onClear}>Clear</Button>
+      <Button variant="primary" size="small" disabled={!count} onClick={onApply}>Show results</Button>
     </SelectionDock>
   );
 }

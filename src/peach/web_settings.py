@@ -201,9 +201,9 @@ def w_settings(contract: SettingsContract, body) -> dict:
         raise TypeError("settings body must be an object")
     unknown = set(body) - SYNCED_SETTING_KEYS
     if unknown:
-        raise ValueError(f"这些设置不跟数据库同步：{sorted(unknown)}")
+        raise ValueError(f"These settings are not synced with the database: {sorted(unknown)}")
     if not body:
-        raise ValueError("没有要写入的设置")
+        raise ValueError("No settings to write")
 
     merged = _stored(contract)
     if "sidebarOrder" in body:
@@ -217,12 +217,12 @@ def w_settings(contract: SettingsContract, body) -> dict:
     if "searchHistoryLimit" in body:
         limit = normalise_search_history_limit(body["searchHistoryLimit"])
         if limit is None:
-            raise ValueError(f"searchHistoryLimit 只收 0 到 {SEARCH_HISTORY_LIMIT_MAX} 的整数")
+            raise ValueError(f"searchHistoryLimit only accepts integers from 0 to {SEARCH_HISTORY_LIMIT_MAX}")
         merged["searchHistoryLimit"] = limit
     for key, _kind in FEED_COMPILATION_SWITCHES:
         if key in body:
             if not isinstance(body[key], bool):
-                raise ValueError(f"{key} 只收 true 或 false")
+                raise ValueError(f"{key} only accepts true or false")
             merged[key] = body[key]
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     with contract.write_transaction() as connection:
@@ -238,5 +238,5 @@ def w_settings(contract: SettingsContract, body) -> dict:
             (json.dumps(current, ensure_ascii=False), stamp, DEFAULT_PROFILE_ID),
         ).rowcount
         if not updated:
-            raise ValueError(f"profile {DEFAULT_PROFILE_ID} 不存在")
+            raise ValueError(f"profile {DEFAULT_PROFILE_ID} does not exist")
     return {"ok": True, **q_settings(contract)}

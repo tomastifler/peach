@@ -219,7 +219,7 @@ class BridgeQueryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as empty:
             with self.assertRaises(MetadataProviderError) as caught:
                 metadata_amane.AmaneBridge.create(Path(empty))
-        self.assertIn("amane 桥未安装", str(caught.exception))
+        self.assertIn("amane bridge is not installed", str(caught.exception))
 
     def test_query_runs_the_pinned_interpreter_and_reads_the_last_json_line(self):
         calls = []
@@ -257,7 +257,7 @@ class BridgeQueryTests(unittest.TestCase):
         bridge = metadata_amane.AmaneBridge.create(self.tools, runner=lambda *a, **k: completed("Traceback…", 1))
         with self.assertRaises(MetadataProviderError) as caught:
             bridge.query("ABW-220", ["avsox"])
-        self.assertIn("非 JSON", str(caught.exception))
+        self.assertIn("non-JSON", str(caught.exception))
         bridge = metadata_amane.AmaneBridge.create(
             self.tools, runner=lambda *a, **k: completed(json.dumps({"error": "amane 加载失败：X"}), 3))
         with self.assertRaises(MetadataProviderError) as caught:
@@ -488,7 +488,7 @@ class ProviderStageTests(unittest.TestCase):
             self.addCleanup(provider.transport.close)
             with self.assertRaises(Unavailable) as caught:
                 provider.amane("HEYZO-1380", route=("avsox",))
-        self.assertIn("amane 桥未安装", str(caught.exception))
+        self.assertIn("amane bridge is not installed", str(caught.exception))
 
     def test_a_route_without_bridge_sites_is_not_found_without_a_subprocess(self):
         provider = self.provider(report())

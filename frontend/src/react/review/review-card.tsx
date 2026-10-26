@@ -98,7 +98,7 @@ export function ReviewCard(props: ReviewCardProps) {
         ))}
         {comparison.length > COMPARISON_SHOWN
           ? <p className="text-body-2-regular text-text-secondary">
-              {`另有 ${(comparison.length - COMPARISON_SHOWN).toLocaleString()} 部对照作品`}
+              {`${(comparison.length - COMPARISON_SHOWN).toLocaleString()} more comparison works`}
             </p>
           : null}
       </div>
@@ -126,8 +126,8 @@ export function ReviewCard(props: ReviewCardProps) {
         ? <AssetPicker assets={assets} picked={choice.assets} locked={locked}
             onPicked={(next) => onChoice({ ...choice, assets: next })} />
         /* 空白一片会被当成界面坏了。真实原因是这些作品还没抽帧，说清楚比留白好。 */
-        : <EmptyState shell="inset" icon={RiImageLine} title="这批作品尚未抽帧">
-            {`${row.video_count || ''} 条作品还没有可用预览；批准后仍会按所选资料写入标签。`}
+        : <EmptyState shell="inset" icon={RiImageLine} title="This batch has no frame sampling yet">
+            {`${row.video_count || ''} works have no usable preview yet; after approval, tags are still written from the selected details.`}
           </EmptyState>)
       : category === 'fc2_similarity'
         ? null
@@ -160,7 +160,7 @@ export function ReviewCard(props: ReviewCardProps) {
           <span className={`${HEADING_LINE} shrink-0`}
             onPointerDownCapture={(event) => { range.current = event.shiftKey }}
             onKeyDownCapture={(event) => { range.current = event.shiftKey }}>
-            <Checkbox isSelected={selected} aria-label={`选择 ${title}`}
+            <Checkbox isSelected={selected} aria-label={`Select ${title}`}
               onChange={(on) => onSelect(range.current, on)} />
           </span>
         )}
@@ -175,12 +175,12 @@ export function ReviewCard(props: ReviewCardProps) {
         <div ref={body} className="flex min-w-0 min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
           {/* 数据库规范名当标题，抓取来源给的写法（多为罗马音）留作副标题。 */}
           {row.source_name
-            ? <p className="text-body-2-regular text-text-secondary">{`来源写法：${row.source_name}`}</p>
+            ? <p className="text-body-2-regular text-text-secondary">{`Source spelling: ${row.source_name}`}</p>
             : null}
           {/* 实体类卡片的作品数已经写在创作者入口里，这里再写一遍就是同一个数字两处。 */}
           {!asEntity && (row.board || row.assets)
             ? <p className="text-body-2-regular text-text-secondary">
-                {`对照文件：${Number(row.video_count || row.assets || 0).toLocaleString()}`}
+                {`Comparison files: ${Number(row.video_count || row.assets || 0).toLocaleString()}`}
               </p>
             : null}
           {!asEntity && origin ? origin : null}
@@ -188,7 +188,7 @@ export function ReviewCard(props: ReviewCardProps) {
             <div className="flex flex-wrap gap-1">
               {tags.length
                 ? tags.map((tag) => <Chip key={tag} variant="caption" color="soft">{tag}</Chip>)
-                : <small className="text-body-2-regular text-text-secondary">暂无待确认标签</small>}
+                : <small className="text-body-2-regular text-text-secondary">No tags awaiting confirmation</small>}
             </div>
           ) : null}
           {preview}
@@ -204,7 +204,7 @@ export function ReviewCard(props: ReviewCardProps) {
           而这一句自己得铺满整条。 */}
       {metadata && evidence
         ? <div className="relative -mx-5 -mb-4 shrink-0">
-            <p ref={current} role="region" aria-label="当前信息"
+            <p ref={current} role="region" aria-label="Current details"
               className="max-h-22 overflow-y-auto border-t border-separator-border px-5 py-2.5 text-body-2-regular text-text-secondary wrap-anywhere">
               {evidence}
             </p>
@@ -215,14 +215,14 @@ export function ReviewCard(props: ReviewCardProps) {
           下面两角跟着卡的圆角收口。 */}
       <footer className="-mx-5 flex min-h-14 shrink-0 flex-wrap items-center justify-end gap-2 rounded-b-surface border-t border-separator-border bg-background-secondary-default py-3 pr-3 pl-5">
         <Button variant="danger" size="small" disabled={locked} {...busyProps(busy)}
-          onClick={() => onDecide('rejected')}>拒绝</Button>
+          onClick={() => onDecide('rejected')}>Reject</Button>
         <Button variant="secondary" size="small" disabled={locked} {...busyProps(busy)}
-          onClick={() => onDecide('skipped')}>跳过</Button>
+          onClick={() => onDecide('skipped')}>Skip</Button>
         {/* 没有可采纳的候选时这颗键灰着，字面说它为什么点不了，和旁边的「跳过」分得开。 */}
         <Button variant="primary" size="small" disabled={locked || !approvable} {...busyProps(busy)}
-          title={approvable ? undefined : '没有可采用的资料，只能拒绝或跳过'}
+          title={approvable ? undefined : 'No details can be adopted; you can only reject or skip'}
           onClick={() => onDecide('approved')}>
-          {approvable ? '通过' : '不可通过'}
+          {approvable ? 'Approve' : 'Cannot approve'}
         </Button>
         {problem
           ? <p role="status" className="w-full text-body-2-regular text-text-error-primary">{problem}</p>

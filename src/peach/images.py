@@ -220,13 +220,13 @@ def is_flat(payload: bytes) -> bool:
 def classify(width: int, height: int) -> tuple[str, float, str]:
     """返回（判定, 长宽比, 说明）。判定为 square / pad / reject。"""
     if not width or not height:
-        return REJECT, 0.0, "尺寸未知"
+        return REJECT, 0.0, "Size unknown"
     aspect = max(width, height) / min(width, height)
     if min(width, height) < MIN_SHORT_EDGE:
-        return REJECT, aspect, f"短边 {min(width, height)} < {MIN_SHORT_EDGE}"
+        return REJECT, aspect, f"Short side {min(width, height)} < {MIN_SHORT_EDGE}"
     if aspect <= MAX_ASPECT:
-        return SQUARE, aspect, "接近正方形"
-    return PAD, aspect, f"长宽比 {aspect:.2f}，补背景填成正方形"
+        return SQUARE, aspect, "Nearly square"
+    return PAD, aspect, f"Aspect ratio {aspect:.2f}; padded with background to a square"
 
 
 def _has_transparency(image: Image.Image) -> bool:

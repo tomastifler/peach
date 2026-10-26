@@ -130,7 +130,7 @@ class MacStandaloneDistributionTests(TestCase):
                         mock.patch.object(tray, "NetworkChangeWatcher") as watcher:
                     tray.run_macos_menu_bar(mock.Mock(specs=()), gate, silent=True)
                 labels = [title for title, _ in menu_type.call_args.args[2]]
-                self.assertEqual("同步开发进度" in labels, not independent)
+                self.assertEqual("Sync dev progress" in labels, not independent)
                 if independent:
                     certificate.assert_not_called()
                     watcher.assert_not_called()
@@ -138,7 +138,7 @@ class MacStandaloneDistributionTests(TestCase):
                     certificate.assert_called_once()
                     watcher.return_value.start.assert_called_once()
                     watcher.return_value.stop.assert_called_once()
-                    self.assertLess(labels.index("同步开发进度"), labels.index("重启服务"))
+                    self.assertLess(labels.index("Sync dev progress"), labels.index("Restart services"))
                 menu.run.assert_called_once()
 
     @skipUnless(sys.platform == "darwin", "AppKit 是 macOS 专属")

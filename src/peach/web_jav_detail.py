@@ -22,7 +22,7 @@ from .preview_cache import PreviewCache
 def detail_code(args) -> str:
     raw = str(args.get("code") or "").strip()
     if not re.fullmatch(r"[A-Za-z0-9_-]{2,64}", raw):
-        raise ValueError("需要有效的作品番号")
+        raise ValueError("A valid release code is required")
     return normalise_code_key(raw)
 
 
@@ -208,7 +208,7 @@ def q_jav_reviews(contract, args) -> dict:
         rows = PUBLIC_API.reviews(code, page, refresh=True) if args.get('refresh') == '1' else PUBLIC_API.reviews(code, page)
     except PublicSourceUnavailable as error:
         return {"ok": False, "items": [], "more": False, "message": str(error)}
-    items = [{"id": str(row.get("id")), "username": str(row.get("username") or "匿名用户"),
+    items = [{"id": str(row.get("id")), "username": str(row.get("username") or "Anonymous user"),
               "content": str(row.get("content") or ""), "score": row.get("score"),
               "created_at": str(row.get("created_at") or "")} for row in rows[:PAGE_SIZE] if isinstance(row, dict)]
     return {"ok": True, "items": items, "page": page,
@@ -222,7 +222,7 @@ def q_jav_image(contract, args) -> dict:
     index = str(args.get("image") or "cover")
     if (index != "cover" and not re.fullmatch(r"actor:[A-Za-z0-9]{1,64}", index)
             and (not index.isdigit() or not 0 <= int(index) < 30)):
-        raise ValueError("预览图不存在")
+        raise ValueError("Preview image does not exist")
     try:
         key = f"jav:actor:{index.removeprefix('actor:')}" if index.startswith("actor:") else f"jav:{code}:image:{index}"
         body = cache_for(contract).bytes(key,
@@ -307,7 +307,7 @@ def q_jav_resources(contract, args) -> dict:
     except PublicSourceUnavailable as error:
         rows = []
         magnet_failed = True
-        warnings.append("磁链区资源未取得：" + str(error))
+        warnings.append("Magnet section resources were not obtained: " + str(error))
     items = {}
     source_url = "https://javdb.com/v/" + movie["id"]
     for row in rows:
@@ -335,10 +335,10 @@ def q_jav_resources(contract, args) -> dict:
             if len(reviews) < PAGE_SIZE:
                 break
         else:
-            warnings.append("已查询前 8 页评论资源。")
+            warnings.append("The first 8 pages of comment resources were queried.")
     except PublicSourceUnavailable as error:
         comments_failed = True
-        warnings.append("评论资源未取得：" + str(error))
+        warnings.append("Comment resources were not obtained: " + str(error))
     merged = merge_resources([*items.values(), *comments])
     failed = magnet_failed and comments_failed and not merged
     return {"state": "error" if failed else "ready", "items": merged,

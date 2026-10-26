@@ -64,7 +64,7 @@ describe('回收站卡片', () => {
           assert.ok(Math.max(...heights) - Math.min(...heights) < 1, JSON.stringify(heights));
         }
         assert.deepEqual(await cards.locator('[data-media-disposal-reason]').allTextContents(),
-          ['手动', '垃圾', '重复', '文件缺失', '原因未记录', '手动', '垃圾', '重复', '文件缺失', '原因未记录']);
+          ['Manual', 'Junk', 'Duplicate', 'File missing', 'Reason not recorded', 'Manual', 'Junk', 'Duplicate', 'File missing', 'Reason not recorded']);
         assert.equal(await cards.locator('[data-flag="dispose"]').count(), 0);
         const textInsets: number[] = [];
         for (const i of [3, 4]) {
@@ -93,10 +93,10 @@ describe('回收站卡片', () => {
         await video.locator('[data-media-resource-action="restore"]').click();
         await page.locator('#grid [data-media-card][data-id="92000"]').waitFor({ state: 'detached' });
         assert.deepEqual(restored, [92000]);
-        await page.getByRole('button', { name: '撤销', exact: true }).last().click();
+        await page.getByRole('button', { name: 'Undo', exact: true }).last().click();
         const returned = page.locator('#grid [data-media-card][data-id="92000"]');
         await returned.waitFor();
-        assert.equal(await returned.locator('[data-media-disposal-reason]').textContent(), '手动');
+        assert.equal(await returned.locator('[data-media-disposal-reason]').textContent(), 'Manual');
       } finally { await context.close() }
     });
   }

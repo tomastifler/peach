@@ -23,15 +23,15 @@ from dataclasses import dataclass
 
 #: 模板认识的占位符，以及它在界面上的说明。顺序就是界面上列出来的顺序。
 PLACEHOLDERS: dict[str, str] = {
-    "number": "番号",
-    "title": "标题",
-    "studio": "厂牌",
-    "series": "系列",
-    "year": "发行年",
-    "actors": "出演者",
-    "cd": "分片号",
-    "mosaic": "有码无码",
-    "definition": "画质",
+    "number": "Code",
+    "title": "Title",
+    "studio": "Studio",
+    "series": "Series",
+    "year": "Release year",
+    "actors": "Performers",
+    "cd": "Part number",
+    "mosaic": "Censored/uncensored",
+    "definition": "Quality",
 }
 
 #: 单个路径组件的长度上限。Windows 的组件上限是 255 个字符，但长名字在资源管理器、
@@ -106,12 +106,12 @@ def _parse(template: str) -> tuple[_Token, ...]:
         if char == "{":
             end = template.find("}", index)
             if end < 0:
-                raise TemplateError("占位符的 `{` 没有配对的 `}`")
+                raise TemplateError("Placeholder `{` has no matching `}`")
             name = template[index + 1:end].strip()
             if name not in PLACEHOLDERS:
                 raise TemplateError(
-                    f"不认识的占位符 `{{{name}}}`；可用的是 "
-                    + "、".join(f"{{{key}}}" for key in PLACEHOLDERS))
+                    f"Unknown placeholder `{{{name}}}`; available ones are "
+                    + ", ".join(f"{{{key}}}" for key in PLACEHOLDERS))
             flush()
             target.append(_Token("field", name))
             index = end + 1
@@ -124,7 +124,7 @@ def _parse(template: str) -> tuple[_Token, ...]:
             continue
         if char == "]":
             if not stack:
-                raise TemplateError("可选分组的 `]` 没有配对的 `[`")
+                raise TemplateError("Optional group `]` has no matching `[`")
             flush()
             group = _Token("group", parts=tuple(target))
             target = stack.pop()
@@ -134,7 +134,7 @@ def _parse(template: str) -> tuple[_Token, ...]:
         buffer.append(char)
         index += 1
     if stack:
-        raise TemplateError("可选分组的 `[` 没有配对的 `]`")
+        raise TemplateError("Optional group `[` has no matching `]`")
     flush()
     return tuple(tokens)
 
@@ -196,21 +196,21 @@ def validate_template(template: str, *, directory: bool = False) -> str:
     if not text:
         return ""
     if len(text) > 300:
-        raise TemplateError("模板太长")
+        raise TemplateError("Template is too long")
     _parse(text)  # 记号配对与占位符名字先过一遍
     if ntpath.splitdrive(text)[0]:
-        raise TemplateError("模板不能带盘符；它只描述来源根下面的相对位置")
+        raise TemplateError("Template cannot include a drive letter; it only describes a relative location under the source root")
     normalised = text.replace("\\", "/")
     if normalised.startswith("/"):
-        raise TemplateError("模板不能以分隔符开头；它只描述来源根下面的相对位置")
+        raise TemplateError("Template cannot start with a separator; it only describes a relative location under the source root")
     if not directory and "/" in normalised:
-        raise TemplateError("文件名模板不能带目录分隔符；分层写在目录模板里")
+        raise TemplateError("The file name template cannot contain directory separators; write the hierarchy in the directory template")
     for component in normalised.split("/"):
         stripped = component.strip()
         if stripped in {".", ".."}:
-            raise TemplateError("模板不能包含 `.` 或 `..`")
+            raise TemplateError("Template cannot contain `.` or `..`")
         if directory and not stripped and normalised.strip("/") != "":
-            raise TemplateError("目录模板里有空的一层")
+            raise TemplateError("The directory template has an empty level")
     return normalised.strip("/") if directory else normalised
 
 

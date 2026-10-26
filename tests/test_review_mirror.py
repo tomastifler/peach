@@ -109,7 +109,7 @@ class ReviewMirrorTests(unittest.TestCase):
         ).resolve(LOCAL_EMPTY)
 
         self.assertEqual(result["mirror"]["state"], "unavailable")
-        self.assertIn("不是 ledger writer", result["mirror"]["error"])
+        self.assertIn("not currently a ledger writer", result["mirror"]["error"])
         self.assertEqual(result["counts"]["creator_tags"], 0)
 
     def test_a_cache_write_failure_does_not_hide_a_live_writer_response(self):
@@ -138,7 +138,7 @@ class ReviewMirrorTests(unittest.TestCase):
         ).resolve(LOCAL_EMPTY)
 
         self.assertEqual(result["mirror"]["state"], "unavailable")
-        self.assertIn("严格校验", result["mirror"]["error"])
+        self.assertIn("strictly verified", result["mirror"]["error"])
 
     def test_macos_keychain_ca_is_added_without_replacing_the_file_ca(self):
         keychain = self.root / "login.keychain-db"

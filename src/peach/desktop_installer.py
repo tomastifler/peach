@@ -130,7 +130,7 @@ def prepare(program: Path, owner: int, error_file: Path) -> int:
         previous = job_recovery.legacy_library_request(db)
         update_tasks.wait_quiescent(db)
         if not stop(program):
-            raise update_tasks.UpdateBusy('Peach 尚未退出，安装未完成。请稍后重试。')
+            raise update_tasks.UpdateBusy('Peach has not exited yet, so the install did not finish. Try again shortly.')
         job_recovery.import_legacy_library(db, previous)
         return 0
     except Exception as exc:
@@ -151,7 +151,7 @@ def prepare_install_tools(program: Path, cache: Path, error_file: Path, *, stage
             cached = cache / url.rsplit('/', 1)[-1]
             if cached.is_file():
                 if cached.stat().st_size != size or update_packages.digest(cached) != checksum:
-                    raise ValueError(f'本地工具包校验失败：{cached.name}。请重新下载或移走此文件后重试。')
+                    raise ValueError(f'Local toolkit verification failed: {cached.name}. Download it again or move this file away and retry.')
                 shutil.copy2(cached, archive)
                 progress(size)
             else:
@@ -164,7 +164,7 @@ def prepare_install_tools(program: Path, cache: Path, error_file: Path, *, stage
                                             report=lambda data, **changes: data.update(changes), fetch=fetch)
         return 0
     except Exception as exc:
-        atomic_write_text(error_file, f'媒体工具准备失败：{exc}')
+        atomic_write_text(error_file, f'Media tool preparation failed: {exc}')
         return 1
 
 

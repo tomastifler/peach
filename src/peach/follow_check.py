@@ -121,7 +121,7 @@ def run_check(row: Mapping, *, credentials, writer, connector_factory,
     remaining = cooldown.cooling(provider) if cooldown is not None else 0
     if remaining:
         return CheckResult(**base, ok=False, status="error",
-                           error=f"{provider} 限流冷却中，{int(remaining) + 1} 秒后再试，本次跳过")
+                           error=f"{provider} is rate-limit cooling down; try again in {int(remaining) + 1} s, skipped this time")
     force = bool(row.get("force_media_reparse")) or replay_first
     cutoff, floor = _history_limits(row, metadata, writer, moment,
                                     older=older, initial_days=initial_days)
@@ -145,7 +145,7 @@ def run_check(row: Mapping, *, credentials, writer, connector_factory,
     except FollowHistoryEnd:
         with writer() as store:
             store.record_history_end(source_id, moment)
-        return CheckResult(**base, exhausted=True, message="没有更多历史内容")
+        return CheckResult(**base, exhausted=True, message="No more history")
     except CredentialError as error:
         return _record_failure(writer, base, error, moment, "unauthorized")
     except FollowSourceError as error:

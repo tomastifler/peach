@@ -3504,7 +3504,7 @@ class OperationalScriptTests(unittest.TestCase):
             candidates = __import__("json").loads(performer["candidates_json"])
             self.assertEqual({candidate["source"] for candidate in candidates}, {"r18dev", "javbus"})
             self.assertEqual(candidates[0]["display_value"], "木村さん")
-            self.assertIn("已规范化", candidates[0]["warnings"][0])
+            self.assertIn("was normalized", candidates[0]["warnings"][0])
             self.assertEqual(candidates[0]["provider_id"], "ABC-001")
             self.assertEqual(candidates[0]["content_id"], "abc00001")
             self.assertEqual(candidates[0]["catalog_evidence"]["label"]["value"], "Label A")
@@ -4569,7 +4569,7 @@ class ScriptingConventionTests(unittest.TestCase):
     def test_apply_without_backup_is_refused_with_the_single_house_wording(self):
         with self.assertRaises(SystemExit) as caught:
             scripting.open_for_write(self._args(apply=True))
-        self.assertEqual(str(caught.exception), "--apply 必须同时给 --backup")
+        self.assertEqual(str(caught.exception), "--apply requires --backup")
 
     def test_apply_backup_keeps_transactions_that_are_still_only_in_the_wal(self):
         """WAL 里已提交未 checkpoint 的事务必须进备份；文件复制会把它们丢掉。"""

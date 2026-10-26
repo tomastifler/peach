@@ -46,7 +46,7 @@ class MetadataProviderTests(unittest.TestCase):
             status_code=200, final_url="https://javdb.com/login?next=/v/abc"))
         self.assertIn("/age_check", auth_wall_reason(
             status_code=200, final_url="https://www.dmm.co.jp/age_check/=/declared=yes/"))
-        self.assertIn("javdb 登录页", auth_wall_reason(
+        self.assertIn("javdb login page", auth_wall_reason(
             status_code=200, body="<title> 登入 | JavDB</title>".encode()))
         for benign in (dict(status_code=404),
                        dict(status_code=200, final_url="https://javdb.com/v/loginbait"),
@@ -64,7 +64,7 @@ class MetadataProviderTests(unittest.TestCase):
         判据明确的那三种没有这个歧义，仍然直说。
         """
         bare = auth_wall_reason(status_code=403)
-        self.assertIn("出口 IP", bare)
+        self.assertIn("egress IP", bare)
         self.assertNotIn(CREDENTIAL_ADVICE, bare)
         for confident in (dict(status_code=401),
                           dict(status_code=200, final_url="https://javdb.com/login"),
@@ -74,7 +74,7 @@ class MetadataProviderTests(unittest.TestCase):
             with self.subTest(confident=confident):
                 reason = auth_wall_reason(**confident)
                 self.assertIn(CREDENTIAL_ADVICE, reason)
-                self.assertNotIn("出口 IP", reason)
+                self.assertNotIn("egress IP", reason)
 
     def test_an_auth_error_is_not_retryable_and_not_a_verdict(self):
         """同一份凭据再问一次还是这个结果，所以不重试；换一份就能继续，所以不是定论。"""
@@ -100,7 +100,7 @@ class MetadataProviderTests(unittest.TestCase):
         ])
         self.assertEqual(fields["studio"]["value"], "Studio")
         self.assertEqual(fields["release_date"]["value"], "2020-09-13")
-        self.assertIn("已规范化", fields["release_date"]["warnings"][0])
+        self.assertIn("was normalized", fields["release_date"]["warnings"][0])
         self.assertEqual(fields["tags"]["value"], ["屁眼"])
 
     def test_performer_profile_names_are_aliases_not_separate_people(self):
@@ -175,7 +175,7 @@ class MetadataProviderTests(unittest.TestCase):
         self.assertEqual(evidence["screenshot_urls"]["value"], [
             "https://img.example/1.jpg", "https://img.example/2.jpg",
         ])
-        self.assertIn("2 张截图", evidence["screenshot_urls"]["display_value"])
+        self.assertIn("2 screenshots", evidence["screenshot_urls"]["display_value"])
 
     def test_catalog_evidence_rejects_credentialed_and_non_http_urls(self):
         evidence = extract_catalog_evidence({

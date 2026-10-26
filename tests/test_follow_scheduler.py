@@ -66,7 +66,7 @@ class FollowUpdateSchedulerTests(unittest.TestCase):
             status = scheduler.status()
             self.assertEqual(status["last_checked"], 2)
             self.assertEqual(status["last_added"], 3)
-            self.assertEqual(status["last_error"], "1 个来源检查失败")
+            self.assertEqual(status["last_error"], "1 source checks failed")
             self.assertIsNotNone(status["last_finished_at"])
 
     def test_a_busy_lock_is_a_skip_not_a_failure(self):

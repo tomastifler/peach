@@ -41,7 +41,7 @@ def page_shell(title: str, page: str, data: Mapping[str, str] | None = None, *, 
     attributes = ""
     for key, value in (data or {}).items():
         if not _DATA_KEY.fullmatch(key):
-            raise ValueError(f"data-* 键名不合法：{key!r}")
+            raise ValueError(f"data-* key name is not valid: {key!r}")
         attributes += f' data-{key}="{escape(value, quote=True)}"'
     sprite = f'<svg width="0" height="0" aria-hidden="true" style="position:absolute">{symbols}</svg>' if symbols else ""
     return (f'{_PAGE_HEAD}<title>{escape(title)}</title>{_THEME_SCRIPT}'
@@ -60,14 +60,14 @@ def runtime_facts(config) -> tuple[tuple[str, str], ...]:
     from .mp4recover import untrunc_path
 
     available = FFmpegResolver(config.directory("tools") / "ffmpeg").ffmpeg() is not None
-    ffmpeg = "可用" if available else "未安装；MP4 可直接播放，转码和缩略图需要安装 FFmpeg。"
-    untrunc = "可用" if untrunc_path(config.directory("tools")) else "未安装；缺索引的 MP4 需要它才修得了。"
+    ffmpeg = "Available" if available else "Not installed; MP4 plays directly, but transcoding and thumbnails need FFmpeg."
+    untrunc = "Available" if untrunc_path(config.directory("tools")) else "Not installed; MP4 files missing an index need it to be repaired."
     return (
-        ("版本", __version__),
-        ("操作系统", system_platform.system()),
-        ("数据目录", str(config.data_root)),
-        ("设置文件", str(config.path)),
-        ("日志目录", str(config.directory("logs"))),
+        ("Version", __version__),
+        ("Operating system", system_platform.system()),
+        ("Data directory", str(config.data_root)),
+        ("Settings file", str(config.path)),
+        ("Log directory", str(config.directory("logs"))),
         ("FFmpeg", ffmpeg),
         ("untrunc", untrunc),
     )
@@ -82,11 +82,11 @@ def runtime_fact_entries(config) -> list[dict[str, str]]:
                if choice is None]
     if missing:
         entry = next(row for row in entries if row["term"] == "FFmpeg")
-        entry.update(value="未找到 " + "、".join(missing) + "；转码、媒体信息与缩略图需要 FFmpeg 工具包。",
-                     download_url="https://ffmpeg.org/download.html", download_label="下载 FFmpeg")
+        entry.update(value="Not found: " + ", ".join(missing) + "; transcoding, media info and thumbnails need the FFmpeg toolkit.",
+                     download_url="https://ffmpeg.org/download.html", download_label="Download FFmpeg")
     untrunc = next(row for row in entries if row["term"] == "untrunc")
-    if untrunc["value"] != "可用":
-        untrunc.update(value=untrunc["value"] + f"解压到 {config.directory('tools') / 'untrunc'}。",
+    if untrunc["value"] != "Available":
+        untrunc.update(value=untrunc["value"] + f" Extract to {config.directory('tools') / 'untrunc'}.",
                        download_url="https://github.com/anthwlock/untrunc/releases",
-                       download_label="下载 untrunc")
-    return [row for row in entries if not (row["term"] in ("FFmpeg", "untrunc") and row["value"] == "可用")]
+                       download_label="Download untrunc")
+    return [row for row in entries if not (row["term"] in ("FFmpeg", "untrunc") and row["value"] == "Available")]

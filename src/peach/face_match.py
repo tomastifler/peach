@@ -45,7 +45,7 @@ FACE_CROP_SIDE = 480
 def ensure_model(path: Path | None = None, *, allow_download: bool = True) -> Path:
     target = Path(path) if path is not None else MODEL_PATH
     return face_detect.fetch_model(target, MODEL_URL, MODEL_SHA256,
-                                   allow_download=allow_download, label="人脸比对模型")
+                                   allow_download=allow_download, label="face matching model")
 
 
 def cosine(one, other) -> float:
@@ -70,7 +70,7 @@ class FaceEmbedder:
         create = getattr(getattr(cv2, "FaceRecognizerSF", None), "create", None)
         if create is None:                       # pragma: no cover - 依赖版本兜底
             raise face_detect.FaceModelUnavailable(
-                "当前 OpenCV 没有 FaceRecognizerSF；需要 4.5.4 以上")
+                "This OpenCV build has no FaceRecognizerSF; 4.5.4 or later is required")
         self._recognizer = create(str(self.model_path), "")
         self._detector = detector or FaceDetector(allow_download=allow_download)
 

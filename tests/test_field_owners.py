@@ -207,11 +207,11 @@ class FieldOwnerVocabularyTests(unittest.TestCase):
         self.assertTrue(set(OWNED_FIELDS) <= columns)
 
     def test_owner_labels_say_who_wrote_it(self):
-        self.assertEqual(owner_label(USER_MANUAL), "手动填写")
-        self.assertEqual(owner_label("review:javbus"), "复核批准 javbus")
-        self.assertEqual(owner_label("auto:r18dev"), "r18dev 免复核落库")
-        self.assertEqual(owner_label("scan:filename"), "文件名推导")
-        self.assertEqual(owner_label("script:clean_names"), "维护脚本 clean_names")
+        self.assertEqual(owner_label(USER_MANUAL), "Entered manually")
+        self.assertEqual(owner_label("review:javbus"), "Review approved javbus")
+        self.assertEqual(owner_label("auto:r18dev"), "r18dev stored without review")
+        self.assertEqual(owner_label("scan:filename"), "Derived from filename")
+        self.assertEqual(owner_label("script:clean_names"), "Maintenance script clean_names")
         self.assertEqual(owner_label(""), "")
 
 

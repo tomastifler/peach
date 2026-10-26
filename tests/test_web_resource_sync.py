@@ -349,9 +349,9 @@ class PurgeMissingTests(unittest.TestCase):
     def test_no_configured_source_requires_media_folder(self):
         with mock.patch.object(rm_sync, 'LOCATION_ROOT_DECLARATIONS', {}):
             for body in ({}, {'background': True}):
-                with self.assertRaisesRegex(ValueError, '添加媒体目录'):
+                with self.assertRaisesRegex(ValueError, 'Add a media directory'):
                     rm_sync.w_resource_sync_scan(self.contract, body)
-            with self.assertRaisesRegex(ValueError, '添加媒体目录'):
+            with self.assertRaisesRegex(ValueError, 'Add a media directory'):
                 rm_sync.w_resource_sync_apply(self.contract, {'confirm': True})
 
     def test_full_sync_skips_an_unreadable_directory_instead_of_trashing_it(self):
@@ -673,7 +673,7 @@ class ResourceSyncCleanupTests(unittest.TestCase):
             result = self.apply(scan)
 
         self.assertEqual(result["purged"], 1)
-        self.assertEqual(result["blocked"], [{"id": 2, "name": "b.mp4", "reason": "文件仍在盘上"}])
+        self.assertEqual(result["blocked"], [{"id": 2, "name": "b.mp4", "reason": "The file is still on disk"}])
         self.assertEqual((self.mount / "gone" / "b.mp4").read_bytes(), b"back")
         self.assertIn(2, self.ids())
 

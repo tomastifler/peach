@@ -111,7 +111,7 @@ def scrape(contract, job_id: str | None = None) -> dict:
             if job_id:
                 if not contract.want_job.update(job_id, checked=len(done), total=len(done) + len(batch),
                                                 current=want_id):
-                    raise InterruptedError('想要资料任务已停止')
+                    raise InterruptedError('Want-list metadata task stopped')
             got, covered = _scrape_one(contract, provider, want_id)
             fetched += got
             covers += covered
@@ -122,7 +122,7 @@ def scrape(contract, job_id: str | None = None) -> dict:
                 completed.add(want_id)
             if job_id and not contract.want_job.checkpoint(job_id, completed_wants=sorted(completed),
                     checked=len(done), fetched=fetched, covers=covers):
-                raise InterruptedError('想要资料任务已停止')
+                raise InterruptedError('Want-list metadata task stopped')
     contract.cache_bust()
     return {"ok": True, "total": len(done), "fetched": fetched, "covers": covers}
 
@@ -211,11 +211,11 @@ def q_want_magnets(contract, args) -> dict:
 
     raw = str(args.get("id") or "")
     if not raw.isdigit():
-        raise ValueError("缺少想要条目编号")
+        raise ValueError("Missing want-list entry ID")
     with contract.database.read_connection() as connection:
         row = wants.get(connection, int(raw))
     if row is None:
-        raise KeyError("想要条目不存在")
+        raise KeyError("Want-list entry does not exist")
     if not row["code"] or wants.phase(row, date.today()) in {"unreleased", "acquired"}:
         return {"ok": True, "state": "unavailable", "items": [], "error": "", "checked_at": None}
     return search_for(contract.follow_secrets_root).query(

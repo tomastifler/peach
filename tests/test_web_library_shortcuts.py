@@ -84,7 +84,7 @@ class LibraryShortcutsTests(unittest.TestCase):
             tag = self.write(action='favorite', entity_id=3, on=True)['favorites'][1]
         self.assertIn('studio=%E5%8E%82%E7%89%8C', studio['image_url'])
         self.assertEqual(tag['image_url'], '/avatar?id=10')
-        self.assertEqual(tag['image_label'], '剧情 · 代表作')
+        self.assertEqual(tag['image_label'], '剧情 · Representative work')
         with closing(sqlite3.connect(self.path)) as c:
             stored = json.loads(c.execute('SELECT settings_json FROM profile').fetchone()[0])
         self.assertNotIn('image_url', stored['libraryShortcuts']['favorites'][0])

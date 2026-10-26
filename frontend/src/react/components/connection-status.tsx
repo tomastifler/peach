@@ -8,6 +8,6 @@ export function ConnectionStatus({ online }: { online: boolean | undefined }) {
     className={cx('inline-flex items-center gap-1.5 whitespace-nowrap text-body-2-medium',
       online === true ? 'text-notification-success-foreground' : online === false ? 'text-text-error-primary' : 'text-text-secondary')}>
     <StatusDot color={online === undefined ? 'indigo' : 'green'} />
-    {online === true ? '在线' : online === false ? '离线' : '未检测'}
+    {online === true ? 'Online' : online === false ? 'Offline' : 'Not checked'}
   </span>;
 }

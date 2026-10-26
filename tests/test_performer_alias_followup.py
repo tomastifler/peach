@@ -321,7 +321,7 @@ class LandingTests(Case):
     def test_her_other_stage_names_are_registered_from_both_sites(self):
         momoka = self.entity("神山ももか")
         summary = self.run_followup(momoka)
-        self.assertEqual(summary["outcome"], "登记 4 个别名")
+        self.assertEqual(summary["outcome"], "Registered 4 aliases")
         batch = f"{alias.SOURCE}@7"
         self.assertEqual(self.aliases(momoka), {
             "雲母そら": batch, "雫つむぎ": batch, "朝霧いのり": batch, "美雲そら": batch})
@@ -340,14 +340,14 @@ class LandingTests(Case):
             self.assertNotIn(name, names)
         skipped = {row["alias"]: row["detail"] for row in self.review()
                    if row["action"] == alias.SKIP}
-        self.assertEqual(skipped, {"未来ちゃん": "一次性称呼", "いちかちゃん": "一次性称呼"})
+        self.assertEqual(skipped, {"未来ちゃん": "one-off nickname", "いちかちゃん": "one-off nickname"})
 
     def test_a_name_another_entity_already_uses_merges_the_two(self):
         """两站名字栏把 `神山ももか` 与 `雫つむぎ` 列成同一个人：作品一样多、页上主名都不是她们，先登记的留下。"""
         momoka = self.entity("神山ももか")
         other = self.entity("雫つむぎ")
         summary = self.run_followup(momoka)
-        self.assertEqual(summary["outcome"], "雫つむぎ 并入 神山ももか")
+        self.assertEqual(summary["outcome"], "雫つむぎ merged into 神山ももか")
         self.assertEqual(summary["merged"]["into"], momoka)
         self.assertEqual(summary["merged"]["from"], other)
         self.assertNotIn("taken", summary)
@@ -358,7 +358,7 @@ class LandingTests(Case):
         merged = [row for row in self.review() if row["action"] == alias.MERGE]
         self.assertEqual({row["alias"] for row in merged}, {"雫つむぎ"})
         self.assertEqual({row["site"] for row in merged}, {alias.MINNANO, alias.AV_NEME})
-        self.assertIn(f"雫つむぎ（实体 {other}）并入 神山ももか（实体 {momoka}）", merged[0]["detail"])
+        self.assertIn(f"雫つむぎ (entity {other})merged into 神山ももか (entity {momoka})", merged[0]["detail"])
         self.assertEqual(merged[0]["batch"], f"{alias.SOURCE}@7")
         self.assertEqual(len(self.merge_backups()), 1)
         self.assertTrue(self.merge_backups()[0].endswith(f"-{other}.db"))
@@ -394,7 +394,7 @@ class LandingTests(Case):
         self.work(2, other)
         self.work(3, other)
         summary = self.run_followup(momoka)
-        self.assertEqual(summary["outcome"], "神山ももか 并入 雫つむぎ")
+        self.assertEqual(summary["outcome"], "神山ももか merged into 雫つむぎ")
         self.assertFalse(self.exists(momoka))
         names = self.aliases(other)
         self.assertEqual(names["神山ももか"], f"merge:{alias.SOURCE}@7")
@@ -402,13 +402,13 @@ class LandingTests(Case):
         self.assertEqual(names["雲母そら"], f"{alias.SOURCE}@7")
         with self.database.read_connection() as connection:
             self.assertEqual(alias._works(connection, other), 3)
-        self.assertEqual(self.run_followup(momoka, run_id=8)["outcome"], "档案已不存在")
+        self.assertEqual(self.run_followup(momoka, run_id=8)["outcome"], "Record no longer exists")
 
     def test_the_page_main_name_breaks_a_tie(self):
         momoka = self.entity("神山ももか")
         kirara = self.entity("雲母そら")
         summary = self.run_followup(momoka)
-        self.assertEqual(summary["outcome"], "神山ももか 并入 雲母そら")
+        self.assertEqual(summary["outcome"], "神山ももか merged into 雲母そら")
         self.assertFalse(self.exists(momoka))
         self.assertIn("神山ももか", self.aliases(kirara))
 
@@ -422,7 +422,7 @@ class LandingTests(Case):
         self.assertTrue(self.exists(first) and self.exists(second))
         taken = [row for row in self.review() if row["action"] == alias.TAKEN]
         self.assertEqual({row["alias"] for row in taken}, {"雫つむぎ", "美雲そら"})
-        self.assertIn(f"实体 {first}", next(row["detail"] for row in taken if row["alias"] == "雫つむぎ"))
+        self.assertIn(f"entity {first}", next(row["detail"] for row in taken if row["alias"] == "雫つむぎ"))
         self.assertEqual(self.merge_backups(), [])
 
     def test_a_short_single_name_is_neither_searched_nor_registered(self):
@@ -440,19 +440,19 @@ class LandingTests(Case):
     def test_the_page_named_after_her_is_read_before_any_search(self):
         """站上人物页就叫她的名字，直取一次；改名页跟一跳到现页。两种都不检索。"""
         momoka = self.entity("神山ももか")
-        self.assertEqual(self.run_followup(momoka)["outcome"], "登记 4 个别名")
+        self.assertEqual(self.run_followup(momoka)["outcome"], "Registered 4 aliases")
         # 改名页指向的 `美雲そら` 站上没有这一页：回到检索，站上没有的页记下，下一轮不再问。
         self.assertEqual(self.av_neme.calls[:3], [wiki_url("神山ももか"), wiki_url("美雲そら"),
                                                   wiki_search_url("神山ももか")])
         asked = len(self.av_neme.calls)
-        self.assertEqual(self.run_followup(momoka, run_id=8)["outcome"], "没有新写法")
+        self.assertEqual(self.run_followup(momoka, run_id=8)["outcome"], "No new spellings")
         self.assertEqual(len(self.av_neme.calls), asked)
         minami = self.entity("初川みなみ")
         self.av_neme.pages[wiki_url("初川みなみ")] = (200, wiki_page(wiki_section(
             "プロフィール", '<pre class="BOX">\n名前(女優名)：初川みなみ（はつかわみなみ）\n生年月日：\n</pre>'
         )).encode("euc_jp"))
         summary = self.run_followup(minami)
-        self.assertEqual(summary["outcome"], "没有新写法")
+        self.assertEqual(summary["outcome"], "No new spellings")
         self.assertTrue(summary["sites"][alias.AV_NEME].startswith("命中 " + wiki_url("初川みなみ")))
         self.assertNotIn(wiki_search_url("初川みなみ"), self.av_neme.calls)
 
@@ -465,7 +465,7 @@ class LandingTests(Case):
         for title, _text in YUKINA_SEARCH[:5]:
             self.av_neme.pages[wiki_url(title)] = (200, AV_NEME_LISTING.encode("euc_jp"))
         summary = self.run_followup(yukina)
-        self.assertEqual(summary["outcome"], "登记 3 个别名")
+        self.assertEqual(summary["outcome"], "Registered 3 aliases")
         self.assertEqual(set(self.aliases(yukina)), {"桜美ゆきな", "夢原まみ", "尾上さら"})
         self.assertIn(wiki_url("叶芽ゆきな"), self.av_neme.calls)
         self.assertNotIn(wiki_url("2020年2月"), self.av_neme.calls)
@@ -475,7 +475,7 @@ class LandingTests(Case):
         self.minnano.pages[minnano_av.search_url("佐々木ゆうか")] = (
             200, MINNANO_PROFILE.encode("utf-8"))
         summary = self.run_followup(stranger)
-        self.assertEqual(summary["outcome"], "两站都没对上她")
+        self.assertEqual(summary["outcome"], "Two sites all failed to match her")
         self.assertEqual(self.aliases(stranger), {})
 
     def test_a_known_minnano_id_is_read_without_searching(self):
@@ -527,15 +527,15 @@ class Fc2cmadbTests(Case):
         her = self.nicknamed({"id": 77, "name": "佐々木ゆうか", "alias_name": "別の人"})
         summary = self.run_followup(her)
         self.assertEqual(self.aliases(her), {})
-        self.assertEqual(summary["outcome"], "三站都没对上她")
-        self.assertIn("FC2-PPV-1234567 的女优栏是 佐々木ゆうか", summary["sites"][alias.FC2CMADB])
+        self.assertEqual(summary["outcome"], "Three sites all failed to match her")
+        self.assertIn("FC2-PPV-1234567 performer field is 佐々木ゆうか", summary["sites"][alias.FC2CMADB])
 
     def test_two_people_on_the_cast_list_claiming_her_is_ambiguous(self):
         her = self.nicknamed({"id": 1, "name": "神山ももか", "alias_name": self.NICKNAME},
                              {"id": 2, "name": "雲母そら", "alias_name": self.NICKNAME})
         summary = self.run_followup(her)
         self.assertEqual(self.aliases(her), {})
-        self.assertIn("不止一位", summary["sites"][alias.FC2CMADB])
+        self.assertIn("More than one person", summary["sites"][alias.FC2CMADB])
 
     def test_a_site_name_another_entity_uses_is_left_for_review(self):
         other = self.entity("神山ももか")
@@ -544,7 +544,7 @@ class Fc2cmadbTests(Case):
         self.assertNotIn("神山ももか", self.aliases(her))
         taken = [row for row in self.review() if row["site"] == alias.FC2CMADB]
         self.assertEqual([row["action"] for row in taken], [alias.TAKEN])
-        self.assertIn(f"实体 {other}", taken[0]["detail"])
+        self.assertIn(f"entity {other}", taken[0]["detail"])
 
     def test_a_refusal_pauses_the_site(self):
         her = self.nicknamed()
@@ -571,7 +571,7 @@ class RepeatTests(Case):
         first = dict(self.aliases(momoka))
         requests = len(self.minnano.calls) + len(self.av_neme.calls)
         summary = self.run_followup(momoka, run_id=8)
-        self.assertEqual(summary["outcome"], "没有新写法")
+        self.assertEqual(summary["outcome"], "No new spellings")
         self.assertEqual(self.aliases(momoka), first)
         self.assertEqual(len(self.minnano.calls) + len(self.av_neme.calls), requests)
 
@@ -648,7 +648,7 @@ class RepeatTests(Case):
         self.work(1, momoka)
         settled = self.entity("有本紗世")
         self.work(2, settled)
-        self.assertEqual(self.run_followup(settled)["outcome"], "两站都没对上她")
+        self.assertEqual(self.run_followup(settled)["outcome"], "Two sites all failed to match her")
         self.minnano.pages[minnano_av.search_url("神山ももか")] = (429, b"")
         self.av_neme.pages[wiki_url("神山ももか")] = (429, b"")
         self.assertEqual(self.run_followup(momoka)["outcome"], "未取得")

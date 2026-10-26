@@ -505,7 +505,7 @@ class FollowContractTests(unittest.TestCase):
         row = result["results"][0]
         self.assertTrue(row["ok"])
         self.assertTrue(row["exhausted"])
-        self.assertEqual(row["message"], "没有更多历史内容")
+        self.assertEqual(row["message"], "No more history")
         with self.contract.database.read_connection() as connection:
             state = dict(connection.execute(
                 "SELECT backfill_page,last_status,last_error FROM follow_source WHERE id=?",
@@ -2132,7 +2132,7 @@ class FollowContractTests(unittest.TestCase):
         outcome = result["results"][0]
         self.assertTrue(outcome["ok"])
         self.assertEqual(outcome["added"], 1)
-        self.assertIn("证据未取得", outcome["evidence_error"])
+        self.assertIn("Evidence not obtained", outcome["evidence_error"])
         self.assertEqual(self._get()["sources"][0]["last_status"], "ok")
 
     def test_source_errors_are_recorded_for_later_inspection(self):
@@ -2162,7 +2162,7 @@ class FollowContractTests(unittest.TestCase):
         self.assertTrue(by_provider["gofile"]["path"].endswith("gofile.json"))
         self.assertEqual(by_provider["simpcity"]["requirement"], "required")
         self.assertEqual(by_provider["simpcity"]["needs"], ["cookie"])
-        self.assertIn("游客", by_provider["simpcity"]["why"])
+        self.assertIn("guests", by_provider["simpcity"]["why"])
         self.assertTrue(by_provider["rule34xxx"]["path"].endswith("rule34xxx.json"))
 
     def test_a_configured_credential_reports_nothing_missing(self):
@@ -2248,7 +2248,7 @@ class FollowContractTests(unittest.TestCase):
         result = self._post("/api/follow/credential",
                             {"provider": "rule34xxx", "values": {}})
         self.assertEqual(result["shared_cleared"], "offline")
-        self.assertIn("只撤掉了本机", result["note"])
+        self.assertIn("only this machine's copy was withdrawn", result["note"])
 
     def test_only_fields_declared_syncable_reach_the_shared_copy(self):
         """可同步是逐字段声明的，不按字段名猜。
@@ -2547,7 +2547,7 @@ class FollowSourceAddTests(FollowContractTests):
             "provider": "fanbox", "provider_label": "FANBOX",
             "ref": "lazyprocrast", "url": "https://lazyprocrast.fanbox.cc/",
             "label": "lazyprocrast", "author": "", "aliases": [], "semantics": "work",
-            "evidence": "链接直接指明", "known": False,
+            "evidence": "Stated directly by the link", "known": False,
         }])
 
     def test_resolve_progress_counts_sources_instead_of_lines(self):
@@ -2648,7 +2648,7 @@ class FollowSourceAddTests(FollowContractTests):
         self.assertTrue(result["ok"])
         self.assertTrue(result["checked"]["deferred"])
         self.assertTrue(result["checked"]["ok"])
-        self.assertIn("已登记", result["checked"]["message"])
+        self.assertIn("Registered", result["checked"]["message"])
         factory.assert_not_called()
         # 来源本身必须已经落库，稍后的自动检查才有东西可查。
         self.assertEqual(self._get()["sources"][0]["ref"], "lazyprocrastinator")
@@ -2754,7 +2754,7 @@ class FollowSourceAddTests(FollowContractTests):
         self.assertEqual(len({row["author_key"] for row in payload["sources"]}), 2)
         self.assertEqual(payload["alias_suggestions"], [{
             "canonical": "InitialA", "alias": "FFXIVInitialA",
-            "evidence": "规范化名称存在包含关系，仅供人工确认",
+            "evidence": "The normalized names contain one another; for manual confirmation only",
         }])
 
     def test_confirmed_alias_merges_sources_and_can_be_removed(self):
@@ -2904,8 +2904,8 @@ class FollowSuggestTests(FollowContractTests):
         self.assertEqual([group["kind"] for group in payload["groups"]],
                          ["followed", "archive", "tag_artist", "tag"])
         self.assertEqual([group["label"] for group in payload["groups"]],
-                         ["已关注", "归档站的创作者",
-                          "Rule34.xxx 的创作者", "Rule34.xxx 标签"])
+                         ["Followed", "Archive-site creator",
+                          "Rule34.xxx creator", "Rule34.xxx tag"])
 
     def test_the_site_authors_are_split_out_from_the_plain_tags(self):
         """rule34.xxx 上作者本来就是一个标签，差别只在站方给它的分类。
@@ -2919,7 +2919,7 @@ class FollowSuggestTests(FollowContractTests):
                       "lewdga", transport=self._typed_transport())["groups"]}
         self.assertEqual([row["value"] for row in groups["tag_artist"]], ["lewdgatta"])
         self.assertEqual([(row["value"], row["matched"]) for row in groups["tag"]],
-                         [("lewdgazer", "角色")])
+                         [("lewdgazer", "character")])
         # 作者组里逐条再标一次「作者」是同一个词并排两次，组名已经说过了。
         self.assertEqual(groups["tag_artist"][0]["matched"], "")
 

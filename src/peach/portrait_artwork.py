@@ -65,7 +65,7 @@ def cover_fallback(connection, record: dict, cache: AvatarCandidateCache,
                 continue
             source = path.resolve().as_uri()
             stored = cache.store(source, data, inspected)
-            label = "完整封面" if provider == "cover-fallback" else f"高清帧 {path.stem}"
+            label = "Full cover" if provider == "cover-fallback" else f"HD frame {path.stem}"
             candidates.append({
                 "provider": provider,
                 "source_kind": source_kind,
@@ -79,7 +79,7 @@ def cover_fallback(connection, record: dict, cache: AvatarCandidateCache,
                 "matched": record["canonical"],
                 "name_source": "ledger-performer",
                 "identity_verified": False,
-                "evidence": f"单人作品 {code_text or asset_id} {label}",
+                "evidence": f"Solo work {code_text or asset_id} {label}",
             })
     if not candidates:
         return None

@@ -132,13 +132,13 @@ class LandingTests(Case):
         creator = self.series_creator()
         self.transport.pages[page_url("sougouwiki", "こすっち")] = (200, work_table(*CAST))
         summary = self.run_followup(creator)
-        self.assertEqual(summary["outcome"], "是厂牌或系列")
+        self.assertEqual(summary["outcome"], "is a studio or series")
         self.assertEqual(self.claims(creator), {("release", "observed", f"{followup.SOURCE}@7")})
         self.assertEqual(self.busted, [1])
         self.assertIn(page_url("sougouwiki", "Scotch Amateur"), self.transport.calls)
         # 有了可信身份，存量补派与再跑都不再问站。
         asked = len(self.transport.calls)
-        self.assertEqual(self.run_followup(creator)["outcome"], "已有身份")
+        self.assertEqual(self.run_followup(creator)["outcome"], "identity already set")
         self.assertEqual(len(self.transport.calls), asked)
         with self.database.read_connection() as connection:
             self.assertEqual(followup.stock(connection, Attempts(self.root / "attempts"), limit=5), [])
@@ -146,8 +146,8 @@ class LandingTests(Case):
     def test_missing_pages_write_nothing_and_are_not_asked_again(self):
         creator = self.entity("lucky")
         summary = self.run_followup(creator)
-        self.assertEqual(summary["outcome"], "两站都没有作品一览")
-        self.assertIn("sougouwiki「lucky」（页不存在）", summary["asked"])
+        self.assertEqual(summary["outcome"], "neither site has a work list")
+        self.assertIn('sougouwiki "lucky"(page does not exist)', summary["asked"])
         self.assertEqual(self.claims(creator), set())
         asked = len(self.transport.calls)
         self.assertEqual(asked, 2)
@@ -178,9 +178,9 @@ class LandingTests(Case):
         with self.database.read_connection() as connection:
             self.assertEqual([item.key for item in followup.plan(connection, since_entity_id=0)],
                              [followup.followup_key(fresh)])
-        self.assertEqual(self.run_followup(reviewed)["outcome"], "已有身份")
+        self.assertEqual(self.run_followup(reviewed)["outcome"], "identity already set")
         self.assertEqual(self.transport.calls, [])
-        self.assertEqual(self.run_followup(999), {"outcome": "档案已不存在"})
+        self.assertEqual(self.run_followup(999), {"outcome": "record no longer exists"})
 
 
 class RevertTests(Case):

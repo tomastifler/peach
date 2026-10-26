@@ -125,7 +125,7 @@ class StandaloneUpdateTests(unittest.TestCase):
         with patch.object(update.distribution, 'standalone', return_value=True), patch.object(update.sys, 'platform', 'win32'):
             self.assertEqual(update.request_restart()['state'], 'restarting')
             self.assertTrue(update.update_tasks.is_pausing(self.database))
-            with self.assertRaisesRegex(ValueError, '安装更新'):
+            with self.assertRaisesRegex(ValueError, 'prepared for installation'):
                 store.start('timeline-thumbnails', trigger='manual')
             update.update_tasks.release(self.database, update.read()['task_token'])
 
@@ -294,7 +294,7 @@ class StandaloneUpdateTests(unittest.TestCase):
         with patch('peach.__version__', '1.0.0'), patch.object(update, 'download') as download, \
                 patch('peach.desktop_installer.stop') as stop:
             self.assertEqual(prepare_install_tools(target, output, error, stage=stage), 1)
-            self.assertIn('校验失败', error.read_text(encoding='utf-8'))
+            self.assertIn('verification failed', error.read_text(encoding='utf-8'))
             bad.write_bytes(valid)
             self.assertEqual(prepare_install_tools(target, output, error, stage=stage), 0)
         download.assert_not_called()
@@ -314,7 +314,7 @@ class StandaloneUpdateTests(unittest.TestCase):
         binary.write_bytes(b"old version")
         state, _ = self.prepare_fixture(target, output, release, corrupt=manifest["tools"]["ffmpeg"]["asset"]["name"])
         self.assertEqual(state["state"], "error")
-        self.assertIn("校验失败", state["message"])
+        self.assertIn("verification failed", state["message"])
         self.assertEqual(binary.read_bytes(), b"old version")
         self.assertEqual((target / "Peach.exe").read_bytes(), b"old application")
 
@@ -335,7 +335,7 @@ class StandaloneUpdateTests(unittest.TestCase):
 
     def test_tool_archive_cannot_replace_application_files(self):
         archive = self.archive(["Peach/tools/ffmpeg/bin/ffmpeg.exe", "Peach/Peach.exe"])
-        with self.assertRaisesRegex(ValueError, "清单外"):
+        with self.assertRaisesRegex(ValueError, "outside the manifest"):
             update.extract(archive, self.root / "tool-stage", Mock(), tool_files={"tools/ffmpeg/bin/ffmpeg.exe"})
 
     def test_install_failure_restores_program_directory_and_preserves_data(self):

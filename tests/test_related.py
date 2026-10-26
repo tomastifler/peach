@@ -105,7 +105,7 @@ class RelatedRankerTests(unittest.TestCase):
         ]
         ranked = rank_related(source, [common, rare, *background], 2, seed="fixed")
         self.assertEqual(ranked[0]["id"], 3)
-        self.assertEqual(ranked[0]["why"], "标签接近")
+        self.assertEqual(ranked[0]["why"], "Similar tags")
 
     def test_result_is_stable_and_mmr_adds_variety(self):
         source = {"id": 1, "entities": {"creator": {7}, "tag": {10, 11}}}
@@ -117,7 +117,7 @@ class RelatedRankerTests(unittest.TestCase):
         first = rank_related(source, candidates, 3, seed="fixed", diversity=0.4)
         second = rank_related(source, candidates, 3, seed="fixed", diversity=0.4)
         self.assertEqual([row["id"] for row in first], [row["id"] for row in second])
-        self.assertEqual(first[0]["why"], "同创作者 · 标签接近")
+        self.assertEqual(first[0]["why"], "Same creator · Similar tags")
 
     def test_unrelated_items_are_excluded(self):
         source = {"id": 1, "entities": {"tag": {10}}}

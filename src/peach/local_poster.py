@@ -28,29 +28,29 @@ def read_jpeg(source: Path, *, isolated=True) -> tuple[bytes, tuple[int, int]]:
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=TIMEOUT_SECONDS,
                                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
         if result.returncode:
-            raise ValueError('配套图片无法读取')
+            raise ValueError('The companion image cannot be read')
         data = output.read_bytes()
     size = measure_image_size(data)
     if size is None:
-        raise ValueError('配套图片无法读取')
+        raise ValueError('The companion image cannot be read')
     return data, size
 
 
 def _decode(source):
     try:
         if source.stat().st_size > MAX_BYTES:
-            raise ValueError('配套图片体积超出范围')
+            raise ValueError('The companion image size is out of range')
         with Image.open(source) as image:
             image.load()
             output = io.BytesIO()
             image.convert('RGB').save(output, format='JPEG', quality=95)
             return output.getvalue(), image.size
     except (OSError, ValueError, Image.DecompressionBombError) as error:
-        raise ValueError('配套图片无法读取') from error
+        raise ValueError('The companion image cannot be read') from error
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description='读取单张配套图片')
+    parser = argparse.ArgumentParser(description='Read a single companion image')
     parser.add_argument('source', type=Path)
     parser.add_argument('output', type=Path)
     args = parser.parse_args(argv)

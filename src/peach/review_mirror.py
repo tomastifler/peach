@@ -75,7 +75,7 @@ class ReviewMirror:
         """优先返回 writer 实时队列；失败时退回上次安全缓存或本机队列。"""
         if not self.enabled:
             return self._annotate(local_payload, state="unavailable",
-                                  error="未配置可严格校验的写入端 HTTPS")
+                                  error="No HTTPS writer endpoint configured that can be strictly verified")
         try:
             payload = self._fetch_cached_live()
             return self._annotate(payload, state="live")
@@ -92,7 +92,7 @@ class ReviewMirror:
             return deepcopy(self._live_payload)
         health = self._request_json("/healthz")
         if health.get("ledger_sync") != "writer":
-            raise ReviewMirrorError("目标实例当前不是 ledger writer")
+            raise ReviewMirrorError("The target instance is not currently a ledger writer")
         payload = self._request_json("/api/review")
         self._validate(payload)
         rewritten = self._rewrite_preview_urls(payload)
@@ -101,7 +101,7 @@ class ReviewMirror:
             self._write_cache(rewritten, fetched_at)
         except OSError as error:
             # 缓存只是 writer 暂时离线时的降级，落盘失败不能把刚取得的实时队列也变成 500。
-            LOGGER.warning("复核镜像缓存写入失败：%s", error)
+            LOGGER.warning("Review mirror cache write failed: %s", error)
         self._live_payload = rewritten
         self._live_at = now
         return deepcopy(rewritten)
@@ -116,23 +116,23 @@ class ReviewMirror:
         except Exception as error:
             if not self.curl_fallback:
                 raise ReviewMirrorError(
-                    f"无法读取写入端：{type(error).__name__}: {error}",
+                    f"Cannot read from the writer: {type(error).__name__}: {error}",
                 ) from error
             try:
                 raw = self._curl_bytes(request.full_url)
             except ReviewMirrorError as curl_error:
                 raise ReviewMirrorError(
-                    f"无法读取写入端：{type(error).__name__}: {error}；"
-                    f"系统网络通道：{curl_error}",
+                    f"Cannot read from the writer: {type(error).__name__}: {error}; "
+                    f"System network channel: {curl_error}",
                 ) from error
         if len(raw) > MAX_REVIEW_BYTES:
-            raise ReviewMirrorError("写入端复核响应超过 8 MiB 上限")
+            raise ReviewMirrorError("Writer review response exceeds the 8 MiB limit")
         try:
             payload = json.loads(raw)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ReviewMirrorError("写入端返回的不是有效 JSON") from error
+            raise ReviewMirrorError("Writer returned invalid JSON") from error
         if not isinstance(payload, dict):
-            raise ReviewMirrorError("写入端返回的不是 JSON 对象")
+            raise ReviewMirrorError("Writer did not return a JSON object")
         return payload
 
     def _curl_bytes(self, url: str) -> bytes:
@@ -160,10 +160,10 @@ class ReviewMirror:
                 timeout=self.timeout + 2, check=False,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
-            raise ReviewMirrorError(f"curl 启动失败：{type(error).__name__}: {error}") from error
+            raise ReviewMirrorError(f"curl failed to start: {type(error).__name__}: {error}") from error
         if result.returncode != 0:
             detail = result.stderr.decode("utf-8", errors="replace").strip()
-            raise ReviewMirrorError(f"curl 退出 {result.returncode}：{detail or '未取得错误详情'}")
+            raise ReviewMirrorError(f"curl exited with {result.returncode}: {detail or 'no error detail obtained'}")
         return bytes(result.stdout)
 
     @staticmethod
@@ -215,7 +215,7 @@ class ReviewMirror:
     def _validate(payload: dict) -> None:
         for key in ("sections", "sources", "counts"):
             if not isinstance(payload.get(key), dict):
-                raise ReviewMirrorError(f"写入端复核响应缺少 {key}")
+                raise ReviewMirrorError(f"Writer review response is missing {key}")
 
     def _rewrite_preview_urls(self, payload: dict) -> dict:
         result = deepcopy(payload)

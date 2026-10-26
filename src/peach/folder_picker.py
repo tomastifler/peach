@@ -38,7 +38,7 @@ _LOCK = threading.Lock()
 #: 用户在对话框里翻多久都行，但进程不能被一个忘了关的窗口永久占住。
 DIALOG_TIMEOUT_SECONDS = 15 * 60
 
-PROMPT = "选择媒体目录"
+PROMPT = "Choose media folder"
 
 #: `IFileOpenDialog` 的最小互操作：vtable 顺序必须与 shobjidl 一致，一个都不能少。
 #: FOS_NOCHANGEDIR 0x8 不改进程工作目录，FOS_PICKFOLDERS 0x20 选文件夹，
@@ -165,7 +165,7 @@ def command(initial: str | None, platform: str = sys.platform) -> tuple[list[str
         if initial and os.path.isdir(initial):
             script += f' default location POSIX file "{_applescript_string(initial)}"'
         return ["osascript", "-e", f"POSIX path of ({script})"], {}
-    raise PickerUnavailable("这个系统上没有可用的文件夹对话框")
+    raise PickerUnavailable("No folder dialog is available on this system")
 
 
 def pick_folder(initial: str | None = None, *, platform: str = sys.platform,
@@ -173,7 +173,7 @@ def pick_folder(initial: str | None = None, *, platform: str = sys.platform,
     """弹对话框，返回选中的绝对路径；用户取消返回 None。"""
     argv, extra = command(initial, platform)
     if not _LOCK.acquire(blocking=False):
-        raise PickerBusy("已经有一个选择文件夹的窗口开着")
+        raise PickerBusy("A folder-picker window is already open")
     try:
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) if platform == "win32" else 0
         try:
@@ -188,7 +188,7 @@ def pick_folder(initial: str | None = None, *, platform: str = sys.platform,
         # osascript 在用户取消时以 1 退出，stderr 是 "User canceled."；这不是失败。
         if "canceled" in stderr.lower():
             return None
-        raise PickerUnavailable("没能打开文件夹对话框")
+        raise PickerUnavailable("Could not open the folder dialog")
     text = (result.stdout or b"").decode("utf-8", "replace").strip()
     if platform == "darwin" and len(text) > 1:
         text = text.rstrip("/")

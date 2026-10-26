@@ -30,8 +30,8 @@ export function ConfigurationPage({ receipt, reopenTutorial, section = '', diagn
   if (!data) {
     return (
       <div className="ui-configpage">
-        <Note tone="error" title="配置读取失败">
-          {config.error ? errorMessage(config.error) : '未取得配置，请刷新页面重试。'}
+        <Note tone="error" title="Couldn't load settings">
+          {config.error ? errorMessage(config.error) : 'Settings were not loaded. Refresh the page and try again.'}
         </Note>
       </div>
     );
@@ -39,7 +39,7 @@ export function ConfigurationPage({ receipt, reopenTutorial, section = '', diagn
   return <ConfigurationGroups data={data} receipt={receipt} reopenTutorial={reopenTutorial} section={section} diagnostics={diagnostics} />;
 }
 
-interface Group { title: string; body(panel: ConfigurationPanel): ReactElement }
+interface Group { title: string; label: string; body(panel: ConfigurationPanel): ReactElement }
 
 /* 页签与面板的 id 前缀按页签条计数：每画出一条新的页签条领一个号。 */
 let tabSequence = 0;
@@ -81,23 +81,23 @@ function ConfigurationGroups(
   const network = Boolean(data.peach_proxy || data.access || data.tunnel || (data.editable && data.port_editable !== false));
   const downloads = data.downloads;
   const groups: Group[] = [
-    { title: '媒体库与入库', body: (panel) => <div {...groupRoot(panel)}>
+    { title: 'Library & import', label: 'Library & import', body: (panel) => <div {...groupRoot(panel)}>
       <MediaSettings {...group} /><MediaProcessingSettings receipt={receipt} />
     </div> },
-    { title: '来源与订阅', body: (panel) => <SourceSettings {...group} panel={panel} /> },
+    { title: 'Sources & subscriptions', label: 'Sources & subscriptions', body: (panel) => <SourceSettings {...group} panel={panel} /> },
     ...(downloads ? [{
-      title: '下载渠道',
+      title: 'Download channels', label: 'Download channels',
       body: (panel: ConfigurationPanel) => <DownloadGroup initial={downloads} receipt={receipt} panel={panel} />,
     }] : []),
-    ...(network ? [{ title: '网络与访问', body: (panel: ConfigurationPanel) => <NetworkSettings {...group} panel={panel} /> }] : []),
+    ...(network ? [{ title: 'Network & access', label: 'Network & access', body: (panel: ConfigurationPanel) => <NetworkSettings {...group} panel={panel} /> }] : []),
     {
-      title: '应用与维护',
+      title: 'App & maintenance', label: 'App & maintenance',
       body: (panel) => <div {...groupRoot(panel)}>
         <GeneralSettings {...group} />
         <MaintenanceSettings {...group} reopenTutorial={reopenTutorial} />
       </div>,
     },
-    { title: '系统诊断', body: panel => <div {...groupRoot(panel)}>{panel.active ? diagnostics : null}</div> },
+    { title: 'System diagnostics', label: 'System diagnostics', body: panel => <div {...groupRoot(panel)}>{panel.active ? diagnostics : null}</div> },
   ];
   const at = Math.max(0, groups.findIndex((item) => item.title === chosen));
   const move = (event: KeyboardEvent<HTMLButtonElement>, from: number) => {
@@ -114,19 +114,19 @@ function ConfigurationGroups(
   };
   return (
     <div ref={workspace} className="ui-configpage">
-      <div className="ui-board-local-nav" role="tablist" aria-label="配置分区" data-section-nav="" data-section-items=""
+      <div className="ui-board-local-nav" role="tablist" aria-label="Settings sections" data-section-nav="" data-section-items=""
         aria-orientation={narrow ? 'horizontal' : 'vertical'}>
-        {groups.map(({ title }, i) => (
+        {groups.map(({ title, label }, i) => (
           <button key={title} ref={(node) => { buttons.current[i] = node }} type="button" role="tab"
             id={`${prefix}-tab-${i}`} aria-controls={`${prefix}-panel-${i}-0`} aria-selected={i === at}
             tabIndex={i === at ? 0 : -1} onClick={() => choose(title)} onKeyDown={(event) => move(event, i)}>
-            {title}
+            {label}
           </button>
         ))}
       </div>
-      {groups.map(({ title, body }, i) => (
+      {groups.map(({ title, label, body }, i) => (
         <Fragment key={title}>
-          <h2 className="ui-configgroup">{title}</h2>
+          <h2 className="ui-configgroup">{label}</h2>
           {body({ index: i, id: `${prefix}-panel-${i}-0`, labelledBy: `${prefix}-tab-${i}`, active: i === at })}
         </Fragment>
       ))}

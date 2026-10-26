@@ -113,10 +113,10 @@ def _clean_segments(tail: str) -> tuple[str, ...]:
             continue
         if (segment == ".." or "\\" in segment or ":" in segment
                 or any(character < " " for character in segment)):
-            raise CloudPathError(f"✗ 云端路径里有不能接受的层级：{segment!r}")
+            raise CloudPathError(f"✗ Cloud path contains an unacceptable segment: {segment!r}")
         parts.append(segment)
     if not parts:
-        raise CloudPathError("✗ 云端路径在前缀之后没有内容")
+        raise CloudPathError("✗ Cloud path has no content after the prefix")
     return tuple(parts)
 
 
@@ -237,7 +237,7 @@ def map_cloud_path(cloud_path: str, prefixes: tuple[CloudPrefix, ...]) -> str:
     """
     text = str(cloud_path or "").strip().replace("\\", "/")
     if not text:
-        raise CloudPathError("✗ 请求里没有云端路径")
+        raise CloudPathError("✗ The request has no cloud path")
     while "//" in text:
         text = text.replace("//", "/")
     if not text.startswith("/"):
@@ -246,15 +246,15 @@ def map_cloud_path(cloud_path: str, prefixes: tuple[CloudPrefix, ...]) -> str:
     for entry in prefixes:
         prefix = normalise_prefix(entry.prefix)
         if text == prefix:
-            raise CloudPathError("✗ 云端路径就是前缀本身，没有文件")
+            raise CloudPathError("✗ Cloud path is the prefix itself; there is no file")
         if not text.startswith(prefix + "/"):
             continue
         depth = len(prefix)
         if best is None or depth > best[0]:
             best = (depth, entry, text[len(prefix):])
     if best is None:
-        known = "、".join(normalise_prefix(entry.prefix) for entry in prefixes) or "（一条都没配）"
-        raise CloudPathError(f"✗ {text} 不在任何已配置的前缀下；已知：{known}")
+        known = ", ".join(normalise_prefix(entry.prefix) for entry in prefixes) or "(none configured)"
+        raise CloudPathError(f"✗ {text} is not under any configured prefix; known: {known}")
     return str(PureWindowsPath(best[1].root).joinpath(*_clean_segments(best[2])))
 
 
@@ -370,7 +370,7 @@ class DiscoveryQueue:
         try:
             wrote = self.ingest(entry.location, entry.path)
         except Exception as error:  # 一条路径失败不该带走整条队列
-            LOGGER.exception("推送发现登记失败：%s", entry.path)
+            LOGGER.exception("Push discovery registration failed: %s", entry.path)
             self.counters.failed += 1
             self.last_error = str(error)
             return 0
@@ -477,10 +477,10 @@ def _prefix_rows(raw, declared_roots) -> tuple[CloudPrefix, ...]:
             continue
         settled = known.get(root.casefold())
         if settled is None:
-            shown = "、".join(sorted(known.values())) or "（设置文件里一个都没有）"
-            raise ValueError(f"{root} 不是已声明的媒体根；已知：{shown}")
+            shown = ", ".join(sorted(known.values())) or "(none in the settings file)"
+            raise ValueError(f"{root} is not a declared media root; known: {shown}")
         if prefix in seen:
-            raise ValueError(f"前缀 {prefix} 登记了不止一次")
+            raise ValueError(f"Prefix {prefix} is registered more than once")
         seen.add(prefix)
         rows.append(CloudPrefix(prefix, settled))
     return tuple(rows)
@@ -498,7 +498,7 @@ class PushDiscoverySettings:
         except FileNotFoundError:
             return PushDiscoveryConfig()
         except (OSError, ValueError):
-            LOGGER.warning("推送发现设置读不出来，按默认值跑：%s", self.path)
+            LOGGER.warning("Push discovery settings could not be read; running with defaults: %s", self.path)
             return PushDiscoveryConfig()
         if not isinstance(payload, dict):
             return PushDiscoveryConfig()
@@ -507,7 +507,7 @@ class PushDiscoverySettings:
         except ValueError:
             # 存进去的时候核对过；此刻对不上多半是媒体根改了。宁可让云端通道空转，
             # 也不要拿一张过期的表往账本里写路径。
-            LOGGER.warning("推送发现的前缀表与当前媒体根对不上，云端通道按未配置处理")
+            LOGGER.warning("Push discovery prefix table does not match the current media roots; treating the cloud channel as not configured")
             prefixes = ()
         return PushDiscoveryConfig(
             enabled=payload.get("enabled") is True,
@@ -518,7 +518,7 @@ class PushDiscoverySettings:
 
     def save(self, body: dict, declared_roots) -> PushDiscoveryConfig:
         if not isinstance(body, dict):
-            raise ValueError("设置必须是一个对象")
+            raise ValueError("Settings must be an object")
         config = PushDiscoveryConfig(
             enabled=body.get("enabled") is True,
             watch_local=body.get("watch_local") is not False,
@@ -654,7 +654,7 @@ class PushDiscoveryService:
         try:
             probe_path(self.db_path, str(choice.path) if choice else None, location, path)
         except sqlite3.Error:
-            LOGGER.exception("推送发现探测时长失败：%s", path)
+            LOGGER.exception("Push discovery duration probe failed: %s", path)
 
     def submit(self, location: str, path: str) -> bool:
         if ignored(PureWindowsPath(path).name):
@@ -674,12 +674,12 @@ class PushDiscoveryService:
     def submit_cloud(self, cloud_path: str) -> str:
         """webhook 收到一条云端路径：映射成账本路径再进队列，返回那条账本路径。"""
         if not self.config.cloud:
-            raise CloudPathError("✗ 云端通道没有打开")
+            raise CloudPathError("✗ The cloud channel is not enabled")
         path = map_cloud_path(cloud_path, self.config.prefixes)
         from .platform import resolve_location
         location = resolve_location(path, self.declared_roots)[0]
         if location is None:
-            raise CloudPathError(f"✗ {path} 不在任何媒体来源已配置的目录下")
+            raise CloudPathError(f"✗ {path} is not under any directory configured for a media source")
         self.submit(location, path)
         return path
 
@@ -714,16 +714,16 @@ class PushDiscoveryService:
 
     def _start_local(self) -> None:
         if not self.config.watch_local:
-            self.local_channel = ChannelState(False, "本地通道没有打开")
+            self.local_channel = ChannelState(False, "The local channel is not enabled")
             return
         roots = self._local_roots()
         if not roots:
-            self.local_channel = ChannelState(False, "本地来源在这台机器上没有可监视的目录")
+            self.local_channel = ChannelState(False, "The local source has no watchable directory on this machine")
             return
         try:
             from watchdog.observers import Observer
         except ImportError as error:  # 打包漏装时不该让整条服务起不来
-            self.local_channel = ChannelState(False, f"文件监视不可用：{error}")
+            self.local_channel = ChannelState(False, f"File watching unavailable: {error}")
             return
         handler = _LocalEventHandler(self)
         observer = Observer()
@@ -733,7 +733,7 @@ class PushDiscoveryService:
         try:
             observer.start()
         except OSError as error:
-            self.local_channel = ChannelState(False, f"文件监视启动失败：{error}")
+            self.local_channel = ChannelState(False, f"File watching failed to start: {error}")
             return
         self._observer = observer
         self.local_channel = ChannelState(
@@ -751,7 +751,7 @@ class PushDiscoveryService:
 
     def save(self, body: dict) -> dict:
         if not self.available:
-            raise ValueError("推送发现只在允许修改数据库的设备上可用")
+            raise ValueError("Push discovery is only available on devices allowed to modify the database")
         with self._lock:
             self.config = self.settings.save(body, self.declared_roots)
             # 密钥由 `start` 补：云端通道一打开，CloudDrive2 那一侧马上要填，页面得当场给出来。
@@ -761,7 +761,7 @@ class PushDiscoveryService:
 
     def rotate_secret(self) -> dict:
         if not self.available:
-            raise ValueError("推送发现只在允许修改数据库的设备上可用")
+            raise ValueError("Push discovery is only available on devices allowed to modify the database")
         self.secret.rotate()
         return self.snapshot(reveal=True)
 

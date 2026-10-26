@@ -49,14 +49,14 @@ export function CoverCrop({ code, coverUrl, box, onSaved }: CoverCropProps) {
   return (
     <>
       <button ref={anchor} type="button" aria-haspopup="dialog" data-cover-crop
-        aria-label={`裁剪 ${code} 的封面`} title="裁剪封面：框出正封那一块"
+        aria-label={`Crop cover of ${code}`} title="Crop cover: frame the front cover area"
         onClick={() => setOpen(true)}
         className="flex size-7 cursor-pointer items-center justify-center rounded-lg text-foreground-icon-secondary outline-none transition-colors hover:bg-background-primary-hover hover:text-foreground-icon-primary focus-visible:ring-2 focus-visible:ring-border-focus-ring">
         <CropIcon className="size-3.75" />
       </button>
       {/* 详情页是 `showModal()` 开的原生 dialog，弹层要挂进同一层才盖得住它。 */}
       <UNSAFE_PortalProvider getContainer={() => overlayHost(anchor.current)}>
-        <ModalFrame isOpen={open} onOpenChange={setOpen} width="cover-crop" label="裁剪封面">
+        <ModalFrame isOpen={open} onOpenChange={setOpen} width="cover-crop" label="Crop cover">
           <CropBody code={code} coverUrl={coverUrl} box={box} onSaved={onSaved}
             close={() => setOpen(false)} />
         </ModalFrame>
@@ -92,17 +92,17 @@ function CropBody({ code, coverUrl, box: saved, onSaved, close }: CoverCropProps
       <div className="flex shrink-0 items-start gap-4 p-5">
         <ModalGlyph><CropIcon className="size-6" /></ModalGlyph>
         <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <Heading slot="title" className="text-title-3-semibold text-text-primary">裁剪封面</Heading>
+          <Heading slot="title" className="text-title-3-semibold text-text-primary">Crop cover</Heading>
           <p className="text-body-2-regular text-text-secondary">
-            {code}：框出正封那一块，封面原图不动。拖动方框移动，滚轮或角上那枚方块改大小。
+            {code}: frame the front cover area; the original cover image is untouched. Drag the box to move it; use the scroll wheel or the corner handle to resize.
           </p>
           {submit.error ? <Note tone="error">{errorMessage(submit.error)}</Note> : null}
         </div>
-        <IconButton icon={RiCloseLine} size="small" aria-label="关闭" onClick={close} />
+        <IconButton icon={RiCloseLine} size="small" aria-label="Close" onClick={close} />
       </div>
       <div ref={frame} className="flex min-h-0 flex-1 flex-col items-center gap-4 overflow-y-auto border-t border-separator-border px-5 py-4">
         <CropFrame src={coverUrl} aspect={locked ? PANEL_ASPECT : null} box={box} size={size}
-          label={`${code} 的正封取景框`}
+          label={`Front cover crop frame for ${code}`}
           onSize={(next) => { if (isUsableSize(next)) ready(next) }}
           onBox={setBox} />
       </div>
@@ -111,13 +111,13 @@ function CropBody({ code, coverUrl, box: saved, onSaved, close }: CoverCropProps
           setLocked(next);
           if (next && box && size) setBox(clampBox(box, size, PANEL_ASPECT));
         }}>
-          <span className="text-body-2-regular text-text-secondary">锁定正封比例</span>
+          <span className="text-body-2-regular text-text-secondary">Lock front cover ratio</span>
         </Switch>
         <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
           <Button variant="secondary" {...busyProps(busy)}
-            onClick={() => { if (!busy) submit.mutate(null) }}>恢复默认</Button>
+            onClick={() => { if (!busy) submit.mutate(null) }}>Restore default</Button>
           <Button disabled={!box || !size} {...busyProps(busy)}
-            onClick={() => { if (box && !busy) submit.mutate(box) }}>用这一块</Button>
+            onClick={() => { if (box && !busy) submit.mutate(box) }}>Use this area</Button>
         </div>
       </div>
     </>

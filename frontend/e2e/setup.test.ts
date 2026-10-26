@@ -43,11 +43,11 @@ describe('首次运行页', { skip: origin && media && dataRoot ? false : '只�
       await page.goto(`${origin}/`, { waitUntil: 'load' });
 
       // 加载：题目到齐后表单出现，等待态结束，页面不横向溢出。
-      const heading = page.getByRole('heading', { name: '欢迎使用 Peach' });
+      const heading = page.getByRole('heading', { name: 'Welcome to Peach' });
       await heading.waitFor({ state: 'visible', timeout: 15_000 });
-      const folder = page.getByRole('textbox', { name: '媒体库 1' });
+      const folder = page.getByRole('textbox', { name: 'Media library 1' });
       await folder.waitFor({ state: 'visible', timeout: 15_000 });
-      assert.equal(await page.getByRole('textbox', { name: '数据库中的路径前缀' }).count(), 0,
+      assert.equal(await page.getByRole('textbox', { name: 'Database path prefix' }).count(), 0,
         '普通首次设置不需要填写内部路径');
       await page.waitForFunction(() => !document.querySelector('[aria-busy="true"]'), undefined, { timeout: 15_000 });
       const host = page.getByRole('radiogroup');
@@ -55,13 +55,13 @@ describe('首次运行页', { skip: origin && media && dataRoot ? false : '只�
       assert.deepEqual((await layout(page)).offenders, []);
 
       // React Aria 的原生 input 是视觉隐藏的，点击落在外面那层画出来的开关上，所以按状态设值。
-      await page.getByRole('switch', { name: '访问密码' }).setChecked(false, { force: true });
-      await page.getByRole('checkbox', { name: /^完成设置后扫描/ }).setChecked(false, { force: true });
+      await page.getByRole('switch', { name: 'Access password' }).setChecked(false, { force: true });
+      await page.getByRole('checkbox', { name: /^Scan and fill in metadata after setup/ }).setChecked(false, { force: true });
 
       // 填错：目录不存在、端口越界。
       const missing = join(media, 'missing');
       await folder.fill(missing);
-      await page.getByText('高级设置', { exact: true }).click();
+      await page.getByText('Advanced settings', { exact: true }).click();
       const port = page.locator('#f-port');
       await port.waitFor({ state: 'visible' });
       const defaultPort = await port.inputValue();
@@ -69,12 +69,12 @@ describe('首次运行页', { skip: origin && media && dataRoot ? false : '只�
       assert.equal(await page.locator('#f-data_root').inputValue(), dataRoot);
       await port.fill('70000');
       // 折叠关上，验证出错时它自己展开。
-      await page.getByText('高级设置', { exact: true }).click();
+      await page.getByText('Advanced settings', { exact: true }).click();
       await port.waitFor({ state: 'hidden' });
 
       const rejected = page.waitForResponse((response) => response.url().endsWith('/api/setup')
         && response.request().method() === 'POST');
-      await page.getByRole('button', { name: '完成设置' }).click();
+      await page.getByRole('button', { name: 'Finish setup' }).click();
       assert.equal((await rejected).status(), 400);
 
       // 写回：目录行与端口各标各的，高级设置展开，已填的值都在，焦点落在第一个错处。
@@ -84,9 +84,9 @@ describe('首次运行页', { skip: origin && media && dataRoot ? false : '只�
       await port.waitFor({ state: 'visible' });
       assert.equal(await port.getAttribute('aria-invalid'), 'true');
       assert.equal(await port.inputValue(), '70000');
-      await page.getByText(/目录不存在/).first().waitFor({ state: 'visible' });
-      await page.getByText('端口要是 1 到 65535 之间的整数').waitFor({ state: 'visible' });
-      await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '媒体库 1');
+      await page.getByText(/Directory does not exist/).first().waitFor({ state: 'visible' });
+      await page.getByText('Port must be an integer between 1 and 65535').waitFor({ state: 'visible' });
+      await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Media library 1');
 
       // 改对：已有目录、默认端口，不扫描。
       await folder.fill(media);
@@ -95,20 +95,20 @@ describe('首次运行页', { skip: origin && media && dataRoot ? false : '只�
       await page.locator('#f-data_root').fill(selectedData);
       const accepted = page.waitForResponse((response) => response.url().endsWith('/api/setup')
         && response.request().method() === 'POST');
-      await page.getByRole('button', { name: '完成设置' }).click();
+      await page.getByRole('button', { name: 'Finish setup' }).click();
       const acceptedResponse = await accepted;
       assert.equal(acceptedResponse.status(), 200, await acceptedResponse.text());
 
       // 完成态：入口链接拿到焦点，扫描没有排队，运行信息收起，口令不在页面上。
-      await page.getByRole('heading', { name: '设置完成' }).waitFor({ state: 'visible' });
-      const entry = page.getByRole('link', { name: '进入 Peach' });
+      await page.getByRole('heading', { name: 'Setup complete' }).waitFor({ state: 'visible' });
+      const entry = page.getByRole('link', { name: 'Enter Peach' });
       await entry.waitFor({ state: 'visible' });
       assert.ok(await entry.evaluate((element) => element === document.activeElement), '入口链接拿到焦点');
       assert.match((await entry.getAttribute('href')) ?? '', /^https?:\/\//);
-      await page.getByText('稍后在配置页开始扫描媒体库。').waitFor({ state: 'visible' });
-      assert.equal(await page.title(), 'Peach · 设置完成');
+      await page.getByText('Start scanning your library later from the settings page.').waitFor({ state: 'visible' });
+      assert.equal(await page.title(), 'Peach · Setup complete');
       assert.deepEqual((await layout(page)).offenders, []);
-      await page.getByText('运行信息', { exact: true }).click();
+      await page.getByText('Runtime info', { exact: true }).click();
       await page.getByText(selectedData, { exact: true }).waitFor({ state: 'visible' });
       const mobile = VIEWPORTS.find((candidate) => candidate.name === 'mobile')!;
       await page.setViewportSize({ width: mobile.width, height: mobile.height });
@@ -118,19 +118,19 @@ describe('首次运行页', { skip: origin && media && dataRoot ? false : '只�
       const originalConfig = await readFile(join(selectedData, 'config.toml'));
       await unlink(join(dataRoot, 'state', 'data-root.txt'));
       await page.reload({ waitUntil: 'load' });
-      await page.getByRole('button', { name: '使用已有数据目录', exact: true }).click();
-      const existing = page.getByRole('textbox', { name: '已有数据目录' });
+      await page.getByRole('button', { name: 'Use an existing data folder', exact: true }).click();
+      const existing = page.getByRole('textbox', { name: 'Existing data folder' });
       await existing.fill(join(dataRoot, 'missing'));
       const restoreRejected = page.waitForResponse((response) => response.url().endsWith('/api/setup/restore'));
-      await page.getByRole('button', { name: '使用此目录', exact: true }).click();
+      await page.getByRole('button', { name: 'Use this folder', exact: true }).click();
       assert.equal((await restoreRejected).status(), 400);
       await page.getByRole('alert').filter({ hasText: 'config.toml' }).waitFor({ state: 'visible' });
       assert.deepEqual((await layout(page)).offenders, []);
       await existing.fill(selectedData);
       const restoreAccepted = page.waitForResponse((response) => response.url().endsWith('/api/setup/restore'));
-      await page.getByRole('button', { name: '使用此目录', exact: true }).click();
+      await page.getByRole('button', { name: 'Use this folder', exact: true }).click();
       assert.equal((await restoreAccepted).status(), 200);
-      await page.getByText('已连接已有数据目录。', { exact: true }).waitFor({ state: 'visible' });
+      await page.getByText('Connected to the existing data folder.', { exact: true }).waitFor({ state: 'visible' });
       assert.equal(await readFile(join(dataRoot, 'state', 'data-root.txt'), 'utf8'), selectedData);
       assert.deepEqual(await readFile(join(selectedData, 'config.toml')), originalConfig);
       assert.deepEqual((await layout(page)).offenders, []);

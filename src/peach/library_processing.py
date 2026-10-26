@@ -80,7 +80,7 @@ SOURCE_LABELS = {'r18dev': 'r18.dev', 'dmm': 'DMM / FANZA', 'avbase': 'AVBase', 
                  'javarchive': 'JavArchive',
                  '1pondo': '一本道', 'local_nfo': '本地 NFO',
                  # 经 amane 桥问的几站（`metadata_amane.SITES`）。
-                 'makers': '片商官网', 'prestige': 'Prestige', 'faleno': 'FALENO',
+                 'makers': 'Studio official sites', 'prestige': 'Prestige', 'faleno': 'FALENO',
                  'dahlia': 'DAHLIA', 'mgstage': 'MGStage',
                  'fc2club': 'FC2Club', 'freejavbt': 'FreeJavBT',
                  'airav': 'AIRAV', 'avsox': 'AVSOX',

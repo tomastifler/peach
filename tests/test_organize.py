@@ -370,7 +370,7 @@ class ApplyTests(unittest.TestCase):
         plan = _plan(self.db_path, file_template="{number}")
         result = self._apply(plan)
         self.assertEqual((result["moved"], result["failed"]), (0, 1))
-        self.assertEqual(result["failures"][0]["reason"], "源文件不存在")
+        self.assertEqual(result["failures"][0]["reason"], "Source file does not exist")
 
 
 class EndpointTests(unittest.TestCase):

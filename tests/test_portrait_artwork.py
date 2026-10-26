@@ -73,7 +73,7 @@ class CoverFallbackTests(unittest.TestCase):
         self.assertIsNotNone(chosen)
         self.assertEqual((chosen["provider"], chosen["external_id"], chosen["source_kind"]),
                          ("cover-fallback", "ABW-001", "single_performer_cover"))
-        self.assertEqual(chosen["evidence"], "单人作品 ABW-001 完整封面")
+        self.assertEqual(chosen["evidence"], "Solo work ABW-001 Full cover")
         self.assertEqual((chosen["width"], chosen["height"]), (800, 538))
         self.assertTrue(Path(chosen["object_path"]).is_file())
 
@@ -99,7 +99,7 @@ class CoverFallbackTests(unittest.TestCase):
         self.assertIsNotNone(chosen)
         self.assertEqual((chosen["provider"], chosen["source_kind"], chosen["face_width"]),
                          ("poster-fallback", "single_performer_frame", 320))
-        self.assertEqual(chosen["evidence"], "单人作品 ABW-001 高清帧 1_0003")
+        self.assertEqual(chosen["evidence"], "Solo work ABW-001 HD frame 1_0003")
 
 
 if __name__ == "__main__":

@@ -239,7 +239,7 @@ class DiscoverTests(_DiscoveryCase):
                                providers=("kemono", "rule34video", "f95zone"))
         self.assertTrue(all(c.evidence for c in found.candidates))
         kemono = next(c for c in found.candidates if c.provider == "kemono")
-        self.assertEqual(kemono.evidence, "创作者名精确匹配")
+        self.assertEqual(kemono.evidence, "Exact creator name match")
 
     def test_archive_identity_resolves_to_the_official_fanbox_page(self):
         found = self._discover("LazyProcrastinator", self.ROUTES,
@@ -248,7 +248,7 @@ class DiscoverTests(_DiscoveryCase):
         self.assertEqual(official.ref, "lazyprocrast")
         self.assertEqual(official.url, "https://lazyprocrast.fanbox.cc/")
         self.assertEqual(official.label, "LazyProcrastinator")
-        self.assertIn("官方资料", official.evidence)
+        self.assertIn("official profile", official.evidence)
 
     def test_a_numeric_term_matches_the_site_id_and_skips_name_only_sources(self):
         calls = []
@@ -264,7 +264,7 @@ class DiscoverTests(_DiscoveryCase):
         found = self._discover("suzutaro3d", self.ROUTES, providers=("kemono",))
         self.assertEqual([c.ref for c in found.candidates],
                          ["patreon/suzutaro3d"])
-        self.assertEqual(found.candidates[0].evidence, "站内 id 精确匹配")
+        self.assertEqual(found.candidates[0].evidence, "Exact on-site id match")
 
     def test_a_handle_id_matches_whatever_case_it_was_copied_in(self):
         # 手柄的大小写只是显示形态：从主页标题复制来的 `SuzuTaro3D` 和索引里的
@@ -272,13 +272,13 @@ class DiscoverTests(_DiscoveryCase):
         found = self._discover("SuzuTaro3D", self.ROUTES, providers=("kemono",))
         self.assertEqual([c.ref for c in found.candidates],
                          ["patreon/suzutaro3d"])
-        self.assertEqual(found.candidates[0].evidence, "站内 id 精确匹配")
+        self.assertEqual(found.candidates[0].evidence, "Exact on-site id match")
 
     def test_a_numeric_term_probes_the_thread_id(self):
         routes = {**self.ROUTES, "f95zone.to/threads/50685/": HttpResponse(200, {}, b"<html/>")}
         found = self._discover("50685", routes, providers=("f95zone",))
         self.assertEqual([c.ref for c in found.candidates], ["50685"])
-        self.assertEqual(found.candidates[0].evidence, "线程存在")
+        self.assertEqual(found.candidates[0].evidence, "Thread exists")
 
     def test_a_missing_thread_yields_nothing_rather_than_a_guessed_link(self):
         found = self._discover("99999999", self.ROUTES, providers=("f95zone",))
@@ -295,7 +295,7 @@ class DiscoverTests(_DiscoveryCase):
         self.assertEqual(search.query, "initial_a f95zone")
         self.assertEqual(search.url,
                          "https://www.google.com/search?q=initial_a+f95zone")
-        self.assertIn("真实线程链接", search.evidence)
+        self.assertIn("actual thread links", search.evidence)
 
     def test_an_f95_hit_does_not_add_a_redundant_google_link(self):
         found = self._discover("LazyProcrastinator", self.ROUTES,
@@ -307,12 +307,12 @@ class DiscoverTests(_DiscoveryCase):
         found = self._discover("Lazy", self.ROUTES, providers=("kemono",))
         evidence = {c.label: c.evidence for c in found.candidates}
         self.assertIn("LazyProcrastinator · fanbox", evidence)
-        self.assertEqual(evidence["LazyProcrastinator · fanbox"], "创作者名以该词开头")
+        self.assertEqual(evidence["LazyProcrastinator · fanbox"], "Creator name starts with the term")
 
     def test_a_name_that_only_contains_the_term_says_so(self):
         found = self._discover("Mazer", self.ROUTES, providers=("kemono",))
         self.assertEqual([(c.label, c.evidence) for c in found.candidates],
-                         [("LazyMazer · patreon", "创作者名包含该词")])
+                         [("LazyMazer · patreon", "Creator name contains the term")])
 
     def test_one_source_failing_does_not_lose_the_others(self):
         routes = {**self.ROUTES}
@@ -346,9 +346,9 @@ class DiscoverTests(_DiscoveryCase):
                   b"{\"label\": \"ria (12)\", \"value\": \"ria\"}]")}
         found = self._discover("ria", routes, providers=("rule34xxx",))
         self.assertEqual([c.ref for c in found.candidates], ["ria", "ria-neearts", "riahri"])
-        self.assertEqual(found.candidates[0].evidence, "站内标签 ria 下有 12 件作品")
+        self.assertEqual(found.candidates[0].evidence, "12 works under on-site tag ria")
         self.assertEqual(found.candidates[1].evidence,
-                         "站内标签以该词开头：ria-neearts 下有 248 件作品")
+                         "On-site tag starts with the term: 248 works under ria-neearts")
 
     def test_a_prefix_hit_is_a_candidate_when_no_spelling_matched_exactly(self):
         # 敲名字的开头、站上的标签比它长时，精确判据下这条也找不到。前缀命中的
@@ -360,9 +360,9 @@ class DiscoverTests(_DiscoveryCase):
         self.assertFalse(any("index.php" in url for url in calls))
         self.assertEqual([c.ref for c in found.candidates], ["ria-neearts", "riahri"])
         self.assertEqual(found.candidates[0].evidence,
-                         "站内标签以该词开头：ria-neearts 下有 248 件作品")
+                         "On-site tag starts with the term: 248 works under ria-neearts")
         self.assertEqual(found.candidates[1].evidence,
-                         "站内标签以该词开头：riahri 下有 156 件作品")
+                         "On-site tag starts with the term: 156 works under riahri")
         self.assertIn("tags=ria-neearts", found.candidates[0].url)
 
     def test_a_prefix_hit_without_a_count_still_states_itself(self):
@@ -371,7 +371,7 @@ class DiscoverTests(_DiscoveryCase):
         found = self._discover("forceball", routes, providers=("rule34xxx",))
         self.assertEqual([c.ref for c in found.candidates], ["forceball_fx"])
         self.assertEqual(found.candidates[0].evidence,
-                         "站内存在以该词开头的标签 forceball_fx")
+                         "On-site tag starting with the term exists: forceball_fx")
 
     def test_prefix_neighbors_do_not_shadow_the_variant_that_matched_exactly(self):
         # 补全按字面前缀返回：`Ria_neearts` 查不出 `ria-neearts`，要换分隔符写法
@@ -398,7 +398,7 @@ class DiscoverTests(_DiscoveryCase):
                   "s=tag": HttpResponse(200, {}, b'<tags type="array"></tags>')}
         found = self._discover("ria", routes, providers=("rule34xxx",))
         self.assertEqual([c.ref for c in found.candidates], ["ria", "ria-neearts", "riahri"])
-        self.assertEqual(found.candidates[0].evidence, "站内标签 ria 下有作品")
+        self.assertEqual(found.candidates[0].evidence, "Works exist under on-site tag ria")
         self.assertEqual(found.failures, {})
 
     def test_a_rejected_credential_keeps_the_prefix_hits(self):
@@ -447,7 +447,7 @@ class DiscoverTests(_DiscoveryCase):
                          transport=call, providers=("f95zone",))
         self.assertEqual(queries, ["strauz", "strauz*"])
         self.assertEqual([c.ref for c in found.candidates], ["146348"])
-        self.assertIn("按标题开头命中「strauz*」", found.candidates[0].evidence)
+        self.assertIn("title-prefix hit \"strauz*\"", found.candidates[0].evidence)
 
     def test_an_exact_hit_never_reaches_the_wildcard_round(self):
         self._write_credential("f95zone", {"cookie": "xf_user=1"})
@@ -481,7 +481,7 @@ class DiscoverTests(_DiscoveryCase):
         f95, tag = found.candidates
         self.assertEqual(f95.aliases, ("Ceeeeekc",), "与检索词同名的 patreon 手柄和 pixiv 数字 id 不算别名")
         self.assertEqual(tag.aliases, ("Ceeeeekc",))
-        self.assertTrue(tag.evidence.startswith("F95 首楼名片上的手柄 Ceeeeekc："))
+        self.assertTrue(tag.evidence.startswith("Handle Ceeeeekc on the F95 first-post card: "))
 
     def test_without_a_cookie_the_forum_search_is_skipped_not_guessed(self):
         calls = []
@@ -504,7 +504,7 @@ class DiscoverTests(_DiscoveryCase):
                          [("simpcity", "17401"), ("simpcity", "392510")])
         self.assertEqual(found.candidates[0].url, "https://simpcity.cr/threads/17401/")
         self.assertEqual(found.candidates[0].label, "Solazola / baby_sue")
-        self.assertEqual(found.candidates[0].evidence, "站内搜索按标题命中「solazola」，版块标签 OnlyFans")
+        self.assertEqual(found.candidates[0].evidence, "On-site search title hit \"solazola\", forum tags OnlyFans")
         self.assertIn("Simp Chat", found.candidates[1].evidence)
         self.assertEqual(found.failures, {})
 
@@ -688,8 +688,8 @@ class TagSuggestionTests(unittest.TestCase):
         found = tag_suggestions("lewdga", transport=self._transport(),
                                 credential=self.credential)
         self.assertEqual([(row.value, row.tag_type, row.matched) for row in found],
-                         [("lewdgatta", "artist", "作者"),
-                          ("lewdgazer", "general", "标签")])
+                         [("lewdgatta", "artist", "artist"),
+                          ("lewdgazer", "general", "tag")])
 
     def test_without_a_credential_the_class_is_left_unknown(self):
         """分类接口要凭据，没有就只报名字——空的 `tag_type` 是「没问出来」。
@@ -792,7 +792,7 @@ class SearchKeepsWhatWasSuggestedTests(_DiscoveryCase):
         found = self._discover("lewd", {}, providers=("kemono",))
         self.assertEqual(offered, ["Lewdgatta", "lewdgazer"])
         self.assertEqual([c.label.split(" · ")[0] for c in found.candidates[:2]], offered)
-        self.assertEqual(found.candidates[0].evidence, "创作者名以该词开头")
+        self.assertEqual(found.candidates[0].evidence, "Creator name starts with the term")
 
     def test_site_tags_offered_for_a_prefix_survive_the_search(self):
         """`lewd` 本身是标签，下拉里的作者 `lewdrex` 和角色 `lewd_dorky` 也得在结果里。
@@ -822,9 +822,9 @@ class SearchKeepsWhatWasSuggestedTests(_DiscoveryCase):
         self.assertEqual({row.value for row in offered}, {c.ref for c in found.candidates})
         self.assertEqual([c.ref for c in found.candidates], ["lewd", "lewdrex", "lewd_dorky"])
         self.assertEqual([c.evidence for c in found.candidates],
-                         ["站内标签 lewd 下有 8548 件作品",
-                          "站内标签以该词开头：lewdrex 下有 57 件作品，站上归为作者",
-                          "站内标签以该词开头：lewd_dorky 下有 401 件作品，站上归为角色"])
+                         ["8548 works under on-site tag lewd",
+                          "On-site tag starts with the term: 57 works under lewdrex, classified on the site as artist",
+                          "On-site tag starts with the term: 401 works under lewd_dorky, classified on the site as character"])
         # 补全里已经有精确写法，就不花一次 dapi 请求去确认它。
         self.assertFalse(any("s=post" in url for url in calls))
 

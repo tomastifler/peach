@@ -81,7 +81,7 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertEqual(diagnostics.writable_root(self.root)["status"], "ok")
         self.assertEqual(set(self.root.iterdir()), before)
         with patch.object(diagnostics.tempfile, "TemporaryFile", side_effect=PermissionError):
-            self.assertEqual(diagnostics.writable_root(self.root)["reason"], "没有权限写入数据目录")
+            self.assertEqual(diagnostics.writable_root(self.root)["reason"], "No permission to write to the data directory")
 
     def test_security_reports_anonymous_lan_and_password_without_secrets(self):
         from peach.access import save

@@ -17,7 +17,7 @@ from .migrations import sqlite_backup
 from .task_runs import declared_rows
 
 TASK_KEY = "download-postprocess"
-TASK_LABEL = "云下载后处理"
+TASK_LABEL = "Cloud download post-processing"
 
 
 def followup_key(task_id: int) -> str:
@@ -27,7 +27,7 @@ def followup_key(task_id: int) -> str:
 def _task_id(key: str) -> int:
     prefix, separator, raw = str(key).partition(":")
     if prefix != TASK_KEY or not separator or not raw.isdigit():
-        raise ValueError("云下载后处理任务编号无效")
+        raise ValueError("Invalid cloud download post-processing task ID")
     return int(raw)
 
 
@@ -38,25 +38,25 @@ def enqueue(contract, task) -> int | None:
         return None
     parent = contract.task_runs.start(
         TASK_KEY, trigger="scheduled", mutex_key=f"download-ingest:{task.id}",
-        conflict="skip", label=f"下载已入库：{task.code or task.display_name or task.id}")
+        conflict="skip", label=f"Download ingested: {task.code or task.display_name or task.id}")
     if parent is None:
         return None
     result = contract.task_runs.enqueue_followups(parent.id, [(
         followup_key(task.id), TASK_KEY,
-        f"{TASK_LABEL}：{task.code or task.display_name or task.id}")])
+        f"{TASK_LABEL}: {task.code or task.display_name or task.id}")])
     active = contract.task_runs.blocking(followup_key(task.id))
     run_id = result["queued"][0] if result["queued"] else (active.id if active else None)
     contract.task_runs.finish(parent.id, "succeeded", summary={"followups": len(result["queued"])})
     if run_id is not None:
         DownloadStore(contract.database).postprocess(
-            task.id, POSTPROCESS_QUEUED, detail="等待识别正片并整理", run_id=run_id)
+            task.id, POSTPROCESS_QUEUED, detail="Waiting to identify the main video and organise", run_id=run_id)
         contract.followups.wake()
     return run_id
 
 
 def _bind_main(contract, task) -> tuple[int, str, list[int]]:
     if not task.ledger_path:
-        raise ValueError("下载任务没有落地路径")
+        raise ValueError("The download task has no landing path")
     store = DownloadStore(contract.database)
     rows = store.assets_under(task.provider, task.ledger_path)
     with contract.database.read_connection() as connection:
@@ -65,12 +65,12 @@ def _bind_main(contract, task) -> tuple[int, str, list[int]]:
             (task.asset_id, task.provider)).fetchone()
     main = int(bound['id']) if bound else store.asset_under(task.provider, task.ledger_path, task.code)
     if main is None:
-        raise ValueError("落地目录里没有可识别的视频")
+        raise ValueError("No recognisable video in the landing directory")
     wrote_code = False
     with contract.database.write_transaction(notify=False) as connection:
         existing = connection.execute("SELECT code FROM asset WHERE id=?", (main,)).fetchone()[0]
         if task.code and existing and not same_release_code(task.code, existing):
-            raise ValueError(f"正片已绑定其他番号：{existing}")
+            raise ValueError(f"The main video is already bound to another code: {existing}")
         if task.code and not existing:
             write_owned_fields(connection, [main], {"code": task.code},
                                SCAN_FILENAME, require_empty=True)
@@ -101,7 +101,7 @@ def _collect(contract, main: int, handle) -> dict:
     config = settings_file.active()
     if not config.configured or Path(contract.db_path).resolve() != (
             config.directory("database") / "ledger.db").resolve():
-        raise ValueError("当前馆藏与媒体配置不一致，不能采集下载资料")
+        raise ValueError("The current library does not match the media config; download metadata cannot be scraped")
     state_file = config.directory('state') / 'download-processing' / f'{main}.json'
     try:
         previous = json.loads(state_file.read_text(encoding='utf-8'))
@@ -118,16 +118,16 @@ def _collect(contract, main: int, handle) -> dict:
     if rows and handle.run_id is not None:
         contract.task_runs.enqueue_followups(handle.run_id, rows)
     if state.get("status") == "failed":
-        raise RuntimeError(str(state.get("error") or "资料采集失败"))
+        raise RuntimeError(str(state.get("error") or "Metadata scrape failed"))
     return state
 
 
 def _organize(contract, task, main: int) -> dict:
     templates = contract.download_organize_templates().get(task.provider, {})
     if not templates:
-        return {"moved": 0, "skipped": "未配置整理模板"}
+        return {"moved": 0, "skipped": "No organise template configured"}
     if organize.unverified_location(task.provider):
-        return {"moved": 0, "skipped": f"{task.provider} 缺少官方核验改名通道"}
+        return {"moved": 0, "skipped": f"{task.provider} has no official verified-rename channel"}
     with contract.database.read_connection() as connection:
         plan = organize.build_plan(
             connection, location=task.provider, file_template=templates.get("file", ""),
@@ -136,9 +136,9 @@ def _organize(contract, task, main: int) -> dict:
     blocked = [row for row in plan['rows'] if row.get('reason') in {
         organize.SKIP_TARGET_EXISTS, organize.SKIP_OFFLINE, organize.SKIP_TOO_LONG}]
     if blocked:
-        raise RuntimeError('文件整理未完成：' + '；'.join(str(row['reason']) for row in blocked))
+        raise RuntimeError('File organising did not finish: ' + '; '.join(str(row['reason']) for row in blocked))
     if not movable:
-        return {"moved": 0, "skipped": next(iter(plan["reasons"]), "无需整理")}
+        return {"moved": 0, "skipped": next(iter(plan["reasons"]), "Nothing to organise")}
     backup = Path(contract.candidate_root) / "organize-backups" / (
         f"ledger.pre-download-{task.id}-{time.strftime('%Y%m%d-%H%M%S')}.db")
     backup.parent.mkdir(parents=True, exist_ok=True)
@@ -146,16 +146,16 @@ def _organize(contract, task, main: int) -> dict:
     with contract.database.write_transaction() as connection:
         integrity = connection.execute('PRAGMA integrity_check').fetchone()[0]
         if integrity != 'ok':
-            raise RuntimeError(f'整理前 ledger 校验失败：integrity={integrity}')
+            raise RuntimeError(f'Ledger check before organising failed: integrity={integrity}')
         baseline = {tuple(row) for row in connection.execute('PRAGMA foreign_key_check')}
         result = organize.apply_plan(connection, movable, generated_root=contract.candidate_root)
         integrity = connection.execute('PRAGMA integrity_check').fetchone()[0]
         introduced = {tuple(row) for row in connection.execute('PRAGMA foreign_key_check')} - baseline
         if integrity != 'ok' or introduced:
-            raise RuntimeError(f'整理后 ledger 校验失败：integrity={integrity} new_foreign_keys={len(introduced)}')
+            raise RuntimeError(f'Ledger check after organising failed: integrity={integrity} new_foreign_keys={len(introduced)}')
     if result.get('failed'):
-        reasons = '；'.join(str(row['reason']) for row in result.get('failures', ()))
-        raise RuntimeError(f'文件整理未完成：{reasons}')
+        reasons = '; '.join(str(row['reason']) for row in result.get('failures', ()))
+        raise RuntimeError(f'File organising did not finish: {reasons}')
     return {**result, 'backup': str(backup), 'existing_foreign_keys': len(baseline)}
 
 
@@ -164,26 +164,26 @@ def run(contract, key: str, handle) -> dict:
     store = DownloadStore(contract.database)
     task = store.get(task_id)
     if task is None or task.state != INGESTED:
-        raise ValueError("云下载任务尚未入库")
+        raise ValueError("The cloud download task has not been ingested yet")
     if task.postprocess_state == POSTPROCESS_COMPLETE:
         return {"task_id": task_id, "already_complete": True}
-    store.postprocess(task_id, POSTPROCESS_RUNNING, detail="正在识别正片")
+    store.postprocess(task_id, POSTPROCESS_RUNNING, detail="Identifying the main video")
     try:
         main, _path, folder_ids = _bind_main(contract, task)
-        handle.progress(label="隔离推广附件", throttle=0)
+        handle.progress(label="Quarantining promo attachments", throttle=0)
         isolated = _isolate_ads(contract, main, folder_ids)
-        handle.progress(label="采集作品资料", throttle=0)
+        handle.progress(label="Scraping work metadata", throttle=0)
         metadata = _collect(contract, main, handle)
         task = store.get(task_id)
-        handle.progress(label="按模板整理文件", throttle=0)
+        handle.progress(label="Organising files by template", throttle=0)
         organized = _organize(contract, task, main)
     except Exception as error:
         store.postprocess(task_id, POSTPROCESS_FAILED,
                           detail=f"{type(error).__name__}: {error}")
         raise
     store.postprocess(task_id, POSTPROCESS_COMPLETE,
-                      detail=(f"正片已绑定，资料已采集；整理跳过：{organized['skipped']}"
-                              if organized.get('skipped') else "正片已绑定，资料已采集并完成整理"),
+                      detail=(f"Main video bound and metadata scraped; organising skipped: {organized['skipped']}"
+                              if organized.get('skipped') else "Main video bound, metadata scraped and organised"),
                       finished=iso(time.time()))
     contract.cache_bust()
     return {"task_id": task_id, "asset_id": main, "ads_isolated": isolated,

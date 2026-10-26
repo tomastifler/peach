@@ -46,7 +46,7 @@ class _DmmPreviewSource(DmmSource):
     def content(self, cid, *, session):
         data = self.graphql(DMM_PREVIEW_QUERY, {'id': cid}, session=session)
         if 'ppvContent' not in data:
-            raise ValueError('DMM 商品字段未取得')
+            raise ValueError('DMM product fields not retrieved')
         item = data['ppvContent']
         if item is None:
             return None
@@ -69,22 +69,22 @@ def dmm_preview(code, secrets_root, *, transport=None):
         with source.holding(session):
             item = json.loads(source.fetch(code, session=session).body)
         if normalise_code_key(item.get('makerContentId')) != normalise_code_key(code):
-            raise ValueError('DMM 番号不匹配')
+            raise ValueError('DMM code mismatch')
         if 'sample2DMovie' not in item:
-            raise ValueError('DMM 公开预告字段未取得')
+            raise ValueError('DMM public trailer fields not retrieved')
         movie = item['sample2DMovie']
         if movie is None:
             return ''
         url = dmm_preview_url(movie.get('highestMovieUrl')) if isinstance(movie, dict) else ''
         if not url:
-            raise ValueError('DMM 公开预告地址未识别')
+            raise ValueError('DMM public trailer URL not recognized')
         return url
     except SourceFailure as error:
         if error.reason == FailureReason.NOT_FOUND:
             return ''
-        raise PublicSourceUnavailable('DMM 视频预览未取得，请稍后重试') from error
+        raise PublicSourceUnavailable('DMM video preview not retrieved; try again later') from error
     except (OSError, ValueError, TypeError, AttributeError, RuntimeError, httpx.HTTPError) as error:
-        raise PublicSourceUnavailable('DMM 视频预览未取得，请稍后重试') from error
+        raise PublicSourceUnavailable('DMM video preview not retrieved; try again later') from error
     finally:
         if owned:
             transport.close()
@@ -112,7 +112,7 @@ def javdb_preview(code, movie_id, secrets_root, *, transport=None):
                 return url
         return ''
     except (OSError, ValueError, TypeError, AttributeError, RuntimeError, httpx.HTTPError, SourceFailure) as error:
-        raise PublicSourceUnavailable('JavDB 视频预览未取得，请稍后重试') from error
+        raise PublicSourceUnavailable('JavDB video preview not retrieved; try again later') from error
     finally:
         if owned:
             transport.close()
@@ -130,31 +130,31 @@ def prestige_preview(code, secrets_root, *, transport=None):
                       limit=1024 * 1024, deadline=deadline)
         payload = json.loads(body)
         if not isinstance(payload, dict):
-            raise ValueError('商品资料格式未识别')
+            raise ValueError('Product data format not recognized')
         return payload
 
     try:
         sku = read(PRESTIGE_SKU.format(code=quote(normalise_code_key(code))))
         uuid = (sku.get('parentProduct') or {}).get('uuid')
         if not isinstance(uuid, str) or not _UUID.fullmatch(uuid):
-            raise ValueError('商品身份未取得')
+            raise ValueError('Product identity not retrieved')
         product = read(PRESTIGE_PRODUCT.format(uuid=uuid))
         numbers = [row.get('deliveryItemId') for row in product.get('sku') or [] if isinstance(row, dict)]
         if product.get('uuid') != uuid or not any(normalise_code_key(number) == normalise_code_key(code) for number in numbers):
             raise ValueError('来源作品身份不匹配')
         if 'movie' not in product:
-            raise ValueError('公开预告字段未取得')
+            raise ValueError('Public trailer fields not retrieved')
         movie = product['movie']
         if movie is None:
             return ''
         if not isinstance(movie, dict) or movie.get('mimeType') != 'video/mp4' or movie.get('isLimited') != 0:
-            raise ValueError('公开预告格式未识别')
+            raise ValueError('Public trailer format not recognized')
         path = movie.get('path')
         if not isinstance(path, str) or not _MOVIE_PATH.fullmatch(path):
-            raise ValueError('公开预告地址未识别')
+            raise ValueError('Public trailer URL not recognized')
         return PRESTIGE_MEDIA.format(path=path)
     except (OSError, ValueError, TypeError, AttributeError, RuntimeError, httpx.HTTPError) as error:
-        raise PublicSourceUnavailable('官方视频预览未取得，请稍后重试') from error
+        raise PublicSourceUnavailable('Official video preview not retrieved; try again later') from error
     finally:
         if owned:
             transport.close()

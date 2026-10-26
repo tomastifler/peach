@@ -109,7 +109,7 @@ class PublicRequestBudget:
                 ("time_budget", time.monotonic() - self.started >= self.max_seconds)):
             if exhausted:
                 self.stop_reason = reason
-                raise PublicBudgetExceeded("本轮作品资料预算已用完")
+                raise PublicBudgetExceeded("The metadata budget for this round is used up")
 
 
 def actor_gender(actor: dict) -> str:
@@ -154,7 +154,7 @@ class PublicAPI:
     def _get(self, url: str, *, signed=False, limit=2 * 1024 * 1024, image=False):
         paused = self.image_paused_until if image else self.paused_until
         if self.clock() < paused:
-            raise PublicSourceUnavailable("图片来源暂时不可用，请稍后重试" if image else "作品资料来源暂时不可用，请稍后重试")
+            raise PublicSourceUnavailable("Image source temporarily unavailable; try again later" if image else "Metadata source temporarily unavailable; try again later")
         if not image:
             self.limiter.wait(url)
         budget = self.request_context.get()
@@ -178,7 +178,7 @@ class PublicAPI:
                 self.image_paused_until = self.clock() + 60
             else:
                 self.paused_until = self.clock() + 60
-            raise PublicSourceUnavailable("作品资料未取得，请稍后重试") from error
+            raise PublicSourceUnavailable("Work metadata not retrieved; try again later") from error
         if budget:
             budget.bytes += len(response.body)
         if response.status != 200:
@@ -187,7 +187,7 @@ class PublicAPI:
                 self.image_paused_until = self.clock() + delay
             else:
                 self.paused_until = self.clock() + delay
-            raise PublicSourceUnavailable("作品资料来源暂时不可用，请稍后重试")
+            raise PublicSourceUnavailable("Metadata source temporarily unavailable; try again later")
         return response
 
     def _signature(self) -> tuple[str, str]:
@@ -197,13 +197,13 @@ class PublicAPI:
         entry = re.search(r'src="(/assets/index-[A-Za-z0-9_-]+\.js)"', html)
         if not entry:
             self.paused_until = self.clock() + 60
-            raise PublicSourceUnavailable("作品资料来源格式未识别")
+            raise PublicSourceUnavailable("Metadata source format not recognized")
         js = response_text(self._get(WEB + entry[1]))
         middle = re.search(r'\bS1="([^"\r\n]{1,256})"', js)
         suffix = re.search(r'\bE1="([^"\r\n]{1,256})"', js)
         if not middle or not suffix:
             self.paused_until = self.clock() + 60
-            raise PublicSourceUnavailable("作品资料来源格式未识别")
+            raise PublicSourceUnavailable("Metadata source format not recognized")
         self.signature_parts = middle[1], suffix[1]
         self.signature_until = self.clock() + 24 * 3600
         return self.signature_parts
@@ -216,14 +216,14 @@ class PublicAPI:
             payload = json.loads(response.body)
         except (ValueError, UnicodeError) as error:
             self.paused_until = self.clock() + 60
-            raise PublicSourceUnavailable("作品资料来源格式未识别") from error
+            raise PublicSourceUnavailable("Metadata source format not recognized") from error
         if not isinstance(payload, dict) or payload.get("success") != 1:
             self.paused_until = self.clock() + 60
-            raise PublicSourceUnavailable("作品资料未取得，请稍后重试")
+            raise PublicSourceUnavailable("Work metadata not retrieved; try again later")
         data = payload.get("data")
         if not isinstance(data, dict):
             self.paused_until = self.clock() + 60
-            raise PublicSourceUnavailable("作品资料来源格式未识别")
+            raise PublicSourceUnavailable("Metadata source format not recognized")
         return data
 
     def _store(self):
@@ -338,7 +338,7 @@ class PublicAPI:
             match = next((row for row in rows if isinstance(row, dict)
                           and normalise_code_key(row.get("number")) == canonical), None)
             if not match or not isinstance(match.get("id"), str) or not re.fullmatch(r"[A-Za-z0-9]+", match["id"]):
-                raise PublicSourceUnavailable("未取得这个番号的作品资料")
+                raise PublicSourceUnavailable("No work metadata retrieved for this code")
             return match["id"]
 
         def fetch():
@@ -368,7 +368,7 @@ class PublicAPI:
         rows = self._json(path, query).get(key)
         if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
             self.paused_until = self.clock() + 60
-            raise PublicSourceUnavailable("作品资料来源格式未识别")
+            raise PublicSourceUnavailable("Metadata source format not recognized")
         return [row for row in rows if isinstance(row, dict)]
 
     def peek_movie(self, code: str) -> dict | None:
@@ -385,7 +385,7 @@ class PublicAPI:
 
     def reviews(self, code: str, page: int, *, refresh=False) -> list[dict]:
         if not 1 <= page <= MAX_REVIEW_PAGES:
-            raise ValueError("评论页码必须在 1 至 8 之间")
+            raise ValueError("The review page number must be between 1 and 8")
         movie = self.movie(code)
         return self._cached(f"reviews:{movie['id']}:{page}", lambda:
                             self._rows(f"/v1/movies/{movie['id']}/reviews", "reviews", {"page": page}),
@@ -427,14 +427,14 @@ class PublicAPI:
             actor = next((actor for actor in movie.get("actors") or []
                           if isinstance(actor, dict) and str(actor.get("id")) == actor_id), None)
             if not actor:
-                raise ValueError("出演者头像不存在")
+                raise ValueError("The performer avatar does not exist")
             url = actor.get("avatar_url")
         else:
             previews = movie.get("preview_images") or []
             try:
                 url = previews[int(index)]
             except (ValueError, IndexError, TypeError):
-                raise ValueError("预览图不存在") from None
+                raise ValueError("The preview image does not exist") from None
             if isinstance(url, dict):
                 url = url.get("large_url") or url.get("url")
         return self.image_from_url(url, original=True) if original else self.image_from_url(url)
@@ -442,7 +442,7 @@ class PublicAPI:
     def image_from_url(self, url, *, original=False) -> str:
         """静态头像与作品图片共用校验、并发下载、解码和请求缓存。"""
         if not public_image_url(url):
-            raise PublicSourceUnavailable("图片未取得")
+            raise PublicSourceUnavailable("Image not retrieved")
 
         def fetch():
             import base64
@@ -476,7 +476,7 @@ def decode_image(body: bytes, *, original=False) -> bytes:
                 return output.getvalue()
         except (OSError, ValueError, Image.DecompressionBombError):
             continue
-    raise PublicSourceUnavailable("图片未取得")
+    raise PublicSourceUnavailable("Image not retrieved")
 
 
 PUBLIC_API = PublicAPI(cache_root=lambda: _CACHE_ROOT.get())

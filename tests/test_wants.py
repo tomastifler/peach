@@ -88,13 +88,13 @@ class RegisterTests(WantFixture):
                          [("SSIS-950", "SSIS-950", "code", "wanted")])
 
     def test_text_without_a_code_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "认不出番号"):
+        with self.assertRaisesRegex(ValueError, "Release code not recognized"):
             self.write(lambda connection: wants.add_code(connection, "hello"))
 
     def test_a_code_already_in_the_library_is_refused_but_a_vanished_one_is_not(self):
         self.add_asset(1, "ABP-123")
         self.add_asset(2, "ABP-124", disposal="vanished")
-        with self.assertRaisesRegex(ValueError, "已经在库里"):
+        with self.assertRaisesRegex(ValueError, "already in the library"):
             self.write(lambda connection: wants.add_code(connection, "abp123"))
         self.assertTrue(self.write(lambda connection: wants.add_code(connection, "ABP-124"))["created"])
 

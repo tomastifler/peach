@@ -17,12 +17,12 @@ from . import seed_pack, seed_corrections, seed_validation
 from .followups import Followup, FollowupType, register
 
 TASK_KEY = "seed-import"
-TASK_LABEL = "导入初始资料"
+TASK_LABEL = "Import seed data"
 REVIEW_FILE = "seed-landing.csv"
 FIELDS = ("kind", "entity", "field", "ours", "source", "theirs", "detail", "batch", "withdrawal_id", "evidence")
 #: 活动页摘要里的计数键与它们的中文名，按这个顺序拼结论。
-SUMMARY_LABELS = (("aliases", "别名"), ("refs", "编号"), ("links", "链接"), ("profiles", "资料"),
-                  ("memberships", "归属"), ("makers", "片商"), ("refreshed", "换新"), ("withdrawn", "撤销"))
+SUMMARY_LABELS = (("aliases", "Aliases"), ("refs", "Codes"), ("links", "Links"), ("profiles", "Profiles"),
+                  ("memberships", "Memberships"), ("makers", "Makers"), ("refreshed", "Refreshed"), ("withdrawn", "Withdrawn"))
 
 
 def followup_key(version: str, content_hash: str = "") -> str:
@@ -67,11 +67,11 @@ def plan(connection: sqlite3.Connection, *, since_entity_id: int, pack_path: Pat
 def _rows(report: dict) -> list[dict]:
     rows = [{"kind": item["kind"], "entity": item["entity"], "field": item["field"], "ours": item["ours"],
              "source": item["source"], "theirs": item["theirs"], "batch": report["batch"],
-             "detail": "包里说的与本机不一致；本机这条不是种子写的，种子不动它"}
+             "detail": "The pack disagrees with this machine; this entry was not written by a seed, so the seed leaves it alone"}
             for item in report["conflicts"]]
     rows += [{"kind": item["kind"], "entity": "、".join(item["entities"]), "field": "identity", "ours": "",
               "source": "", "theirs": item["name"], "batch": report["batch"],
-              "detail": "包里一条对上本机两位，可能是重复身份；合并不可逆，由人决定"}
+              "detail": "One entry in the pack matches two on this machine, possibly a duplicate identity; merging is irreversible, so a person decides"}
              for item in report["duplicates"]]
     rows += [{"kind": item["kind"], "entity": item["entity"], "field": item["field"], "source": item["source"],
               "detail": item["detail"] + "；" + item["reason"], "withdrawal_id": item["id"],
@@ -91,19 +91,19 @@ def record_review(root: Path, report: dict) -> Path:
 def outcome(report: dict) -> str:
     parts = [f"{label} {report[key]}" for key, label in SUMMARY_LABELS if report.get(key)]
     if report["conflicts"]:
-        parts.append(f"不一致 {len(report['conflicts'])}")
+        parts.append(f"Conflicts {len(report['conflicts'])}")
     if report["duplicates"]:
-        parts.append(f"重复身份 {len(report['duplicates'])}")
+        parts.append(f"Duplicate identities {len(report['duplicates'])}")
     if report.get("withdrawal_conflicts"):
-        parts.append(f"撤销待复核 {len(report['withdrawal_conflicts'])}")
-    return "、".join(parts) if parts else f"没有可补的（对上 {report['matched']} 位）"
+        parts.append(f"Withdrawals to review {len(report['withdrawal_conflicts'])}")
+    return ", ".join(parts) if parts else f"Nothing to fill ({report['matched']} matched)"
 
 
 def run(contract, key: str, handle) -> dict:
     """将私有种子包补进账本；测试使用临时种子包。"""
     pack = seed_pack.load(seed_pack.DEFAULT_PACK)
     if key != followup_key(pack["version"], seed_validation.digest(pack)):
-        raise ValueError("种子内容与排队任务的摘要不一致，请重新派发")
+        raise ValueError("Seed content does not match the queued task's digest; dispatch again")
     if handle is not None:
         handle.progress(label=f"{TASK_LABEL}：{pack['version']}", throttle=0)
     with contract.database.write_transaction() as connection:

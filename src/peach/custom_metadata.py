@@ -28,35 +28,35 @@ _ID = re.compile(r'custom-[a-f0-9]{16}')
 
 def validate(raw: dict) -> dict:
     if not isinstance(raw, dict):
-        raise ValueError('来源配置必须是对象')
+        raise ValueError('Source config must be an object')
     name = str(raw.get('name', '')).strip()
     endpoint = str(raw.get('endpoint', '')).strip()
     if not name or len(name) > 80:
-        raise ValueError('来源名称需要 1–80 个字符')
+        raise ValueError('Source name must be 1–80 characters')
     if endpoint.count('{code}') != 1 or '{' in endpoint.replace('{code}', '') or '}' in endpoint.replace('{code}', ''):
-        raise ValueError('接口地址需要包含一个 {code}')
+        raise ValueError('The endpoint URL must contain one {code}')
     parsed = urlsplit(endpoint.replace('{code}', 'ABW-001'))
     if (not public_https_url(endpoint.replace('{code}', 'ABW-001')) or parsed.port not in (None, 443)
             or not re.fullmatch(r'[a-z0-9-]+(?:\.[a-z0-9-]+)+', parsed.hostname or '')
             or parsed.fragment or '{code}' in endpoint.split('://', 1)[-1].split('/', 1)[0]
             or len(endpoint) > 2048 or any(ord(c) < 33 for c in endpoint)):
-        raise ValueError('接口需要使用固定公网域名的 HTTPS 地址，端口为 443')
+        raise ValueError('The endpoint must be an HTTPS URL on a fixed public domain, port 443')
     mapping = raw.get('fields')
     if not isinstance(mapping, dict) or not mapping.get('code'):
-        raise ValueError('请填写响应中番号字段的路径')
+        raise ValueError('Enter the path of the code field in the response')
     if set(mapping) - set(FIELDS) or any(not isinstance(v, str) or not _PATH.fullmatch(v) for v in mapping.values()):
-        raise ValueError('字段映射只接受对象键或数组下标组成的点路径')
+        raise ValueError('Field mappings only accept dotted paths made of object keys or array indexes')
     kinds = raw.get('content_types', [])
     if not isinstance(kinds, list) or not kinds or any(kind not in CONTENT_TYPES for kind in kinds):
-        raise ValueError('至少选择一种有效内容类型')
+        raise ValueError('Select at least one valid content type')
     if not isinstance(raw.get('enabled', False), bool):
-        raise ValueError('启用状态必须为布尔值')
+        raise ValueError('The enabled state must be a boolean')
     network = raw.get('network', 'direct')
     if network not in ('direct', 'peach_proxy'):
-        raise ValueError('请选择直连或 Peach 代理')
+        raise ValueError('Choose direct connection or the Peach proxy')
     code_format = raw.get('code_format', 'original')
     if code_format not in ('original', 'lowercase', 'compact', 'underscore'):
-        raise ValueError('番号格式无效')
+        raise ValueError('Invalid code format')
     return dict(name=name, endpoint=endpoint, fields=dict(mapping),
                 content_types=list(dict.fromkeys(kinds)), enabled=raw.get('enabled', False), network=network,
                 code_format=code_format)
@@ -82,7 +82,7 @@ def load(root: Path) -> list[dict]:
         return []
     rows = json.loads(path.read_text(encoding='utf-8'))
     if not isinstance(rows, list) or len(rows) > MAX_SOURCES:
-        raise ValueError('自定义来源配置无效')
+        raise ValueError('Invalid custom source config')
     return [dict(validate(row), id=row['id']) for row in rows if _ID.fullmatch(str(row.get('id', '')))]
 
 
@@ -93,10 +93,10 @@ def save(root: Path, body: dict) -> list[dict]:
         rows = load(root)
         identity = str(body.get('id', ''))
         if identity and not any(row['id'] == identity for row in rows):
-            raise ValueError('来源不存在，请刷新')
+            raise ValueError('Source does not exist; refresh')
         if body.get('action') == 'delete':
             if not identity:
-                raise ValueError('请选择来源')
+                raise ValueError('Choose a source')
             rows = [row for row in rows if row['id'] != identity]
         else:
             incoming = dict(validate(body), id=identity or 'custom-' + secrets.token_hex(8))
@@ -104,7 +104,7 @@ def save(root: Path, body: dict) -> list[dict]:
             if not identity:
                 rows.append(incoming)
             if len(rows) > MAX_SOURCES:
-                raise ValueError(f'最多保存 {MAX_SOURCES} 个来源')
+                raise ValueError(f'At most {MAX_SOURCES} sources can be saved')
         atomic_write_text(root / 'custom-metadata.json', json.dumps(rows, ensure_ascii=False))
         return rows
 
@@ -128,19 +128,19 @@ def parse(config: dict, code: str, document: object) -> SiteRecord:
         if value is None:
             return ''
         if not isinstance(value, (str, int, float)) or isinstance(value, bool) or len(str(value)) > 4096:
-            raise ValueError(f'{field} 字段需要文本或数值')
+            raise ValueError(f'Field {field} must be text or a number')
         return str(value).strip()
     def strings(field):
         value = values.get(field)
         if value is None:
             return ()
         if not isinstance(value, list) or len(value) > 100 or any(not isinstance(v, str) or len(v) > 256 for v in value):
-            raise ValueError(f'{field} 字段需要文本数组')
+            raise ValueError(f'Field {field} must be a text array')
         return tuple(dict.fromkeys(v.strip() for v in value if v.strip()))
     returned_code = text('code')
     # 身份只核对响应字段，查询 URL 不能替来源证明自己答对了。
     if not returned_code or not identifies_code(code, {'id': returned_code}):
-        raise ValueError('来源返回的番号与查询番号不一致')
+        raise ValueError('The code returned by the source does not match the queried code')
     return SiteRecord(source=config['id'], provenance='custom-json', code=returned_code,
                       source_url=endpoint(config, code),
                       title=text('title'), studio=text('studio'), series=text('series'),
@@ -152,7 +152,7 @@ def parse(config: dict, code: str, document: object) -> SiteRecord:
 def _remaining_seconds(deadline: float) -> float:
     remaining = deadline - time.monotonic()
     if remaining <= 0:
-        raise ValueError('来源查询已超时')
+        raise ValueError('Source query timed out')
     return remaining
 
 
@@ -163,7 +163,7 @@ def fetch_json(url: str, timeout: float, *, client_options=None):
     addresses = host_addresses(host)
     _remaining_seconds(expires)
     if not addresses or any(not ipaddress.ip_address(ip).is_global for ip in addresses):
-        raise ValueError('来源域名必须解析到公网地址')
+        raise ValueError('The source domain must resolve to a public address')
     address = addresses[0]
     if ':' in address:
         address = f'[{address}]'
@@ -179,16 +179,16 @@ def fetch_json(url: str, timeout: float, *, client_options=None):
             with client.stream('GET', url, timeout=_remaining_seconds(expires), allow_redirects=False,
                                headers={'Accept': 'application/json'}) as response:
                 if response.status_code != 200:
-                    raise ValueError(f'来源响应 HTTP {response.status_code}')
+                    raise ValueError(f'Source responded with HTTP {response.status_code}')
                 chunks, total = [], 0
                 for chunk in response.iter_content():
                     total += len(chunk)
                     if total > MAX_BYTES:
-                        raise ValueError('来源响应超过 1 MiB')
+                        raise ValueError('Source response exceeds 1 MiB')
                     chunks.append(chunk)
                 return json.loads(b''.join(chunks))
         except requests.exceptions.RequestException as error:
-            raise ValueError('来源连接失败') from error
+            raise ValueError('Source connection failed') from error
 
 
 def query(config: dict, code: str, *, deadline=None, secrets_root=None) -> SiteRecord:
@@ -202,11 +202,11 @@ def query(config: dict, code: str, *, deadline=None, secrets_root=None) -> SiteR
     options = None
     if checked['network'] == 'peach_proxy':
         if secrets_root is None:
-            raise ValueError('Peach 代理配置未取得')
+            raise ValueError('Peach proxy config not available')
         from .peach_proxy import client_options
         options = client_options(Path(secrets_root))
     try:
         document = fetch_json(url, _remaining_seconds(expires), client_options=options)
     except (json.JSONDecodeError, UnicodeError) as error:
-        raise ValueError('来源响应不是有效 JSON') from error
+        raise ValueError('Source response is not valid JSON') from error
     return parse(config, code, document)

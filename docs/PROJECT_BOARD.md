@@ -1,47 +1,47 @@
-# 项目看板与交付关联
+# Project Board and Delivery Linking
 
-[Peach 需求与路线图](https://github.com/orgs/peach-mitao/projects/7)是唯一持续同步的公开看板，展示项目 Issue、计划范围与交付状态。维护者安排的项目任务和使用者提交的反馈通过「来源」及视图区分。个人馆藏修正、账号登录与设备维护留在私有清单。
+[Peach Requirements and Roadmap](https://github.com/orgs/peach-mitao/projects/7) is the only continuously synced public board, showing project Issues, planned scope, and delivery status. Project tasks arranged by maintainers and feedback submitted by users are distinguished by "Source" and views. Personal library fixes, account sign-in, and device maintenance stay on the private list.
 
-「需求看板」展示全部项目需求，「维护者待办」和「用户反馈」分别按来源筛选，「路线图」展示计划阶段与优先级。README 顶部和仓库 Projects 提供入口。视图不改变公开范围，同一事项只维护一份。
+"Requirements Board" shows all project requirements, "Maintainer To-do" and "User Feedback" filter by source respectively, and "Roadmap" shows planned phase and priority. The top of the README and the repository Projects provide entry points. Views do not change public scope, and each item is maintained in one place only.
 
-Issue 分别归属两个公开仓库：[用户反馈](https://github.com/peach-mitao/peach/issues)放在应用仓库，[维护者待办](https://github.com/peach-mitao/peach-roadmap/issues)放在规划仓库。应用仓库的 Issues 页直接呈现反馈，同一个公开 Project 汇总两边的事项。登录后的 Issues 总览可以按仓库查询并保存为个人视图。
+Issues belong to two public repositories: [User feedback](https://github.com/peach-mitao/peach/issues) goes in the app repository, and [maintainer to-dos](https://github.com/peach-mitao/peach-roadmap/issues) go in the planning repository. The app repository's Issues page presents feedback directly, and the same public Project aggregates items from both. After signing in, the Issues overview can query by repository and be saved as a personal view.
 
-公开仓库的 Issue 始终按仓库权限可见，将它加入私有看板不会隐藏原 Issue。正式事项使用 GitHub Issue 编号；草稿保留已确认范围与优先级，相关事项使用可访问的链接说明关联。
+Issues in public repositories are always visible per repository permissions; adding one to a private board does not hide the original Issue. Formal items use GitHub Issue numbers; drafts keep their confirmed scope and priority, and related items use accessible links to describe the association.
 
-## 状态与版本
+## Status and Version
 
-| 字段 | 含义 |
+| Field | Meaning |
 | --- | --- |
-| Status | 待评估、待安排、进行中、待验证、已完成、已取消；PR 另有已关闭未合入，描述真实处理结果 |
-| 来源 | 规划仓库为维护者待办，应用仓库为用户反馈；与提交者账号无关 |
-| Priority | P0 紧急、P1 优先、P2 常规、P3 低优先级 |
-| 计划阶段 | 近期、后续、探索；不构成交付日期承诺 |
-| 等待条件 | 阻止下一步的具体条件；没有阻塞时留空 |
-| 实现关联 | 已关联的 PR 或经核对的实现提交 |
-| 交付进度 | 未关联实现、尚未合入、已合入待发布、已发布 |
-| 发布版本、发布说明 | 首次实际包含实现的可下载版本及其链接 |
-| Milestone | 计划交付范围；与实际发布版本分别记录 |
+| Status | To triage, To schedule, In progress, To verify, Done, Cancelled; PRs also have Closed without merging, describing the real outcome |
+| Source | Planning repository means maintainer to-do, app repository means user feedback; unrelated to the submitter's account |
+| Priority | P0 urgent, P1 high, P2 normal, P3 low |
+| Planned phase | Near term, Later, Exploring; not a commitment to a delivery date |
+| Waiting on | The specific condition blocking the next step; left empty when nothing blocks |
+| Implementation link | The linked PR or a verified implementation commit |
+| Delivery progress | No implementation linked, Not yet merged, Merged awaiting release, Released |
+| Release version, Release notes | The first downloadable version that actually includes the implementation, and its link |
+| Milestone | Planned delivery scope; recorded separately from the actual release version |
 
-PR 合入表示代码已集成。开放的需求进入待验证；完成验收后关闭 Issue 才进入已完成。关闭原因是「不计划」时进入已取消。发布版本不会代替目标环境或报告者验收。
+A merged PR means the code is integrated. An open requirement moves to To verify; only after acceptance is complete and the Issue is closed does it become Done. When the close reason is "not planned" it becomes Cancelled. A release version does not substitute for acceptance in the target environment or by the reporter.
 
-## 自动同步
+## Automatic Sync
 
-应用仓库的 `.github/workflows/project-board.yml` 响应本仓库 Issue 开关和标签变化、PR 建立和合入、主线推送、Release 发布与变动，并每 6 小时检查两个仓库。规划仓库的 Issue 开关与新建由定时检查同步。使用主线代码，不检出或执行外部 PR 的代码。所有同步串行执行，每次读取当前事实，重复执行不会重复建卡或推进状态。
+The app repository's `.github/workflows/project-board.yml` responds to this repository's Issue open/close and label changes, PR creation and merge, mainline pushes, Release publishing and changes, and checks both repositories every 6 hours. Issue open/close and creation in the planning repository are synced by the scheduled check. It uses mainline code and does not check out or run code from external PRs. All syncs run serially, each reading current facts, so repeated runs do not create duplicate cards or advance status twice.
 
-- 公开路线图自动收录两个配置仓库的 Issue；应用仓库补查开放事项，规划仓库补查全部状态，保证两次定时检查之间新建并关闭的事项也能收录。PR 用于计算实现关联，内部草稿不复制到公开 Project。
-- 来源按 `.github/project-board.json` 配置的仓库同步；分类视图使用同一份 Issue。
-- 重新打开的事项按实际实现恢复为待安排或待验证，已关联开放 PR 的事项为进行中。
-- 应用仓库 PR 的 GitHub 关联和独立关联行建立实现关联。规划任务使用 `Refs peach-mitao/peach-roadmap#编号`，应用反馈可使用 `Refs #编号`，也支持完整 Issue URL。只接受配置仓库，正文中普通提及某个编号不会被当成交付。
-- 仓库名与编号共同标识 Issue；`issue_aliases` 保存迁移映射，使迁移前的关联行仍能指向对应任务。GitHub 原生转移保留历史讨论，原 Issue URL 自动跳转。
-- 已合入 PR 对应的开放需求进入待验证；`status:needs-info` 和 `status:needs-verification` 分别保留等待信息和验收的含义。
-- 从有下载制品的已发布 Release 中检查标签提交祖先关系，填写首次包含实现的版本。只有标签、失败构建和发布草稿均不算已发布。
-- 通过 Actions 的仓库令牌创建 Release 不会触发另一条 Release 工作流；发布工作流在上架后显式调用同一同步入口。
-- 不关闭 Issue，不合入 PR，不修改优先级、排期或归档状态。已归档事项不自动恢复。
+- The public roadmap automatically collects Issues from the two configured repositories; the app repository backfills open items and the planning repository backfills all statuses, so items created and closed between two scheduled checks are still collected. PRs are used to compute implementation links, and internal drafts are not copied to the public Project.
+- Sources sync per the repositories configured in `.github/project-board.json`; the category views use the same Issues.
+- Reopened items return to To schedule or To verify depending on the actual implementation, and items with a linked open PR are In progress.
+- Implementation links are built from an app-repository PR's GitHub linking and separate reference lines. Planning tasks use `Refs peach-mitao/peach-roadmap#number`, app feedback can use `Refs #number`, and full Issue URLs are also supported. Only configured repositories are accepted; an ordinary mention of a number in the body is not treated as delivery.
+- The repository name and number together identify an Issue; `issue_aliases` stores migration mappings so reference lines from before a migration still point to the matching task. A native GitHub transfer keeps the discussion history, and the original Issue URL redirects automatically.
+- An open requirement whose PR has merged moves to To verify; `status:needs-info` and `status:needs-verification` keep their meanings of waiting for information and for acceptance respectively.
+- From published Releases that have downloadable artifacts, the tag commit ancestry is checked and the first version including the implementation is filled in. A bare tag, a failed build, or a release draft does not count as released.
+- Creating a Release through the Actions repository token does not trigger another Release workflow; after publishing, the release workflow explicitly calls the same sync entry.
+- It does not close Issues, merge PRs, or change priority, schedule, or archive status. Archived items are not restored automatically.
 
-历史直接集成而没有 PR 的实现，在 `.github/project-board.json` 的 `implementation_commits` 中以 `组织/仓库#编号` 为键登记完整提交 SHA；同步同样验证其是否属于应用主线和发布标签，不凭文字宣称完成。
+For historical implementations integrated directly without a PR, register the full commit SHA in `implementation_commits` of `.github/project-board.json`, keyed by `org/repo#number`; the sync likewise verifies whether it belongs to the app mainline and release tag, and does not declare completion on text alone.
 
-## 凭据与验证
+## Credentials and Verification
 
-组织 Project 不接受仓库默认的 `GITHUB_TOKEN`。`PROJECT_BOARD_TOKEN` 必须具备两个仓库的读取与 Project 写权限，仅在应用仓库通过 GitHub Actions Secret 注入；不得写入代码、日志或事件正文。规划仓库不保存这份凭据。GitHub App 可按[官方方法](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/automating-projects-using-actions)替代长期令牌。
+The organization Project does not accept the repository's default `GITHUB_TOKEN`. `PROJECT_BOARD_TOKEN` must have read access to both repositories and Project write access, and is injected only in the app repository through a GitHub Actions Secret; it must not be written into code, logs, or event bodies. The planning repository does not store this credential. A GitHub App can replace the long-lived token following the [official method](https://docs.github.com/en/issues/planning-and-tracking-with-projects/automating-your-project/automating-projects-using-actions).
 
-本地运行 `scripts/project_board.py` 默认只预览差异，显式传入 `--apply` 才写入。回归覆盖开关、合入、待验收、发布祖先关系和跨仓库引用；线上验收使用手动触发和实际看板读回。
+Running `scripts/project_board.py` locally only previews differences by default; it writes only when `--apply` is passed explicitly. Regression covers open/close, merge, to-verify, release ancestry, and cross-repository references; live acceptance uses a manual trigger and reading the actual board back.

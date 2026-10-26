@@ -29,11 +29,11 @@ def _url(value: str, suffix: str) -> str:
         url = urlsplit(urljoin(SITE + "/", value))
         valid = url.port in (None, 443)
     except ValueError as error:
-        raise SubtitleSearchError("字幕下载地址不受支持") from error
+        raise SubtitleSearchError("Subtitle download address is not supported") from error
     path = unquote(url.path)
     if not valid or url.scheme != "https" or url.hostname != "www.subtitlecat.com" or url.username or url.password \
             or url.query or url.fragment or not re.fullmatch(r"/subs/\d+/[^/\\\x00-\x1f]+" + re.escape(suffix), path):
-        raise SubtitleSearchError("字幕下载地址不受支持")
+        raise SubtitleSearchError("Subtitle download address is not supported")
     return url.geturl()
 
 
@@ -50,11 +50,11 @@ def _get(client: httpx.Client, url: str, *, suffix: str = "", params: dict | Non
                 for chunk in response.iter_bytes():
                     data.extend(chunk)
                     if len(data) > MAX_BYTES:
-                        raise SubtitleSearchError("字幕响应超过 4 MiB")
+                        raise SubtitleSearchError("Subtitle response exceeds 4 MiB")
                 return bytes(data)
     except httpx.HTTPError as error:
-        raise SubtitleSearchError("SubtitleCat 暂时无法连接，请稍后重试") from error
-    raise SubtitleSearchError("字幕下载重定向次数过多")
+        raise SubtitleSearchError("SubtitleCat is temporarily unreachable; try again later") from error
+    raise SubtitleSearchError("Too many subtitle download redirects")
 
 
 def _client() -> httpx.Client:
@@ -67,11 +67,11 @@ def _id(url: str) -> str:
 
 def _detail(subtitle_id: str) -> str:
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,1600}", subtitle_id):
-        raise SubtitleSearchError("字幕编号无效")
+        raise SubtitleSearchError("Invalid subtitle ID")
     try:
         path = base64.b64decode(subtitle_id + "=" * (-len(subtitle_id) % 4), altchars=b"-_", validate=True).decode()
     except (ValueError, UnicodeError, binascii.Error) as error:
-        raise SubtitleSearchError("字幕编号无效") from error
+        raise SubtitleSearchError("Invalid subtitle ID") from error
     return _url(path, ".html")
 
 
@@ -107,14 +107,14 @@ def _matches(title: str, code: str) -> bool:
 def search(query: str, offset: int = 0) -> dict:
     query = query.strip()
     if not 3 <= len(query) <= 200 or not 0 <= offset < 60 or offset % PAGE_SIZE:
-        raise SubtitleSearchError("搜索词需为 3–200 个字符，分页位置无效时请重新搜索")
+        raise SubtitleSearchError("Search term must be 3–200 characters; search again if the paging position is invalid")
     code = release_code_from_text(query)
     query = code or query
     with _client() as client:
         page = BeautifulSoup(_get(client, SITE + "/index.php", params={"search": query}), "html.parser")
         table = page.select_one("table.sub-table")
         if table is None:
-            raise SubtitleSearchError("SubtitleCat 搜索页面未取得，请稍后重试")
+            raise SubtitleSearchError("SubtitleCat search page was not obtained; try again later")
         candidates = {}
         for link in table.select("a[href]"):
             title = link.get_text(" ", strip=True)
@@ -144,16 +144,16 @@ def load(subtitle_id: str, index: int) -> str:
     with _client() as client:
         row = next((row for row in _files(client, _detail(subtitle_id)) if row["index"] == index), None)
         if row is None:
-            raise SubtitleSearchError("中文字幕文件不存在")
+            raise SubtitleSearchError("Chinese subtitle file does not exist")
         return convert(_get(client, row["url"], suffix=".srt"), "srt")
 
 
 def convert(data: bytes, fmt: str) -> str:
     if len(data) > MAX_BYTES:
-        raise SubtitleSearchError("字幕文件超过 4 MiB")
+        raise SubtitleSearchError("Subtitle file exceeds 4 MiB")
     if not data or not subtitles.is_playable_format(fmt):
-        raise SubtitleSearchError("请选择 SRT、ASS、SSA 或 VTT 文本字幕")
+        raise SubtitleSearchError("Choose an SRT, ASS, SSA or VTT text subtitle")
     text = subtitles.to_webvtt(data, fmt)
     if "-->" not in text:
-        raise SubtitleSearchError("字幕文件中没有可播放的时间轴")
+        raise SubtitleSearchError("The subtitle file has no playable timeline")
     return text

@@ -1,43 +1,43 @@
-# 目录浏览
+# Directory Browsing
 
-馆藏筛选条右侧的「文件夹模式」开关打开目录树和面包屑。目录树按媒体库配置中的顶层目录分组，展示数据库中已登记的目录，保留原目录名与层级。关闭开关返回全部作品。
+The "Folder mode" switch on the right of the library filter bar turns on the directory tree and breadcrumbs. The tree is grouped by the top-level directories in the media library configuration, shows the directories already registered in the database, and keeps the original directory names and hierarchy. Turning the switch off returns to all works.
 
-右侧「卡片 / 列表」切换馆藏显示方式，首页与资料页的作品区共用，当前浏览器会记住选择。列表展示封面、名称、归属、时长、体积和观看次数，行间以直线分隔；窄屏将时长和体积收在名称下方。
+The "Cards / List" toggle on the right switches the library display mode, shared by the works area on the home page and profile pages; the current browser remembers the choice. The list shows cover, name, ownership, duration, size, and view count, with rows separated by straight lines; on narrow screens duration and size move under the name.
 
-列表默认每页 20 部，可选 10、20、50、100 部。点击列标题排序，也可用排序菜单选择入库时间、发行时间、评分等字段；排序作用于整个筛选结果。全选只影响本页，已选作品跨页保留，底部批量操作使用全部已选作品。详情返回保留同一筛选范围内的页码和排序。
+The list defaults to 20 works per page, with 10, 20, 50, and 100 as options. Click a column header to sort, or use the sort menu to pick added time, release date, rating, and other fields; sorting applies to the entire filtered result. Select all only affects the current page, selected works persist across pages, and the bottom bulk actions use all selected works. Returning from a detail page keeps the page number and sort within the same filter scope.
 
-窄屏的计数与操作控件共用一行，横向滚动查看。作品卡片按实际文字和标签定高。补全提示的说明后接「查看处理详情 →」，补全按钮单独放在下一行。
+On narrow screens the count and action controls share one row and scroll horizontally. Work cards size their height to the actual text and tags. The enrichment hint is followed by "View processing details →", with the enrich button on its own next row.
 
-## 找内容
+## Finding Content
 
-点击目录名称进入该范围，点击箭头展开子目录。面包屑可返回祖先目录，「全部文件夹」回到媒体库根列表。搜索、标签、没看过、稍后看、已标记、排序、卡片版式和作品详情沿用馆藏首页。
+Click a directory name to enter that scope, and click the arrow to expand subdirectories. Breadcrumbs go back to ancestor directories, and "All folders" returns to the media library root list. Search, tags, unwatched, watch later, marked, sort, card layout, and work details follow the library home page.
 
-「包含子文件夹」决定作品列表是否包含下层目录。桌面目录树位于正文左侧；空间不足时，通过面包屑旁的目录按钮打开弹层。目录位置进入地址栏，刷新和浏览器返回可恢复。
+"Include subfolders" decides whether the works list includes lower-level directories. On desktop the tree sits to the left of the content; when space is tight, a directory button next to the breadcrumbs opens a popover. The directory location goes into the address bar, so refresh and browser back restore it.
 
-目录树读取 Peach 数据库中的路径，离线挂载仍可浏览已登记内容。未扫描的文件和空目录需要先经过入库；路径只表示收纳位置。
+The directory tree reads paths from the Peach database, so offline mounts can still browse registered content. Unscanned files and empty directories must be ingested first; a path only indicates where something is filed.
 
-## 设置目录用途
+## Setting a Directory Purpose
 
-选中目录后，点击面包屑右侧的「设置目录用途」。
+After selecting a directory, click "Set directory purpose" to the right of the breadcrumbs.
 
-| 用途 | 保存的内容 |
+| Purpose | What is saved |
 | --- | --- |
-| 个人分类 | 目录范围与分类用途 |
-| 人物 | 作品与人物的关联 |
-| 创作者／账号 | 作品与创作者账号的关联 |
-| 卖家 | 作品与账号的关联，以及用户确认的卖家用途 |
-| 厂牌 | 作品与厂牌的关联 |
+| Personal category | Directory scope and category purpose |
+| Person | Association between works and a person |
+| Creator / account | Association between works and a creator account |
+| Seller | Association between works and an account, plus the user-confirmed seller purpose |
+| Studio | Association between works and a studio |
 
-关联用途需要输入规范名称。已有规范实体或唯一别名会解析到对应身份；存在歧义时要求使用规范名称。新名称可以在用户确认目录用途时建档。
+Association purposes require entering a canonical name. An existing canonical entity or unique alias resolves to the matching identity; when ambiguous, the canonical name must be used. A new name can be created when the user confirms the directory purpose.
 
-先选择「应用到子文件夹」和「新文件沿用此规则」，再点「预览影响」。预览展示当前范围、可应用数量和归属冲突；确认范围后点「保存目录用途」。修改任一选项需要重新预览。
+First choose "Apply to subfolders" and "New files follow this rule", then click "Preview impact". The preview shows the current scope, the number that can be applied, and ownership conflicts; after confirming the scope, click "Save directory purpose". Changing any option requires previewing again.
 
-逐件确认、不同的文件级归属和归属否定会保留。规则有冲突时，目录标题下方提供查看入口；详情与目录用途弹层可分别检查作品和冲突原因。
+Per-item confirmations, differing file-level ownership, and ownership rejections are preserved. When a rule has conflicts, an entry to view them appears under the directory title; the detail and directory purpose popovers can separately inspect the works and the conflict reasons.
 
-## 新文件与移除规则
+## New Files and Removing a Rule
 
-「新文件沿用此规则」只用于以后登记的文件。扫描按最近一层匹配的目录规则判断归属；子目录的个人分类规则可以停止上层规则的继承。未启用时，扫描只登记路径和文件信息。
+"New files follow this rule" only applies to files registered later. A scan judges ownership by the nearest matching directory rule; a personal-category rule in a subdirectory can stop inheritance from upper-level rules. When not enabled, a scan only registers the path and file information.
 
-「移除规则」撤回由这条目录规则建立的关联。其他来源的关联、后续逐件编辑和媒体文件保留。人物、创作者、卖家或厂牌的资料页仍使用同一份规范实体。
+"Remove rule" withdraws the associations created by that directory rule. Associations from other sources, later per-item edits, and media files are kept. The profile page of a person, creator, seller, or studio still uses the same canonical entity.
 
-目录浏览与归属确认均不移动或重命名媒体文件。物理整理使用数据管理里的「整理」。目录名作为身份线索的边界见 [ADR-0013](adr/0013-folder-names-are-candidate-evidence.md)。
+Neither directory browsing nor ownership confirmation moves or renames media files. Physical organizing uses "Organize" in data management. For the boundary of using directory names as identity hints, see [ADR-0013](adr/0013-folder-names-are-candidate-evidence.md).

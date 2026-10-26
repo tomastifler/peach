@@ -73,7 +73,7 @@ class DiagnosticExportTests(unittest.TestCase):
             with instance._diagnostics_lock:
                 pass
         self.assertIn(str(path), message.call_args.args[1])
-        self.assertIn('诊断报告已保存', message.call_args.args[1])
+        self.assertIn('Diagnostic report saved', message.call_args.args[1])
         self.assertIn('no association', message.call_args.args[1])
 
     def test_dialog_module_requires_a_tray_restart(self):

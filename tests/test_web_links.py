@@ -153,7 +153,7 @@ class SummaryTests(unittest.TestCase):
         }
         out = web_links.w_links_prune(self.contract, {"confirm": True, "check_id": "old"})
         self.assertFalse(out["ok"])
-        self.assertIn("过期", out["error"])
+        self.assertIn("expired", out["error"])
         self.assertEqual(
             sqlite3.connect(self.contract.db_path).execute(
                 "SELECT count(*) FROM entity_link").fetchone()[0], 3)
@@ -273,7 +273,7 @@ class SummaryTests(unittest.TestCase):
         self._finished_check()
         stale = web_links.w_links_check(self.contract, {"retry": [2], "check_id": "old"})
         self.assertFalse(stale["ok"])
-        self.assertIn("过期", stale["error"])
+        self.assertIn("expired", stale["error"])
         unknown = web_links.w_links_check(
             self.contract, {"retry": [999], "check_id": "fresh"})
         self.assertFalse(unknown["ok"])

@@ -30,32 +30,32 @@ describe('口味浏览器来源', () => {
         await route.fulfill({ json: { dashboard: data() } });
       });
       await page.reload(); await settle(page);
-      const sources = page.getByRole('region', { name: '数据源', exact: true });
+      const sources = page.getByRole('region', { name: 'Data sources', exact: true });
       assert.equal(await sources.count(), 1);
       assert.equal(await sources.locator('[data-taste-source]').count(), 2);
       await sources.getByText('导入书签示例.html', { exact: true }).waitFor();
-      await sources.getByText('25 条历史 · 7 枚书签', { exact: true }).waitFor();
+      await sources.getByText('25 history entries · 7 bookmarks', { exact: true }).waitFor();
       assert.equal(await sources.getByText('Default · 书签', { exact: true }).count(), 0);
       const cards = await sources.locator('[data-taste-source]').evaluateAll(elements => elements.map(element => {
         const style = getComputedStyle(element);
         return { background: style.backgroundColor, radius: style.borderRadius, parent: element.parentElement?.className };
       }));
       assert.deepEqual(cards[0], cards[1]);
-      await sources.getByRole('button', { name: '添加浏览器', exact: true }).click();
-      await sources.getByRole('textbox', { name: '浏览器名称', exact: true }).fill('演示浏览器');
-      await sources.getByRole('textbox', { name: '资料目录或历史文件', exact: true }).fill('C:/Demo/Custom/User Data');
-      await sources.getByRole('button', { name: '添加', exact: true }).click();
+      await sources.getByRole('button', { name: 'Add browser', exact: true }).click();
+      await sources.getByRole('textbox', { name: 'Browser name', exact: true }).fill('演示浏览器');
+      await sources.getByRole('textbox', { name: 'Profile folder or history file', exact: true }).fill('C:/Demo/Custom/User Data');
+      await sources.getByRole('button', { name: 'Add', exact: true }).click();
       await sources.getByText('演示浏览器', { exact: true }).waitFor();
-      await sources.getByRole('button', { name: '停止读取 Aside', exact: true }).click();
-      const dialog = page.getByRole('dialog', { name: '停止读取 Aside', exact: true });
-      await dialog.getByRole('button', { name: '停止读取', exact: true }).click();
-      await sources.getByText('已停止读取', { exact: true }).waitFor();
-      await sources.getByRole('button', { name: '启用 Aside', exact: true }).click();
-      await sources.getByRole('button', { name: '停止读取 Aside', exact: true }).waitFor();
-      await sources.getByRole('button', { name: '删除 Aside', exact: true }).click();
-      await page.getByRole('dialog', { name: '删除 Aside', exact: true }).getByRole('button', { name: '删除浏览器来源', exact: true }).click();
-      await sources.getByRole('button', { name: '停止读取 Aside', exact: true }).waitFor({ state: 'hidden' });
-      assert.equal(await sources.getByRole('button', { name: '停止读取 Aside', exact: true }).count(), 0);
+      await sources.getByRole('button', { name: 'Stop reading Aside', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: 'Stop reading Aside', exact: true });
+      await dialog.getByRole('button', { name: 'Stop reading', exact: true }).click();
+      await sources.getByText('Reading stopped', { exact: true }).waitFor();
+      await sources.getByRole('button', { name: 'Enable Aside', exact: true }).click();
+      await sources.getByRole('button', { name: 'Stop reading Aside', exact: true }).waitFor();
+      await sources.getByRole('button', { name: 'Delete Aside', exact: true }).click();
+      await page.getByRole('dialog', { name: 'Delete Aside', exact: true }).getByRole('button', { name: 'Delete browser source', exact: true }).click();
+      await sources.getByRole('button', { name: 'Stop reading Aside', exact: true }).waitFor({ state: 'hidden' });
+      assert.equal(await sources.getByRole('button', { name: 'Stop reading Aside', exact: true }).count(), 0);
       assert.deepEqual(requests, ['add', 'disable', 'enable', 'delete_browser']);
       const geometry = await layout(page);
       assert.ok(geometry.scrollWidth <= geometry.viewportWidth, JSON.stringify(geometry));
@@ -85,13 +85,13 @@ describe('口味浏览器来源', () => {
         await route.fulfill({ json: { removed: 1284, dashboard: data() } });
       });
       await page.reload(); await settle(page);
-      await page.getByRole('button', { name: '更多取得浏览记录的方式', exact: true }).click();
+      await page.getByRole('button', { name: 'More ways to get browsing history', exact: true }).click();
       const chooser = page.waitForEvent('filechooser');
-      await page.getByRole('button', { name: '导入书签文件', exact: true }).click();
+      await page.getByRole('button', { name: 'Import bookmarks file', exact: true }).click();
       await (await chooser).setFiles({ name: '书签.html', mimeType: 'text/html',
         buffer: Buffer.from('<!DOCTYPE NETSCAPE-Bookmark-file-1><DL></DL>') });
-      await page.getByText('导入文件 · desktop · 1,284 枚书签', { exact: true }).waitFor();
-      const footer = page.getByText('2 个数据源 · 10/12–10/17', { exact: true });
+      await page.getByText('Imported file · desktop · 1,284 bookmarks', { exact: true }).waitFor();
+      const footer = page.getByText('2 data sources · 10/12–10/17', { exact: true });
       const footerStyle = await footer.evaluate(element => ({ height: element.getBoundingClientRect().height,
         line: parseFloat(getComputedStyle(element).lineHeight), whitespace: getComputedStyle(element).whiteSpace }));
       assert.equal(footerStyle.whitespace, 'nowrap');
@@ -99,10 +99,10 @@ describe('口味浏览器来源', () => {
       const geometry = await layout(page);
       assert.ok(geometry.scrollWidth <= geometry.viewportWidth, JSON.stringify(geometry));
       await page.screenshot({ path: `../build/taste-bookmarks-${viewport.name}.png` });
-      await page.getByRole('button', { name: '移除 Chrome 与 Firefox 收藏的创作者与作品书签.html', exact: true }).click();
-      await page.getByRole('dialog', { name: '移除口味数据源', exact: true })
-        .getByRole('button', { name: '移除口味数据源', exact: true }).click();
-      await page.getByText('还没有数据源', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Remove Chrome 与 Firefox 收藏的创作者与作品书签.html', exact: true }).click();
+      await page.getByRole('dialog', { name: 'Remove taste data source', exact: true })
+        .getByRole('button', { name: 'Remove taste data source', exact: true }).click();
+      await page.getByText('No data sources yet', { exact: true }).waitFor();
       assert.deepEqual(problems, []);
     } finally { await page.context().close(); }
   });

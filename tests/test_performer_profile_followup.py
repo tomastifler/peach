@@ -367,7 +367,7 @@ class MinnanoLandingTests(Case):
         summary = self.run_followup(other)
         self.assertIsNone(self.profile(other))
         self.assertTrue(summary["sites"][followup.MINNANO].startswith(followup.MISS))
-        self.assertEqual(summary["outcome"], "哪一站都没对上她")
+        self.assertEqual(summary["outcome"], "No site matched her")
 
     def test_a_hand_written_row_is_left_alone(self):
         meguri = self.entity("美ノ嶋めぐり")
@@ -462,7 +462,7 @@ class AvwikidbTests(Case):
         self.work(3, both, code="MKMP-761")
         summary = self.run_followup(both)
         self.assertNotIn(followup.AVWIKIDB, self.refs(both))
-        self.assertIn("不止一位", summary["sites"][followup.AVWIKIDB])
+        self.assertIn("more than one person", summary["sites"][followup.AVWIKIDB])
 
     def test_no_match_in_the_cast_reports_not_found_instead_of_guessing(self):
         stranger = self.entity("星宮一花")
@@ -538,7 +538,7 @@ class JavdbTests(Case):
         summary = self.run_followup(self.meguri)
         self.assertEqual(self.javdb_ids(self.meguri), [])
         self.assertTrue(summary["sites"][followup.JAVDB].startswith(followup.MISS))
-        self.assertIn("Ab12、Ef56", summary["sites"][followup.JAVDB])
+        self.assertIn("Ab12, Ef56", summary["sites"][followup.JAVDB])
 
     def test_japanese_glyphs_on_the_card_match_her_simplified_name(self):
         reiko = self.entity("泽村玲子")
@@ -553,7 +553,7 @@ class JavdbTests(Case):
         self.work(3, creator)
         summary = self.run_followup(creator)
         self.assertEqual(self.javdb.calls, [])
-        self.assertEqual(summary["sites"][followup.JAVDB], "不查：JAV 目录站里没有她")
+        self.assertEqual(summary["sites"][followup.JAVDB], "Not checked: she is not on the JAV catalog site")
 
     def test_a_bound_id_is_not_searched_again(self):
         self.ref(self.meguri, followup.JAVDB, "Ab12")

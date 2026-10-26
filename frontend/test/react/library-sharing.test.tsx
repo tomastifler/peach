@@ -22,22 +22,22 @@ describe('馆藏与口味分享的明确同意', () => {
     expect(switches(host)[0]?.checked).toBe(false);
     expect(host.textContent).not.toContain(initial.fields[0]);
     expect(host.querySelector('input[type="checkbox"]:not([role="switch"])')).toBeNull();
-    await click(buttonNamed('预览上传内容', host));
+    await click(buttonNamed('Preview upload', host));
     await settle();
     expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(host.textContent).toContain('KiB。不含账号、设备、文件路径和浏览器历史记录等个人数据。');
-    expect((buttonNamed('同意并开启上传', host) as HTMLButtonElement).disabled).toBe(true);
+    expect(host.textContent).toContain('KiB. It does not include personal data such as accounts, devices, file paths or browser history.');
+    expect((buttonNamed('Agree and turn on upload', host) as HTMLButtonElement).disabled).toBe(true);
     await click(host.querySelector('input[type="checkbox"]:not([role="switch"])'));
-    await click(buttonNamed('同意并开启上传', host));
+    await click(buttonNamed('Agree and turn on upload', host));
     await settle();
     const call = fetcher.mock.calls[1]! as unknown as [string, RequestInit];
     expect(JSON.parse(String(call[1].body))).toEqual({ enabled: true, schema: 4, consent: true, preview_token: 'preview-token' });
-    expect(receipt).toHaveBeenCalledWith('已保存馆藏与口味上传选项');
+    expect(receipt).toHaveBeenCalledWith('Library and taste upload options saved');
     expect(switches(host)[0]?.checked).toBe(true);
     expect(host.textContent).not.toContain(initial.fields[0]);
     expect(host.querySelector('pre')).toBeNull();
     expect(host.querySelector('input[type="checkbox"]:not([role="switch"])')).toBeNull();
-    expect(buttonNamed('预览上传内容', host)).not.toBeNull();
+    expect(buttonNamed('Preview upload', host)).not.toBeNull();
   });
 
   it('关闭不要求重新预览或勾选', async () => {
@@ -57,7 +57,7 @@ describe('馆藏与口味分享的明确同意', () => {
     const receipt = vi.fn();
     const host = await mount(<LibrarySharingSettings initial={initial} receipt={receipt} />);
     await click(switches(host)[0]);
-    await click(buttonNamed('预览上传内容', host));
+    await click(buttonNamed('Preview upload', host));
     await settle();
     expect(switches(host)[0]?.checked).toBe(false);
     expect(host.querySelector('[role="alert"]')?.textContent).toContain('读取失败');

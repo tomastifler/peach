@@ -25,7 +25,7 @@ from .entities import normalize_entity_name
 #: JavDB 演员页当伪 Feed 抓。它按发行日排在前面，所以「还没发行的作品」会先出现。
 KIND_JAVDB_ACTOR = "javdb-actor"
 
-KIND_LABELS = {KIND_JAVDB_ACTOR: "JAV 订阅"}
+KIND_LABELS = {KIND_JAVDB_ACTOR: "JAV subscription"}
 
 #: 拉取间隔。JavDB 按出口 IP 计配额，一张一天才更新几条的页面拉得再密也只是花配额。
 DEFAULT_INTERVAL_MINUTES = 360
@@ -225,7 +225,7 @@ def normalize_url(value: object) -> str:
     """
     url = str(value or "").strip()
     if not url.startswith("https://"):
-        raise ValueError("订阅地址必须以 https:// 开头")
+        raise ValueError("The subscription URL must start with https://")
     return url
 
 
@@ -234,7 +234,7 @@ def add_source(connection: sqlite3.Connection, *, url: str, name: str = "",
     """登记一条 JavDB 演员页订阅。地址重复直接拒绝——同一个源订两遍只会让同一条新作出现两次。"""
     address = normalize_url(url)
     if connection.execute("SELECT 1 FROM feed_source WHERE url=?", (address,)).fetchone():
-        raise ValueError("这个订阅地址已经在列表里了")
+        raise ValueError("This subscription URL is already in the list")
     cursor = connection.execute(
         "INSERT INTO feed_source(kind,name,url,entity_id,enabled,interval_minutes,"
         "created_at) VALUES(?,?,?,?,1,?,?)",

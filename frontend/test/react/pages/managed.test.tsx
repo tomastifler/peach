@@ -274,5 +274,5 @@ it('配置页带 `#libraryProcessing` 进来：画上之后改写到数据管理
 
 it('诊断页的标题、管理区身份与换一批由路由元数据登记', async () => {
   const r = await load();
-  expect(r.routeMetaOf('/settings/diagnostics')).toEqual({ section: 'configuration', title: '系统诊断', refresh: 'reopen' });
+  expect(r.routeMetaOf('/settings/diagnostics')).toEqual({ section: 'configuration', title: 'System diagnostics', refresh: 'reopen' });
 });

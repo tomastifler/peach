@@ -147,12 +147,12 @@ class MagnetSearch:
             try:
                 result.update(self.fetcher(self.root, code))
                 if result['state'] == 'ready' and not reusable_result(result):
-                    result.update(state='error', error='资源链接未取得，请稍后重试或检查来源连接。')
+                    result.update(state='error', error='Resource link was not obtained; try again later or check the source connection.')
             except SourceFailure as error:
                 if error.reason != FailureReason.NOT_FOUND:
                     result.update(state="error", error=str(error))
             except Exception:  # 来源异常只报告查询失败，不泄露请求或凭据
-                result.update(state="error", error="磁力抓取链未取得，请稍后重试或检查来源连接。")
+                result.update(state="error", error="Magnet fetch chain was not obtained; try again later or check the source connection.")
             self.next_request = self.clock() + 3
             self._remember(code, result)
             return result

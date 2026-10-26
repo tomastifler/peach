@@ -2689,7 +2689,7 @@ class LibraryWatchdogTests(unittest.TestCase):
             initial = w_library_processing(contract, {'stage': 'collect'})
             self.assertEqual(run.call_args.kwargs['stage'], 'collect')
             self.assertEqual(initial['requested_stage'], 'collect')
-            self.assertEqual(initial['stage'], '准备采集资料')
+            self.assertEqual(initial['stage'], 'Preparing to collect metadata')
             w_library_processing(contract, {})
             self.assertEqual(run.call_args.kwargs['stage'], 'all')
             with self.assertRaises(ValueError):

@@ -132,14 +132,14 @@ def check_scan_target(
     """扫描根必须落在这个来源的某个数据库路径前缀内，否则拒绝（ADR-0023 第 2 阶段的写入侧门槛）。"""
     declared = declared_roots.get(location)
     if declared is None:
-        known = "、".join(sorted(declared_roots)) or "（设置文件里一个都没有）"
-        raise ScanTargetError(f"✗ 未声明的来源 {location!r}；[media.locations] 里已知：{known}")
+        known = ", ".join(sorted(declared_roots)) or "(none in the settings file)"
+        raise ScanTargetError(f"✗ Undeclared source {location!r}; known in [media.locations]: {known}")
     actual = resolve_location(root, declared_roots)[0]
     if actual != location:
         raise ScanTargetError(
-            f"✗ 扫描目录与媒体来源不一致：{location} 的数据库路径前缀是 {'、'.join(declared)}，"
-            f"但要扫的是 {root}"
-            + (f"（该目录属于 {actual}）" if actual else "（不在任何已配置的媒体目录下）")
+            f"✗ Scan directory does not match the media source: {location} database path prefix is {', '.join(declared)}, "
+            f"but the scan target is {root}"
+            + (f" (that directory belongs to {actual})" if actual else " (not under any configured media directory)")
         )
 
 
@@ -170,10 +170,10 @@ def ledger_root_for(
         return text
     if not location_mounts:
         raise ScanTargetError(
-            f"✗ 媒体来源 {location!r} 未配置本机目录，无法转换 {text} 的路径；"
-            f"请先在 [media.mounts] 中配置媒体目录")
+            f"✗ Media source {location!r} has no local directory configured; cannot convert the path of {text}; "
+            f"configure a media directory in [media.mounts] first")
     shown = "、".join(os.fspath(mount) for mount in location_mounts)
-    raise ScanTargetError(f"✗ {text} 不在来源 {location!r} 的挂载点 {shown} 之下")
+    raise ScanTargetError(f"✗ {text} is not under mount point {shown} of source {location!r}")
 
 
 def walk_root_for(
@@ -188,8 +188,8 @@ def walk_root_for(
     location_mounts = tuple(mounts.get(location, ()))
     if index >= len(location_mounts):
         raise ScanTargetError(
-            f"✗ 媒体来源 {location!r} 的第 {index + 1} 个数据库路径前缀没有对应的本机目录；"
-            f"请先在 [media.mounts] 中按相同顺序配置媒体目录")
+            f"✗ Database path prefix #{index + 1} of media source {location!r} has no matching local directory; "
+            f"configure media directories in [media.mounts] in the same order first")
     return Path(location_mounts[index]).joinpath(*tail)
 
 
@@ -334,10 +334,10 @@ class ScanResult:
     acquired: int = 0
 
     def summary(self) -> str:
-        return (f"✓ {self.location}: {self.files:,} 文件 / "
-                f"{self.total_bytes / 1024 ** 4:.2f} TB / 耗时 {self.seconds:.0f}s；"
-                f"附属文件未登记 {self.sidecars:,} 个；清单中已消失 {self.gone:,} 个；"
-                f"字幕 {self.subtitles:,} 条（孤立 {self.orphan_subtitles:,} 条）")
+        return (f"✓ {self.location}: {self.files:,} files / "
+                f"{self.total_bytes / 1024 ** 4:.2f} TB / took {self.seconds:.0f}s; "
+                f"unregistered sidecar files {self.sidecars:,}; gone from the manifest {self.gone:,}; "
+                f"subtitles {self.subtitles:,} (orphaned {self.orphan_subtitles:,})")
 
 
 def _walk(top: Path, pending: list[str] | None = None):
@@ -412,7 +412,7 @@ def _pending_directories(previous, walk_root):
     if previous.get('current_directory'):
         pending.append(previous['current_directory'])
     if any(not Path(value).is_relative_to(walk_root) for value in pending):
-        raise ScanTargetError('扫描目录与保存的断点不一致，请核对挂载设置')
+        raise ScanTargetError('The scan directory does not match the saved checkpoint; check the mount settings')
     return pending
 
 
@@ -498,7 +498,7 @@ def _scan_location(
                     connection.commit()
                     batch.clear()
                     save_directory(directory, name, here)
-                    report(f"  {time.time() - started:5.0f}s  {files:,} 文件  "
+                    report(f"  {time.time() - started:5.0f}s  {files:,} files  "
                            f"{total / 1024 ** 4:.2f} TB")
             sidecars = subtitles.directory_sidecars(
                 ledger_root.joinpath(*relative), here,

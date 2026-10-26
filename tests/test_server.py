@@ -62,7 +62,7 @@ class ServerTests(unittest.TestCase):
             config.directory("database").joinpath("ledger.db").write_bytes(b"existing")
             with patch.object(server.settings_file, "load_config", return_value=config), \
                     patch.object(server, "launch") as launch:
-                with self.assertRaisesRegex(RuntimeError, "已有数据库"):
+                with self.assertRaisesRegex(RuntimeError, "A database exists"):
                     server.initialize()
             launch.assert_not_called()
 

@@ -54,7 +54,7 @@ export function openFollowTagFromIndex(tag){indexState.controller.openFollowTag(
 export function installIndex16() {
 followState.FOLLOW_MANAGE_TABS = ['list','add','feeds'];
 applicationEffects.listen(document, 'click', event=>{
-  if(event.target.closest?.('[data-empty-settings]')){openConfigurationSection('媒体库与入库');return}
+  if(event.target.closest?.('[data-empty-settings]')){openConfigurationSection('Library & import');return}
   const link=event.target.closest?.('a[href="/subscriptions?tab=add"]');
   if(!link||event.defaultPrevented||event.button||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
   event.preventDefault();

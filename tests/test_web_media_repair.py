@@ -156,9 +156,9 @@ class MediaRepairRunTests(unittest.TestCase):
                 self.assertEqual(source.read_bytes(), b'repaired')
 
     def test_a_library_has_to_be_named(self):
-        with self.assertRaisesRegex(ValueError, "先选一个媒体库"):
+        with self.assertRaisesRegex(ValueError, "Choose a media library first"):
             rm_repair.w_media_repair(self.contract, {})
-        with self.assertRaisesRegex(ValueError, "没有这个媒体库"):
+        with self.assertRaisesRegex(ValueError, "No such media library"):
             rm_repair.w_media_repair(self.contract, {"library": "不存在"})
 
     def test_other_libraries_are_left_alone(self):

@@ -154,7 +154,7 @@ def find(pages, actor: str, skip: set[str], probe, matcher, transport,
     except (Blocked, Unavailable) as error:
         return Outcome(f"avwikidb 单人作品{UNFETCHED}：{error}", unavailable=True)
     if not works:
-        return Outcome("avwikidb 上没有她的单人作品")
+        return Outcome("avwikidb has no solo works for her")
     cache = AvatarCandidateCache(Path(providers_root) / COVER_CACHE)
     faces, urls = listed_faces(works, skip, probe,
                                lambda url: fetch_cover(transport, cache, url))

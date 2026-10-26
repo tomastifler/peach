@@ -1,130 +1,130 @@
-# Windows 测试版
+# Windows test build
 
-Windows 版提供完整安装包、轻量安装包和免安装包，均无需另装 Python、Git、Node 或 OpenSSL。macOS 的 DMG 构建、安装和测试包限制见 [macOS 独立测试包](OPERATIONS.md#macos-独立测试包)。
+The Windows build comes as a full installer, a lite installer and a portable package, none of which needs a separate Python, Git, Node or OpenSSL. For the macOS DMG build, installation and the limits of the test package, see [macOS standalone test package](OPERATIONS.md#standalone-macos-test-build).
 
-| 文件 | 用途 |
+| File | Purpose |
 | --- | --- |
-| `Peach-<版本>-windows-x64-setup.exe` | 完整安装包，包含全部工具，可离线安装 |
-| `Peach-<版本>-windows-x64-lite-setup.exe` | 轻量安装包，校验并复用已有工具，缺失或版本不符时自动下载 |
-| `Peach-<版本>-windows-x64.zip` | 完整免安装包，解压后运行 `Peach.exe` |
+| `Peach-<version>-windows-x64-setup.exe` | Full installer, includes all tools, can be installed offline |
+| `Peach-<version>-windows-x64-lite-setup.exe` | Lite installer, verifies and reuses existing tools, and downloads them automatically when missing or the version does not match |
+| `Peach-<version>-windows-x64.zip` | Full portable package, run `Peach.exe` after extracting |
 
-安装包默认装在 `%LOCALAPPDATA%\Programs\Peach`，可选择目录，无需管理员权限；两种安装包都提供开始菜单与系统设置里的卸载项。免安装包解压到哪里就在哪里。
+The installers install to `%LOCALAPPDATA%\Programs\Peach` by default, the directory can be changed, and no administrator rights are needed; both installers provide an uninstall entry in the Start menu and in system Settings. The portable package stays wherever it is extracted.
 
-三种包的数据都在 `%LOCALAPPDATA%\Peach\peach-data`，换用另一种时设置和数据库照常沿用。
+All three packages keep their data in `%LOCALAPPDATA%\Peach\peach-data`, so when you switch to another one, settings and the database carry over as usual.
 
-轻量安装包先在临时目录备齐并校验工具，再停止旧程序并安装；下载失败可重试，现有安装会保留。安装包旁边已有对应的 `tools-*.zip` 时，可校验后直接使用。
+The lite installer first gathers and verifies the tools in a temporary directory, then stops the old program and installs; a failed download can be retried, and the existing installation is kept. When a matching `tools-*.zip` sits next to the installer, it can be verified and used directly.
 
-安装目录须为当前用户可写的独立文件夹，上级目录也须可写，以便自动更新。可选择空文件夹或已有的 Peach 安装目录；程序目录不能与数据目录重叠，也不能经过目录链接。升级默认沿用已有安装目录。需要换位置时，先卸载并保留数据，再安装到新目录。
+The installation directory must be a separate folder writable by the current user, and its parent directory must also be writable so that automatic updates work. You can choose an empty folder or an existing Peach installation directory; the program directory must not overlap the data directory or pass through a directory link. Upgrades reuse the existing installation directory by default. To change the location, uninstall first while keeping the data, then install to the new directory.
 
-## 开始使用
+## Getting started
 
-1. 从 [GitHub Releases](https://github.com/peach-mitao/peach/releases) 下载其中一种，以及 `SHA256SUMS.txt`。
-2. 核对哈希：在 PowerShell 里运行 `Get-FileHash .\<下载的文件名>`，结果应与 `SHA256SUMS.txt` 里对应的那一行相同（不区分大小写）。
-3. 安装包：双击，选择安装目录，按提示完成安装，最后一步勾选「运行 Peach」。免安装包：右键压缩包，选「全部解压」，保留整个 `Peach` 文件夹，不要只拿出 `Peach.exe`，然后双击 `Peach.exe`。
-4. 浏览器会打开首次设置页。
-5. 添加媒体目录（可以用「选择文件夹」挑选），选择谁可以访问、要不要设访问密码、是否立即扫描，然后提交。
-6. 设置完成后自动进入馆藏，右下角会显示一份安装教程，照着做或逐项跳过都可以。
+1. Download one of them and `SHA256SUMS.txt` from [GitHub Releases](https://github.com/peach-mitao/peach/releases).
+2. Verify the hash: run `Get-FileHash .\<downloaded file name>` in PowerShell; the result should match the corresponding line in `SHA256SUMS.txt` (case-insensitive).
+3. Installer: double-click it, choose the installation directory, follow the prompts, and on the last step check "Run Peach". Portable package: right-click the archive, choose "Extract All", keep the whole `Peach` folder (do not take out only `Peach.exe`), then double-click `Peach.exe`.
+4. The browser opens the first-run setup page.
+5. Add a media directory (you can pick it with "Choose folder"), choose who can access it, whether to set an access password and whether to scan immediately, then submit.
+6. When setup finishes you go straight into the library, and a setup guide appears at the bottom right; follow it or skip items one by one.
 
-测试包没有代码签名，Windows 可能提示「未识别的应用」。先确认文件来自本项目的 Release 页面、哈希与 `SHA256SUMS.txt` 一致，再决定是否运行。
+The test build is not code-signed, and Windows may show "Unrecognized app". First confirm the file comes from this project's Release page and the hash matches `SHA256SUMS.txt`, then decide whether to run it.
 
-## 从其他设备打开
+## Opening from other devices
 
-- 选「只有这台电脑」：只能在本机打开 `http://127.0.0.1:<端口>`。
-- 选「同一局域网的设备」：同一网络里的手机、平板或电脑打开 `http://<设置的名字>.local:<端口>`。
+- Choose "Only this computer": it can only be opened on this machine at `http://127.0.0.1:<port>`.
+- Choose "Devices on the same LAN": phones, tablets or computers on the same network open `http://<configured name>.local:<port>`.
 
-测试包在局域网里用的是 HTTP，传输不加密。局域网里有其他人时，请设置访问密码。
+On the LAN the test build uses HTTP, and traffic is not encrypted. When other people are on the LAN, set an access password.
 
-Windows 第一次询问防火墙权限时，只勾选「专用网络」。
+When Windows asks for firewall permission for the first time, check only "Private networks".
 
-其他设备打不开时，按顺序检查：
+If other devices cannot connect, check in order:
 
-1. 两台设备连的是同一个网络。
-2. 路由器没有开启「客户端隔离」（有时叫 AP 隔离）。
-3. Windows 防火墙允许 Peach 使用专用网络。
+1. Both devices are on the same network.
+2. The router does not have "client isolation" turned on (sometimes called AP isolation).
+3. Windows Firewall allows Peach on private networks.
 
-## 修改配置
+## Changing the configuration
 
-从管理菜单「配置」、设置弹层「这台电脑」里的「打开配置页」，或托盘菜单「配置 Peach」进入配置页。可以在这里增减媒体目录、修改端口、设置访问密码，并请求重新扫描。
+Open the configuration page from the management menu "Configuration", from "Open configuration page" under "This computer" in the settings dialog, or from the tray menu "Configure Peach". Here you can add or remove media directories, change the port, set an access password and request a rescan.
 
-- 保存配置会重启本机服务，正在播放的视频会中断。
-- 每次保存前，上一份配置会备份为数据目录里的 `config.previous.toml`。
-- 修改端口时页面会检查冲突。端口被占用时，先退出占用它的程序再试。
+- Saving the configuration restarts the local service, and any video that is playing is interrupted.
+- Before each save, the previous configuration is backed up as `config.previous.toml` in the data directory.
+- When you change the port, the page checks for conflicts. If the port is in use, quit the program using it and try again.
 
-数据保存在 `%LOCALAPPDATA%\Peach\peach-data`，和程序文件夹分开。
+Data is stored in `%LOCALAPPDATA%\Peach\peach-data`, separate from the program folder.
 
-## 播放与 FFmpeg
+## Playback and FFmpeg
 
-完整安装包和完整免安装 ZIP 均包含 FFmpeg 与 ffprobe，位于程序目录的 `tools\ffmpeg\bin`；轻量安装包会在安装时备齐工具。转码、媒体信息探测与缩略图无需额外配置。`*-update.zip` 由 Peach 更新器校验和安装，不提供手动导入入口；首次安装使用任一安装包或完整免安装包。`tools-*.zip` 由更新器或轻量安装包按需处理。
+The full installer and the full portable ZIP both include FFmpeg and ffprobe, located in `tools\ffmpeg\bin` in the program directory; the lite installer gathers the tools during installation. Transcoding, media information probing and thumbnails need no extra configuration. `*-update.zip` is verified and installed by the Peach updater and has no manual import entry; for a first installation use either installer or the full portable package. `tools-*.zip` is handled on demand by the updater or the lite installer.
 
-缺索引 MP4 修复使用随包的 `tools\untrunc\untrunc.exe`，需要同编码参数的完整片作为参照。该工具与其兼容的 FFmpeg 库独立构建，按 GPL-2.0-or-later 分发；完整对应源码制品为同一 Release 中的 `untrunc-corresponding-source.zip`。显式 `PEACH_UNTRUNC` 优先于随包工具，其后查数据目录与 PATH。
+Repair of MP4 files missing an index uses the bundled `tools\untrunc\untrunc.exe`, and requires an intact reference file with the same encoding parameters. This tool and its compatible FFmpeg libraries are built independently and distributed under GPL-2.0-or-later; the complete corresponding source artifact is `untrunc-corresponding-source.zip` in the same Release. An explicit `PEACH_UNTRUNC` takes priority over the bundled tool, followed by the data directory and PATH.
 
-工具以独立进程调用，按 GPL-3.0-or-later 分发；工具目录包含许可证、构建配置、来源清单和 SHA-256。完整对应源码制品 `ffmpeg-corresponding-source.zip` 与应用放在同一个 Release，包含 FFmpeg、x264、nv-codec-headers 的固定源码和构建脚本。发行构建会校验工具及对应源码，任何一项缺失或哈希不符都停止打包。
+The tools are invoked as separate processes and distributed under GPL-3.0-or-later; the tools directory contains the licenses, build configuration, source manifest and SHA-256. The complete corresponding source artifact `ffmpeg-corresponding-source.zip` sits in the same Release as the application and contains pinned sources and build scripts for FFmpeg, x264 and nv-codec-headers. The release build verifies the tools and the corresponding source, and stops packaging if any item is missing or its hash does not match.
 
-源码运行可将 FFmpeg、ffprobe 加入 PATH，或放在数据目录的 `tools\ffmpeg\bin`。显式指定的 `PEACH_FFMPEG`、`PEACH_FFPROBE` 优先；独立包随后使用随包工具，再查数据目录和 PATH。
+When running from source, put FFmpeg and ffprobe on PATH, or place them in `tools\ffmpeg\bin` in the data directory. An explicitly set `PEACH_FFMPEG` or `PEACH_FFPROBE` takes priority; a standalone package then uses the bundled tools, followed by the data directory and PATH.
 
-已在系统安装媒体工具时，可运行 [`import_windows_media_tools.cmd`](../scripts/import_windows_media_tools.cmd)，它调用同目录 PowerShell 脚本检测 WinGet、Scoop、Chocolatey、PATH 和下载目录，将工具及同目录 DLL 放入 Peach 的数据目录，替换文件时保留备份。没有检测到已解压工具时，可识别下载目录中的 Gyan `ffmpeg-9.0.2-essentials_build.zip`，校验固定 SHA-256 后解压接入。脚本不修改系统 PATH 或馆藏账本；完成后刷新配置页。
+If media tools are already installed on the system, run [`import_windows_media_tools.cmd`](../scripts/import_windows_media_tools.cmd); it calls the PowerShell script in the same directory to detect WinGet, Scoop, Chocolatey, PATH and the download directory, and puts the tools and the DLLs in the same directory into Peach's data directory, keeping a backup when it replaces files. When no extracted tools are detected, it can recognize Gyan's `ffmpeg-9.0.2-essentials_build.zip` in the download directory and extract and wire it up after verifying the pinned SHA-256. The script does not modify the system PATH or the library ledger; refresh the configuration page when it finishes.
 
-## 从外网临时访问
+## Temporary access from the internet
 
-配置页「网络与访问」里的「Cloudflare 公网入口」可以生成一个临时公网链接，默认关闭。
+"Cloudflare public entry" under "Network and access" on the configuration page can generate a temporary public link, off by default.
 
-1. 先在同一分组的「访问密码」里设置密码。没有密码时无法启动公网入口。
-2. 点「启动公网入口」。
-3. 页面显示一个随机地址 `https://<id>.trycloudflare.com`，用它访问。`https://try.cloudflare.com/` 只是介绍页，不是你的入口。
+1. First set a password under "Access password" in the same group. The public entry cannot start without a password.
+2. Click "Start public entry".
+3. The page shows a random address `https://<id>.trycloudflare.com`; use it to access. `https://try.cloudflare.com/` is only an introduction page, not your entry.
 
-使用须知：
+Notes:
 
-- 这只用于临时预览。地址是随机的，停止公网入口或退出 Peach 后就失效，下次启动会换一个。
-- 不要把随机地址存进书签、文档或公开配置。
-- 测试包已附带经过 SHA-256 校验的 `cloudflared.exe`，不用另装。
-- 连接失败时，检查防火墙或代理是否允许 cloudflared 出站访问 TCP/UDP `7844` 端口。页面上出现了随机地址，不代表连接已经成功。
+- This is only for temporary preview. The address is random, becomes invalid once you stop the public entry or quit Peach, and changes the next time it starts.
+- Do not save the random address in bookmarks, documents or public configuration.
+- The test build already bundles a SHA-256-verified `cloudflared.exe`; no separate install is needed.
+- If the connection fails, check whether the firewall or proxy allows cloudflared outbound access on TCP/UDP port `7844`. A random address appearing on the page does not mean the connection has succeeded.
 
-## 采集来源
+## Collection sources
 
-1. 扫描完成后，打开「数据管理」页，在「扫描与采集」卡片上点「来源和凭证」。
-2. 每个来源可以选连接方式：「Peach 代理」或「直接连接」。高清来源通常需要代理；「Peach 代理」用的是配置页「网络与访问 → Peach 代理」里的设置（系统代理、直连或自定义地址，系统代理不支持 PAC）。
-3. 点「检查连接」。DMM 会分别检查页面和高清图片服务器，图片检查会显示实际像素尺寸。
-4. 在「高清封面」里填一个馆藏里已有的番号，点「抓取封面」。只有新图能完整解码、而且像素比现有封面大时才替换；失败时保留已有的图。同一个番号 24 小时内抓成功过，会直接用本机已有的文件。
-5. 需要 Cookie 的来源（例如 FC2）选「粘贴 Cookie」或「导入文件」其中一种，文件支持 Netscape 格式的 `.txt`。Cookie 只保存在这台电脑上，不同电脑之间不共享。
+1. After scanning finishes, open the "Data management" page and click "Sources and credentials" on the "Scan and collection" card.
+2. Each source can use a connection mode: "Peach proxy" or "Direct connection". HD sources usually need the proxy; "Peach proxy" uses the settings under "Network and access → Peach proxy" on the configuration page (system proxy, direct connection or a custom address; the system proxy does not support PAC).
+3. Click "Check connection". DMM checks the page and the HD image server separately, and the image check shows the actual pixel size.
+4. Under "HD cover", enter a code already in the library and click "Fetch cover". The existing cover is replaced only when the new image decodes fully and has more pixels than the current cover; on failure the existing image is kept. If the same code was fetched successfully within 24 hours, the file already on this machine is used directly.
+5. For sources that need a cookie (such as FC2), choose either "Paste cookie" or "Import file"; the file supports Netscape-format `.txt`. Cookies are stored only on this computer and are not shared between computers.
 
-「已保存」只表示 Cookie 存下来了，不代表登录仍然有效。撤销后，这个来源需要登录的采集要重新提供 Cookie。浏览器里的 Cookie 不能直接导入，只能粘贴或导入文件。更多来源的说明见 [来源采集](https://github.com/peach-mitao/peach/blob/master/docs/SOURCING.md)。
+"Saved" only means the cookie was stored, not that the login is still valid. After revoking, collection from that source that needs a login requires the cookie to be provided again. Cookies in the browser cannot be imported directly; they can only be pasted or imported from a file. For more on sources see [Source collection](https://github.com/peach-mitao/peach/blob/master/docs/SOURCING.md).
 
-## 更新
+## Updating
 
-在配置页「应用与维护 → 检查更新」里操作：
+Operate under "App and maintenance → Check for updates" on the configuration page:
 
-1. 点「检查更新」。有新版本时出现「下载并安装」。
-2. 点「下载并安装」，等待下载、校验、解压和准备安装完成。
-3. 点「重启安装」。
+1. Click "Check for updates". When a new version exists, "Download and install" appears.
+2. Click "Download and install" and wait for the download, verification, extraction and installation preparation to finish.
+3. Click "Restart to install".
 
-已有馆藏却出现首次设置页时，点「使用已有数据目录」，填入保存馆藏的 `peach-data` 目录。成功连接后会记住位置，沿用原配置、账本和访问密码。尚未进入馆藏的部署可先运行新版安装包，再接回已有目录。
+If the first-run setup page appears even though a library already exists, click "Use existing data directory" and enter the `peach-data` directory that holds the library. After a successful connection the location is remembered and the original configuration, ledger and access password are reused. A deployment that has not yet entered the library can first run the new installer and then reconnect the existing directory.
 
-也可以打开「自动检查新版本」和「自动下载更新」，下载完成后仍要在这里确认重启。
+You can also turn on "Automatically check for new versions" and "Automatically download updates"; after the download finishes you still confirm the restart here.
 
-也可以手动更新，数据目录不用动，新版启动后会沿用已有配置：
+You can also update manually. The data directory needs no changes, and the new version reuses the existing configuration after it starts:
 
-- 安装包：直接运行新版安装包。它会先让正在运行的 Peach 退出，装完后在需要时更新本地数据库，更新前的数据库备份在数据目录的 `database` 文件夹里，文件名以 `ledger.pre-migrate-` 开头。
-- 免安装包：先从托盘退出 Peach，再把新版完整解压到一个新文件夹。不要只替换 `Peach.exe`：旁边的 `_internal` 文件夹也是程序的一部分。
+- Installer: simply run the new installer. It first makes the running Peach exit, and after installing it updates the local database if needed; the database backup made before the update is in the `database` folder of the data directory, with a file name starting with `ledger.pre-migrate-`.
+- Portable package: first quit Peach from the tray, then extract the new full package into a new folder. Do not replace only `Peach.exe`: the `_internal` folder next to it is also part of the program.
 
-## 卸载
+## Uninstalling
 
-在配置页「维护 → 卸载 Peach」里操作。卸载会先退出 Peach，再移除程序文件夹、开机自启和桌面图标；用安装包装的，开始菜单项和系统设置里的卸载项也一并移除。
+Operate under "Maintenance → Uninstall Peach" on the configuration page. Uninstalling first quits Peach, then removes the program folder, startup entry and desktop icon; for installer-based installs, the Start menu entry and the uninstall entry in system Settings are removed as well.
 
-用安装包装的也可以在系统设置「应用 → 已安装的应用」里卸载 Peach。这条路只移除程序、开始菜单项、开机自启和桌面图标，数据全部保留；要连数据一起删，用配置页里的「完全卸载」。
+An installer-based install can also be uninstalled from system Settings under "Apps → Installed apps". This route removes only the program, the Start menu entry, the startup entry and the desktop icon, and all data is kept; to delete the data as well, use "Complete uninstall" on the configuration page.
 
-- 默认保留数据：设置、本地数据库、观看记录和缓存都留着，以后重新安装可以接着用。
-- 勾选「完全卸载」会同时删除设置、本地数据库、观看记录、凭据和缓存。
-- 原始媒体文件在任何情况下都不会被删除。自己手工复制的 `config.toml.bak` 和其他 Peach 不认识的文件也会保留。
-- 数据目录放在别处、用了目录链接，或者和媒体目录有重叠时，「完全卸载」不可用，需要对照页面上列出的目录手动清理。
-- 文件被占用导致删除失败时，弹窗会给出日志位置，日志是临时目录里的 `peach-uninstall.log`，里面写着失败的路径和原因。
+- Data is kept by default: settings, the local database, watch history and caches remain, so a later reinstall can pick up where you left off.
+- Checking "Complete uninstall" also deletes settings, the local database, watch history, credentials and caches.
+- Original media files are never deleted under any circumstances. A `config.toml.bak` you copied by hand and other files Peach does not recognize are also kept.
+- When the data directory is elsewhere, uses a directory link, or overlaps the media directory, "Complete uninstall" is unavailable and you need to clean up manually against the directories listed on the page.
+- When deletion fails because a file is in use, the dialog gives the log location; the log is `peach-uninstall.log` in the temporary directory, and it records the failing path and the reason.
 
-## 反馈问题
+## Reporting problems
 
-启动失败时保留完整弹窗，并找到弹窗给出的 `peach-support-*.zip`。能够运行时，从托盘「导出诊断报告」或系统诊断页「下载诊断报告」取得报告；程序尚未配置也可以导出。发送前打开报告，确认其中没有需要保留的私人信息。
+When startup fails, keep the full dialog and find the `peach-support-*.zip` the dialog points to. When the program can run, get the report from the tray "Export diagnostic report" or the system diagnostics page "Download diagnostic report"; it can also be exported before the program is configured. Before sending, open the report and confirm it contains no private information you want to keep.
 
-请写上版本、操作系统、操作步骤、预期结果和实际结果。与采集有关的问题，再加上来源、连接方式、番号、页面状态和图片像素。版本、数据目录和日志目录都在配置页「运行信息」里。
+Please include the version, operating system, steps, expected result and actual result. For collection-related problems, also add the source, connection mode, code, page state and image pixel size. The version, data directory and log directory are all on the configuration page under "Runtime information".
 
-发送之前：
+Before sending:
 
-- 检查日志，去掉个人路径和来源网址。
-- 不要发送 `secrets` 目录、数据库、Cookie 或带签名的图片网址。
+- Check the logs and remove personal paths and source URLs.
+- Do not send the `secrets` directory, the database, cookies or signed image URLs.

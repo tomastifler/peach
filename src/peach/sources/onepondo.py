@@ -91,7 +91,7 @@ class OnePondoSource(SiteSource):
         return self.config.base_url + PAGE_PATH.format(movie_id=movie)
 
     def _unrecognised(self) -> SourceFailure:
-        return SourceFailure(FailureReason.NOT_FOUND, f"这个番号不是{self.config.label}的写法")
+        return SourceFailure(FailureReason.NOT_FOUND, f"This code is not in the {self.config.label} format")
 
     def fetch(self, code: str, *, session: Session) -> Page:
         url = self.detail_url(code)
@@ -100,7 +100,7 @@ class OnePondoSource(SiteSource):
         try:
             return session.get(url, config=self.config)
         except NotFound:
-            raise SourceFailure(FailureReason.NOT_FOUND, f"{self.config.label}站上没有这部片") from None
+            raise SourceFailure(FailureReason.NOT_FOUND, f"No such title on {self.config.label}") from None
 
     def parse(self, page: Page, code: str) -> SiteRecord:
         """作品 JSON → 记录。回的作品号对不上这个番号归 `not_found`：番号同形的另一家片子问到这里时，
@@ -111,9 +111,9 @@ class OnePondoSource(SiteSource):
         try:
             raw = json.loads(page.body or b"null")
         except ValueError:
-            raise SourceFailure(FailureReason.PARSE_ERROR, f"{self.config.label}返回的不是作品 JSON") from None
+            raise SourceFailure(FailureReason.PARSE_ERROR, f"{self.config.label} did not return work JSON") from None
         if not isinstance(raw, dict) or str(raw.get("MovieID") or "").strip() != wanted:
-            raise SourceFailure(FailureReason.NOT_FOUND, f"{self.config.label}回的作品号对不上这个番号")
+            raise SourceFailure(FailureReason.NOT_FOUND, f"The work ID returned by {self.config.label} does not match this code")
         duration = raw.get("Duration")
         cover = _cover(raw)
         return SiteRecord(

@@ -165,7 +165,7 @@ class DiscoveryMetadataTests(unittest.TestCase):
         with patch("peach.web_jav_discovery.discovery_metadata") as metadata:
             metadata.return_value.ensure.return_value = failure
             response = _metadata_response(None, {}, [], [], 60, "external")
-        self.assertEqual(response["metadata_job"]["message"], "作品资料未取得")
-        self.assertEqual(response["metadata_job"]["error"], "作品资料未取得")
+        self.assertEqual(response["metadata_job"]["message"], "Work metadata not obtained")
+        self.assertEqual(response["metadata_job"]["error"], "Work metadata not obtained")
         self.assertNotIn("codes", response["metadata_job"])
         self.assertNotIn("poll_after_ms", response)

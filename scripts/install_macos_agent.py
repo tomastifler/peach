@@ -97,7 +97,7 @@ def remove_legacy_agents(domain: str) -> list[str]:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="注册 / 注销 Peach 菜单栏项的 LaunchAgent")
+    parser = argparse.ArgumentParser(description="Register / unregister the LaunchAgent for the Peach menu bar item")
     parser.add_argument("action", choices=("install", "uninstall", "status"),
                         nargs="?", default="install")
     parser.add_argument("--tray", type=Path,
@@ -111,21 +111,21 @@ def run(args: argparse.Namespace) -> int:
 
     if args.action == "status":
         result = launchctl("print", f"{domain}/{LABEL}")
-        print(f"plist：{target}（{'存在' if target.is_file() else '不存在'}）")
-        print("已加载" if result.returncode == 0 else "未加载")
+        print(f"plist: {target} ({'exists' if target.is_file() else 'missing'})")
+        print("loaded" if result.returncode == 0 else "not loaded")
         return 0
 
     if args.action == "uninstall":
         launchctl("bootout", f"{domain}/{LABEL}")
         if target.is_file():
             target.unlink()
-        print(f"已注销 {LABEL}")
+        print(f"Unregistered {LABEL}")
         return 0
 
     if not args.tray.is_file():
-        raise SystemExit(f"找不到 peach-tray：{args.tray}（先 pip install -e .）")
+        raise SystemExit(f"peach-tray not found: {args.tray} (run pip install -e . first)")
     for label in remove_legacy_agents(domain):
-        print(f"已清理遗留 LaunchAgent {label}")
+        print(f"Cleaned up legacy LaunchAgent {label}")
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(plistlib.dumps(build_plist(args.tray)))
@@ -139,12 +139,12 @@ def run(args: argparse.Namespace) -> int:
         time.sleep(0.2)
     result = launchctl("bootstrap", domain, str(target))
     if result.returncode != 0:
-        raise SystemExit(f"launchctl bootstrap 失败：{result.stderr.strip()}")
+        raise SystemExit(f"launchctl bootstrap failed: {result.stderr.strip()}")
     launchctl("kickstart", "-k", f"{domain}/{LABEL}")
-    print(f"已注册并启动 {LABEL}（用户 {getpass.getuser()}）")
+    print(f"Registered and started {LABEL} (user {getpass.getuser()})")
     print(f"  plist：{target}")
-    print(f"  日志：{LOG_DIR / 'macos-tray.log'}")
-    print(f"  停止：launchctl bootout {domain}/{LABEL}")
+    print(f"  Log: {LOG_DIR / 'macos-tray.log'}")
+    print(f"  Stop: launchctl bootout {domain}/{LABEL}")
     return 0
 
 

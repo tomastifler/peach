@@ -119,7 +119,7 @@ class CaptchaRequired(DownloadError):
     """PikPak 要求在浏览器里完成人机验证。`url` 交给设置页。"""
 
     def __init__(self, url: str):
-        super().__init__("config", "PikPak 要求先完成人机验证：打开验证页完成后，回到设置页再点一次登录")
+        super().__init__("config", "PikPak requires a human verification first: complete it on the verification page, then click Sign in again on the settings page")
         self.url = url
 
 
@@ -145,7 +145,7 @@ def _account_meta(username: str) -> dict:
 
 def _changed(what: str) -> DownloadError:
     return DownloadError(
-        "config", f"PikPak 接口回包形状不对（{what}），接口可能已经变了。可以先复制磁力手动添加")
+        "config", f"PikPak API response has the wrong shape ({what}); the API may have changed. You can copy the magnet and add it manually")
 
 
 class PikPakClient:
@@ -183,15 +183,15 @@ class PikPakClient:
         try:
             response = self.http.request(method, url, json=body, params=params, headers=headers)
         except httpx.HTTPError as error:
-            raise DownloadError("network", f"连不上 PikPak：{type(error).__name__}") from None
+            raise DownloadError("network", f"Could not reach PikPak: {type(error).__name__}") from None
         if response.status_code >= 500:
-            raise DownloadError("network", f"PikPak 暂时不可用（HTTP {response.status_code}）")
+            raise DownloadError("network", f"PikPak is temporarily unavailable (HTTP {response.status_code})")
         try:
             payload = response.json() if response.content else {}
         except ValueError:
-            raise _changed(f"HTTP {response.status_code} 不是 JSON") from None
+            raise _changed(f"HTTP {response.status_code} is not JSON") from None
         if not isinstance(payload, dict):
-            raise _changed("回包不是对象")
+            raise _changed("response is not an object")
         if payload.get("error") or (response.status_code >= 400 and payload):
             raise PikPakApiError(payload, response.status_code)
         if response.status_code >= 400:
@@ -205,14 +205,14 @@ class PikPakClient:
             raise CaptchaRequired(str(payload["url"]))
         token = payload.get("captcha_token")
         if not token:
-            raise _changed("没有 captcha_token")
+            raise _changed("no captcha_token")
         return str(token)
 
     def _drive_captcha(self, action: str) -> str:
         profile = self.profile
         if not profile.known:
-            raise DownloadError("config", f"PikPak 网页端的客户端标识是 {profile.client_id}，Peach 没有它的签名常量，"
-                                          "提交不了离线任务。可以先复制磁力手动添加")
+            raise DownloadError("config", f"The PikPak web client ID is {profile.client_id} and Peach has no signing constant for it, "
+                                          "so offline tasks cannot be submitted. You can copy the magnet and add it manually")
         stamp = profile.sign_timestamp or str(int(self.clock() * 1000))
         try:
             return self._captcha(action, {
@@ -220,10 +220,10 @@ class PikPakClient:
                 "client_version": profile.client_version, "package_name": profile.package_name,
                 "user_id": self.values.get("user_id", ""), "timestamp": stamp})
         except PikPakApiError as error:
-            reason = f"{error.description}（{error.code or error.status}）"
+            reason = f"{error.description} ({error.code or error.status})"
             if profile is WEB:
-                raise DownloadError("config", f"PikPak 拒绝了网页端的请求签名：{reason}。网页端的签名常量可能已经更新，"
-                                              "可以先复制磁力手动添加") from None
+                raise DownloadError("config", f"PikPak rejected the web client request signature: {reason}. The web signing constant may have been updated, "
+                                              "you can copy the magnet and add it manually") from None
             raise error.as_download_error() from None
 
     # -- 登录与刷新
@@ -245,7 +245,7 @@ class PikPakClient:
         """按签发 token 的那个 client 刷新。安卓与网页端的刷新请求体都不带 `client_secret`。"""
         token = self.values.get("refresh_token")
         if not token:
-            raise DownloadError("config", "还没有登录 PikPak")
+            raise DownloadError("config", "Not signed in to PikPak")
         profile = self.profile
         body = {"client_id": profile.client_id, "refresh_token": token, "grant_type": "refresh_token"}
         headers = {"X-Device-Id": self.device_id, "User-Agent": BROWSER_AGENT}
@@ -257,7 +257,7 @@ class PikPakClient:
     def _take_tokens(self, payload: dict) -> None:
         access, refresh = payload.get("access_token"), payload.get("refresh_token")
         if not access or not refresh:
-            raise _changed("登录回包里没有 token")
+            raise _changed("no token in the sign-in response")
         expires = int(payload.get("expires_in") or 7200)
         self.values.update({
             "access_token": str(access), "refresh_token": str(refresh),
@@ -277,11 +277,11 @@ class PikPakClient:
         except PikPakApiError as error:
             username, password = self.values.get("username"), self.values.get("password")
             if not (username and password):
-                reason = f"{error.description}（{error.code or error.status}）"
+                reason = f"{error.description} ({error.code or error.status})"
                 if self.profile is ANDROID:
-                    raise DownloadError("config", f"PikPak 登录已过期，请在设置页重新登录：{reason}") from None
-                raise DownloadError("config", f"PikPak 拒绝刷新网页登录的令牌：{reason}。"
-                                              "请在设置页点「用浏览器登录」重新登录") from None
+                    raise DownloadError("config", f"PikPak sign-in has expired; sign in again on the settings page: {reason}") from None
+                raise DownloadError("config", f"PikPak refused to refresh the web sign-in token: {reason}. "
+                                              "Click 'Sign in with browser' on the settings page to sign in again") from None
             self.login(username, password)
 
     def _api(self, method: str, path: str, *, body=None, params=None, captcha: str | None = None) -> dict:
@@ -298,7 +298,7 @@ class PikPakClient:
                     self._renew()
                     continue
                 raise error.as_download_error() from None
-        raise _changed("刷新 token 之后仍未通过认证")
+        raise _changed("still not authenticated after refreshing the token")
 
     # -- 网盘
 
@@ -312,10 +312,10 @@ class PikPakClient:
                     match = item
                     break
             if match is None:
-                raise DownloadError("config", f"PikPak 里没有 {path} 这个文件夹")
+                raise DownloadError("config", f"PikPak has no folder {path}")
             parent = str(match.get("id") or "")
         if not parent:
-            raise DownloadError("config", "目标目录要写成 PikPak 里的一个具体文件夹")
+            raise DownloadError("config", "The target directory must be a specific folder in PikPak")
         return parent
 
     def _children(self, parent_id: str) -> list[dict]:
@@ -327,7 +327,7 @@ class PikPakClient:
                 "filters": json.dumps({"trashed": {"eq": False}})})
             files = payload.get("files")
             if not isinstance(files, list):
-                raise _changed("文件列表")
+                raise _changed("file list")
             found.extend(item for item in files if isinstance(item, dict))
             token = str(payload.get("next_page_token") or "")
             if not token:
@@ -344,7 +344,7 @@ class PikPakClient:
             "folder_type": "", "parent_id": parent_id})
         task = payload.get("task")
         if not isinstance(task, dict) or not task.get("id"):
-            raise _changed("提交回包里没有 task")
+            raise _changed("no task in the submit response")
         return task
 
     def tasks(self) -> list[dict]:
@@ -356,7 +356,7 @@ class PikPakClient:
                 "filters": json.dumps({"phase": {"in": PHASES}})})
             tasks = payload.get("tasks")
             if not isinstance(tasks, list):
-                raise _changed("任务列表")
+                raise _changed("task list")
             found.extend(item for item in tasks if isinstance(item, dict))
             token = str(payload.get("next_page_token") or "")
             if not token:
@@ -382,17 +382,17 @@ class PikPakApiError(Exception):
         return self.number == 16 or self.status == 401 or self.code == "unauthenticated"
 
     def as_download_error(self) -> DownloadError:
-        text = f"{self.description}（{self.code or self.status}）"
+        text = f"{self.description} ({self.code or self.status})"
         lowered = f"{self.code} {self.description}".casefold()
         if self.unauthenticated or "invalid_grant" in lowered:
-            return DownloadError("config", f"PikPak 登录已失效，请在设置页重新登录：{text}")
+            return DownloadError("config", f"PikPak sign-in is no longer valid; sign in again on the settings page: {text}")
         if "captcha" in lowered:
-            return DownloadError("config", f"PikPak 要求人机验证，请在设置页重新登录：{text}")
+            return DownloadError("config", f"PikPak requires human verification; sign in again on the settings page: {text}")
         if any(word in lowered for word in ("limit", "quota", "space", "exceed")):
-            return DownloadError("quota", f"PikPak 离线次数或空间不够：{text}")
+            return DownloadError("quota", f"PikPak offline attempts or space are insufficient: {text}")
         if any(word in lowered for word in ("url", "invalid_argument", "magnet")):
-            return DownloadError("invalid_link", f"PikPak 不认这个链接：{text}")
-        return DownloadError("rejected", f"PikPak 拒绝了这个任务：{text}")
+            return DownloadError("invalid_link", f"PikPak does not accept this link: {text}")
+        return DownloadError("rejected", f"PikPak rejected this task: {text}")
 
 
 def match_task(tasks: list[dict], task: DownloadTask) -> dict | None:
@@ -420,10 +420,10 @@ def task_status(item: dict | None) -> RemoteStatus:
         return RemoteStatus(DONE, remote_id, name, 1.0)
     if phase == "PHASE_TYPE_ERROR":
         return RemoteStatus(ERROR, remote_id, name, progress,
-                            str(item.get("message") or "PikPak 报告离线失败"))
+                            str(item.get("message") or "PikPak reported an offline failure"))
     if phase in {"PHASE_TYPE_RUNNING", "PHASE_TYPE_PENDING"}:
         return RemoteStatus(RUNNING, remote_id, name, progress)
-    raise _changed(f"任务状态 {phase or '为空'}")
+    raise _changed(f"task status {phase or 'empty'}")
 
 
 class PikPakProvider:
@@ -444,7 +444,7 @@ class PikPakProvider:
         with SESSION_LOCK:
             values = self.load() or {}
             if not values.get("refresh_token"):
-                raise DownloadError("config", "还没有登录 PikPak")
+                raise DownloadError("config", "Not signed in to PikPak")
             with PikPakClient(values, persist=self.persist, transport=self.transport,
                               clock=self.clock) as client:
                 yield client
@@ -476,7 +476,7 @@ class PikPakProvider:
 
     def cancel(self, task: DownloadTask) -> None:
         if not task.remote_id:
-            raise DownloadError("rejected", "这个任务还没有 PikPak 任务号，无法取消")
+            raise DownloadError("rejected", "This task has no PikPak task ID yet and cannot be cancelled")
         with self.client() as client:
             client.delete_task(task.remote_id)
 
@@ -489,7 +489,7 @@ def login(load: Callable[[], dict], username: str, password: str, *, remember: b
     """
     username, password = str(username or "").strip(), str(password or "")
     if not username or not password:
-        raise ValueError("请填写 PikPak 账号和密码")
+        raise ValueError("Enter your PikPak account and password")
     saved: dict = {}
 
     def keep(update: dict) -> None:
@@ -504,8 +504,8 @@ def login(load: Callable[[], dict], username: str, password: str, *, remember: b
                 persist(start)
                 raise
             except PikPakApiError as error:
-                raise DownloadError("config", f"PikPak 登录失败：{error.description}"
-                                              f"（{error.code or error.status}）") from None
+                raise DownloadError("config", f"PikPak sign-in failed: {error.description}"
+                                              f" ({error.code or error.status})") from None
         final = {key: value for key, value in saved.items() if key != "password"}
         if remember:
             final["password"] = password

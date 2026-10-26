@@ -49,7 +49,7 @@ class CertificateTests(unittest.TestCase):
     def test_missing_certificate_needs_reissue(self):
         self.assertEqual(
             reissue_reason(self.files, {"peach.local"}, {"127.0.0.1"}),
-            "服务器证书不存在")
+            "Server certificate does not exist")
 
     def test_reissue_writes_every_requested_name(self):
         reissue(self.files, "peach.local", {"peach.local", "localhost"},
@@ -86,7 +86,7 @@ class CertificateTests(unittest.TestCase):
         reissue(self.files, "peach.local", {"peach.local"}, {"127.0.0.1"})
         soon = datetime.now(timezone.utc) + timedelta(days=CERT_DAYS - 5)
         reason = reissue_reason(self.files, {"peach.local"}, {"127.0.0.1"}, now=soon)
-        self.assertIn("到期", reason or "")
+        self.assertIn("expires", reason or "")
 
     def test_ensure_keeps_the_ca_untouched(self):
         """只重签叶子证书。连 CA 一起换的话，每台设备都要重新装一遍信任。"""

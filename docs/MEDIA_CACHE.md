@@ -1,19 +1,19 @@
-# 媒体缓存
+# Media Cache
 
-远程媒体缓存在本机数据目录 `peach-data/generated/remote-media/`，不进入 Git。DMM 样张继续使用 `generated/sample-cache/`，已安装封面、头像和 favicon 继续复用各自目录。
+The remote media cache lives in the local data directory `peach-data/generated/remote-media/` and does not enter Git. DMM samples continue to use `generated/sample-cache/`, and installed covers, avatars, and favicons continue to reuse their own directories.
 
-| 内容 | 保存与刷新 |
+| Content | Storage and refresh |
 | --- | --- |
-| 关注图片、作品封面与预览图 | 首次实际读取后持久保存；成功内容不自动过期 |
-| 关注视频 | 播放时保存完整取得的响应；完整文件可按任意 Range 本地读取，部分响应按原 Range 复用 |
-| JAV 预览 HLS | 清单与嵌套清单按来源地址保存，5 分钟后下次读取刷新；浏览器每次读取核对本机清单。密钥、初始化段与已播放分片持久保存 |
-| 远程头像 | 90 天后下次读取时刷新；失败保留已有图片，1 小时内不反复重取 |
-| favicon、来源图标与外链圆标 | 365 天后下次读取时刷新；失败保留已有图片 |
+| Follow images, work covers, and preview images | Persisted after the first actual read; successful content does not expire automatically |
+| Follow videos | The fully retrieved response is saved during playback; a complete file can be read locally for any Range, and a partial response is reused for its original Range |
+| JAV preview HLS | Manifests and nested manifests are stored by source address and refreshed on the next read after 5 minutes; the browser rechecks the local manifest on every read. Keys, init segments, and already-played segments are persisted |
+| Remote avatars | Refreshed on the next read after 90 days; on failure the existing image is kept and not refetched within 1 hour |
+| Favicons, source icons, and external-link round icons | Refreshed on the next read after 365 days; on failure the existing image is kept |
 
-未读取的媒体不会提前全量下载。播放中断或响应长度不完整时不安装该响应，尚未取得的部分仍须回源。缓存优先于远程播放地址解析，已完整保存的媒体不依赖临时签名地址。
+Unread media is not downloaded in full ahead of time. If playback is interrupted or the response length is incomplete, that response is not installed, and the parts not yet retrieved must still go back to the origin. The cache takes priority over remote playback URL resolution, and fully saved media does not depend on temporary signed URLs.
 
-浏览器只取得条目 ID 与缓存对象 ID；服务端保留公开 HTTPS 校验、逐跳目标检查和来源凭据隔离。缓存源信息属于本机私有数据，不进入日志和公开产物。用户隐藏图片后，卡面使用对应图片的版本地址。
+The browser only gets the item ID and cache object ID; the server keeps public HTTPS validation, per-hop target checks, and source credential isolation. Cache source information is local private data and does not enter logs or public artifacts. After the user hides an image, the card uses that image's versioned address.
 
-公开预览发生 TLS 连接错误时，流式传输复用已安装的 `curl_cffi` 浏览器传输。HTTP 拒绝状态不切换传输；两种传输共用逐跳目标检查。退出播放会关闭上游响应和本次连接池。
+When a public preview hits a TLS connection error, streaming reuses the installed `curl_cffi` browser transport. An HTTP rejection status does not switch transports; both transports share the per-hop target check. Leaving playback closes the upstream response and this connection pool.
 
-关注管理在存在已启用的检查失败来源时显示「检查失败项」，按钮提交这些来源的 ID；没有可重试失败来源时隐藏。单条来源检查和「检查全部」继续使用同一任务入口。
+Follow management shows "Failed checks" when there are enabled sources whose check failed; the button submits the IDs of those sources, and is hidden when no failed source can be retried. A single-source check and "Check all" continue to use the same task entry.

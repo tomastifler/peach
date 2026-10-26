@@ -1,33 +1,33 @@
-# 口味来源与判定
+# Taste sources and judgment
 
-浏览历史保存在本机私有历史库；资料目录配置、浏览候选和偏好分不写入 ledger，不产生已确认的身份绑定。
+Browsing history is stored in a private history database on this machine; profile directory settings, browsing candidates, and preference scores are not written to the ledger and create no confirmed identity bindings.
 
-| 来源 | 使用范围 | 证据 |
+| Source | Scope of use | Evidence |
 | --- | --- | --- |
-| 成人作品目录 | DMM/FANZA 成人域、MGS、JavDB、JavBus、JavLibrary、厂牌网站等 | 搜索词、路径标签、已知人物与厂牌名称 |
-| 视频、图集、漫画、音声与创作者来源 | Rule34、Gelbooru、NHentai、Hitomi、OnlyFans、Fansly、Kemono、Coomer、常见视频及直播来源 | 标签、搜索词、账号与既有身份关联 |
-| 混合内容平台 | X/Twitter、Instagram、YouTube、Reddit、Bluesky、Tumblr、Pixiv、Patreon、FANBOX、Fantia | 已登记实体链接、Peach 启用的关注；已知人物名称和明确成人标记仅提供浏览候选 |
-| 混合发行平台 | DMM.com 的 FANZA 分区、DLsite 成人分区 | 成人分区的网址证据；普通业务访问不提供口味信号 |
-| 自有网站 | 既有实体资料中登记的网址 | 精确页面或官方根域关联，不凭未知域名猜测成人性质 |
+| Adult title catalogs | DMM/FANZA adult domains, MGS, JavDB, JavBus, JavLibrary, studio websites, etc. | Search terms, path tags, known performer and studio names |
+| Video, gallery, comic, audio, and creator sources | Rule34, Gelbooru, NHentai, Hitomi, OnlyFans, Fansly, Kemono, Coomer, common video and livestream sources | Tags, search terms, accounts, and existing identity links |
+| Mixed-content platforms | X/Twitter, Instagram, YouTube, Reddit, Bluesky, Tumblr, Pixiv, Patreon, FANBOX, Fantia | Registered entity links and follows enabled in Peach; known performer names and explicit adult markers give browsing candidates only |
+| Mixed release platforms | The FANZA section of DMM.com, the adult section of DLsite | URL evidence from the adult section; ordinary business visits give no taste signal |
+| Own websites | URLs registered in existing entity profiles | Association by exact page or official root domain; adult nature is not guessed for unknown domains |
 
-域名名单是可识别来源规则，不能证明来源当前可访问，也不宣称覆盖所有成人网站。未知域名不按名称猜测性质；页面标题有明确成人上下文时，可提取该次访问的候选词，不把整站标成成人来源。新增专门适配应有网址格式和隔离样本。Rule34 搜索的负向标签不产生正向偏好，平台控制词不作为内容标签。DMM/FANZA 服务关系参考 [FANZA 帮助](https://support.dmm.co.jp/digital)；Rule34 标签语义参考[站点标签说明](https://rule34.xxx/index.php?page=help&topic=post)。
+The domain list is a set of recognizable source rules; it does not prove a source is currently reachable, and does not claim to cover every adult website. Unknown domains are not judged by name; when the page title has a clear adult context, candidate terms may be extracted from that visit, but the whole site is not marked as an adult source. A new dedicated adapter should have a URL format and isolated samples. Negative tags in a Rule34 search produce no positive preference, and platform control words are not content tags. For the DMM/FANZA service relationships see the [FANZA help](https://support.dmm.co.jp/digital); for Rule34 tag semantics see the [site tag help](https://rule34.xxx/index.php?page=help&topic=post).
 
-浏览记录不能证明购买、平台收藏或关注，也不包含页面正文与停留时长。Peach 关注是独立明确证据；外部平台关注需通过用户导出或已有授权连接取得，不从访问 `following` 页面推断关注列表。未知成人账号仅保留候选，不自行建档。
+Browsing records cannot prove a purchase, a platform favorite, or a follow, and do not include page body or dwell time. A Peach follow is independent explicit evidence; follows on external platforms must come from a user export or an existing authorized connection, and the follow list is not inferred from visiting a `following` page. Unknown adult accounts are kept only as candidates and not profiled automatically.
 
-偏好覆盖出演者、创作者、内容标签、厂牌、系列、发行区间和时长。行为与明确反馈权重较强，馆藏数量、浏览天数及关注分别计权；重复访问按身份和日期去重。技术标签、长度标签和不合口味作品不提供正向内容偏好。多题材用户的其他偏好不降低当前候选的匹配分。
+Preference covers performers, creators, content tags, studios, series, release intervals, and duration. Behavior and explicit feedback carry heavy weight; library count, browsing days, and follows are weighted separately; repeat visits are deduplicated by identity and date. Technical tags, length tags, and not-my-taste titles give no positive content preference. For a user with many themes, other preferences do not lower the current candidate's match score.
 
-尚未取得的信号：跨平台收藏与实际关注列表、独立预览停留时间、选段重复观看、规范人物特征、相邻用户协同证据。接入时需记录来源、取得状态和候选置信度；先验证对排序的影响，再用于推荐，不制造缺失字段或概率。
+Signals not yet obtained: cross-platform favorites and actual follow lists, standalone preview dwell time, repeat viewing of segments, canonical person features, and collaborative evidence from adjacent users. When integrated, the source, acquisition status, and candidate confidence must be recorded; verify the effect on ranking before using them for recommendation, and do not make up missing fields or probabilities.
 
-浏览器与导入文件统一在「管理 → 口味 → 数据源」管理，使用相同的来源卡片。自动发现常见 Chromium 和 Firefox 资料；自定义来源可添加资料目录或历史文件。浏览器卡片支持停止和启用读取，已导入记录保留；导入来源删除只删除私有库内的历史与书签，不删除浏览器原文件。读取采用 SQLite 一致快照，历史解析复用 `browserexport==0.4.4`；历史文件被浏览器独占时提示退出后重读，其余资料继续导入。
+Browsers and imported files are managed uniformly under "Manage → Taste → Data sources", using the same source cards. Common Chromium and Firefox profiles are discovered automatically; custom sources can add a profile directory or a history file. Browser cards support stopping and enabling reads, and imported records are kept; deleting an import source deletes only the history and bookmarks inside the private database, not the browser's original files. Reading uses a consistent SQLite snapshot, and history parsing reuses `browserexport==0.4.4`; when a history file is held exclusively by the browser, you are prompted to quit and re-read, and the remaining profiles continue to import.
 
-本机同步的历史和书签归到对应浏览器卡片，文件导入标注为「导入文件」。删除浏览器来源同时清除该来源的私有快照，并停止自动发现与读取；浏览器原文件和上传原件保留，可通过添加浏览器重新接入。API 的 `browsers[].source_keys` 关联私有快照，`POST /api/taste/source` 的 `delete_browser` 操作使用浏览器 `id`。
+History and bookmarks synced from this machine are filed under the matching browser card, and file imports are labeled "Imported file". Deleting a browser source also clears that source's private snapshot and stops automatic discovery and reading; the browser's original files and uploaded originals are kept, and it can be reconnected by adding the browser again. The API's `browsers[].source_keys` links the private snapshots, and the `delete_browser` operation of `POST /api/taste/source` uses the browser `id`.
 
-书签通过「读取浏览器记录」采集，或在菜单选择「导入书签文件」。本机读取 Chromium 的 `Bookmarks` 和 Firefox／Zen 的 `places.sqlite`；文件导入支持 Netscape HTML 与 Chromium Bookmarks JSON。Safari 等浏览器可导出 HTML 后导入。URL、标题和添加时间保存在本机私有历史库，不写入 ledger，不请求书签页面。书签参与标签、创作者和规范身份分析，作为独立的「浏览器书签」偏好证据；同一 URL 跨来源去重，不计为访问次数或活跃时间。
+Bookmarks are collected through "Read browser records", or by choosing "Import bookmark file" from the menu. On this machine it reads Chromium's `Bookmarks` and Firefox／Zen's `places.sqlite`; file import supports Netscape HTML and Chromium Bookmarks JSON. Browsers such as Safari can export HTML and then import it. The URL, title, and added time are stored in the private history database on this machine, are not written to the ledger, and bookmark pages are not requested. Bookmarks take part in tag, creator, and canonical identity analysis as an independent "Browser bookmarks" preference evidence; the same URL is deduplicated across sources and counts as neither a visit nor active time.
 
-API 的 `summary.bookmarks` 为范围内去重书签数，来源行的 `bookmarks` 为该来源条数。榜单保留 `web_visits` 作为浏览器信号总数，`web_bookmarks` 标明其中的书签数，页面分别展示浏览和书签。复核 CSV 分列 `visits`、`bookmarks` 与 `signals`；原始 URL 和标题不进入 API 或复核报告。
+The API's `summary.bookmarks` is the deduplicated bookmark count in range, and the `bookmarks` of a source row is that source's count. Rankings keep `web_visits` as the total browser signals, and `web_bookmarks` states how many of them are bookmarks; the page shows visits and bookmarks separately. The review CSV has separate `visits`, `bookmarks`, and `signals` columns; raw URLs and titles do not enter the API or the review report.
 
-本机书签读取成功后按来源更新当前快照，浏览器中已删除的书签不再提供证据；读取失败保留已有快照。不同导入文件分别作为数据源管理，可在页面底部移除。时间范围使用书签添加时间，没有有效日期的书签只在「全部时间」显示。停止读取保留快照；删除口味数据源保留浏览器原文件和上传原件。
+After a successful local bookmark read, the current snapshot is updated per source, and bookmarks deleted in the browser no longer give evidence; a failed read keeps the existing snapshot. Different imported files are managed as separate data sources and can be removed at the bottom of the page. The time range uses the bookmark's added time, and bookmarks without a valid date appear only under "All time". Stopping reads keeps the snapshot; deleting a taste data source keeps the browser's original files and uploaded originals.
 
-口味页使用规则解析与统计，不调用 LLM。历史和书签联合解析标题与 URL：URL 提供搜索词、标签路径及个人页账号，标题复用中英日内容词表提取题材，并按已登记规范名和别名匹配身份。同一条记录内同义标签去重；词表取最长匹配，英文检查词边界，省写与单字不参与标题扫描。仅有作品 ID 的详情地址也可从标题提供证据；普通站点仍需成人上下文或已绑定账号，不把所有网页标题用于口味推断。厂牌和系列的标题证据参与发现推荐，口味页厂牌和系列榜展示 Peach 内部证据。
+The taste page uses rule-based parsing and statistics and does not call an LLM. History and bookmarks are parsed together by title and URL: the URL provides search terms, tag paths, and profile-page accounts; the title reuses the Chinese, English, and Japanese content vocabulary to extract themes and matches identities by registered canonical names and aliases. Synonymous tags within one record are deduplicated; the vocabulary takes the longest match, English checks word boundaries, and abbreviations and single characters do not take part in title scanning. A details URL with only a title ID can also take evidence from the title; ordinary sites still require adult context or a bound account, and not every web page title is used for taste inference. Title evidence for studios and series takes part in Discover recommendation, and the taste page's studio and series rankings show Peach's internal evidence.
 
-浏览器榜按信号数排序，综合分为 Peach 行为分加 `2 × log₂(1＋浏览器信号数)`。发现推荐的各身份强度由观看反馈、馆藏、浏览天数、书签和关注加权后映射到 0–1，再按作品特征匹配并以 MMR 保留多样性。域名名单与具体 URL 格式支持分开：已登记域名不代表每种作品详情地址都能提取题材，也不表示来源当前可访问。没有标题且 URL 只有 ID 时，题材未取得；不为补题材自动抓取每个页面。
+The browser ranking is ordered by signal count, and the composite score is the Peach behavior score plus `2 × log₂(1＋browser signal count)`. In Discover recommendation, each identity's strength is weighted from watch feedback, library, browsing days, bookmarks, and follows, mapped to 0–1, then matched by title features and kept diverse by MMR. The domain list and the support for specific URL formats are separate: a registered domain does not mean every kind of title details URL can yield a theme, nor that the source is currently reachable. When there is no title and the URL has only an ID, the theme is not obtained; pages are not fetched automatically just to fill in themes.

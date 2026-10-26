@@ -728,7 +728,7 @@ class ReviewQueueTests(unittest.TestCase):
                 "provider_id": "FC2-PPV-1449453"}], ensure_ascii=False),
             "source_count": "1", "source_profile": "fc2-cast", "status": "candidate",
             "size_gb": "", "videos": "", "fetched_at": ""}])
-        self.assertIn("2 个同番号资产", self.queue_row("metadata_fields", key)["reason"])
+        self.assertIn("2 x same-code asset", self.queue_row("metadata_fields", key)["reason"])
 
     def test_javbus_gives_way_to_any_other_source_on_the_same_field(self):
         """javbus 的取值只在没有别家时才算证据（ADR-0035）。
@@ -1764,7 +1764,7 @@ class ReviewQueueTests(unittest.TestCase):
         row = next(item for item in rows if item["item_key"] == "III-9:studio")
         self.assertEqual(row["current_owner"], USER_MANUAL)
         self.assertEqual(row["asset_mutation_revision"], 1)
-        self.assertIn("（手动填写）", rm_review._review_evidence("metadata_fields", row))
+        self.assertIn("（Entered manually）", rm_review._review_evidence("metadata_fields", row))
 
     def test_two_sources_saying_the_same_thing_land_without_review(self):
         """数取值，不数候选条数。
@@ -2824,7 +2824,7 @@ class ReviewQueueTests(unittest.TestCase):
                 rm_review.w_review_decision(self.contract, {
                     "category": "creator_tags", "item_key": "b1", "status": "approved",
                 })
-        self.assertIn("显式勾选", str(caught.exception))
+        self.assertIn("tick them explicitly", str(caught.exception))
         con = sqlite3.connect(self.db_path)
         self.assertEqual(con.execute("SELECT count(*) FROM asset_tag").fetchone()[0], 0)
         con.close()
@@ -2907,7 +2907,7 @@ class ReviewQueueTests(unittest.TestCase):
              "token_overlap": "0.33", "portrait_url": "https://x/s.jpg"}])
         row = rm_review.q_review(self.contract)["sections"]["western_identity"][0]
         self.assertIn("Saffron Bacchus", row["reason"])
-        self.assertIn("写法 Sexy Saffron", row["reason"], "别名跳转必须写明用了哪个写法")
+        self.assertIn("spelling Sexy Saffron", row["reason"], "别名跳转必须写明用了哪个写法")
         self.assertEqual(row["preview_url"], "https://x/s.jpg")
 
     def test_review_rows_say_up_front_whether_the_face_can_be_fetched(self):
@@ -3040,8 +3040,8 @@ class ReviewQueueTests(unittest.TestCase):
             self._fc2_row("FC2PPV-3312576", is_collection="1",
                           collection_parts="19", cover_url="")])
         row = rm_review.q_review(self.contract)["sections"]["fc2_markings"][0]
-        self.assertIn("19 个分片", row["reason"])
-        self.assertIn("封面不下发", row["reason"])
+        self.assertIn("19 parts", row["reason"])
+        self.assertIn("the cover is not distributed", row["reason"])
 
     def test_fc2_cross_number_similarity_is_a_record_only_review_candidate(self):
         con = sqlite3.connect(self.db_path)
@@ -3070,7 +3070,7 @@ class ReviewQueueTests(unittest.TestCase):
         self.assertEqual([asset["id"] for asset in row["comparison_assets"]], [1, 4])
         self.assertEqual(row["comparison_assets"][1]["preview_url"], "/poster?id=4&c=4")
         self.assertIn("comment_equivalent", row["reason"])
-        self.assertIn("时长差 1.2 秒", row["reason"])
+        self.assertIn("duration difference 1.2 s", row["reason"])
         result = rm_review.w_review_decision(self.contract, {
             "category": "fc2_similarity", "item_key": row["item_key"],
             "status": "skipped",
@@ -3250,7 +3250,7 @@ class PerformerAvatarApplyTests(ReviewQueueTests):
 
     def test_a_candidate_that_did_not_pass_quality_is_refused(self):
         self._seed(verdict="rejected")
-        with self.assertRaisesRegex(ValueError, "通过图片质量检查"):
+        with self.assertRaisesRegex(ValueError, "passed the image quality check"):
             self._decide()
         self.assertFalse((self.avatar_root / "performer-9.img").exists())
 
@@ -3261,7 +3261,7 @@ class PerformerAvatarApplyTests(ReviewQueueTests):
         重算一遍，对不上就拒绝，而不是把一张来历不明的图装成这个人的头像。
         """
         self._seed(digest="0" * 64)
-        with self.assertRaisesRegex(ValueError, "缓存"):
+        with self.assertRaisesRegex(ValueError, "local cache"):
             self._decide()
         self.assertFalse((self.avatar_root / "performer-9.img").exists())
 

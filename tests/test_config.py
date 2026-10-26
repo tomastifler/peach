@@ -301,17 +301,17 @@ class BadFileTests(unittest.TestCase):
                        "[media.mounts]\nlocal = '/mnt/a'\n")
             with self.assertRaises(SettingsFileError) as caught:
                 tree.load()
-        self.assertIn("2 个数据库路径前缀", str(caught.exception))
+        self.assertIn("2 database path prefixes", str(caught.exception))
         with TempTree() as tree:
             tree.write("[media.locations]\nlocal = ['D:\\Videos', 'D:\\Videos']\n")
             with self.assertRaises(SettingsFileError) as caught:
                 tree.load()
-        self.assertIn("重复", str(caught.exception))
+        self.assertIn("duplicate", str(caught.exception))
         with TempTree() as tree:
             tree.write("[media.locations]\nlocal = []\n")
             with self.assertRaises(SettingsFileError) as caught:
                 tree.load()
-        self.assertIn("没有配置目录前缀", str(caught.exception))
+        self.assertIn("no directory prefix configured", str(caught.exception))
 
     def test_without_a_locations_table_the_builtin_defaults_apply(self):
         with TempTree() as tree:

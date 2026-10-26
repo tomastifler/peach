@@ -38,7 +38,7 @@ from .follow_store import FollowStore
 from .followups import FollowupType, register
 
 TASK_KEY = "follow-creator"
-TASK_LABEL = "关注作者建档"
+TASK_LABEL = "Create followed-creator records"
 
 #: 这条后继写下的一切都带这个归属串，撤回按它认。
 SOURCE = "auto:follow-creator"
@@ -111,13 +111,13 @@ def source_links(row) -> list[dict]:
     found: list[dict] = []
     if provider in _OFFICIAL_PROVIDERS and row["url"]:
         found.append({"service": provider, "url": str(row["url"]),
-                      "evidence": f"{provider} 关注来源本身"})
+                      "evidence": f"{provider} follow source itself"})
     if provider in KemonoConnector.HOSTS:
         service, _, user = str(row["ref"] or "").partition("/")
         mapped = _ARCHIVE_ACCOUNTS.get(service)
         if mapped and user and mapped[2](user):
             found.append({"service": mapped[0], "url": mapped[1].format(user),
-                          "evidence": f"{provider} 归档的原站账号 {service}/{user}"})
+                          "evidence": f"{provider} archived original-site account {service}/{user}"})
     for link in trusted_profile_links(row):
         service = str(link.get("service") or "")
         handle = str(link.get("handle") or "").strip()
@@ -133,7 +133,7 @@ def source_links(row) -> list[dict]:
                 continue
             url = f"https://{host}/{handle}"
         found.append({"service": service, "url": url,
-                      "evidence": f"{provider} 名片 {service}/{handle}"})
+                      "evidence": f"{provider} profile card {service}/{handle}"})
     return found
 
 
@@ -184,21 +184,21 @@ def plan(connection: sqlite3.Connection) -> list[Landing]:
             entity_id = next(iter(owners))
             landings.append(Landing(key, "", "join", ids, links, entity_id=entity_id,
                                     providers=providers,
-                                    reason="同一名字键的来源已建档"))
+                                    reason="A source with the same name key already has a record"))
             continue
         name = canonicalize_entity_name("creator", author_name(group, key, canonical))
         if len(owners) > 1:
             landings.append(Landing(key, name, "hold", ids, providers=providers,
-                                    reason="同一名字键的来源分属几个实体"))
+                                    reason="Sources with the same name key belong to several entities"))
             continue
         if not name:
             landings.append(Landing(key, author_name(group, key, canonical), "skip", ids,
-                                    providers=providers, reason="名字是平台、目录或转载站"))
+                                    providers=providers, reason="The name is a platform, directory or repost site"))
             continue
         held = _name_held(connection, normalize_entity_name(name))
         if held is not None:
             landings.append(Landing(key, name, "hold", ids, links, entity_id=held,
-                                    providers=providers, reason="数据库里已有同名创作者"))
+                                    providers=providers, reason="A creator with the same name already exists in the database"))
             continue
         normalized = normalize_entity_name(name)
         spellings = [author_display_name(row) for row in group] + alias_names.get(key, [])
@@ -217,7 +217,7 @@ def plan(connection: sqlite3.Connection) -> list[Landing]:
     for landing in landings:
         if landing.action == "create" and counts[normalize_entity_name(landing.name)] > 1:
             landing.action, landing.links, landing.aliases = "hold", (), ()
-            landing.reason = "几组关注作者归一成同一个名字"
+            landing.reason = "Several groups of followed creators normalise to the same name"
     return landings
 
 
@@ -279,7 +279,7 @@ def confirm(connection: sqlite3.Connection, entity_id: int, key: str) -> dict:
     """
     landing = next((item for item in held_for(connection, entity_id) if item.key == key), None)
     if landing is None:
-        raise ValueError("这组关注作者已经不在等确认了，刷新后再看")
+        raise ValueError("This group of followed creators is no longer awaiting confirmation; refresh and look again")
     landing.action = "join"
     stamp = datetime.now(timezone.utc).isoformat()
     return apply(connection, [landing], batch=f"{CONFIRM_SOURCE}@{stamp}",
@@ -288,7 +288,7 @@ def confirm(connection: sqlite3.Connection, entity_id: int, key: str) -> dict:
 
 def summarize(landings: list[Landing]) -> dict:
     """活动页上那一行：建了几位、并进几组，等人的那几位写名字和原因。"""
-    held = [f"{landing.name}（{landing.reason}）" for landing in landings
+    held = [f"{landing.name} ({landing.reason})" for landing in landings
             if landing.action == "hold"]
     return {"create": sum(landing.action == "create" for landing in landings),
             "join": sum(landing.action == "join" for landing in landings),
@@ -309,7 +309,7 @@ def declare(connection: sqlite3.Connection) -> list[dict]:
 def run(contract, key: str, handle) -> dict:
     """跑一轮建档。幂等：已绑的来源不再出现在计划里，重跑只是一张空计划。"""
     if key != f"{TASK_KEY}:all":
-        raise ValueError(f"认不出这条关注作者建档后继：{key}")
+        raise ValueError(f"Unrecognised followed-creator record follow-up: {key}")
     batch = f"{SOURCE}@{getattr(handle, 'run_id', None) or time.strftime('%Y%m%dT%H%M%S')}"
     with contract.database.write_transaction() as connection:
         landings = plan(connection)

@@ -1,33 +1,33 @@
-# 外部播放器与 VR
+# External Players and VR
 
-本地或已挂载视频的作品详情提供「外部播放器 / VR」。选择此设备的播放器后，点击「生成播放链接」，
-再打开播放器或下载 M3U 播放列表。VR 播放器可使用生成的网络播放地址。
+The work detail for local or mounted videos offers "External player / VR". After choosing this device's player, click "Generate playback link",
+then open the player or download an M3U playlist. VR players can use the generated network playback URL.
 
-| 选项 | 使用方式 |
+| Option | How to use |
 | --- | --- |
-| M3U 播放列表 | 用支持网络地址的外部播放器打开下载的 `.m3u` |
-| VLC（iPhone / iPad） | 调用 VLC 的 `vlc-x-callback` 协议 |
-| IINA（Mac） | 调用 IINA 的 `iina://weblink` 协议 |
+| M3U playlist | Open the downloaded `.m3u` with an external player that supports network URLs |
+| VLC (iPhone / iPad) | Calls VLC's `vlc-x-callback` protocol |
+| IINA (Mac) | Calls IINA's `iina://weblink` protocol |
 
-播放器选择只保存在当前浏览器。另一台设备需要能访问当前 Peach 地址；电脑上用 `localhost`
-生成的地址不能供手机访问。HTTPS 使用项目证书时，外部设备也需要信任该证书。
+The player choice is saved only in the current browser. Another device must be able to reach the current Peach address; a URL generated on the computer with `localhost`
+cannot be used from a phone. When HTTPS uses the project certificate, external devices also need to trust that certificate.
 
-播放链接有效期为 6 小时，Peach 重启后失效。链接只允许读取选中的资产，不包含本机盘符路径或
-长期登录凭据。请求支持 HTTP Range，传输原始文件；解码能力、VR 投影方式由外部播放器决定。
-生成链接和打开播放器不计作观看记录，也不能证明播放器已经起播。
+A playback link is valid for 6 hours and expires when Peach restarts. The link only allows reading the selected asset and contains no local drive-letter path or
+long-lived login credential. Requests support HTTP Range and transfer the original file; decoding capability and VR projection are decided by the external player.
+Generating a link and opening a player do not count as watch records, and cannot prove the player has started playing.
 
-## 协议与验证
+## Protocol and Verification
 
-签发接口 `POST /api/external-playback?id=…` 使用现有登录及同源检查。流和 M3U 端点验证
-进程内密钥签发的单资产限时票据，每次读取仍经过现有媒体根目录检查。
-播放地址的 origin 一并签名：优先使用通过同源检查的页面 Origin；无 Origin 的客户端使用已配置的
-隧道入口或当前服务地址。M3U 使用该签名地址，代理转发的本机 Host 不会改写列表中的公网入口。
+The issuing endpoint `POST /api/external-playback?id=…` uses the existing login and same-origin checks. The stream and M3U endpoints verify
+a single-asset time-limited ticket signed with an in-process key, and every read still goes through the existing media-root check.
+The origin of the playback URL is signed too: the page Origin that passed the same-origin check is preferred; clients without an Origin use the configured
+tunnel entry or the current service address. The M3U uses this signed address, so a local Host forwarded by a proxy does not rewrite the public entry in the playlist.
 
-VLC 协议参考 [VideoLAN 官方实现说明](https://mailman.videolan.org/pipermail/vlc-devel/2014-October/099830.html)，
-IINA 协议参考 [IINA 上游协议讨论](https://github.com/iina/iina/issues/3922)。播放器实现不进入 Peach，
-无新增依赖。协议打开后的实际播放取决于访问端是否安装对应播放器；自动化验证覆盖票据、Range、
-M3U 内容和页面交互，不替代真实设备的解码验收。
+The VLC protocol follows the [VideoLAN official implementation note](https://mailman.videolan.org/pipermail/vlc-devel/2014-October/099830.html),
+and the IINA protocol follows the [IINA upstream protocol discussion](https://github.com/iina/iina/issues/3922). Player implementations do not enter Peach,
+and there are no new dependencies. Actual playback after the protocol opens depends on whether the client has the matching player installed; automated verification covers tickets, Range,
+M3U content, and page interaction, and does not replace decoding acceptance on real devices.
 
-Windows 原生验证使用现有 ffplay、临时 HTTPS 服务与专用测试证书，播放 M3U 中的签名网络地址。
-两秒 H.264 合成测试画面在关闭音频、隐藏输出时正常播放并退出，ffprobe 确认解码 20 帧；
-TLS 校验保持开启。该验证不覆盖 VLC / IINA 协议唤起或 VR 投影。
+Windows native verification uses the existing ffplay, a temporary HTTPS service, and a dedicated test certificate to play the signed network address in the M3U.
+A two-second H.264 synthetic test picture played and exited normally with audio off and output hidden, and ffprobe confirmed 20 decoded frames;
+TLS verification stayed on. This verification does not cover VLC / IINA protocol launch or VR projection.

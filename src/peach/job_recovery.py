@@ -17,7 +17,7 @@ current_job_id = ContextVar('peach_resuming_job_id', default=None)
 
 def _path(db: Path, key: str) -> Path:
     if not key or any(c not in "abcdefghijklmnopqrstuvwxyz0123456789-" for c in key):
-        raise ValueError("任务恢复标识无效")
+        raise ValueError("Invalid task recovery identifier")
     return state_for(db).parent / "job-recovery" / (key + ".json")
 
 
@@ -28,7 +28,7 @@ def read(db: Path, key: str) -> dict:
     except FileNotFoundError:
         return {}
     except (OSError, ValueError):
-        return {'status': 'blocked', 'error': '任务恢复记录无法读取，请重新发起任务。'}
+        return {'status': 'blocked', 'error': 'The task recovery record cannot be read; start the task again.'}
 
 
 def save(db: Path, key: str, job_id: str, request: dict, *, run_id=None, waiting=False) -> None:
@@ -62,7 +62,7 @@ def cancel(db: Path, key: str) -> None:
         data = read(db, key)
         if data.get('run_id') is not None:
             from .task_runs import TaskRunStore
-            TaskRunStore(db).finish(data['run_id'], 'cancelled', error='用户停止任务')
+            TaskRunStore(db).finish(data['run_id'], 'cancelled', error='Task stopped by the user')
         _path(db, key).unlink(missing_ok=True)
 
 
@@ -135,7 +135,7 @@ def resume(db: Path, handlers: dict) -> list[str]:
                         TaskRunStore(db).finish(data['run_id'], 'failed', error=str(exc))
                     data.update(status="blocked", error=str(exc))
                     atomic_write_text(_path(db, key), json.dumps(data, ensure_ascii=False))
-                    LOGGER.warning("任务 %s 未能恢复：%s", key, exc)
+                    LOGGER.warning("Task %s could not be resumed: %s", key, exc)
                 else:
                     resumed.append(key)
         except UpdateBusy:

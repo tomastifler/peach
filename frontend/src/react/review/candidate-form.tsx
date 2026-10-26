@@ -15,9 +15,9 @@ import { pendingGenres, recordGenre, reloadReview } from './review';
 
 /** 候选顺带交回来的那些字段在界面上叫什么。表里没有的按原名显示。 */
 const EVIDENCE_LABELS: Record<string, string> = {
-  title: '标题', original_title: '原标题', runtime: '来源时长', director: '导演',
-  label: 'Label', poster_url: '海报', cover_url: '封面', screenshot_urls: '截图',
-  trailer_url: '预告片',
+  title: 'Title', original_title: 'Original title', runtime: 'Source duration', director: 'Director',
+  label: 'Label', poster_url: 'Poster', cover_url: 'Cover', screenshot_urls: 'Screenshots',
+  trailer_url: 'Trailer',
 };
 
 /** 收录 genre 时的候选词表，一份挂在整页上：每张卡各写一遍的话，同一百来个 option 会在
@@ -45,7 +45,7 @@ function CandidateBody(
       <span className="relative flex min-w-0 flex-col gap-0.5 px-4 py-3 group-hover:bg-background-primary-hover group-data-selected:bg-background-primary-hover">
         <b className="text-body-2-medium text-text-secondary">
           {candidate.source}
-          {candidate.official ? ' · 官方优先' : ''}
+          {candidate.official ? ' · official preferred' : ''}
           {id ? ` · ID ${id}` : ''}
         </b>
         <span className="text-body-medium break-words text-text-primary">
@@ -105,7 +105,7 @@ export function CandidateChoices(
     );
   }
   return (
-    <RadioGroup aria-label={`${fieldName || '资料'}的来源`} value={value} isDisabled={locked}
+    <RadioGroup aria-label={`Source of ${fieldName || 'details'}`} value={value} isDisabled={locked}
       onChange={onChange} className="flex flex-col gap-2">
       {candidates.map((candidate) => (
         <Radio key={candidate.candidate_key} value={candidate.candidate_key}
@@ -128,26 +128,26 @@ function GenreRow(
   const record = useMutation({
     mutationFn: (tag: string) => recordGenre(genre, tag),
     onSuccess: async (result, tag) => {
-      if (!result.ok) { setProblem(result.error || '服务端拒绝了这次收录'); return }
-      toast(tag ? `已把「${genre}」收录为标签「${tag}」` : `已把「${genre}」判为非内容标签`);
+      if (!result.ok) { setProblem(result.error || 'The server rejected this entry'); return }
+      toast(tag ? `Added "${genre}" as tag "${tag}"` : `Marked "${genre}" as a non-content tag`);
       await reloadReview();
     },
     onError: (cause) => setProblem(errorMessage(cause)),
   });
   const accept = () => {
     const tag = draft.trim();
-    if (!tag) { setProblem('先给它一个中文标签'); return }
+    if (!tag) { setProblem('Give it a Chinese tag first'); return }
     setProblem('');
     record.mutate(tag);
   };
   return (
     <div className="flex flex-wrap items-center gap-2">
       <b lang="ja" className="text-body-medium text-text-primary">{genre}</b>
-      <TextField aria-label={`「${genre}」收录成的中文标签`} value={draft} onChange={setDraft}
+      <TextField aria-label={`Chinese tag to add "${genre}" as`} value={draft} onChange={setDraft}
         maxLength={40} isDisabled={locked || record.isPending} className="min-w-40 flex-1">
         {/* 输入法还在组词时的那一下 Enter 是「选这个词」，不是「提交」。 */}
         <InputBase size="small" list={tags.length ? GENRE_TAGS_ID : undefined}
-          autoComplete="off" placeholder="中文标签"
+          autoComplete="off" placeholder="Chinese tag"
           onKeyDown={(event) => {
             if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
             event.preventDefault();
@@ -157,9 +157,9 @@ function GenreRow(
       {/* 两个结论都是次级键：这张卡上的主动作是「通过」，把词收进表里只是让那一步有得
           可选。收录挂上 primary 的话，同一张卡上会有两个蓝底键在抢「按这里」。 */}
       <Button variant="secondary" size="small" disabled={locked || record.isPending}
-        onClick={accept}>收录</Button>
+        onClick={accept}>Add</Button>
       <Button variant="secondary" size="small" disabled={locked || record.isPending}
-        onClick={() => { setProblem(''); record.mutate('') }}>不是内容</Button>
+        onClick={() => { setProblem(''); record.mutate('') }}>Not content</Button>
       {problem
         ? <p role="status" className="w-full text-body-2-regular text-text-error-primary">{problem}</p>
         : null}
@@ -178,8 +178,8 @@ export function PendingGenres(
   const genres = pendingGenres(row);
   if (!genres.length) return null;
   return (
-    <div role="group" aria-label="未收录 genre" className="flex flex-col gap-2 rounded-surface border border-separator-border bg-background-primary-default px-4 py-3">
-      <h5 className="text-body-2-medium text-text-secondary">{`未收录 genre · ${genres.length}`}</h5>
+    <div role="group" aria-label="Uncollected genre" className="flex flex-col gap-2 rounded-surface border border-separator-border bg-background-primary-default px-4 py-3">
+      <h5 className="text-body-2-medium text-text-secondary">{`Uncollected genre · ${genres.length}`}</h5>
       {genres.map((genre) => (
         <GenreRow key={genre} genre={genre} tags={tags} locked={locked} toast={toast} />
       ))}

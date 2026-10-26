@@ -187,7 +187,7 @@ class ScanTests(unittest.TestCase):
     def test_sidecars_are_registered_against_the_video_in_the_same_directory(self):
         result, output = self._scan()
         self.assertEqual((result.subtitles, result.orphan_subtitles), (3, 1))
-        self.assertIn("字幕 3 条（孤立 1 条）", output)
+        self.assertIn("subtitles 3 (orphaned 1)", output)
         self.assertEqual(self._rows(), [
             (r"R:\media\ABP-758\ABP-758.chs.srt", "zh-Hans", "srt",
              subtitles.SUFFIX, "ABP-758.mp4"),
@@ -348,8 +348,8 @@ class SubtitleApiTests(unittest.TestCase):
         self.assertEqual(tracks[0]["label"], "简体中文")
         self.assertEqual(tracks[0]["src"], "/api/assets/1/subtitles/0")
         self.assertTrue(tracks[0]["playable"])
-        self.assertEqual(tracks[1]["note"], "不在正片所在目录")
-        self.assertEqual(tracks[2]["note"], "编码未识别")
+        self.assertEqual(tracks[1]["note"], "Not in the main video's directory")
+        self.assertEqual(tracks[2]["note"], "Encoding not recognized")
         self.assertFalse(tracks[1]["playable"] or tracks[2]["playable"])
 
     def test_a_track_comes_back_as_webvtt(self):
@@ -368,7 +368,7 @@ class SubtitleApiTests(unittest.TestCase):
         with self._client() as client:
             response = client.get("/api/assets/1/subtitles/2")
         self.assertEqual(response.status_code, 415)
-        self.assertEqual(response.json()["error"], "编码未识别")
+        self.assertEqual(response.json()["error"], "Encoding not recognized")
 
     def test_an_index_past_the_end_and_a_missing_asset_both_404(self):
         with self._client() as client:

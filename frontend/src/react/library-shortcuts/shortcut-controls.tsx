@@ -17,9 +17,9 @@ import './shortcuts.css';
 const Star = spriteGlyph('star');
 const Bookmark = spriteGlyph('bookmark-plus');
 const ChevronRight = spriteGlyph('chevron-right');
-const LABELS: Record<string, string> = { performer: '艺人', creator: '创作者', studio: '片商与厂牌', series: '系列', agency: '事务所', tag: '标签' };
+const LABELS: Record<string, string> = { performer: 'Performer', creator: 'Creator', studio: 'Maker and studio', series: 'Series', agency: 'Agency', tag: 'Tag' };
 const GLYPHS = { all: spriteGlyph('star'), performer: spriteGlyph('user-round'), creator: spriteGlyph('user-round'), studio: spriteGlyph('clapperboard'), series: spriteGlyph('film'), agency: spriteGlyph('briefcase'), tag: spriteGlyph('tags'), filters: spriteGlyph('list-filter') };
-const SCOPES = [['all', '全部'], ...Object.entries(LABELS), ['filters', '保存的筛选']];
+const SCOPES = [['all', 'All'], ...Object.entries(LABELS), ['filters', 'Saved filters']];
 
 export function FavoriteButton({ item }: { item: Favorite }) {
   return <FavoriteChoice key={`${item.kind}:${item.entity_id}:${item.name}`} item={item} />;
@@ -34,13 +34,13 @@ function FavoriteChoice({ item }: { item: Favorite }) {
     : item.favorite ?? (query.data ? isFavorite(query.data.favorites || [], item) : false);
   return <span className="inline-flex min-w-0 flex-col gap-1">
     <button type="button" data-favorite="" aria-pressed={!!selected}
-      aria-label={`${selected ? '取消收藏' : '收藏'}${item.name}`}
-      title={`${selected ? '取消收藏' : '收藏'}${item.name}`}
+      aria-label={`${selected ? 'Unfavorite' : 'Favorite'} ${item.name}`}
+      title={`${selected ? 'Unfavorite' : 'Favorite'} ${item.name}`}
       {...busyProps(write.isPending)} onClick={() => {
         if (!write.isPending) write.mutate({ action: 'favorite', ...item, on: !selected });
       }}>{write.isPending ? <span aria-hidden dangerouslySetInnerHTML={{ __html: spinnerHtml('') }} /> : <Star />}</button>
     {write.isError ? <Note tone="error">{errorMessage(write.error)}</Note> : null}
-    {query.isError ? <Button variant="secondary" size="small" onClick={() => void query.refetch()}>重试读取收藏</Button> : null}
+    {query.isError ? <Button variant="secondary" size="small" onClick={() => void query.refetch()}>Retry loading favorites</Button> : null}
   </span>;
 }
 
@@ -48,9 +48,9 @@ function FavoriteChoice({ item }: { item: Favorite }) {
 export function LibraryShortcuts({ currentHref, kind }: { currentHref?: () => string; kind?: string }) {
   const [open, setOpen] = useState(false);
   return <>
-    <span data-shortcuts-entry=""><FilterIconButton data-shortcuts-trigger="" label="我的收藏" icon={Star}
+    <span data-shortcuts-entry=""><FilterIconButton data-shortcuts-trigger="" label="My favorites" icon={Star}
       aria-haspopup="dialog" aria-expanded={open} onPress={() => setOpen(true)} /></span>
-    <ModalFrame isOpen={open} onOpenChange={setOpen} width="collections" label="我的收藏">
+    <ModalFrame isOpen={open} onOpenChange={setOpen} width="collections" label="My favorites">
       {open ? <ShortcutContents currentHref={currentHref} kind={kind} close={() => setOpen(false)} /> : null}
     </ModalFrame>
   </>;
@@ -89,7 +89,7 @@ function ShortcutContents({ currentHref, kind, close }: { currentHref?: () => st
     previousScope.current = scope;
   }, [scope]);
   useLayoutEffect(() => { scroll.current?.() });
-  const label = SCOPES.find(([value]) => value === scope)?.[1] || '全部';
+  const label = SCOPES.find(([value]) => value === scope)?.[1] || 'All';
   const selectWithKeys = (event: KeyboardEvent<HTMLDivElement>) => {
     const tabs = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
     const index = tabs.indexOf(event.target as HTMLButtonElement);
@@ -106,7 +106,7 @@ function ShortcutContents({ currentHref, kind, close }: { currentHref?: () => st
     event.preventDefault();
     if (!currentHref || !name.trim() || write.isPending) return;
     write.mutate({ action: 'save_filter', name: name.trim(), href: currentHref() }, {
-      onSuccess: () => { setName(''); setMessage('筛选已保存') },
+      onSuccess: () => { setName(''); setMessage('Filter saved') },
     });
   };
   const data = query.data;
@@ -115,12 +115,12 @@ function ShortcutContents({ currentHref, kind, close }: { currentHref?: () => st
   return <div data-shortcuts-panel="">
     <div ref={head} data-shortcuts-head="">
       <h2 className="text-title-2-semibold text-text-primary">{label}</h2>
-      <SettingsDialogClose label="关闭我的收藏" onPress={close} />
+      <SettingsDialogClose label="Close my favorites" onPress={close} />
     </div>
       <aside data-shortcuts-sidebar="" data-settings-nav="" data-glass-pane={narrow ? undefined : ''}>
-      <div ref={navigation} data-shortcuts-categories="" data-glass-pane={narrow ? '' : undefined} role="tablist" aria-label="收藏类型" onKeyDown={selectWithKeys} onPointerLeave={glide.leave}>
+      <div ref={navigation} data-shortcuts-categories="" data-glass-pane={narrow ? '' : undefined} role="tablist" aria-label="Favorite types" onKeyDown={selectWithKeys} onPointerLeave={glide.leave}>
         <span ref={pane} data-view-glide="" data-shortcuts-glide="" aria-hidden="true" hidden />
-        <p data-shortcuts-caption="" role="presentation">我的收藏</p>
+        <p data-shortcuts-caption="" role="presentation">My favorites</p>
         {SCOPES.map(([value, label]) => {
           const Glyph = GLYPHS[value as keyof typeof GLYPHS] || Star;
           const count = value === 'filters' ? data?.filters.length || 0 : (data?.favorites || []).filter(row => value === 'all' || row.kind === value).length;
@@ -130,19 +130,19 @@ function ShortcutContents({ currentHref, kind, close }: { currentHref?: () => st
           </button>;
         })}
       </div>
-      <nav data-shortcuts-footer="" aria-label="收藏作品清单">
-        <a href="/flagged" onClick={close}><Star aria-hidden />已标记<ChevronRight aria-hidden /></a>
-        <a href="/watch-later" onClick={close}><Bookmark aria-hidden />稍后看<ChevronRight aria-hidden /></a>
+      <nav data-shortcuts-footer="" aria-label="Favorite work lists">
+        <a href="/flagged" onClick={close}><Star aria-hidden />Flagged<ChevronRight aria-hidden /></a>
+        <a href="/watch-later" onClick={close}><Bookmark aria-hidden />Watch later<ChevronRight aria-hidden /></a>
       </nav>
       </aside>
       <div ref={content} data-shortcuts-content="" role="tabpanel" id={`${id}-content`} aria-labelledby={`${id}-${scope}`} tabIndex={0} className="flex min-h-0 min-w-0 flex-col gap-4 overflow-y-auto overscroll-contain">
     {query.isPending ? <div aria-busy="true" data-skeleton="" className="h-12 animate-pulse rounded-lg bg-background-secondary-default" /> : null}
-    {query.isError ? <Note tone="error" action={<Button variant="secondary" onClick={() => void query.refetch()}>重试</Button>}>{errorMessage(query.error)}</Note> : null}
+    {query.isError ? <Note tone="error" action={<Button variant="secondary" onClick={() => void query.refetch()}>Retry</Button>}>{errorMessage(query.error)}</Note> : null}
     {write.isError ? <Note tone="error">{errorMessage(write.error)}</Note> : null}
     {data ? scope !== 'filters' ? <>
-      <Input aria-label="搜索收藏" placeholder="搜索收藏" leadingIcon={spriteGlyph('search')} value={search} onChange={setSearch} />
-      {!rows.length ? <EmptyState shell="plain" icon={Star} title={search ? '没有匹配的收藏' : (data.favorites.length ? '还没有此类收藏' : '还没有收藏')}>
-        {search ? '试试其他名称。' : '在资料页或标签页收藏常用内容。'}
+      <Input aria-label="Search favorites" placeholder="Search favorites" leadingIcon={spriteGlyph('search')} value={search} onChange={setSearch} />
+      {!rows.length ? <EmptyState shell="plain" icon={Star} title={search ? 'No matching favorites' : (data.favorites.length ? 'No favorites of this type yet' : 'No favorites yet')}>
+        {search ? 'Try another name.' : 'Favorite frequently used items on profile or tag pages.'}
       </EmptyState> : null}
       <div data-shortcuts-list="">{rows.map((row) => <div key={row.key} data-shortcuts-row="" className="flex min-w-0 items-center justify-between gap-3">
         <a href={favoriteHref(row)} aria-label={row.name} onClick={close} className="flex min-w-0 flex-1 items-center gap-3 text-body-regular text-text-primary">
@@ -150,19 +150,19 @@ function ShortcutContents({ currentHref, kind, close }: { currentHref?: () => st
           <span className="flex min-w-0 flex-col gap-1"><span className="truncate">{row.name}</span>
             <span className="text-caption-1-regular text-text-secondary">{LABELS[row.kind]}</span></span>
         </a>
-        <Button variant="secondary" size="small" aria-label={`取消收藏${row.name}`} {...busyProps(write.isPending)}
-          onClick={() => { if (!write.isPending) write.mutate({ action: 'favorite', ...row, on: false }) }}>取消收藏</Button>
+        <Button variant="secondary" size="small" aria-label={`Unfavorite ${row.name}`} {...busyProps(write.isPending)}
+          onClick={() => { if (!write.isPending) write.mutate({ action: 'favorite', ...row, on: false }) }}>Unfavorite</Button>
       </div>)}</div>
     </> : <>
-      {!data.filters.length ? <EmptyState shell="plain" icon={spriteGlyph('list-filter')} title="还没有保存的筛选">在馆藏页保存当前条件，随时打开。</EmptyState> : null}
+      {!data.filters.length ? <EmptyState shell="plain" icon={spriteGlyph('list-filter')} title="No saved filters yet">Save the current conditions on the library page to open them anytime.</EmptyState> : null}
       {data.filters.map((row) => <div key={row.id} className="flex min-w-0 items-center justify-between gap-2">
         <a href={row.href} onClick={close} className="min-w-0 flex-1 break-all text-body-regular text-text-primary underline">{row.name}</a>
-        <Button variant="secondary" size="small" aria-label={`删除筛选${row.name}`} {...busyProps(write.isPending)}
-          onClick={() => { if (!write.isPending) write.mutate({ action: 'delete_filter', id: row.id }) }}>删除</Button>
+        <Button variant="secondary" size="small" aria-label={`Delete filter ${row.name}`} {...busyProps(write.isPending)}
+          onClick={() => { if (!write.isPending) write.mutate({ action: 'delete_filter', id: row.id }) }}>Delete</Button>
       </div>)}
-      {currentHref ? <form onSubmit={submit} className="flex flex-col gap-3" aria-label="保存当前筛选">
-        <Input label="筛选名称" value={name} onChange={setName} maxLength={80} />
-        <Button type="submit" disabled={!name.trim()} {...busyProps(write.isPending)}>保存当前筛选</Button>
+      {currentHref ? <form onSubmit={submit} className="flex flex-col gap-3" aria-label="Save current filter">
+        <Input label="Filter name" value={name} onChange={setName} maxLength={80} />
+        <Button type="submit" disabled={!name.trim()} {...busyProps(write.isPending)}>Save current filter</Button>
         {message ? <span role="status" className="text-body-2-regular text-text-secondary">{message}</span> : null}
       </form> : null}
     </> : null}

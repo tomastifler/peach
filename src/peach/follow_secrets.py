@@ -28,7 +28,7 @@ class Credential:
         missing = [name for name in names if not self.values.get(name)]
         if missing:
             raise CredentialError(
-                f"{self.provider} 凭据缺少字段：{', '.join(missing)}"
+                f"{self.provider} credentials are missing fields: {', '.join(missing)}"
             )
         return tuple(str(self.values[name]) for name in names)
 
@@ -52,7 +52,7 @@ class CredentialStore:
 
     def path_for(self, provider: str) -> Path:
         if not provider or "/" in provider or "\\" in provider or provider.startswith("."):
-            raise CredentialError("provider 名称非法")
+            raise CredentialError("Invalid provider name")
         return self.root / f"{provider}.json"
 
     def syncable(self, provider: str) -> tuple[str, ...]:
@@ -78,9 +78,9 @@ class CredentialStore:
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-            raise CredentialError(f"{provider} 凭据文件无法解析") from exc
+            raise CredentialError(f"{provider} credentials file could not be parsed") from exc
         if not isinstance(payload, dict):
-            raise CredentialError(f"{provider} 凭据文件必须是 JSON 对象")
+            raise CredentialError(f"{provider} credentials file must be a JSON object")
         return {
             str(key): str(value) for key, value in payload.items()
             if value is not None and not isinstance(value, (dict, list))
@@ -187,17 +187,17 @@ CREDENTIAL_GUIDE: dict[str, dict] = {
         "fields": ["cookie"],
         # FANBOX Cookie 绑定浏览器会话与风控环境，不跨机同步。
         "syncable": [],
-        "why": "公开列表不需要登录；帖子详情被 FANBOX 验证页拦住时，可用浏览器会话取得正文、多图和外部资源链接。",
+        "why": "The public list needs no sign-in; when post details are blocked by the FANBOX verification page, a browser session can fetch the body, multiple images and external resource links.",
         "where": "https://www.fanbox.cc/",
-        "howto": "登录 FANBOX 后，从一次成功的 api.fanbox.cc/post.info 请求复制整条 Cookie 请求头。",
+        "howto": "After signing in to FANBOX, copy the whole Cookie request header from a successful api.fanbox.cc/post.info request.",
     },
     "gofile": {
         "requirement": "optional",
         "fields": ["api_token"],
         "syncable": [],
-        "why": "用于展开 Gofile 文件页，取得其中的图片和视频列表；Gofile 当前要求 Premium 才能读取 contents API，不配置仍会保留文件页链接。",
+        "why": "Used to expand Gofile file pages and get their image and video lists; Gofile currently requires Premium to read the contents API, and without it the file page link is still kept.",
         "where": "https://gofile.io/myprofile",
-        "howto": "登录 Premium Gofile 账户后，在个人资料页复制 API token。",
+        "howto": "After signing in to a Premium Gofile account, copy the API token from the profile page.",
     },
     "kemono": {"requirement": "none"},
     "coomer": {"requirement": "none"},
@@ -208,28 +208,28 @@ CREDENTIAL_GUIDE: dict[str, dict] = {
         "fields": ["user_id", "api_key"],
         # 账号级、与机器无关，用户明确要求跨机同步。
         "syncable": ["user_id", "api_key"],
-        "why": "网页版挂了 Cloudflare 验证码，Peach 不绕验证码，只能走官方 API。",
+        "why": "The website sits behind a Cloudflare captcha; Peach does not bypass captchas, so only the official API can be used.",
         "where": "https://rule34.xxx/index.php?page=account&s=options",
-        "howto": "登录后在账号设置页生成 API key，把 user_id 和 api_key 写进凭据文件。",
+        "howto": "After signing in, generate an API key on the account settings page and write user_id and api_key into the credentials file.",
     },
     "f95zone": {
         "requirement": "optional",
         "fields": ["cookie"],
         # cookie 绑会话与客户端 IP，同步到另一台大概率直接失效——不同步。
         "syncable": [],
-        "why": "发现更新不需要登录；只有取附件和 masked 下载链接才需要会话。",
+        "why": "Discovering updates needs no sign-in; only fetching attachments and masked download links requires a session.",
         "where": "https://f95zone.to/",
-        "howto": "登录后从浏览器复制整条 Cookie 请求头，写进凭据文件的 cookie 字段。",
+        "howto": "After signing in, copy the whole Cookie request header from the browser and write it into the cookie field of the credentials file.",
     },
     "simpcity": {
         "requirement": "required",
         "fields": ["cookie"],
         # 登录会话绑浏览器与 DDoS-Guard 的放行记录，同步到另一台大概率直接失效——不同步。
         "syncable": [],
-        "why": "站点不让游客读帖，检查更新必须带登录会话；前面的 DDoS-Guard 对标准桌面浏览器"
-               "标识不出质询，Peach 也不解任何质询，cookie 失效就原样报错。",
+        "why": "The site does not let guests read posts, so update checks need a signed-in session; the DDoS-Guard in front cannot identify "
+               "a challenge for a standard desktop browser, and Peach solves no challenges, so an expired cookie is reported as is.",
         "where": "https://simpcity.cr/",
-        "howto": "登录后从浏览器复制整条 Cookie 请求头，写进凭据文件的 cookie 字段。",
+        "howto": "After signing in, copy the whole Cookie request header from the browser and write it into the cookie field of the credentials file.",
     },
 }
 

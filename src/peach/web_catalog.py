@@ -189,7 +189,7 @@ def region_facet_rows(rows) -> list[dict]:
     `none`，空串到不了查询串里。
     """
     return [{**dict(row), "k": row["k"] or "none",
-             "label": region_label(row["k"]) or "未判定"} for row in rows]
+             "label": region_label(row["k"]) or "Undetermined"} for row in rows]
 
 
 def _entity_asset_filter(connection, kind: str, name: str) -> tuple[str, list[int]]:
@@ -701,7 +701,7 @@ def attach_edition_groups(contract: WebContract, rows) -> None:
             continue
         row["edition_group"] = {
             "key": code,
-            "title": code or str(row.get("code") or "多版本作品"),
+            "title": code or str(row.get("code") or "Multi-edition work"),
             "count": len({item['version_id'] for item in group}),
             "seed_id": group[0]["id"],
             "item_ids": [item["id"] for item in group],
@@ -800,7 +800,7 @@ def attach_multipart_groups(contract: WebContract, rows) -> None:
             continue
         row["part_group"] = {
             "key": key,
-            "title": code or str(row.get("code") or "分卷作品"),
+            "title": code or str(row.get("code") or "Multi-part work"),
             "count": len(group),
             "seed_id": group[0]["id"],
             "item_ids": [item["id"] for item in group],
@@ -1376,7 +1376,7 @@ def w_item_tag(contract: WebContract, body):
     if operation == "add":
         canonical = current_tags([tag])
         if not canonical:
-            raise ValueError("该标签不在当前词表中")
+            raise ValueError("This tag is not in the current vocabulary")
         tag = canonical[0]
     normalized = normalize_entity_name(tag)
     stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())

@@ -169,7 +169,7 @@ describe('播放墙的共享播放器', () => {
     const signal = new AbortController().signal;
     for (const extra of [{ cost: 'metered' }, { location: 'online' }]) {
       response(extra);
-      await expect(stage.mountWallPlayer(item(1), frame, signal)).rejects.toThrow('请打开详情');
+      await expect(stage.mountWallPlayer(item(1), frame, signal)).rejects.toThrow('Open the details page');
     }
     response(); offline = true;
     await expect(stage.mountWallPlayer(item(1), frame, signal)).rejects.toThrow('来源未挂载');
@@ -253,8 +253,8 @@ describe('小窗自己的键', () => {
     settings.seekSeconds = 15;
     show(1).leave(true);
     const { player } = fake.mounts[0]!;
-    expect(dom.back.getAttribute('aria-label')).toBe('后退 15 秒');
-    expect(dom.ahead.title).toBe('前进 15 秒');
+    expect(dom.back.getAttribute('aria-label')).toBe('Back 15 s');
+    expect(dom.ahead.title).toBe('Forward 15 s');
     player.time = 90;
     stage.seekMiniplayer(1);
     expect(player.time).toBe(100);

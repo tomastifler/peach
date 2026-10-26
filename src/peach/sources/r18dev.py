@@ -100,11 +100,11 @@ class R18DevSource(SiteSource):
         try:
             raw = json.loads(page.body)
         except ValueError:
-            raise SourceFailure(FailureReason.PARSE_ERROR, "r18.dev 返回的不是作品 JSON") from None
+            raise SourceFailure(FailureReason.PARSE_ERROR, "r18.dev did not return work JSON") from None
         if not isinstance(raw, dict):
-            raise SourceFailure(FailureReason.PARSE_ERROR, "r18.dev 返回的不是作品 JSON")
+            raise SourceFailure(FailureReason.PARSE_ERROR, "r18.dev did not return work JSON")
         if not identifies_code(code, {'content_id': raw.get('content_id')}):
-            raise SourceFailure(FailureReason.PARSE_ERROR, '来源返回的番号不匹配')
+            raise SourceFailure(FailureReason.PARSE_ERROR, 'The code returned by the source does not match')
         name = lambda key: (raw.get(key) or {}).get('name', '')
         jacket = (raw.get('images') or {}).get('jacket_image')
         return SiteRecord(

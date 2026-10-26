@@ -140,11 +140,11 @@ def _metadata_response(contract, args, candidates, picked, limit, scope):
 
 
 def _metadata_message(job):
-    messages = {"running": "正在读取作品资料", "complete": "作品资料读取完成", "failed": "作品资料未取得"}
-    reasons = {"request_budget": "本轮请求预算已用完", "byte_budget": "本轮流量预算已用完",
-               "time_budget": "本轮时间预算已用完", "source_cooldown": "来源暂时不可用，已停止读取",
-               "cancelled": "已停止读取作品资料"}
-    return reasons.get(job.get("stop_reason"), messages.get(job["status"], "作品资料未取得"))
+    messages = {"running": "Reading work metadata", "complete": "Work metadata read complete", "failed": "Work metadata not obtained"}
+    reasons = {"request_budget": "This round's request budget is used up", "byte_budget": "This round's traffic budget is used up",
+               "time_budget": "This round's time budget is used up", "source_cooldown": "The source is temporarily unavailable; reading stopped",
+               "cancelled": "Stopped reading work metadata"}
+    return reasons.get(job.get("stop_reason"), messages.get(job["status"], "Work metadata not obtained"))
 
 
 def q_jav_discoveries(contract, args):

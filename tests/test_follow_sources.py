@@ -451,7 +451,7 @@ class OfficialConnectorTests(unittest.TestCase):
         with self.assertRaises(FollowSourceError) as caught:
             connector.fetch("ffxivinitiala")
         self.assertIn("Premium", str(caught.exception))
-        self.assertIn("token 有效", str(caught.exception))
+        self.assertIn("the token is valid", str(caught.exception))
 
     def test_one_blocked_detail_keeps_the_public_list_item(self):
         def route(request):
@@ -1750,7 +1750,7 @@ class Rule34XxxConnectorTests(unittest.TestCase):
         with self.assertRaises(FollowSourceError) as caught:
             self._connector(body=body).fetch("lazyprocrastinator")
         message = str(caught.exception)
-        self.assertIn("频率限制", message)
+        self.assertIn("rate limit hit", message)
         self.assertIn("60", message)
         self.assertNotIn("JSON", message)
         # 检查循环据此让整站冷却，等的就是正文里那个窗口。
@@ -1762,7 +1762,7 @@ class Rule34XxxConnectorTests(unittest.TestCase):
         with self.assertRaises(FollowSourceRateLimited) as caught:
             connector.fetch("lazyprocrastinator")
         self.assertIn("429", str(caught.exception))
-        self.assertIn("频繁", str(caught.exception))
+        self.assertIn("too many requests", str(caught.exception))
 
 
     def test_authentication_rejection_is_reported_as_a_credential_error(self):
@@ -1898,7 +1898,7 @@ class SimpCityConnectorTests(unittest.TestCase):
         with self.assertRaises(FollowSourceError) as caught:
             SimpCityConnector(credential=self.COOKIE,
                               transport=_transport(body=SIMPCITY_GUEST_HTML)).fetch("4242")
-        self.assertIn("游客态", str(caught.exception))
+        self.assertIn("guest mode", str(caught.exception))
 
     @staticmethod
     def _search_transport(record):
@@ -2045,11 +2045,11 @@ class ParseSourceUrlTests(unittest.TestCase):
             ("https://kemono.cr/posts", "fanbox/user"),
             ("https://rule34video.com/latest-updates/", "models"),
             ("https://rule34.xxx/index.php?page=post&s=view&id=1", "tags="),
-            ("https://rule34.paheal.net/post/view/7428820", "搜索标签"),
+            ("https://rule34.paheal.net/post/view/7428820", "search tag"),
             ("https://f95zone.to/latest", "threads"),
-            ("https://www.fanbox.cc/", "创作者主页"),
-            ("https://subscribestar.adult/posts/1", "创作者主页"),
-            ("https://www.patreon.com/posts/123", "创作者主页"),
+            ("https://www.fanbox.cc/", "creator home page"),
+            ("https://subscribestar.adult/posts/1", "creator home page"),
+            ("https://www.patreon.com/posts/123", "creator home page"),
         ):
             with self.assertRaises(FollowSourceError) as caught:
                 parse_source_url(url)

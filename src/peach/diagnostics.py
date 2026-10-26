@@ -46,26 +46,26 @@ def configuration(config, configured, *, validate=True):
         if validate:
             settings_file.load_config(environ=dict(os.environ, PEACH_DATA_ROOT=str(config.data_root)))
         elif settings_file.error():
-            raise settings_file.SettingsFileError("配置文件无法读取")
+            raise settings_file.SettingsFileError("Config file could not be read")
     except settings_file.SettingsFileError:
-        return item("配置", "failed", "配置文件无法读取", action="在本机修复配置文件")
+        return item("Config", "failed", "Config file could not be read", action="Repair the config file on this machine")
     if not configured:
-        return item("配置", "failed", "尚未完成首次配置", action="完成首次配置", target="/settings/library")
-    return item("配置", "ok", "配置可读取")
+        return item("Config", "failed", "First-time setup is not complete", action="Complete first-time setup", target="/settings/library")
+    return item("Config", "ok", "Config is readable")
 
 
 def database_checks(settings):
     state = inspect_database(settings.db_path)
-    reasons = {"missing": "数据库不存在", "empty": "数据库尚未初始化", "unavailable": "数据库无法读取"}
+    reasons = {"missing": "Database does not exist", "empty": "Database is not initialised", "unavailable": "Database could not be read"}
     readable = state["database"] == "available" and state["readable"]
-    database = item("数据库", "ok" if readable else "failed",
-                    "数据库可读取" if readable else reasons.get(state["database"], "数据库结构无法读取"),
-                    action="" if readable else "检查本机数据库与备份", details={"state": state["database"]})
-    schema_reasons = {"current": "迁移校验通过", "pending": "存在待执行迁移", "empty": "数据库尚未初始化",
-                      "mismatch": "迁移记录与当前程序不一致", "unavailable": "迁移校验未取得"}
+    database = item("Database", "ok" if readable else "failed",
+                    "Database is readable" if readable else reasons.get(state["database"], "Database schema could not be read"),
+                    action="" if readable else "Check the local database and backups", details={"state": state["database"]})
+    schema_reasons = {"current": "Migration check passed", "pending": "Migrations are pending", "empty": "Database is not initialised",
+                      "mismatch": "Migration records do not match the current program", "unavailable": "Migration check unavailable"}
     current = state["schema"] == "current"
-    schema = item("数据库迁移", "ok" if current else "failed", schema_reasons[state["schema"]],
-                  action="" if current else "在本机核对数据库迁移与备份",
+    schema = item("Database migrations", "ok" if current else "failed", schema_reasons[state["schema"]],
+                  action="" if current else "Check database migrations and backups on this machine",
                   details={key: state[key] for key in ("schema", "version", "pending", "mismatched", "unknown_versions")})
     return database, schema
 
@@ -83,12 +83,12 @@ def tools(settings, *, inspect=True):
     missing = [name for name, value in found.items() if not value["available"]]
     unavailable = [name for name in ('ffmpeg', 'ffprobe') if found[name]['available'] and not found[name].get('usable', True)]
     incomplete = found['ffmpeg'].get('usable') and not found['ffmpeg'].get('av1_software')
-    problems = (["未找到：" + "、".join(missing)] if missing else [])
-    problems += (["无法执行：" + "、".join(unavailable)] if unavailable else [])
-    problems += ['FFmpeg 缺少 AV1 软件解码器'] if incomplete else []
+    problems = (["Not found: " + ", ".join(missing)] if missing else [])
+    problems += (["Cannot execute: " + ", ".join(unavailable)] if unavailable else [])
+    problems += ['FFmpeg is missing the AV1 software decoder'] if incomplete else []
     return item("FFmpeg／OpenSSL", 'warning' if problems else 'ok',
-                '；'.join(problems) or ('媒体工具可执行，AV1 软件解码器可用' if inspect else '工具路径已找到'),
-                action='更新媒体工具' if problems else '', target='/settings/maintenance' if problems else None, details=found)
+                '; '.join(problems) or ('Media tools are executable and the AV1 software decoder is available' if inspect else 'Tool paths found'),
+                action='Update media tools' if problems else '', target='/settings/maintenance' if problems else None, details=found)
 
 
 def security(settings):
@@ -100,21 +100,21 @@ def security(settings):
     protected = policy["mode"] == "password" or (policy["mode"] == "legacy" and bool(settings.token))
     exposed = not loopback or settings.tunnel_enabled
     if policy["mode"] == "locked":
-        return item("访问安全", "failed", "访问密码配置无法读取", action="在本机检查访问密码配置")
+        return item("Access security", "failed", "Access password config could not be read", action="Check the access password config on this machine")
     if exposed and not protected:
-        return item("访问安全", "warning", "局域网或公网入口未开启访问密码",
-                    action="在配置中开启访问密码", target="/settings/network", details={"exposed": True, "protected": False})
-    return item("访问安全", "ok", "已开启访问密码" if protected else "仅监听本机",
+        return item("Access security", "warning", "No access password is set for the LAN or public entry point",
+                    action="Turn on the access password in settings", target="/settings/network", details={"exposed": True, "protected": False})
+    return item("Access security", "ok", "Access password enabled" if protected else "Listening on this machine only",
                 details={"exposed": exposed, "protected": protected})
 
 
 def media_mounts(snapshot):
     if not snapshot["sources"]:
-        return item("媒体挂载", "disabled", "没有已配置的本地来源")
+        return item("Media mounts", "disabled", "No local sources configured")
     states = {"ok": "ok", "degraded": "warning", "checking": "unknown"}
-    reason = "来源可读取" if snapshot["state"] == "ok" else "；".join(snapshot["warnings"]) or "挂载检测尚未完成"
-    return item("媒体挂载", states[snapshot["state"]], reason,
-                action="检查媒体目录与挂载状态" if snapshot["state"] != "ok" else "", target="/settings/library",
+    reason = "Sources are readable" if snapshot["state"] == "ok" else "; ".join(snapshot["warnings"]) or "Mount check has not finished"
+    return item("Media mounts", states[snapshot["state"]], reason,
+                action="Check the media directories and mount status" if snapshot["state"] != "ok" else "", target="/settings/library",
                 details=snapshot)
 
 
@@ -133,10 +133,10 @@ def writable_root(root):
             probe.write(b"peach")
             probe.flush()
     except PermissionError:
-        return item("数据目录", "failed", "没有权限写入数据目录", action="调整数据目录的写入权限")
+        return item("Data directory", "failed", "No permission to write to the data directory", action="Adjust write permissions on the data directory")
     except OSError:
-        return item("数据目录", "failed", "数据目录无法写入", action="检查数据目录与可用空间")
-    return item("数据目录", "ok", "临时写入与清理通过")
+        return item("Data directory", "failed", "The data directory is not writable", action="Check the data directory and free space")
+    return item("Data directory", "ok", "Temporary write and cleanup passed")
 
 
 def port_status(host, port):
@@ -144,7 +144,7 @@ def port_status(host, port):
     try:
         address = ipaddress.ip_address(host)
     except ValueError:
-        return item("服务端口", "unknown", "监听地址不是 IP，端口状态未取得", details={"port": port})
+        return item("Service port", "unknown", "The listen address is not an IP, so port status is unavailable", details={"port": port})
     family = socket.AF_INET6 if address.version == 6 else socket.AF_INET
     try:
         with socket.socket(family, socket.SOCK_STREAM) as probe:
@@ -152,9 +152,9 @@ def port_status(host, port):
     except OSError as error:
         import errno
         if error.errno == errno.EADDRINUSE or getattr(error, "winerror", None) == 10048:
-            return item("服务端口", "ok", "端口正在使用", details={"port": port, "state": "in_use"})
-        return item("服务端口", "unknown", "端口状态未取得", details={"port": port})
-    return item("服务端口", "ok", "端口当前可用", details={"port": port, "state": "available"})
+            return item("Service port", "ok", "Port is in use", details={"port": port, "state": "in_use"})
+        return item("Service port", "unknown", "Port status unavailable", details={"port": port})
+    return item("Service port", "ok", "Port is available", details={"port": port, "state": "available"})
 
 
 def recent_failure(path):
@@ -164,13 +164,13 @@ def recent_failure(path):
             row = connection.execute("SELECT id,finished_at FROM task_run WHERE status='failed' "
                                      "ORDER BY finished_at DESC,id DESC LIMIT 1").fetchone()
     except (sqlite3.Error, OSError):
-        return item("后台任务", "unknown", "任务失败记录未取得")
+        return item("Background tasks", "unknown", "Task failure records unavailable")
     if row is None:
-        return item("后台任务", "ok", "没有已记录的任务失败")
+        return item("Background tasks", "ok", "No task failures recorded")
     # 不公开任务 error、参数或结果原文，它们可能包含凭据和媒体路径。
     moment = str(row[1] or "")
     safe_time = moment if len(moment) <= 32 and all(c in "0123456789-:+.TZ " for c in moment) else None
-    return item("后台任务", "warning", "存在已记录的任务失败", action="在活动页查看失败任务",
+    return item("Background tasks", "warning", "Task failures have been recorded", action="View failed tasks on the Activity page",
                 target="/tasks", details={"id": row[0], "finished_at": safe_time})
 
 
@@ -194,7 +194,7 @@ def report(settings, snapshot, *, config=None):
     checks = component_checks(settings, snapshot, config=config)
     checks.update(data_root=writable_root(config.data_root), port=port_status(settings.host, settings.port),
                   tasks=recent_failure(settings.db_path),
-                  version=item("版本", "ok", f"Peach {__version__} · Python {platform.python_version()}",
+                  version=item("Version", "ok", f"Peach {__version__} · Python {platform.python_version()}",
                                details={"peach": __version__, "python": platform.python_version()}))
     statuses = {check["status"] for check in checks.values()}
     state = "failed" if "failed" in statuses else "warning" if statuses & {"warning", "unknown"} else "ok"

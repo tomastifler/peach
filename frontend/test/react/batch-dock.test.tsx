@@ -112,11 +112,11 @@ describe('每种语境的键', () => {
   it('从左到右的顺序，「取消」总在最后，危险操作只有移出与彻底删除', () => {
     const shape = (context: Parameters<typeof batchActions>[0], dismissed = false) =>
       batchActions(context, dismissed).map((action) => `${action.label}${action.danger ? '!' : ''}`);
-    expect(shape('catalog')).toEqual(['喜欢', '看过', '稍后看', '判定产地', '移入回收站!', '取消']);
-    expect(shape('trash')).toEqual(['还原', '彻底删除!', '取消']);
-    expect(shape('junk')).toEqual(['不是垃圾', '移入回收站!', '取消']);
-    expect(shape('junk', true)).toEqual(['重新判断', '移入回收站!', '取消']);
-    expect(shape('follow')).toEqual(['保存到数据库', '标记已看', '忽略', '取消']);
+    expect(shape('catalog')).toEqual(['Like', 'Seen', 'Watch later', 'Detect region', 'Move to trash!', 'Cancel']);
+    expect(shape('trash')).toEqual(['Restore', 'Delete permanently!', 'Cancel']);
+    expect(shape('junk')).toEqual(['Not junk', 'Move to trash!', 'Cancel']);
+    expect(shape('junk', true)).toEqual(['Reassess', 'Move to trash!', 'Cancel']);
+    expect(shape('follow')).toEqual(['Save to database', 'Mark as seen', 'Ignore', 'Cancel']);
   });
 
   it('「忽略」用划掉的眼睛，不借「取消」那枚叉', () => {
@@ -131,19 +131,19 @@ describe('浮条', () => {
     expect(root.querySelector('[data-selection-dock]')).toBeNull();
     await render({ count: 2, context: 'trash', junkDismissed: false });
     const shown = root.querySelector('[data-selection-dock]')!;
-    expect(shown.getAttribute('aria-label')).toBe('所选项目操作');
-    expect(shown.querySelector('[role="status"]')!.textContent).toBe('已选 2 项');
-    expect(labels(root)).toEqual(['还原', '彻底删除', '取消']);
+    expect(shown.getAttribute('aria-label')).toBe('Actions for selected items');
+    expect(shown.querySelector('[role="status"]')!.textContent).toBe('2 selected');
+    expect(labels(root)).toEqual(['Restore', 'Delete permanently', 'Cancel']);
     await render({ count: 3, context: 'junk', junkDismissed: true });
-    expect(root.querySelector('[data-selection-dock] [role="status"]')!.textContent).toBe('已选 3 项');
-    expect(labels(root)).toEqual(['重新判断', '移入回收站', '取消']);
+    expect(root.querySelector('[data-selection-dock] [role="status"]')!.textContent).toBe('3 selected');
+    expect(labels(root)).toEqual(['Reassess', 'Move to trash', 'Cancel']);
     expect(root.querySelector('[data-batch-scope]')!.getAttribute('data-context')).toBe('junk');
   });
 
   it('上千项的计数带千分位', async () => {
     const { root, render } = await setup();
     await render({ count: 12345, context: 'catalog', junkDismissed: false });
-    expect(root.querySelector('[data-selection-dock] [role="status"]')!.textContent).toBe('已选 12,345 项');
+    expect(root.querySelector('[data-selection-dock] [role="status"]')!.textContent).toBe('12,345 selected');
   });
 
   it('危险键挂 data-danger 读全站那份红，每颗键带自己的 sprite 字形', async () => {
@@ -182,7 +182,7 @@ describe('常驻组件', () => {
     api.render({ count: 4, context: 'follow', junkDismissed: false });
     const status = root.querySelector('[data-selection-dock] [role="status"]')?.textContent;
     const context = root.querySelector('[data-batch-scope]')?.getAttribute('data-context');
-    expect([status, context]).toEqual(['已选 4 项', 'follow']);
+    expect([status, context]).toEqual(['4 selected', 'follow']);
   });
 
   it('壳的 loadBatchDock 在这一面画上之后才交出句柄', async () => {
@@ -196,7 +196,7 @@ describe('常驻组件', () => {
     expect(r.managedEntry(host.root)?.path).toBe('batch-dock');
     expect(host.root.querySelector(':scope > [data-batch-scope]')).not.toBeNull();
     await act(async () => { api!.render({ count: 1, context: 'catalog', junkDismissed: false }) });
-    expect(host.root.querySelector('[data-selection-dock] [role="status"]')?.textContent).toBe('已选 1 项');
+    expect(host.root.querySelector('[data-selection-dock] [role="status"]')?.textContent).toBe('1 selected');
   });
 
   it('收起只卸组件，宿主留在文档里', async () => {

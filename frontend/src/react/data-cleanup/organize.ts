@@ -99,9 +99,9 @@ const count = (value: number | undefined) => Number(value || 0).toLocaleString()
 export function planSummary(plan: OrganizePlan): string {
   const skipped = Object.entries(plan.reasons || {}).sort((a, b) => b[1] - a[1])
     .map(([reason, value]) => `${reason} ${count(value)}`).join(' · ');
-  if (!Number(plan.counts?.change || 0)) return `没有要改的文件。${skipped ? `跳过：${skipped}。` : ''}`;
-  return `${count(plan.counts.change)} 个文件会改名或移动，${count(plan.counts.unchanged)} 个已经就是目标名字`
-    + `${skipped ? `；跳过 ${skipped}` : ''}。`;
+  if (!Number(plan.counts?.change || 0)) return `No files to change.${skipped ? ` Skipped: ${skipped}.` : ''}`;
+  return `${count(plan.counts.change)} files will be renamed or moved, ${count(plan.counts.unchanged)} already have the target name`
+    + `${skipped ? `; skipped ${skipped}` : ''}.`;
 }
 
 /** 跑完的那一趟怎么说。回滚那一趟有 `restored`。 */
@@ -110,7 +110,7 @@ export function organizeOutcome(job: OrganizeJob): { text: string; failed: numbe
   const failed = Number(job.failed || 0);
   const done = Number(rollback ? job.restored : job.moved || 0);
   const text = rollback
-    ? `已退回 ${count(done)} 个文件${failed ? `，${count(failed)} 行未能退回` : ''}。`
-    : `已整理 ${count(done)} 个文件${failed ? `，${count(failed)} 行未能处理` : ''}。`;
+    ? `Reverted ${count(done)} files${failed ? `, ${count(failed)} rows could not be reverted` : ''}.`
+    : `Organized ${count(done)} files${failed ? `, ${count(failed)} rows could not be processed` : ''}.`;
   return { text, failed, rollback };
 }

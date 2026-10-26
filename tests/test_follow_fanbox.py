@@ -69,7 +69,7 @@ class FanboxNormalizerTests(unittest.TestCase):
 
         self.assertEqual([item["id"] for item in content.media_items], ["one", "cover"])
         tail = content.media_items[-1]
-        self.assertEqual(tail["name"], "封面")
+        self.assertEqual(tail["name"], "Cover")
         self.assertEqual(tail["url"], cover)
         self.assertEqual(tail["thumb_url"], cover)
         self.assertEqual(tail["media_kind"], "image")
@@ -146,7 +146,7 @@ class FanboxNormalizerTests(unittest.TestCase):
         self.assertEqual(content.image_count, 1)
 
     def test_unknown_type_fails_loudly(self):
-        with self.assertRaisesRegex(FanboxContentError, "类型不受支持"):
+        with self.assertRaisesRegex(FanboxContentError, "Unsupported FANBOX body type"):
             normalize_fanbox_post({"type": "future-shape", "body": {}})
 
 
