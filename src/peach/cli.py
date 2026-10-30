@@ -319,7 +319,7 @@ def _parse_mounts(
         key, separator, value = chunk.partition("=")
         key = key.strip()
         if not separator or not key:
-            raise SystemExit(f"--mount 要写成 来源ID=路径，收到：{chunk}")
+            raise SystemExit(f"--mount must be written as SOURCE_ID=PATH, got: {chunk}")
         if key not in known:
             raise SystemExit(
                 f"--mount source ID is not declared in [media.locations]: {key}"
@@ -429,7 +429,7 @@ def _init_interactive(
                     print("Run `peach init --force` to regenerate it; this overwrites the file and leaves data untouched.")
                     return 3
     except onboarding.OnboardingAborted as exc:
-        raise SystemExit(f"{exc}已退出，没有写任何文件。") from None
+        raise SystemExit(f"{exc} exited; no files were written.") from None
     answers = onboarding.Answers(**collected)  # type: ignore[arg-type]
     applied = onboarding.apply(config, answers, windows=windows)
     prepared = applied.config

@@ -979,7 +979,7 @@ class FaceMatchFollowupTests(FaceStubCase):
         self.candidate("1-S1", (400, 600), self.HER)
         self.candidate("2-Ideapocket", (400, 600), self.HER)
         summary = self.run_followup()
-        self.assertEqual(summary["outcome"], "图库 2 张彼此认不出同一个人, no face could be cropped from the cover")
+        self.assertEqual(summary["outcome"], "Gallery: 2 images do not match each other as the same person, no face could be cropped from the cover")
         self.assertFalse((self.avatars / f"performer-{self.person}.img").exists())
 
     def test_a_pair_among_strangers_is_a_minority_and_installs_nothing(self):
@@ -989,14 +989,14 @@ class FaceMatchFollowupTests(FaceStubCase):
         self.candidate("3-Moodyz", (400, 600), self.STRANGER)
         self.candidate("4-Fitch", (400, 600), self.HER_AGAIN)
         summary = self.run_followup()
-        self.assertEqual(summary["outcome"], "图库 4 张彼此认不出同一个人, no face could be cropped from the cover")
+        self.assertEqual(summary["outcome"], "Gallery: 4 images do not match each other as the same person, no face could be cropped from the cover")
         self.assertFalse((self.avatars / f"performer-{self.person}.img").exists())
 
     def test_one_picture_alone_is_still_not_enough_without_a_cover(self):
         self.candidate("1-S1", (400, 600), self.HER)
         self.candidate("2-Ideapocket", (400, 600), self.BLANK)
         summary = self.run_followup()
-        self.assertEqual(summary["outcome"], "图库 2 张认不准, no face could be cropped from the cover")
+        self.assertEqual(summary["outcome"], "Gallery: 2 images, cannot identify her reliably, no face could be cropped from the cover")
         self.assertFalse((self.avatars / f"performer-{self.person}.img").exists())
 
     def test_no_match_falls_back_to_the_cover_face(self):

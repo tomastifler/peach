@@ -156,7 +156,7 @@ class BrowserLoginTests(unittest.TestCase):
         self.assertIs(script, pb._FORGET_ON_FIRST_DOCUMENT)
 
     def test_closing_the_window_cancels_the_login(self):
-        browser = FakeBrowser([None, ConnectionError("浏览器关闭了调试连接")])
+        browser = FakeBrowser([None, ConnectionError("The browser closed the debugging connection")])
         login, _made = self.make(browser)
         login.start()
         self.assertEqual(self.finish(login)["state"], pb.CANCELLED)
@@ -208,12 +208,12 @@ class BrowserLoginTests(unittest.TestCase):
         self.assertEqual(made, [])
 
     def test_a_browser_that_does_not_start_is_a_failure_to_poll(self):
-        browser = FakeBrowser([], fail_start=BrowserUnavailable("浏览器没有写出调试口"))
+        browser = FakeBrowser([], fail_start=BrowserUnavailable("The browser did not expose a debugging port"))
         login, _made = self.make(browser)
         login.start()
         status = self.finish(login)
         self.assertEqual(status["state"], pb.FAILED)
-        self.assertIn("调试口", status["message"])
+        self.assertIn("debugging port", status["message"])
 
 
 class ParseTests(unittest.TestCase):

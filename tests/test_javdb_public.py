@@ -263,7 +263,7 @@ class PublicProtocolTests(unittest.TestCase):
         self.assertIsNone(api.peek_movie('EXM-999'))
 
     def test_mismatched_detail_is_rejected(self):
-        with self.assertRaisesRegex(PublicSourceUnavailable, '身份不匹配'):
+        with self.assertRaisesRegex(PublicSourceUnavailable, 'identity does not match'):
             self.api(wrong_code=True).movie('EXM-001')
 
     def test_rate_limit_stops_retrying(self):

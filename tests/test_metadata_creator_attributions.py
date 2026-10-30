@@ -401,7 +401,7 @@ class CreatorAttributionTests(unittest.TestCase):
         upsert_asset_entity(self.connection, kind='creator', name='NewSeller', asset_id=asset_id,
                             role='creator', source='user:manual')
         self.connection.commit()
-        with self.assertRaisesRegex(ValueError, '关系已发生后续改动'):
+        with self.assertRaisesRegex(ValueError, 'relations have changed since'):
             with self.connection:
                 restore(self.connection, manifest)
 

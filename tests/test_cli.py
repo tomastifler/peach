@@ -171,7 +171,7 @@ class InitCommandTests(unittest.TestCase):
     def test_mount_without_an_equals_sign_is_refused(self):
         with self.assertRaises(SystemExit) as caught:
             self._init("--mount", "/mnt/media")
-        self.assertIn("来源ID=路径", str(caught.exception))
+        self.assertIn("SOURCE_ID=PATH", str(caught.exception))
 
     def test_mount_ids_keep_their_case(self):
         """来源 ID 不是盘符，`local` 不能被改写成 `LOCAL`。"""
@@ -357,7 +357,7 @@ class InteractiveInitTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as caught:
             self._run(["", "/nope1", "/nope2", "/nope3"], windows=NATIVE_WINDOWS)
         self.assertIn("after 3 attempts", str(caught.exception))
-        self.assertIn("没有写任何文件", str(caught.exception))
+        self.assertIn("no files were written", str(caught.exception))
         self.assertFalse(self.data_root.exists())
 
     def test_the_scan_can_be_declined(self):

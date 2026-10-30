@@ -392,7 +392,7 @@ class LibraryMetadataProvider:
         if deadline is not None:
             timeout = deadline - time.monotonic()
             if timeout <= 1.0:
-                raise DeadlineExceeded('外部资料在预算时间内未取得')
+                raise DeadlineExceeded('External data not obtained within the time budget')
         try:
             tools = self.tools_root if self.tools_root is not None else TOOLS_DIR
             try:
@@ -571,7 +571,7 @@ class LibraryMetadataProvider:
         # 一处报错、另一处说没有时报错误：那个番号在报错那处有没有，还没问出来。
         if state['problems']:
             raise _again(state['problems'][0])
-        raise _said_no('FC2 与几个存档站上都没有这个商品', sorted(state['asked']))
+        raise _said_no('Neither FC2 nor any of the archive sites has this item', sorted(state['asked']))
 
     def one_pondo(self, code, *, deadline=None):
         """一本道自己那份作品 JSON（`sources/onepondo.py`），返回 `[('1pondo', 资料)]`。
@@ -703,7 +703,7 @@ class LibraryMetadataProvider:
             except (Unavailable, SourcePaused) as error:
                 problems.append((describe_failure(error), source_paused(error)))
         if chosen is None:
-            raise _unreached(problems) if problems else NotFound('官方与社区来源都没有这部片的封面')
+            raise _unreached(problems) if problems else NotFound('Neither official nor community sources have a cover for this title')
         candidate, size, data = chosen
         # 官方图可替换社区转存图；同类来源按像素面积升级。
         from .community_catalog import origin_of
@@ -721,7 +721,7 @@ class LibraryMetadataProvider:
             if problems:
                 # 有来源这一趟没问成（冷却、配额、超时），它那里可能有原图：不能记成一周不问。
                 raise _unreached(problems)
-            raise CoverKept(f'来源给的封面 {size[0]}×{size[1]} 未提高本机封面质量')
+            raise CoverKept(f'The source cover {size[0]}×{size[1]} does not improve the local cover quality')
         from .cover_artwork import install_cover
         title = artwork_title(snapshots)
         install_cover(target, code, data, size, evidence=dict(source=candidate.source, title=title,
@@ -1082,7 +1082,7 @@ def _require_writer(config, db_path):
         device_path = config.directory('state') / 'device-id'
         device = device_path.read_text(encoding='utf-8').strip() if device_path.is_file() else ''
         if not device or writer_device(Path(db_path), config.shared_root / 'database' / 'ledger.db') != device:
-            raise ValueError('这台电脑是只读端，请在写入端扫描和导入资料')
+            raise ValueError('This computer is read-only; scan and import on the writer')
 
 
 def _text(raw):
@@ -2213,14 +2213,14 @@ def _asset_selection(db_path, asset_ids):
         return None
     if not isinstance(asset_ids, list) or not asset_ids or any(
             type(value) is not int or value <= 0 for value in asset_ids):
-        raise ValueError('请选择有效的视频项目')
+        raise ValueError('Select a valid video item')
     chosen = list(dict.fromkeys(asset_ids))
     marks = ','.join('?' * len(chosen))
     with closing(sqlite3.connect(db_path, timeout=30)) as connection:
         found = {row[0] for row in connection.execute(
             f"SELECT id FROM asset WHERE id IN ({marks}) AND medium='video' AND disposal IS NULL", chosen)}
     if found != set(chosen):
-        raise ValueError('所选视频已不存在或已移入回收站，请刷新后重试')
+        raise ValueError('The selected video no longer exists or was moved to the trash; refresh and try again')
     return chosen
 
 
@@ -2278,16 +2278,16 @@ def _generate_preview(config, row, database, resolver, *, progress):
     video = translate_ledger_path(row['path'])
     import stat
     if not stat.S_ISREG(file_stat(video, timeout=remaining(20)).st_mode):
-        raise PreviewUnavailable('媒体文件不可访问')
+        raise PreviewUnavailable('The media file is not accessible')
     duration = row.get('duration') or 0
     if duration <= 0:
         probe = resolver.ffprobe()
         if probe is None:
-            raise PreviewUnavailable('未找到 ffprobe，无法读取视频时长')
+            raise PreviewUnavailable('ffprobe not found; cannot read the video duration')
         measured = media_probe.measure(str(probe.path), row['id'], str(video), timeout=remaining(20))
         duration = measured[0]
         if duration <= 0:
-            raise PreviewUnavailable('视频时长未取得，请检查媒体文件后重试')
+            raise PreviewUnavailable('Video duration not obtained; check the media file and try again')
         progress()
         with database.write_transaction() as connection:
             connection.execute(media_probe.UPDATE, measured)
@@ -2436,14 +2436,14 @@ def _validate_processing_request(config, db_path, stage, asset_ids, retry_ids, d
     """校验处理范围、选择与预览生成所需条件，返回规范的所选影片。"""
     _require_writer(config, db_path)
     if stage not in STAGES:
-        raise ValueError('处理阶段无效')
+        raise ValueError('Invalid processing stage')
     if stage == PREVIEWS_STAGE and metadata_only(config.directory('state')):
-        raise ValueError('视频预览生成已关闭，请先在媒体库设置中开启')
+        raise ValueError('Video preview generation is turned off; enable it in the media library settings first')
     if asset_ids is not None and retry_ids is not None:
-        raise ValueError('选择项目与失败重试不能同时使用')
+        raise ValueError('Selecting items and retrying failures cannot be used together')
     selected_ids = _asset_selection(db_path, asset_ids)
     if stage == PREVIEWS_STAGE and database is None:
-        raise ValueError('生成预览图需要共享馆藏写入连接')
+        raise ValueError('Generating preview images requires a shared-collection write connection')
     return selected_ids
 
 
@@ -2483,7 +2483,7 @@ def _read_local_metadata(config, db_path, row, cover_root, listing, state, updat
         try:
             payload, raw = read_nfo(nfo)
             if payload['id'] and code and not same_release_code(code, payload['id']):
-                raise ValueError('文件名与 NFO 番号冲突，请复核')
+                raise ValueError('File name conflicts with the NFO code; please review')
             code = code or _provider_code(payload['id'])
         except InterruptedError:
             raise
@@ -2758,7 +2758,7 @@ def process_library(config, db_path, candidate_root, cover_root, *, location='co
         def update(**values):
             _require_writer(config, db_path)
             if not active():
-                raise InterruptedError('处理任务已停止')
+                raise InterruptedError('Processing task stopped')
             checkpoint_values(values)
             state.update(values)
             estimate.update(state)

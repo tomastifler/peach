@@ -928,7 +928,7 @@ class FeedWebTest(FeedWebFixture):
         self.assertIn(key, [item["key"] for item in self._check(automatic=True)["followups"]])
         with self.contract.database.read_connection() as connection:
             current = avatar_followup.fingerprint(connection, entity_id, providers_root)
-        Attempts(attempts_root(self.contract.candidate_root)).record(key, current, "图库 6 张认不准")
+        Attempts(attempts_root(self.contract.candidate_root)).record(key, current, "Gallery: 6 images, cannot identify her reliably")
         self.assertNotIn(key, [item["key"] for item in self._check(automatic=True)["followups"]])
         index_path.write_text(json.dumps({"Content": {"1-S1": {"二の宮すずか.jpg": "二の宮すずか.jpg"}}}), encoding="utf-8")
         self.assertIn(key, [item["key"] for item in self._check(automatic=True)["followups"]])

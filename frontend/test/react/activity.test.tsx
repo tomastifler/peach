@@ -641,8 +641,8 @@ it('缺人脸模型跑完的后继标成发现问题，不是已完成', async (
   expect(isRoutine(run({ status: 'succeeded', trigger: 'scheduled', result_summary: down }))).toBe(false);
   expect(hasResultProblems(followup(4, { result_summary: { face_match_unavailable: false } }))).toBe(false);
   // 结论本身没写原因时补一句，写了就不重复。
-  expect(summaryItems({ outcome: '图库 2 张彼此认不出同一个人', face_match_unavailable: true }))
-    .toEqual(['图库 2 张彼此认不出同一个人', 'Face model unavailable; face check not performed']);
+  expect(summaryItems({ outcome: 'Gallery: 2 images do not match each other as the same person', face_match_unavailable: true }))
+    .toEqual(['Gallery: 2 images do not match each other as the same person', 'Face model unavailable; face check not performed']);
   expect(summaryItems(down)).toEqual([down.outcome]);
   const parent = run({ id: 4, status: 'succeeded', task_label: 'Scan and collection', progress_total: null,
                        finished_at: '2026-09-11T10:03:00Z', result_summary: { followups: 1 } });

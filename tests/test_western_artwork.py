@@ -153,7 +153,7 @@ class WesternPortraitGateTests(unittest.TestCase):
         winner, evidence, reason = artwork.face_matched_portrait([portrait('blue')], self.covers, Matcher())
         self.assertIsNone(winner)
         self.assertEqual(evidence, {})
-        self.assertEqual(reason, '图库 1 张认不准')
+        self.assertEqual(reason, 'Gallery: 1 images, cannot identify her reliably')
 
     def test_an_unavailable_model_installs_nothing(self):
         matcher = Matcher()

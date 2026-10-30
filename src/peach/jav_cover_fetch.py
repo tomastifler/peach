@@ -257,7 +257,7 @@ def _sleep_within(delay: float, deadline: float | None) -> None:
     """限速等待也服从截止时间，不让睡眠越过预算。"""
     remaining = _remaining(deadline)
     if remaining is not None and delay >= remaining:
-        raise DeadlineExceeded("动作预算已用尽")
+        raise DeadlineExceeded("Action budget exhausted")
     time.sleep(delay)
 
 
@@ -294,7 +294,7 @@ def _fetch(transport: HttpTransport, url: str, *, referer: str,
     for attempt in range(len(NETWORK_RETRY_DELAYS) + 1):
         remaining = _remaining(deadline)
         if remaining is not None and remaining <= 0:
-            raise DeadlineExceeded("动作预算已用尽")
+            raise DeadlineExceeded("Action budget exhausted")
         try:
             response = transport(request, request_timeout(url, remaining), limit)
             break

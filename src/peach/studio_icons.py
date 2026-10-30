@@ -1295,10 +1295,10 @@ def install(rows: list[dict[str, object]], logo_root: Path, *,
             continue
         candidate = Path(str(row["candidate"])).read_bytes()
         if hashlib.sha256(candidate).hexdigest() != row["sha256"]:
-            raise ValueError(f'候选文件与复核记录哈希不一致，拒绝安装：{row["safe"]}')
+            raise ValueError(f'Candidate file hash does not match the review record; refusing to install: {row["safe"]}')
         payload = images.bake_square(candidate)
         if payload is None:
-            raise ValueError(f'无法生成可用的方形图片，未安装：{row["safe"]}')
+            raise ValueError(f'Could not produce a usable square image; not installed: {row["safe"]}')
         installed_sha256 = hashlib.sha256(payload).hexdigest()
         variant = str(row.get("variant") or ICON)
         targets = [logo_root / f'{row["safe"]}.{variant}.img']

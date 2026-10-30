@@ -237,7 +237,7 @@ def cover_version(cover: Path | None) -> str:
 def _check_version(cover: Path | None, version: str | None) -> None:
     """框是在 `version` 那一张封面上画的；封面此后被换过，同一组坐标就落在别的地方。"""
     if version is not None and cover_version(cover) != version:
-        raise PickerError("这张封面刚换过，返回备选图片重新框一次")
+        raise PickerError("This cover was just replaced; go back to the alternative images and frame it again")
 
 
 def name_chain(connection: sqlite3.Connection, entity_id: int) -> list[str]:

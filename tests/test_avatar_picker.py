@@ -588,7 +588,7 @@ class AssetArtworkTests(PickerFixture):
         self.cover.write_bytes(picture(800, 520, "green"))
         later = self.cover.stat().st_mtime_ns + 1_000_000_000
         os.utime(self.cover, ns=(later, later))
-        with self.assertRaisesRegex(avatar_picker.PickerError, "刚换过"):
+        with self.assertRaisesRegex(avatar_picker.PickerError, "just replaced"):
             avatar_picker.resolve("asset:11:cover", self.connection, self.providers,
                                   7792, None, self.artwork, version=drawn_on)
         # 九宫格那几格从视频抽帧，不随封面变，带着旧版本照样取得到。

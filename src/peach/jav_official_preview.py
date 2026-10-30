@@ -52,7 +52,7 @@ class _DmmPreviewSource(DmmSource):
             return None
         if (not isinstance(item, dict) or item.get('id') != cid
                 or not matching_cids(item.get('makerContentId'), [cid])):
-            raise ValueError('DMM 作品身份不匹配')
+            raise ValueError('DMM work identity does not match')
         return item
 
 
@@ -141,7 +141,7 @@ def prestige_preview(code, secrets_root, *, transport=None):
         product = read(PRESTIGE_PRODUCT.format(uuid=uuid))
         numbers = [row.get('deliveryItemId') for row in product.get('sku') or [] if isinstance(row, dict)]
         if product.get('uuid') != uuid or not any(normalise_code_key(number) == normalise_code_key(code) for number in numbers):
-            raise ValueError('来源作品身份不匹配')
+            raise ValueError('Source work identity does not match')
         if 'movie' not in product:
             raise ValueError('Public trailer fields not retrieved')
         movie = product['movie']

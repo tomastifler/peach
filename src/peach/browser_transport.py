@@ -167,7 +167,7 @@ class _WebSocket:
         while len(self.buffer) < size:
             chunk = self.sock.recv(65536)
             if not chunk:
-                raise ConnectionError("浏览器关闭了调试连接")
+                raise ConnectionError("The browser closed the debugging connection")
             self.buffer += chunk
         out, self.buffer = self.buffer[:size], self.buffer[size:]
         return out
@@ -199,7 +199,7 @@ class _WebSocket:
             if opcode == 0x1:
                 return data.decode()
             if opcode == 0x8:
-                raise ConnectionError("浏览器关闭了调试连接")
+                raise ConnectionError("The browser closed the debugging connection")
 
     def call(self, method: str, timeout: float = 30.0, **params):
         """发一条 CDP 命令，等它的回包；中途到的事件跳过。"""
@@ -291,7 +291,7 @@ class _Browser:
                     return int(lines[0])
             self._sleep(0.1)
         self.close()
-        raise BrowserUnavailable("浏览器没有写出调试口")
+        raise BrowserUnavailable("The browser did not expose a debugging port")
 
     def alive(self) -> bool:
         return self.socket is not None and self.process is not None and self.process.poll() is None
@@ -500,7 +500,7 @@ class BrowserTransport:
                 if shown_at is not None:
                     if now - shown_at >= self.click_seconds:
                         self._unsolved.add(host)
-                        raise ChallengeUnsolved(f"{host} 的人机验证在 {int(elapsed)} 秒内没有通过")
+                        raise ChallengeUnsolved(f"The human verification on {host} was not passed within {int(elapsed)} s")
                 elif challenged_seen:
                     waited = now - phase_started
                     if not cleared and waited >= reset_limit:
@@ -511,8 +511,8 @@ class BrowserTransport:
                         phase_started = now
                     elif cleared and waited >= auto_limit:
                         if host in self._unsolved:
-                            raise ChallengeUnsolved(f"{host} 的人机验证在 {int(elapsed)} 秒内没有自动通过；"
-                                                    "窗口上次弹出后没点过去，这次不再弹")
+                            raise ChallengeUnsolved(f"The human verification on {host} did not pass automatically within {int(elapsed)} s; "
+                                                    "the window was not clicked through the last time it was shown, so it will not be shown again")
                         shown_at = now
                         browser.place(visible=True)
                         _set_attention(host, f"{host} 的人机验证需要点一下，浏览器窗口已打开")

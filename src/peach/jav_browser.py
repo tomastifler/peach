@@ -193,7 +193,7 @@ class JavBrowser:
         if action not in {"enable", "rotate", "disable"}:
             raise ValueError("Choose enable, renew token, or turn off")
         if not self.downloads.available:
-            raise ValueError("浏览器添加只在允许修改数据库的设备上可用")
+            raise ValueError("Adding from the browser is only available on devices that may modify the database")
         provider = str(body.get("provider") or "")
         if action != "disable":
             self._ready(provider)
@@ -221,7 +221,7 @@ class JavBrowser:
 
     def _ready(self, provider: str, *, remote=True):
         if not self.downloads.available:
-            raise ValueError("浏览器添加只在允许修改数据库的设备上可用")
+            raise ValueError("Adding from the browser is only available on devices that may modify the database")
         if remote:
             state = next((row for row in self.downloads.channel_snapshot()["providers"] if row["key"] == provider), None)
         elif provider in {"115", "pikpak"}:

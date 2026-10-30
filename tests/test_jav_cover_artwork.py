@@ -37,7 +37,7 @@ class CoverArtworkTests(unittest.TestCase):
         evidence_list = [{'source_url': 'https://c0.' + domain + '/covers/x.jpg'}
                          for domain in (*JAVDB.domains, 'tp.spfcas.com')]
         for evidence in [*evidence_list, {'source': 'javdb-public'}]:
-            with self.subTest(evidence=evidence), self.assertRaisesRegex(Unavailable, '无 JavDB 水印'):
+            with self.subTest(evidence=evidence), self.assertRaisesRegex(Unavailable, 'JavDB watermark'):
                 cover_artwork.install_cover(self.target, 'FC2-PPV-12345', data, (840, 472), evidence=evidence)
         self.assertEqual(self.target.read_bytes(), data)
         self.assertFalse(self.target.with_suffix('.face.json').exists())

@@ -1074,7 +1074,7 @@ class LibraryNfoTests(unittest.TestCase):
     def test_reader_cannot_scan_or_create_candidates(self):
         from peach.settings_file import ReplicationSettings
         config = PeachConfig(self.root, self.root / 'config.toml', replication=ReplicationSettings(enabled=True))
-        with self.assertRaisesRegex(ValueError, '只读端'):
+        with self.assertRaisesRegex(ValueError, 'read-only'):
             process_library(config, self.root / 'ledger.db', self.root / 'generated', self.root / 'covers')
         self.assertFalse((self.root / 'generated').exists())
         self.assertFalse((self.root / 'ledger.db').exists())
@@ -3359,7 +3359,7 @@ class LibraryPreviewCompletionTests(unittest.TestCase):
         self.assertEqual(result['status'], 'complete')
         self.assertEqual(result['previews'], 0)
         finish.assert_called_once()
-        with self.assertRaisesRegex(ValueError, '视频预览生成已关闭'):
+        with self.assertRaisesRegex(ValueError, 'Video preview generation is turned off'):
             self.run_processing(stage='previews', asset_ids=[1])
 
     def test_local_preview_is_available_when_online_collection_starts(self):

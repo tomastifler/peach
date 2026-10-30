@@ -397,7 +397,7 @@ class PublicAPI:
             movie = self._json("/v4/movies/" + movie_id).get("movie")
             if (not isinstance(movie, dict) or normalise_code_key(movie.get("number")) != canonical
                     or movie.get("id") != movie_id):
-                raise PublicSourceUnavailable("来源作品身份不匹配")
+                raise PublicSourceUnavailable("Source work identity does not match")
             return {**movie, 'javdb_rule': RULE}
 
         return self._cached(f"movie:{canonical}:{movie_id}", fetch, refresh=refresh)

@@ -89,7 +89,7 @@ def parse_key(key: str) -> tuple[str, int]:
     prefix, _, rest = str(key).partition(":")
     kind, _, raw = rest.partition(":")
     if prefix != TASK_KEY or kind not in KINDS or not raw.isdigit():
-        raise ValueError(f"认不出这条补头像后继：{key}")
+        raise ValueError(f"Unrecognized avatar follow-up successor: {key}")
     return kind, int(raw)
 
 
@@ -508,7 +508,7 @@ def _covers_corroborate(found: list[dict], compared: list, scores: dict, evidenc
                    for mine, theirs in zip(row, other_row)):
                 return GalleryMatch(winner=candidate, scores=scores, evidence=evidence(
                     row, corroborated_by={"ref": other.choice["ref"], "score": round(pair, 3)}))
-    return GalleryMatch(reason=f"图库 {len(found)} 张里比不出她", scores=scores)
+    return GalleryMatch(reason=f"Gallery: {len(found)} images, none could be matched to her", scores=scores)
 
 
 def _directory(choice: dict) -> str:
@@ -557,8 +557,8 @@ def _gallery_agrees(found: list[dict], compared: list, scores: dict, evidence,
             row, corroborated_by={"ref": other.choice["ref"], "score": round(pair, 3)},
             agreeing=len(agreeing) + 1, faces=faces))
     if faces < 2:
-        return GalleryMatch(reason=f"图库 {len(found)} 张认不准", scores=scores)
-    return GalleryMatch(reason=f"图库 {len(found)} 张彼此认不出同一个人", scores=scores)
+        return GalleryMatch(reason=f"Gallery: {len(found)} images, cannot identify her reliably", scores=scores)
+    return GalleryMatch(reason=f"Gallery: {len(found)} images do not match each other as the same person", scores=scores)
 
 
 def gallery_fetcher(connection, providers_root, entity_id: int, transport,

@@ -317,18 +317,18 @@ def restore(connection: sqlite3.Connection, manifest: dict) -> None:
             raise ValueError(f"Asset {after['id']} changed afterwards; refusing to roll back the whole batch")
     asset_ids = sorted({int(row['asset_id']) for row in manifest['relations']})
     if _creator_relations(connection, asset_ids) != manifest['remaining_creator_relations']:
-        raise ValueError('创作者关系已发生后续改动，拒绝回滚整批')
+        raise ValueError('Creator relations have changed since; refusing to roll back the whole batch')
     for row in manifest['added_relations']:
         current = cursor.execute('SELECT * FROM asset_entity WHERE asset_id=? AND entity_id=? AND role=? AND source=?',
                                  tuple(row[key] for key in ('asset_id', 'entity_id', 'role', 'source'))).fetchone()
         if not current or dict(current) != row:
-            raise ValueError('厂牌关系已发生后续改动，拒绝回滚整批')
+            raise ValueError('Studio relations have changed since; refusing to roll back the whole batch')
     for row in manifest['relations']:
         if connection.execute("SELECT 1 FROM asset_entity WHERE asset_id=? AND entity_id=? AND role=? AND source=?",
                               tuple(row[key] for key in ('asset_id', 'entity_id', 'role', 'source'))).fetchone():
             raise ValueError('The creator relation already exists; refusing to roll back the whole batch')
         if not connection.execute('SELECT 1 FROM entity WHERE id=?', (row['entity_id'],)).fetchone():
-            raise ValueError('档案已不存在，拒绝回滚整批')
+            raise ValueError('The profile no longer exists; refusing to roll back the whole batch')
     for row in manifest['relations']:
         columns = tuple(row)
         connection.execute(f"INSERT INTO asset_entity({','.join(columns)}) VALUES({','.join('?' for _ in columns)})",
