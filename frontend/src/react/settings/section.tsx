@@ -99,7 +99,7 @@ export function ExternalLink({ href, children, leadingIcon }: {
   return (
     <LinkButton href={href} target="_blank" rel="noopener noreferrer" size="small"
       leadingIcon={leadingIcon} trailingIcon={RiExternalLinkLine} className="min-w-0 max-w-full">
-      <span className="min-w-0 whitespace-normal break-all">{children}</span>
+      <span className="min-w-0 whitespace-normal wrap-anywhere">{children}</span>
     </LinkButton>
   );
 }
@@ -124,7 +124,7 @@ export function Fact({ term, children }: { term: ReactNode; children: ReactNode 
   return (
     <div className="flex min-h-11 items-center justify-between gap-4 border-b border-separator-border py-2.5 pr-3 last:border-b-0">
       <dt className="flex max-w-1/2 min-w-0 shrink-0 items-center gap-2 text-body-regular text-text-secondary">{term}</dt>
-      <dd className="flex min-w-0 flex-wrap items-center justify-end gap-2 text-left text-body-regular break-all text-text-primary">{children}</dd>
+      <dd className="flex min-w-0 flex-wrap items-center justify-end gap-2 text-left text-body-regular wrap-anywhere text-text-primary">{children}</dd>
     </div>
   );
 }

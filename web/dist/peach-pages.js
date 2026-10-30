@@ -2,7 +2,7 @@
 (function() {
 	try {
 		var e = typeof globalThis < "u" ? globalThis : typeof window < "u" ? window : typeof global < "u" ? global : typeof self < "u" ? self : {}, t = new e.Error().stack;
-		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "00dbd8fd-75be-4303-b90d-9f6d36c76af0", e._sentryDebugIdIdentifier = "sentry-dbid-00dbd8fd-75be-4303-b90d-9f6d36c76af0");
+		t && (e._sentryDebugIds = e._sentryDebugIds || {}, e._sentryDebugIds[t] = "0499c786-20d6-40fd-85f0-d55c8ab3868b", e._sentryDebugIdIdentifier = "sentry-dbid-0499c786-20d6-40fd-85f0-d55c8ab3868b");
 	} catch {}
 })();
 var e = Object.create, t = Object.defineProperty, n = Object.getOwnPropertyDescriptor, r = Object.getOwnPropertyNames, i = Object.getPrototypeOf, a = Object.prototype.hasOwnProperty, o = (e, t) => () => (t || (e((t = { exports: {} }).exports, t, t.exports), e = null), t.exports), s = (e, i, o, s) => {
@@ -19535,7 +19535,7 @@ function Km({ href: e, children: t, leadingIcon: n }) {
 		trailingIcon: tm,
 		className: "min-w-0 max-w-full",
 		children: /* @__PURE__ */ (0, z.jsx)("span", {
-			className: "min-w-0 whitespace-normal break-all",
+			className: "min-w-0 whitespace-normal wrap-anywhere",
 			children: t
 		})
 	});
@@ -19553,7 +19553,7 @@ function Jm({ term: e, children: t }) {
 			className: "flex max-w-1/2 min-w-0 shrink-0 items-center gap-2 text-body-regular text-text-secondary",
 			children: e
 		}), /* @__PURE__ */ (0, z.jsx)("dd", {
-			className: "flex min-w-0 flex-wrap items-center justify-end gap-2 text-left text-body-regular break-all text-text-primary",
+			className: "flex min-w-0 flex-wrap items-center justify-end gap-2 text-left text-body-regular wrap-anywhere text-text-primary",
 			children: t
 		})]
 	});
@@ -22655,4 +22655,4 @@ E();
 var cv = document.getElementById("peach-page"), lv = cv ? sv[cv.dataset.page ?? ""] : void 0;
 cv && lv && (0, M.createRoot)(cv).render(/* @__PURE__ */ (0, z.jsx)(lv, { data: { ...cv.dataset } }));
 
-//# debugId=00dbd8fd-75be-4303-b90d-9f6d36c76af0
+//# debugId=0499c786-20d6-40fd-85f0-d55c8ab3868b
