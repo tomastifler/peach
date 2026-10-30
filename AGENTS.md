@@ -1,7 +1,7 @@
 # Peach Agent Working Contract
 
 This file is the shared project convention entry for Codex and Claude; for the project and how to run it, see `README.md`. For layering and retirement, see `docs/adr/0015-agent-context-layering.md`; do not append rules by default.
-Public documents and skill bodies are written in Chinese, with technical identifiers kept in English; writing follows the user-level `tech-doc-style-chinese` and `docs/WRITING.md`. Keep replies concise, ending with "What I did" and "What you need to do".
+Public documents and skill bodies are written in English in this English fork (upstream writes Chinese), with technical identifiers kept as they are; writing follows `docs/WRITING.md`. Keep replies concise, ending with "What I did" and "What you need to do".
 
 ## Authorization and Protection
 
