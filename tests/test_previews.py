@@ -18,7 +18,7 @@ from unittest import mock
 
 from PIL import Image
 
-from peach import previews
+from peach import artifact_rules, previews
 from peach.avatar_provider import install_entity_avatar
 from peach.previews import PreviewService, PreviewUnavailable, entity_image_key
 from peach.repository import MediaAsset
@@ -149,6 +149,7 @@ class ParallelGenerationTests(unittest.TestCase):
             self.assertEqual(target, destination)
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(b"jpg")
+            artifact_rules.remember(target, source=self.snapshot_root / f"{self.LEFT}.jpg")
             yield
 
         with mock.patch.object(previews, "_generate_lock", lock_that_lands_the_target), \
@@ -440,3 +441,196 @@ class EntityThumbnailTests(unittest.TestCase):
         root = Path(self.tmp.name).resolve()
         self.assertEqual(previews.entity_thumb_root(root / "generated" / "avatars"),
                          root / "generated" / "avatar-thumbs")
+
+
+class ArtifactSourceSignatureTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name).resolve()
+        self.source = self.root / 'source.jpg'
+        self.source.write_bytes(b'source')
+        self.output = self.root / 'output.jpg'
+        self.output.write_bytes(b'derived')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_rule_only_records_and_source_bound_records_have_separate_validity(self):
+        artifact_rules.remember(self.output)
+        self.assertTrue(artifact_rules.current(self.output))
+        self.assertFalse(artifact_rules.current(self.output, source=self.source))
+        artifact_rules.remember(self.output, source=self.source)
+        self.assertTrue(artifact_rules.current(self.output))
+        self.assertTrue(artifact_rules.current(self.output, source=self.source))
+        self.assertFalse(artifact_rules.current(self.output, 'another-rule', source=self.source))
+
+    def test_atomic_source_replacement_invalidates_equal_size_and_mtime(self):
+        artifact_rules.remember(self.output, source=self.source)
+        stamp = self.source.stat().st_mtime_ns
+        replacement = self.root / 'replacement.jpg'
+        replacement.write_bytes(b'newest')
+        os.utime(replacement, ns=(stamp, stamp))
+        replacement.replace(self.source)
+        self.assertFalse(artifact_rules.current(self.output))
+        self.assertFalse(artifact_rules.current(self.output, source=self.source))
+
+    def test_generation_cannot_be_registered_with_a_changed_source(self):
+        before = artifact_rules.fingerprint(self.source)
+        self.source.write_bytes(b'another-source')
+        self.assertFalse(artifact_rules.remember(self.output, source=self.source, source_fingerprint=before))
+        self.assertFalse(artifact_rules.current(self.output, source=self.source))
+
+    def test_replacing_an_output_without_its_signature_invalidates_it(self):
+        artifact_rules.remember(self.output, source=self.source)
+        self.output.write_bytes(b'another-derived-file')
+        self.assertFalse(artifact_rules.current(self.output, source=self.source))
+
+    def test_unreadable_signature_is_a_cache_miss(self):
+        Path(str(self.output) + '.rule').write_bytes(b'\xff\xfe\x80')
+        self.assertFalse(artifact_rules.current(self.output, source=self.source))
+
+
+class SnapshotSourceGenerationTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name).resolve()
+        self.snapshots = self.root / 'snapshots'
+        self.snapshots.mkdir()
+        self.source = self.snapshots / '1.jpg'
+        self.source.write_bytes(b'first-snapshot')
+        self.repository = SimpleNamespace(media_asset=lambda asset_id: MediaAsset(
+            id=asset_id, path=None, snapshot_path=str(self.source)))
+        self.service = PreviewService(self.repository, SimpleNamespace(ffmpeg=lambda: SimpleNamespace(path=Path('ffmpeg'))),
+                                      self.snapshots, self.root / 'posters', self.root / 'avatars', self.root / 'logos')
+        self.calls = []
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def fake_run(self, command):
+        self.calls.append(command)
+        Path(command[-1]).write_bytes(Path(command[command.index('-i') + 1]).read_bytes())
+
+    def test_poster_and_avatar_follow_replaced_snapshot_content(self):
+        with mock.patch.object(PreviewService, '_run', self.fake_run), \
+                mock.patch.object(previews.subprocess, 'run', return_value=SimpleNamespace(stdout=bytes([200]))):
+            poster = self.service.poster(1)
+            avatar = self.service.avatar(1)
+            self.assertEqual(poster.read_bytes(), b'first-snapshot')
+            self.assertEqual(avatar.read_bytes(), b'first-snapshot')
+            self.service.poster(1)
+            self.service.avatar(1)
+            self.assertEqual(len(self.calls), 2)
+            self.source.write_bytes(b'second-snapshot')
+            self.assertEqual(self.service.poster(1).read_bytes(), b'second-snapshot')
+            self.assertEqual(self.service.avatar(1).read_bytes(), b'second-snapshot')
+            self.assertEqual(len(self.calls), 4)
+
+    def test_poster_and_avatar_do_not_publish_a_source_changed_during_generation(self):
+        for method in ('poster', 'avatar'):
+            with self.subTest(method=method):
+                def changing_run(command):
+                    self.fake_run(command)
+                    self.source.write_bytes(self.source.read_bytes() + b'changed')
+                with mock.patch.object(PreviewService, '_run', staticmethod(changing_run)), \
+                        mock.patch.object(previews.subprocess, 'run', return_value=SimpleNamespace(stdout=bytes([200]))):
+                    with self.assertRaises(PreviewUnavailable):
+                        getattr(self.service, method)(1)
+                destination = self.root / ('posters/1_4.jpg' if method == 'poster' else 'avatars/1.jpg')
+                self.assertFalse(destination.exists())
+                self.assertFalse(artifact_rules.current(destination, source=self.source))
+
+    def test_manual_entity_image_is_unchanged_by_derived_generation(self):
+        source = self.root / 'avatars' / 'performer-1.img'
+        source.parent.mkdir()
+        Image.new('RGB', (20, 20), 'red').save(source, 'PNG')
+        original = source.read_bytes()
+        service = previews.DerivedImageService(self.root / 'avatar-thumbs')
+        self.assertIsNotNone(service.thumbnail('performer-1', source))
+        self.assertEqual(source.read_bytes(), original)
+        self.assertFalse(Path(str(source) + '.rule').exists())
+        self.assertEqual(self.service.entity_image('performer', 1)[0], source)
+
+
+class ImageSourceGenerationTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name).resolve()
+        self.source = self.root / 'photo.png'
+        Image.new('RGB', (24, 24), 'red').save(self.source)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_photo_cached_lookup_validates_the_saved_local_source(self):
+        service = previews.PhotoThumbnailService(self.root / 'photos')
+        destination = service.thumbnail(1, self.source)
+        self.assertEqual(service.cached(1), destination)
+        first = destination.read_bytes()
+        Image.new('RGB', (24, 24), 'blue').save(self.source)
+        self.assertIsNone(service.cached(1))
+        self.assertNotEqual(service.thumbnail(1, self.source).read_bytes(), first)
+        self.assertEqual(service.cached(1), destination)
+
+    def test_photo_cached_lookup_requires_a_recorded_source(self):
+        service = previews.PhotoThumbnailService(self.root / 'photos')
+        destination = self.root / 'photos/1.jpg'
+        destination.parent.mkdir()
+        destination.write_bytes(b'old-thumbnail')
+        artifact_rules.remember(destination)
+        self.assertIsNone(service.cached(1))
+        self.assertEqual(service.thumbnail(1, self.source), destination)
+        self.assertNotEqual(destination.read_bytes(), b'old-thumbnail')
+        self.assertEqual(service.cached(1), destination)
+
+    def test_signed_photo_cache_remains_available_while_source_is_offline(self):
+        service = previews.PhotoThumbnailService(self.root / 'photos')
+        destination = service.thumbnail(1, self.source)
+        self.source.unlink()
+        self.assertEqual(service.cached(1), destination)
+        Image.new('RGB', (24, 24), 'blue').save(self.source)
+        self.assertIsNone(service.cached(1))
+
+    def test_network_photo_cache_is_checked_online_and_preserved_for_offline_use(self):
+        service = previews.PhotoThumbnailService(self.root / 'photos')
+        destination = service.thumbnail(1, self.source)
+        resource = SimpleNamespace(stat=self.source.stat)
+        artifact_rules.remember(destination, source=resource)
+        self.assertIsNone(service.cached(1))
+        self.assertEqual(service.cached(1, offline=True), destination)
+        destination.write_bytes(b'changed')
+        self.assertIsNone(service.cached(1, offline=True))
+
+    def test_derived_images_detect_a_different_source_even_with_matching_mtime(self):
+        service = previews.DerivedImageService(self.root / 'derived')
+        destination = service.thumbnail('photo', self.source)
+        before = destination.read_bytes()
+        other = self.root / 'other.png'
+        Image.new('RGB', (24, 24), 'blue').save(other)
+        stamp = self.source.stat().st_mtime_ns
+        os.utime(other, ns=(stamp, stamp))
+        self.assertNotEqual(service.thumbnail('photo', other).read_bytes(), before)
+
+    def test_source_changes_during_image_encoding_are_not_signed_or_published(self):
+        replacement = self.root / 'replacement.png'
+        Image.new('RGB', (24, 24), 'blue').save(replacement)
+        replacement_bytes = replacement.read_bytes()
+        save = Image.Image.save
+        for kind in ('photo', 'derived'):
+            with self.subTest(kind=kind):
+                Image.new('RGB', (24, 24), 'red').save(self.source)
+                def changing_save(image, target, *args, **kwargs):
+                    save(image, target, *args, **kwargs)
+                    self.source.write_bytes(replacement_bytes)
+                with mock.patch.object(Image.Image, 'save', changing_save):
+                    if kind == 'photo':
+                        service = previews.PhotoThumbnailService(self.root / 'photos')
+                        with self.assertRaises(PreviewUnavailable):
+                            service.thumbnail(1, self.source)
+                        destination = self.root / 'photos/1.jpg'
+                    else:
+                        service = previews.DerivedImageService(self.root / 'derived')
+                        self.assertIsNone(service.thumbnail('photo', self.source))
+                        destination = service.path_for('photo')
+                self.assertFalse(destination.exists())
+                self.assertFalse(artifact_rules.current(destination, source=self.source))

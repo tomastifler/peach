@@ -1,7 +1,10 @@
 name: Release
 
+# 版本提交 `chore(release): 版本 X` 推上 master 时演练整条发布链（只构建、验收，不发布）；
+# `release_tag.py --ship` 等这次演练通过才打标签，标签上才发布（ADR-0121）。
 on:
   push:
+    branches: [master]
     tags: ["v*.*.*"]
   workflow_dispatch:
 
@@ -22,6 +25,8 @@ env:
 jobs:
   validate:
     name: 核对发布提交与版本
+    # 其余作业都依赖它：普通的 master 推送在这里就结束，只有版本提交、标签与手动运行往下走。
+    if: "${{ github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'chore(release): 版本 ') }}"
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -42,6 +47,7 @@ jobs:
     name: Windows FFmpeg 与对应源码
     runs-on: ubuntu-latest
     needs: validate
+    if: github.ref_type != 'tag'
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
@@ -59,7 +65,7 @@ jobs:
         if: steps.media-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential gcc-mingw-w64-x86-64-posix g++-mingw-w64-x86-64-posix mingw-w64-x86-64-dev nasm pkg-config python3 clang meson ninja-build ca-certificates curl xz-utils
+          sudo apt-get install -y build-essential gcc-mingw-w64-x86-64-posix g++-mingw-w64-x86-64-posix mingw-w64-x86-64-dev nasm pkg-config python3 clang meson ninja-build cmake ca-certificates curl xz-utils
       - name: 构建固定版本媒体工具
         if: steps.media-cache.outputs.cache-hit != 'true'
         run: bash scripts/build_ffmpeg_windows.sh build/ffmpeg-windows
@@ -87,6 +93,7 @@ jobs:
     name: Windows x64 独立测试包
     runs-on: windows-latest
     needs: ffmpeg
+    if: github.ref_type != 'tag'
     timeout-minutes: 40
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -109,7 +116,7 @@ jobs:
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v${ReleaseVersion}") { throw 'Tag 与版本不一致' }
           "version=${ReleaseVersion}" >> $env:GITHUB_OUTPUT
       - name: 安装构建依赖
-        uses: astral-sh/setup-uv@v10.3.0
+        uses: astral-sh/setup-uv@v10.3.2
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
@@ -144,6 +151,19 @@ jobs:
       - name: 构建独立目录包与安装包
         shell: pwsh
         run: '& ./scripts/build_windows.ps1 -Installer -CloudflaredPath "$env:RUNNER_TEMP/cloudflared.exe" -FFmpegPath "$env:RUNNER_TEMP/ffmpeg-build/ffmpeg" -UntruncPath "$env:RUNNER_TEMP/untrunc-build/untrunc"'
+      - name: 上传 Windows 构建的浏览器 source maps
+        shell: pwsh
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+        run: |
+          if (-not $env:SENTRY_AUTH_TOKEN -or -not $env:SENTRY_ORG -or -not $env:SENTRY_PROJECT) {
+            Write-Host '未配置 Sentry source map 上传环境，跳过上传。'
+            exit 0
+          }
+          npm --prefix frontend run sentry:upload
+          if ($LASTEXITCODE -ne 0) { throw '浏览器 source map 上传失败' }
       - name: 生成完整包、应用更新包与工具包
         shell: pwsh
         run: |
@@ -171,7 +191,17 @@ jobs:
     needs: windows
     runs-on: windows-latest
     timeout-minutes: 25
+    # 验收脚本核对随包 amane 运行时要读发行锁与桥脚本；与 scripts/ci_windows.ps1 一样，验收宿主
+    # 从同一检出加载辅助模块，被测应用启动时清除 PYTHONPATH。
+    env:
+      PYTHONPATH: ${{ github.workspace }}\source\scripts
     steps:
+      - uses: actions/checkout@v7
+        with:
+          path: source
+          sparse-checkout: |
+            scripts
+            tools/amane-bridge
       - uses: actions/download-artifact@v8
         with:
           name: desktop-candidate
@@ -239,6 +269,7 @@ jobs:
   macos:
     name: macOS ${{ matrix.arch }} 独立测试包
     needs: validate
+    if: github.ref_type != 'tag'
     strategy:
       fail-fast: false
       matrix:
@@ -248,7 +279,8 @@ jobs:
           - arch: x86_64
             runner: macos-15-intel
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    # 媒体工具缓存未命中时要在 runner 上从源码编译 FFmpeg 与 untrunc，首轮冷编译耗时长。
+    timeout-minutes: 180
     env:
       MACOSX_DEPLOYMENT_TARGET: '11.0'
       ARCHFLAGS: '-arch ${{ matrix.arch }}'
@@ -262,7 +294,7 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
@@ -271,8 +303,36 @@ jobs:
           uv sync --locked --all-extras --python python
           uv pip check --python .venv/bin/python
           npm ci --prefix frontend
+      # 与 scripts/ci_macos.sh 相同的媒体工具准备：缓存按 media_build_cache.py 的输入与工具链身份核对，
+      # 不一致时在本机重新编译。
+      - name: 复用固定源码的 macOS 媒体工具与对应源码包
+        uses: actions/cache@v6.1.0
+        with:
+          key: macos-media-v1-${{ matrix.arch }}-${{ runner.os }}-${{ hashFiles('scripts/ffmpeg-sources.json', 'scripts/untrunc-sources.json', 'scripts/build_macos_media.py', 'scripts/fetch_ffmpeg_sources.py', 'scripts/fetch_untrunc_sources.py', 'scripts/setup_macos_media_tools.py', 'scripts/media_build_cache.py', 'src/peach/user_agent.py', 'LICENSE') }}
+          path: build/media-cache/macos-${{ matrix.arch }}
+      - name: 安装固定版本的媒体编译工具
+        run: |
+          .venv/bin/python scripts/setup_macos_media_tools.py --root build/macos-media-toolchain
+          echo "$PWD/build/macos-media-toolchain/env/bin" >> "$GITHUB_PATH"
+      - name: 构建或复用媒体工具并取得 cloudflared
+        run: |
+          for tool in ffmpeg untrunc; do
+            .venv/bin/python scripts/media_build_cache.py macos --tool "$tool" --arch '${{ matrix.arch }}'
+          done
+          .venv/bin/python scripts/fetch_cloudflared_macos.py --arch '${{ matrix.arch }}' --destination "build/media-macos/${{ matrix.arch }}/cloudflared"
       - name: 构建独立应用与拖放安装镜像
         run: .venv/bin/python scripts/build_macos_standalone.py --target-arch '${{ matrix.arch }}' --destination release
+      - name: 上传 macOS 构建的浏览器 source maps
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.SENTRY_PROJECT }}
+        run: |
+          if [ -z "$SENTRY_AUTH_TOKEN" ] || [ -z "$SENTRY_ORG" ] || [ -z "$SENTRY_PROJECT" ]; then
+            echo '未配置 Sentry source map 上传环境，跳过上传。'
+            exit 0
+          fi
+          npm --prefix frontend run sentry:upload
       - uses: actions/upload-artifact@v7
         with:
           name: macos-candidate-${{ matrix.arch }}
@@ -297,7 +357,17 @@ jobs:
             runner: macos-15-intel
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
+    # 与 Windows 仅下载验收相同：核对随包 amane 运行时要读发行锁与桥脚本，验收宿主从同一检出
+    # 加载辅助模块，被测应用启动时清除 PYTHONPATH。
+    env:
+      PYTHONPATH: ${{ github.workspace }}/source/scripts
     steps:
+      - uses: actions/checkout@v7
+        with:
+          path: source
+          sparse-checkout: |
+            scripts
+            tools/amane-bridge
       - uses: actions/download-artifact@v8
         with:
           name: macos-candidate-${{ matrix.arch }}
@@ -318,38 +388,113 @@ jobs:
           test "$(readlink "$mount/Applications")" = /Applications
           test -s "$mount/Peach.app/Contents/Resources/LICENSE"
           codesign --verify --deep --strict "$mount/Peach.app"
-          lipo -verify_arch '${{ matrix.arch }}' "$mount/Peach.app/Contents/MacOS/Peach"
+          lipo "$mount/Peach.app/Contents/MacOS/Peach" -verify_arch '${{ matrix.arch }}'
           python scripts/smoke_macos.py "$mount/Peach.app"
 
   release:
     name: GitHub 预发布
     if: github.ref_type == 'tag'
-    needs: [windows, desktop-smoke, macos-smoke]
+    needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
+      actions: read
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
-          name: desktop-candidate
-          path: release
-      - uses: actions/download-artifact@v8
-        with:
-          pattern: macos-candidate-*
-          merge-multiple: true
-          path: macos-candidates
+          python-version: '3.14'
+      - name: 核对并取得同提交演练产物
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/github_release_candidate.py desktop --destination release
+          python scripts/github_release_candidate.py macos --destination macos-candidates
       - name: 创建预发布
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          VERSION: ${{ needs.windows.outputs.version }}
+          VERSION: ${{ github.ref_name }}
         run: |
           cd release
           cp ../macos-candidates/release/*.dmg .
           tail -n +4 ../macos-candidates/scripts/MACOS_DOWNLOADS.md >> RELEASE_NOTES.md
           sha256sum ./*.zip ./*-setup.exe ./*.dmg > SHA256SUMS.txt
-          gh release create "$GITHUB_REF_NAME" ./*.zip ./*-setup.exe ./*.dmg SHA256SUMS.txt --verify-tag --prerelease --title "Peach $VERSION · Windows / macOS 测试版" --notes-file RELEASE_NOTES.md
+          gh release create "$GITHUB_REF_NAME" ./*.zip ./*-setup.exe ./*.dmg SHA256SUMS.txt --verify-tag --prerelease --title "Peach ${VERSION#v} · Windows / macOS 测试版" --notes-file RELEASE_NOTES.md
+
+  # 镜像在演练中构建和验收，标签核对相同 image ID 后发布；发布排在 GitHub Release 成功之后：
+  # 桌面包任何一步没发出去，Docker Hub 的版本号与 edge 都不动（ADR-0121）。
+  docker:
+    name: Linux amd64 镜像构建与验收
+    needs: validate
+    if: github.ref_type != 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - uses: docker/setup-buildx-action@v4
+      - name: 读取镜像版本
+        id: version
+        run: echo "version=$(PYTHONPATH=src python -c 'from peach import __version__; print(__version__)')" >> "$GITHUB_OUTPUT"
+      - name: 构建候选镜像
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: longmeidao/peach:candidate
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: 验收临时容器
+        run: python3 scripts/smoke_docker.py longmeidao/peach:candidate
+      - name: 保存已验收镜像与摘要
+        run: |
+          python scripts/github_release_candidate.py image-record --version '${{ steps.version.outputs.version }}' --destination docker-image.json
+          docker image save longmeidao/peach:candidate | gzip > docker-image.tar.gz
+      - uses: actions/upload-artifact@v7
+        with:
+          name: docker-candidate
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          path: |
+            docker-image.json
+            docker-image.tar.gz
+
+  docker-publish:
+    name: 发布已验收镜像
+    if: github.ref_type == 'tag' && vars.DOCKERHUB_USERNAME != ''
+    needs: [release, validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: 取得并核对已验收镜像
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python scripts/github_release_candidate.py docker --destination docker-candidate
+          docker image load --input docker-candidate/docker-image.tar.gz
+          python scripts/github_release_candidate.py image-verify --version "${GITHUB_REF_NAME#v}" --destination docker-candidate/docker-image.json
+      - uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: 推送版本号与 edge
+        run: |
+          for tag in "${GITHUB_REF_NAME#v}" edge; do
+            docker tag longmeidao/peach:candidate "longmeidao/peach:$tag"
+            docker push "longmeidao/peach:$tag"
+          done
 
   project-board:
     name: 同步已发布版本到看板

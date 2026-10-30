@@ -12,6 +12,7 @@ LOCAL_EMPTY = {
     "sections": {"creator_tags": []},
     "sources": {"creator_tags": None},
     "counts": {"creator_tags": 0},
+    "queues": {"later": {"sections": {}, "counts": {}}, "ignored": {"sections": {}, "counts": {}}},
 }
 
 
@@ -49,6 +50,10 @@ class ReviewMirrorTests(unittest.TestCase):
 
     def test_live_writer_payload_is_validated_rewritten_and_cached(self):
         remote = {
+            **LOCAL_EMPTY,
+            'queues': {'later': {'sections': {'metadata_fields': [{'item_key': 'later', 'preview_url': '/poster?id=2'}]},
+                                 'counts': {'metadata_fields': 1}},
+                       'ignored': {'sections': {}, 'counts': {}}},
             "sections": {"creator_tags": [{
                 "item_key": "one", "preview_url": "/endcard-frame?id=1",
                 "comparison_assets": [{"preview_url": "/poster?id=1"}],
@@ -74,12 +79,15 @@ class ReviewMirrorTests(unittest.TestCase):
         self.assertEqual(row["comparison_assets"][0]["preview_url"],
                          "https://writer.test/poster?id=1")
         self.assertTrue(self.cache.is_file())
+        self.assertEqual(result['queues']['later']['sections']['metadata_fields'][0]['preview_url'],
+                         'https://writer.test/poster?id=2')
         self.assertEqual(opener.requests[0][0].get_header("X-token"), "secret")
 
     def test_cached_writer_payload_survives_a_temporary_network_failure(self):
         live = FakeOpener({
             "https://writer.test/healthz": {"ledger_sync": "writer"},
             "https://writer.test/api/review": {
+                **LOCAL_EMPTY,
                 "sections": {"creator_tags": [{"item_key": "one"}]},
                 "sources": {"creator_tags": "batch.csv"},
                 "counts": {"creator_tags": 1},
@@ -118,6 +126,7 @@ class ReviewMirrorTests(unittest.TestCase):
         opener = FakeOpener({
             "https://writer.test/healthz": {"ledger_sync": "writer"},
             "https://writer.test/api/review": {
+                **LOCAL_EMPTY,
                 "sections": {"creator_tags": [{"item_key": "one"}]},
                 "sources": {"creator_tags": "batch.csv"},
                 "counts": {"creator_tags": 1},
@@ -139,6 +148,17 @@ class ReviewMirrorTests(unittest.TestCase):
 
         self.assertEqual(result["mirror"]["state"], "unavailable")
         self.assertIn("strictly verified", result["mirror"]["error"])
+
+    def test_legacy_live_and_cached_payloads_report_missing_states(self):
+        legacy = {key: value for key, value in LOCAL_EMPTY.items() if key != 'queues'}
+        self.cache.parent.mkdir(parents=True)
+        self.cache.write_text(json.dumps({'payload': legacy, 'fetched_at': 'old'}), encoding='utf-8')
+        opener = FakeOpener({'https://writer.test/healthz': {'ledger_sync': 'writer'},
+            'https://writer.test/api/review': legacy})
+        result = ReviewMirror('https://writer.test', self.ca, self.cache, opener=opener).resolve(LOCAL_EMPTY)
+        self.assertEqual(result['mirror']['state'], 'unavailable')
+        self.assertIn('未提供复核状态', result['mirror']['error'])
+        self.assertEqual(result['queues'], LOCAL_EMPTY['queues'])
 
     def test_macos_keychain_ca_is_added_without_replacing_the_file_ca(self):
         keychain = self.root / "login.keychain-db"
@@ -164,6 +184,7 @@ class ReviewMirrorTests(unittest.TestCase):
         def curl_runner(args, **kwargs):
             calls.append((args, kwargs))
             payload = ({"ledger_sync": "writer"} if args[-1].endswith("/healthz") else {
+                **LOCAL_EMPTY,
                 "sections": {"creator_tags": [{"item_key": "one"}]},
                 "sources": {"creator_tags": "batch.csv"},
                 "counts": {"creator_tags": 1},

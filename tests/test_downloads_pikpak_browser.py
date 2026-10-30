@@ -8,6 +8,7 @@ import json
 import threading
 import time
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from peach import downloads_pikpak_browser as pb
@@ -106,6 +107,22 @@ class BrowserLoginTests(unittest.TestCase):
         thread.join(timeout=5)
         self.assertFalse(thread.is_alive())
         return login.status()
+
+    def test_proxy_setup_failure_finishes_the_login_without_a_browser(self):
+        login, _ = self.make(FakeBrowser([]))
+        with patch.object(login, '_browser', side_effect=BrowserUnavailable('代理配置不可用')):
+            login.start()
+            status = self.finish(login)
+        self.assertEqual(status['state'], pb.FAILED)
+        self.assertIn('代理配置不可用', status['message'])
+
+    def test_browser_login_uses_the_saved_proxy_from_its_secrets_root(self):
+        from peach import peach_proxy
+        with patch.object(peach_proxy, 'client_options', return_value={'trust_env': False, 'proxy': 'http://127.0.0.1:17890'}) as options, \
+                patch.object(pb, '_Browser') as factory:
+            pb._attended_browser('chrome.exe', Path('C:/fake/secrets/browser-pikpak'))
+        options.assert_called_once_with(Path('C:/fake/secrets'))
+        self.assertEqual(factory.call_args.args[2], ('--proxy-server=http://127.0.0.1:17890',))
 
     def test_the_page_credentials_are_stored_with_the_client_from_the_key_and_then_forgotten(self):
         browser = FakeBrowser([None, RuntimeError("Execution context was destroyed"), json.dumps(CAPTURE)])

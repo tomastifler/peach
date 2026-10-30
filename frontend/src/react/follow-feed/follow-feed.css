@@ -26,13 +26,9 @@
   .peach-react [data-follow-title] { font: var(--board-figure); }
 }
 .peach-react [data-follow-head-actions] { display: inline-flex; flex: none; align-items: center; gap: 8px; }
-/* 英文按钮文字更长：窄屏放不下时按钮组换到标题下一行，不撑出视口。 */
-@media (max-width: 640px) {
-  .peach-react [data-follow-head] { flex-wrap: wrap; }
-}
-/* 「管理关注」「抓更早的一页」同遗留层 `.fbtn`：左边留 12px，图标 14px，与文字隔 4px（文字自带的内边距）。 */
+/* 「管理关注」「抓更早的一页」同遗留层 `.fbtn`：左边留 12px，图标与文字同行、随字号缩放，与文字隔 4px（文字自带的内边距）。 */
 .peach-react button:is([data-follow-manage], [data-follow-older]):has(> svg) { gap: 0; padding-left: 12px; }
-.peach-react button:is([data-follow-manage], [data-follow-older]) > svg { width: 14px; height: 14px; }
+.peach-react button:is([data-follow-manage], [data-follow-older]) > svg { width: var(--icon-inline); height: var(--icon-inline); }
 
 /* ── 创作者行与题材行 ──
  * 同首页那两排（`catalog-filter.css` 的 `[data-tier-performer]`、`[data-tier-studio]`）：圆头像 48px、名字一行 Caption；题材是 40px 高的
@@ -167,8 +163,8 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: var(--control-h-compact);
+  height: var(--control-h-compact);
   padding: 0;
   border: 1px dashed var(--glass-low);
   border-radius: var(--tag-radius);
@@ -201,14 +197,14 @@
   font-family: "Cascadia Mono", Consolas, ui-monospace, "Microsoft YaHei UI", "PingFang SC", monospace;
   font-size: 11px;
 }
-/* 「仅显示图片」：一枚 30px 的方键，按下时垫一块滑动玻璃那种料。 */
+/* 「仅显示图片」：一枚紧凑档的方键，按下时垫一块滑动玻璃那种料。 */
 .peach-react button[data-follow-images-only] {
   position: relative;
   display: grid;
   flex: none;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: var(--control-h-compact);
+  height: var(--control-h-compact);
   padding: 0;
   border: 0;
   border-radius: 7px;
@@ -255,7 +251,7 @@
 }
 .peach-react [data-follow-page-action] { display: inline-flex; align-items: center; gap: 12px; }
 .peach-react [data-follow-pagination] [data-entity-more] { gap: 4px; min-width: 0; margin: 0; }
-/* 忙态里转圈与「抓取中…」隔开 4px，同遗留层 `.fbtn` 的间距。 */
+/* 忙态里转圈与「抓取中」隔开 4px，同遗留层 `.fbtn` 的间距。 */
 .peach-react :is([data-follow-older], [data-follow-recheck]) > span { gap: 4px; }
 /* 任务在跑时两枚键只标 `aria-busy`，重复点击由 `start` 拦住：「检查更新」保持主键那块蓝，
    「抓更早的一页」铺遗留层次级键的忙态面（`--ground` 底、`--line` 边、`--muted` 字、不带影），悬停也不变。 */
@@ -271,7 +267,7 @@
 .peach-react [data-follow-list] {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--tile)), 1fr));
-  gap: 24px 16px;
+  gap: 24px;
 }
 .peach-react [data-follow-list]:not([data-follow-wall]) > [data-media-card] { align-self: stretch; }
 .peach-react [data-follow-list] > [data-follow-empty] { grid-column: 1 / -1; }
@@ -329,6 +325,15 @@ body[data-density="dense"]:not([data-surface="/trash"]) .peach-react [data-follo
 .peach-react [data-follow-list]:not([data-follow-wall]) [data-follow-item] [data-media-meta] {
   min-height: calc(var(--card-meta-block) + 16px);
   contain-intrinsic-block-size: auto var(--card-meta-block);
+}
+/* 窄屏关注卡按实际内容定高，紧凑视图的长标题保留两行。 */
+@media (max-width: 760px) {
+  body .peach-react [data-follow-list] [data-follow-item] [data-media-meta] {
+    min-height: 0; content-visibility: visible; contain-intrinsic-block-size: none;
+  }
+  body[data-density]:not([data-surface="/trash"]) .peach-react [data-follow-item] [data-media-title] {
+    display: -webkit-box; min-height: 0; white-space: normal; -webkit-line-clamp: 2;
+  }
 }
 /* 已看的卡片保持原样：看过不等于不想再看，只有忽略的才淡下去。 */
 .peach-react [data-follow-item][data-status="ignored"] { opacity: .62; }
@@ -423,7 +428,7 @@ body[data-density="dense"]:not([data-surface="/trash"]) .peach-react [data-follo
   -webkit-backdrop-filter: blur(10px);
   transition: opacity .15s ease;
 }
-.peach-react [data-follow-collection] svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; }
+.peach-react [data-follow-collection] svg { width: var(--icon-inline); height: var(--icon-inline); fill: none; stroke: currentColor; stroke-width: 2; }
 .peach-react [data-follow-actions] {
   display: flex;
   align-items: center;
@@ -432,11 +437,12 @@ body[data-density="dense"]:not([data-surface="/trash"]) .peach-react [data-follo
   pointer-events: none;
   transition: opacity .15s ease;
 }
+/* 卡片悬浮动作取紧凑档，与首页卡片上的稍后看、未入库卡的动作键同高。 */
 .peach-react [data-follow-actions] button {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: var(--control-h-compact);
+  height: var(--control-h-compact);
   padding: 0;
   border: 1px solid rgb(255 255 255 / .16);
   border-radius: 50%;
@@ -527,8 +533,8 @@ body[data-density="dense"]:not([data-surface="/trash"]) .peach-react [data-follo
 /* 卡片、两排与详情共用的几处字样，HTML 由 `follow-marks.ts` 拼。站点图标在角标、来源条那几格里
    另有尺寸，这里是行内默认的那一档。SFW 模式下它不跟着内容图一起糊，豁免写在 `17-overlay.css`。 */
 .peach-react [data-follow-site-icon] {
-  width: 14px;
-  height: 14px;
+  width: var(--icon-inline);
+  height: var(--icon-inline);
   margin-right: 5px;
   border-radius: 0;
   object-fit: contain;

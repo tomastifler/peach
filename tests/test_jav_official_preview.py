@@ -175,8 +175,13 @@ class OfficialPreviewTests(unittest.TestCase):
 
     def test_source_absence_is_distinct_from_transport_failure(self):
         self.assertEqual(prestige_preview('EXM-001', Path('unused'), transport=self.transport(self.product(movie=None))), '')
-        with self.assertRaises(PublicSourceUnavailable):
-            prestige_preview('EXM-001', Path('unused'), transport=Mock(side_effect=httpx.ConnectError('offline')))
+        offline, slept = Mock(side_effect=httpx.ConnectError('offline')), []
+        # 连接失败按网络退避重试后才认定来源不可用；退避只记下时长，不真睡。
+        with patch('peach.jav_cover_fetch._sleep_within', side_effect=lambda delay, _: slept.append(delay)), \
+                self.assertRaises(PublicSourceUnavailable):
+            prestige_preview('EXM-001', Path('unused'), transport=offline)
+        self.assertEqual(slept, [2, 4, 6, 8])
+        self.assertEqual(offline.call_count, 5)
 
     def test_empty_preview_rechecks_daily_and_good_old_preview_survives_restart(self):
         with tempfile.TemporaryDirectory() as directory:

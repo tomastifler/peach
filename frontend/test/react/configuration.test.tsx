@@ -1,6 +1,7 @@
 import { notifyManager, QueryClientProvider } from '@tanstack/react-query';
 import { act } from 'react';
 import { afterEach, expect, it, vi } from 'vitest';
+vi.mock('../../src/react/settings/cloud-proxy-settings', () => ({ CloudProxySettings: () => null }));
 import { CONFIGURATION_URL } from '../../src/configuration-endpoints';
 import type { ConfigurationData, DownloadSettingsState } from '../../src/react/bundle';
 import { queryClient } from '../../src/react/query';
@@ -16,6 +17,7 @@ const data = (over: Partial<ConfigurationData> = {}): ConfigurationData => ({
   port: 9123, facts: [], ...over,
 });
 const downloads: DownloadSettingsState = {
+  media_sources: ['115', 'pikpak'],
   available: true, config: { clouddrive_address: '', targets: {}, pikpak_root: '', wait_hours: 168 },
   token_set: false, pikpak: { logged_in: false, username: '', remember: false, method: 'password' },
   pikpak_browser: { available: true, state: 'idle', message: '' }, pikpak_roots: [],
@@ -139,4 +141,50 @@ it('只读媒体配置可刷新挂载状态，更新共用配置快照', async (
   await settle();
   expect(section(host, 'Mount status')?.textContent).toContain('Online');
   expect(queryClient.getQueryData<ConfigurationData>(CONFIGURATION_KEY)?.revision).toBe('rev-2');
+});
+
+it('下载设置未取得时保留分区与健康表单，并可重试恢复', async () => {
+  const partial = full();
+  delete partial.downloads;
+  partial.section_errors = { downloads: { title: '下载设置未取得', message: '请重新读取。', error_id: 'test-error-id' } };
+  const host = await open(partial, '下载渠道');
+  expect(tabs(host).map(tab => tab.textContent)).toEqual(names);
+  expect(chosen(host).textContent).toBe('下载渠道');
+  expect(host.querySelector('.ui-board-group-active')?.textContent).toContain('下载设置未取得');
+  expect(host.querySelector('[data-folder-row]')).not.toBeNull();
+  serve(full());
+  await click(buttonNamed('重新读取', host.querySelector('.ui-board-group-active')!));
+  await settle();
+  expect(host.textContent).not.toContain('下载设置未取得');
+  expect(section(host, '云下载')).not.toBeNull();
+});
+
+it('局部配置错误出现在对应分区且不替换其他未保存输入', async () => {
+  const host = await open(full());
+  const input = host.querySelector<HTMLInputElement>('input[aria-label^="媒体目录 "]')!;
+  await type(input, 'D:\\Edited');
+  await act(async () => {
+    queryClient.setQueryData(CONFIGURATION_KEY, { ...full(), section_errors: {
+      storage: { title: '存储空间未取得', message: '请重新读取。', error_id: 'storage-error' },
+      tunnel: { title: '公网入口未取得', message: '请重新读取。', error_id: 'tunnel-error' },
+    } });
+  });
+  expect(input.value).toBe('D:\\Edited');
+  expect(host.querySelector('.ui-board-group-active')?.textContent).not.toContain('存储空间未取得');
+  await click(tabs(host).find(tab => tab.textContent === '应用与维护'));
+  expect(host.querySelector('.ui-board-group-active')?.textContent).toContain('存储空间未取得');
+  await click(tabs(host).find(tab => tab.textContent === '网络与访问'));
+  expect(host.querySelector('.ui-board-group-active')?.textContent).toContain('公网入口未取得');
+  expect(host.querySelector('#peachProxy')).not.toBeNull();
+});
+
+it('媒体来源未取得时隐藏会提交媒体配置的表单，其他设置仍可用', async () => {
+  const partial = full();
+  partial.section_errors = { media_sources: { title: '媒体目录未取得', message: '请重新读取。', error_id: 'media-error' } };
+  const host = await open(partial);
+  expect(host.querySelector('[data-folder-row]')).toBeNull();
+  expect(host.querySelector('#configPort')).toBeNull();
+  expect(host.querySelector('#peachProxy')).not.toBeNull();
+  await click(tabs(host).find(tab => tab.textContent === '网络与访问'));
+  expect(host.querySelector('.ui-board-group-active')?.textContent).toContain('媒体目录未取得');
 });

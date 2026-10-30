@@ -14,29 +14,7 @@
 import type { ReactNode } from 'react';
 
 import { cardClass } from './card';
-
-type Layout = 'split' | 'stack';
-
-const FACE = cardClass({ padding: 'none', bordered: 'line', className: 'overflow-hidden' });
-
-const BODY: Record<Layout, string> = {
-  split: 'min-w-0 p-6',
-  stack: 'flex min-h-30 min-w-0 flex-1 flex-col px-5 pt-5 pb-4 max-cleanup-tight:min-h-0 max-cleanup-tight:p-4.5',
-};
-
-const FOOT: Record<Layout, string> = {
-  split: 'flex flex-wrap items-center justify-end gap-2 self-stretch p-6'
-    + ' max-[1001px]:justify-start max-[1001px]:pt-0',
-  stack: 'flex min-h-14 flex-wrap items-center justify-end gap-2 border-t border-border-button-default'
-    + ' bg-card-footer px-5 py-3 max-cleanup-tight:px-4.5',
-};
-
-/** 结果面板底下那条带子，和 `stack` 页脚同一副几何；颜色按语气另给。 */
-const BAND = 'flex min-h-14 flex-wrap items-center justify-end gap-2 border-t px-5 py-3';
-const BAND_TONE = {
-  neutral: 'border-border-button-default bg-card-footer',
-  error: 'border-border-error-default bg-background-tertiary-error',
-};
+import { FIELDSET_BODY, FIELDSET_FOOT, fieldsetClass, type FieldsetLayout } from './fieldset-layout';
 
 /** 卡下面那块结果面板：同一副填充底，一条描边、14px 圆角、不浮起。
  *  链接检查与资源同步把一趟后台任务的结论摆在这里，一段一段往下叠，段间一条发丝线。 */
@@ -46,24 +24,6 @@ export const RESULT_PANEL = cardClass({
 
 /** 结果面板里的一段：16px 内边距，除第一段外顶上一条线。 */
 export const RESULT_SECTION = 'border-t border-border-button-default p-4 first:border-t-0';
-
-/** 面板底下那条放按钮的带子。`error` 是「这一步删了就回不来」的那一档：红线红底，左边
- *  那句说明也换成红字。 */
-export function PanelFooter(
-  { tone = 'neutral', status, children }:
-  { tone?: 'neutral' | 'error'; status?: string; children: ReactNode },
-) {
-  return (
-    <div className={`${BAND} ${BAND_TONE[tone]}`}>
-      {status
-        ? <p className={`mr-auto min-w-0 text-caption-1-regular ${tone === 'error' ? 'text-text-error-primary' : 'text-text-secondary'}`}>
-            {status}
-          </p>
-        : null}
-      {children}
-    </div>
-  );
-}
 
 /** 卡外那一行分区标题（链接管理、资源同步），Title 2，与下面那张卡隔 16px。
  *
@@ -85,7 +45,7 @@ export function FieldsetTitle(
 export function Fieldset(
   { layout, label, labelledBy, id, footer, children, attributes }:
   {
-    layout: Layout;
+    layout: FieldsetLayout;
     /** 没有可见标题可指的时候（扫描与采集那两张的标题在正文那一列里）用它。 */
     label?: string;
     labelledBy?: string;
@@ -98,9 +58,9 @@ export function Fieldset(
 ) {
   return (
     <section id={id} aria-label={label} aria-labelledby={labelledBy} {...attributes}
-      className={`${FACE} ${layout === 'split' ? 'fieldset-split' : 'flex flex-col'}`}>
-      <div className={BODY[layout]}>{children}</div>
-      {footer ? <footer className={FOOT[layout]}>{footer}</footer> : null}
+      className={fieldsetClass(layout)}>
+      <div className={FIELDSET_BODY[layout]}>{children}</div>
+      {footer ? <footer className={FIELDSET_FOOT[layout]}>{footer}</footer> : null}
     </section>
   );
 }

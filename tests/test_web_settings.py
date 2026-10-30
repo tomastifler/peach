@@ -95,9 +95,47 @@ class SettingsRoundTripTests(unittest.TestCase):
                          {"sidebarOrder": list(DEFAULT_SIDEBAR_ORDER),
                           "avatarRefreshDays": 90, "faviconRefreshDays": 365,
                           "followInitialDays": 30, "postSetupTutorialDone": False,
-                          "organizeTemplates": {}, "feedHideGroupCompilations": True,
+                          "organizeTemplates": {}, "codePatterns": [],
+                          "feedHideGroupCompilations": True,
                           "feedHideSoloCompilations": False, "feedHideExcerpts": True,
-                          "searchHistoryLimit": None})
+                          "searchHistoryLimit": None, "performerNameLanguage": "zh-CN"})
+
+    def test_code_patterns_are_checked_when_saved(self):
+        """写错的规则在保存那一刻报出来；存下的规则去掉空行，读回来是同一份。"""
+        rules = [r"^\+{3}\s*(?<code>FC2-PPV-\d+)", "", r"\[(\w+-\d+)\]"]
+        saved = w_settings(self.contract, {"codePatterns": rules})["codePatterns"]
+        self.assertEqual(saved, [rules[0], rules[2]])
+        self.assertEqual(q_settings(self.contract)["codePatterns"], saved)
+        for broken in (["(unclosed"], "not a list", ["x" * 201], ["a"] * 21):
+            with self.assertRaises(ValueError, msg=repr(broken)[:40]):
+                w_settings(self.contract, {"codePatterns": broken})
+        self.assertEqual(self._stored_json()["codePatterns"], saved)
+
+    def test_name_language_is_shared_and_preserves_other_profile_settings(self):
+        self.assertEqual(q_settings(self.contract)['performerNameLanguage'], 'zh-CN')
+        self.assertEqual(self._stored_json(), {})
+        order = ['tags', '']
+        w_settings(self.contract, {'sidebarOrder': order, 'performerNameLanguage': 'ja'})
+        other_device = WebContract(self.db.resolve())
+        self.assertEqual(q_settings(other_device)['performerNameLanguage'], 'ja')
+        w_settings(other_device, {'performerNameLanguage': 'zh-CN'})
+        self.assertEqual(q_settings(self.contract)['performerNameLanguage'], 'zh-CN')
+        self.assertEqual(self._stored_json(), {'sidebarOrder': order, 'performerNameLanguage': 'zh-CN'})
+
+    def test_invalid_name_languages_leave_the_stored_preference_unchanged(self):
+        w_settings(self.contract, {'performerNameLanguage': 'ja'})
+        for value in ('en', 'ja ', None, True, 1, [], {}):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                w_settings(self.contract, {'performerNameLanguage': value})
+            self.assertEqual(self._stored_json(), {'performerNameLanguage': 'ja'})
+
+    def test_a_hand_broken_rule_reads_as_unset(self):
+        con = sqlite3.connect(self.db)
+        con.execute("UPDATE profile SET settings_json=? WHERE id='local-default'",
+                    (json.dumps({"codePatterns": ["(unclosed"]}),))
+        con.commit()
+        con.close()
+        self.assertEqual(q_settings(self.contract)["codePatterns"], [])
 
     def test_the_search_history_limit_stays_unset_until_a_device_writes_it(self):
         """没写过读出 None，前端据此把本机记着的那个数同步上来一次；写过之后各端读同一个数。"""
@@ -134,9 +172,10 @@ class SettingsRoundTripTests(unittest.TestCase):
                          {"ok": True, "sidebarOrder": order,
                           "avatarRefreshDays": 90, "faviconRefreshDays": 365,
                           "followInitialDays": 30, "postSetupTutorialDone": False,
-                          "organizeTemplates": {}, "feedHideGroupCompilations": True,
+                          "organizeTemplates": {}, "codePatterns": [],
+                          "feedHideGroupCompilations": True,
                           "feedHideSoloCompilations": False, "feedHideExcerpts": True,
-                          "searchHistoryLimit": None})
+                          "searchHistoryLimit": None, "performerNameLanguage": "zh-CN"})
         self.assertEqual(q_settings(self.contract)["sidebarOrder"], order)
         self.assertEqual(self._stored_json()["sidebarOrder"], order)
 

@@ -40,6 +40,12 @@ class BumpPartTests(unittest.TestCase):
         self.assertTrue(runtime_inputs_changed(["resources/peach.ico"]))
         self.assertTrue(runtime_inputs_changed(["scripts/build_windows.ps1"]))
         self.assertTrue(runtime_inputs_changed(["scripts/build_app_entry.py"]))
+        for path in ("scripts/build_macos_app.py", "scripts/build_macos_standalone.py",
+                     "scripts/peach_macos.spec", "scripts/package_windows_release.py",
+                     "scripts/installer/peach.iss", "scripts/ci_windows.ps1",
+                     "scripts/ci_macos.sh", ".gitlab-ci.yml"):
+            with self.subTest(path=path):
+                self.assertTrue(runtime_inputs_changed([path]))
         self.assertTrue(runtime_inputs_changed(["pyproject.toml"]))
         self.assertTrue(runtime_inputs_changed(["uv.lock"]))
         self.assertTrue(runtime_inputs_changed([".github/workflows/release.yml"]))
@@ -141,6 +147,26 @@ class ReleasePlanTests(unittest.TestCase):
     def test_locked_dependency_changes_plan_a_patch(self):
         self.tag()
         self.commit("fix(desktop): 固定构建依赖", self.write("uv.lock"))
+        self.assertEqual(plan_bump(self.root)["version"], "0.7.15")
+
+    def test_bundled_sidecar_fetch_changes_plan_a_patch(self):
+        self.tag()
+        self.commit('fix(desktop): 获取随包工具', self.write('scripts/fetch_cloudflared.ps1'))
+        self.assertEqual(plan_bump(self.root)['version'], '0.7.15')
+
+    def test_bundled_sidecar_lock_changes_plan_a_patch(self):
+        self.tag()
+        self.commit('fix(desktop): 固定随包工具版本', self.write('scripts/cloudflared-windows.json'))
+        self.assertEqual(plan_bump(self.root)['version'], '0.7.15')
+
+    def test_macos_disk_image_changes_plan_a_patch(self):
+        self.tag()
+        self.commit("fix(macos): 保留镜像资源签名", self.write("scripts/build_macos_standalone.py"))
+        self.assertEqual(plan_bump(self.root)["version"], "0.7.15")
+
+    def test_gitlab_release_build_changes_plan_a_patch(self):
+        self.tag()
+        self.commit("fix(packaging): 使用项目要求的解释器", self.write(".gitlab-ci.yml"))
         self.assertEqual(plan_bump(self.root)["version"], "0.7.15")
 
     def test_planning_writes_nothing(self):

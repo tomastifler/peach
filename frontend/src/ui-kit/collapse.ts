@@ -45,19 +45,28 @@ export function wireCollapse(
  */
 const collapseRuns=new WeakMap<HTMLElement,number>();
 export function setCollapseOpen(details: HTMLDetailsElement, body: HTMLElement, expanded: boolean): void {
+  transitionCollapse(body,expanded,()=>details.open,open=>{details.open=open});
+}
+
+/** 外置按钮控制的折叠正文与原生 details 共用高度过渡和反向点击保护。 */
+export function setCollapseRegionOpen(body: HTMLElement, expanded: boolean): void {
+  transitionCollapse(body,expanded,()=>!body.hidden,open=>{body.hidden=!open});
+}
+
+function transitionCollapse(body: HTMLElement, expanded: boolean, visible: () => boolean, show: (open: boolean) => void): void {
   body.classList.add('ui-fcollapse');
   const run=(collapseRuns.get(body)||0)+1;collapseRuns.set(body,run);
   const isCurrent=()=>collapseRuns.get(body)===run;
   if(expanded){
     body.inert=false;
-    const start=details.open?body.getBoundingClientRect().height:0;
-    details.open=true;
+    const start=visible()?body.getBoundingClientRect().height:0;
+    show(true);
     growCollapse(body,start,isCurrent);
   }else{
     body.inert=true;body.classList.remove('ui-fcollapse-settled');
     body.style.height=body.getBoundingClientRect().height+'px';body.getBoundingClientRect();
     body.style.height='0px';
-    settleHeight(body,()=>{if(isCurrent()){details.open=false;body.style.height=''}});
+    settleHeight(body,()=>{if(isCurrent()){show(false);body.style.height=''}});
   }
 }
 

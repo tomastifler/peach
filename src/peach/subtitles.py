@@ -1,28 +1,31 @@
 """字幕 sidecar：识别、配对、登记，以及播放器要的那份 WebVTT。
 
-三段职责，边界刻意分开：
+职责边界如下：
 
 - **识别与配对**（`directory_sidecars`）只看一个目录里的文件名，不碰数据库，也不读
   文件内容。sidecar 按定义就和正片同目录，跨目录的相似文件名一律不算——番号相同的
   两个目录在这个库里很常见，跨目录配对会把「另一版的字幕」挂到这一版上。
 - **登记**（`record`）把配对结论 upsert 进 `asset_subtitle`，幂等，重扫只更新
   `last_seen` 与可变字段；消失的行不删，沿用 `asset` 的约定。
+- **即时发现**（`discover_sidecars`）只读当前视频目录，复用配对判据，不进入子目录或写账本。
 - **出口**（`decode`、`to_webvtt`）把磁盘上的 srt/ass/ssa/vtt 换成浏览器唯一认识的
   WebVTT。这一段在 Python 里做而不是叫 FFmpeg：每请求一次字幕就起一个子进程，代价
   落在挂载网盘的目录遍历上；而且 FFmpeg 解码失败只给一个退出码，界面要说的是
   「这份字幕的编码认不出来」，两者不是同一件事。
 
 本模块不 import `scan`：方向是 `scan` → `subtitles`。哪些扩展名算视频是扫描层的
-判断，`directory_sidecars` 因此要求调用方把视频文件名传进来。
+判断，调用方传入视频文件名或视频扩展名集合。
 """
 from __future__ import annotations
 
 import codecs
+import hashlib
+import os
 import re
 import sqlite3
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import PureWindowsPath
+from pathlib import Path, PureWindowsPath
 
 from .catalog_rules import VERSION_TAIL_TOKENS, release_code_from_filename
 
@@ -247,6 +250,36 @@ def subtitles_for(connection: sqlite3.Connection, asset_id: int) -> list[sqlite3
     return list(connection.execute(
         "SELECT id,path,name,language,format,size,pairing FROM asset_subtitle "
         "WHERE asset_id=? ORDER BY name COLLATE NOCASE, id", (asset_id,)))
+
+
+def file_key(name: str) -> str:
+    """字幕在当前视频目录内的稳定身份。"""
+    return "local:" + hashlib.sha256(name.casefold().encode("utf-8")).hexdigest()
+
+
+def discover_sidecars(video: Path, video_suffixes: set[str]) -> list[dict]:
+    """读取正片所在目录，返回配给当前视频的字幕，不写账本。"""
+    try:
+        with os.scandir(video.parent) as entries:
+            names = [entry.name for entry in entries
+                     if (Path(entry.name).suffix.lower() in video_suffixes
+                         or subtitle_format(entry.name))
+                     and entry.is_file(follow_symlinks=False)]
+    except OSError:
+        return []
+    videos = [name for name in names if Path(name).suffix.lower() in video_suffixes]
+    found = []
+    for name in sorted(names, key=str.casefold):
+        fmt = subtitle_format(name)
+        if not fmt:
+            continue
+        paired, pairing = pair(name, videos)
+        if not paired or paired.casefold() != video.name.casefold():
+            continue
+        found.append({"id": file_key(name), "path": str(video.parent / name),
+                      "name": name, "language": language_of(name), "format": fmt,
+                      "size": None, "pairing": pairing})
+    return found
 
 
 class SubtitleUndecodable(ValueError):

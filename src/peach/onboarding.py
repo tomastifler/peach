@@ -86,7 +86,7 @@ class Question:
 @dataclass(frozen=True)
 class Answers:
     data_root: Path
-    #: 至少一个，都是已经解析过的绝对路径；互不重复，也互不包含。
+    #: 已解析的绝对路径，互不重复也互不包含；网页明确选择稍后添加时为空。
     media_dirs: tuple[Path, ...]
     host: str
     port: int
@@ -339,7 +339,8 @@ def configure(config: PeachConfig, answers: Answers, *, windows: bool) -> PeachC
     if answers.media_sources is not None:
         from . import media_configuration
         sources = media_configuration.prepare_sources(answers.media_sources, windows=windows, config=config)
-        locations, mounts, errors = media_configuration.validate(sources, windows=windows, config=config)
+        locations, mounts, errors = (media_configuration.validate(sources, windows=windows, config=config)
+                                     if sources else ({}, {}, []))
         if errors:
             raise ValueError("；".join(error for error in errors if error))
     prepared = settings_file.capture_existing(
@@ -353,9 +354,19 @@ def configure(config: PeachConfig, answers: Answers, *, windows: bool) -> PeachC
         for row in sources:
             if row.get("library"):
                 library_names[str(PureWindowsPath(row["path"] if windows else row["root"]))] = str(row["library"])
-    return replace(prepared, locations=locations, library_names=library_names,
+    prepared = replace(prepared, locations=locations, library_names=library_names,
+                   library_catalog={}, storage_roots={},
                    media_costs=(media_configuration.costs(sources, config, windows=windows)
                                 if answers.media_sources is not None else dict(config.media_costs)))
+    from . import media_identity
+    if answers.media_sources is not None:
+        identities = media_identity.configure_sources(config, sources, windows=windows)
+        return media_identity.project(prepared, identities.library_catalog, identities.storage_roots)
+    if config.storage_roots:
+        sources = media_identity.sources_for_paths(config, answers.media_dirs, windows=windows)
+        identities = media_identity.configure_sources(config, sources, windows=windows)
+        return media_identity.project(prepared, identities.library_catalog, identities.storage_roots)
+    return media_identity.project(prepared)
 
 
 @dataclass(frozen=True)
@@ -435,7 +446,7 @@ def create_data_tree(config: PeachConfig) -> DataTree:
 
 def apply(
     config: PeachConfig, answers: Answers, *, windows: bool, force: bool = False,
-    access_password: str = "",
+    access_password: str = "", peach_proxy_values: dict | None = None,
 ) -> Applied:
     """把答案变成一台可以直接起服务的机器：目录、账本、CA、口令、设置文件。
 
@@ -448,6 +459,9 @@ def apply(
     access_path = prepared.directory("secrets") / "access.json"
     if not config.present and not access_path.exists():
         access.save(access_path, access_password)
+    if peach_proxy_values is not None:
+        from . import peach_proxy
+        peach_proxy.save(prepared.directory("secrets"), peach_proxy_values)
     path = settings_file.write(prepared, force=force)
     return Applied(config=prepared, settings_path=path, tree=tree)
 

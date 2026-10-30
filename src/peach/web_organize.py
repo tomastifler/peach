@@ -12,10 +12,9 @@ import sqlite3
 import time
 from pathlib import Path
 
-from . import organize
-from .migrations import sqlite_backup
+from . import junk, ledger_backups, organize
 from .media_sources import SCANNABLE_LOCATIONS
-from .organize_templates import PLACEHOLDERS, TemplateError, validate_template
+from .organize_templates import PLACEHOLDERS, TemplateError, example_path, validate_template
 from .platform import location_roots
 from .scripting import verify_after_write
 from .web_settings import organize_templates
@@ -57,16 +56,24 @@ def q_organize(contract, _args=None) -> dict:
     }
 
 
+def q_organize_example(_contract, args=None) -> dict:
+    """以示例字段预览模板，保持账本与文件系统只读。"""
+    args = args or {}
+    return example_path(str(args.get("file_template") or ""), str(args.get("dir_template") or ""))
+
+
 def w_organize_preview(contract, body) -> dict:
     """出计划：写一份 CSV，回给界面会变的行（上限 200）与跳过统计。"""
     location, file_template, dir_template = _templates(contract, body)
+    path_scope = organize.scope_path(location, body.get('path', ''))
     with contract.read_connection() as connection:
         plan = organize.build_plan(connection, location=location,
-                                   file_template=file_template, dir_template=dir_template)
+                                   file_template=file_template, dir_template=dir_template,
+                                   path=path_scope)
     path = organize.plan_path(contract.candidate_root, location)
     organize.write_plan(path, plan["rows"])
     changes = [row for row in plan["rows"] if row["action"] != "skip"]
-    return {"ok": True, "location": location, "counts": plan["counts"],
+    return {"ok": True, "location": location, "path": path_scope, "counts": plan["counts"],
             "reasons": plan["reasons"], "rows": changes[:200],
             "truncated": len(changes) > 200, "plan_csv": str(path)}
 
@@ -78,43 +85,49 @@ def _run_write(contract, job_id: str, work) -> dict:
     中心的进度也要拿同一把锁，同一个线程里就是死锁。逐条提交让每个事务都很短，
     并发的普通写入照常进行。
     """
-    backup = Path(contract.candidate_root) / "organize-backups" / (
-        f"ledger.pre-organize-{time.strftime('%Y%m%d-%H%M%S')}-{job_id}.db")
-    backup.parent.mkdir(parents=True, exist_ok=True)
-    sqlite_backup(Path(contract.db_path), backup)
-    connection = sqlite3.connect(str(contract.db_path), timeout=30)
-    connection.row_factory = sqlite3.Row
-    try:
-        result = work(connection)
-        integrity, violations = verify_after_write(connection)
-    finally:
-        connection.close()
+    name = f"ledger.pre-organize-{time.strftime('%Y%m%d-%H%M%S')}-{job_id}.db"
+    with ledger_backups.organize_backup(Path(contract.db_path), contract.candidate_root,
+                                        name) as backup:
+        connection = sqlite3.connect(str(contract.db_path), timeout=30)
+        connection.row_factory = sqlite3.Row
+        try:
+            before, _ = verify_after_write(connection)
+            if before != 'ok':
+                raise RuntimeError(f'写入前 ledger 校验失败：integrity={before}')
+            baseline = {tuple(row) for row in connection.execute('PRAGMA foreign_key_check')}
+            result = work(connection)
+            integrity, _ = verify_after_write(connection)
+            introduced = {tuple(row) for row in connection.execute('PRAGMA foreign_key_check')} - baseline
+        finally:
+            connection.close()
     contract.cache_bust()
-    if integrity != "ok" or violations:
+    if integrity != "ok" or introduced:
         raise RuntimeError(
-            f"Ledger check failed after writing: integrity={integrity} foreign_keys={violations}")
-    return {**result, "backup": str(backup)}
+            f"写入后 ledger 校验失败：integrity={integrity} new_foreign_keys={len(introduced)}")
+    return {**result, "backup": str(backup), 'existing_foreign_keys': len(baseline)}
 
 
 def w_organize_apply(contract, body) -> dict:
-    """按确认过的模板执行整理。重跑一次计划，不信任界面手上那份。"""
+    """按确认过的范围与可选模板执行整理，计划由服务端核对。"""
     if body.get("confirm") is not True:
         raise ValueError("Organizing needs confirmation")
     location, file_template, dir_template = _templates(contract, body)
-    if not file_template and not dir_template:
-        raise ValueError("At least one template is required")
+    path_scope = organize.scope_path(location, body.get('path', ''))
     if organize.unverified_location(location):
         raise ValueError(f"{location}: renaming on this mount cannot verify the cloud result, so the UI only shows a preview and does not execute it")
     job = contract.organize_job
 
     def work(job_id: str) -> None:
         batch_stamp = (job.snapshot() or {}).get('batch_stamp') or f"{time.strftime('%Y%m%d-%H%M%S')}-{job_id}"
+        roots = [(location, path_scope)] if path_scope else [(location, root) for root in location_roots()[location]]
+        checked = junk.isolate(contract.database, roots=roots)
+        job.update(job_id, junk_isolated=checked['isolated'], junk_review=checked['review'])
         plan = (job.snapshot() or {}).get('plan')
         if plan is None:
             with contract.read_connection() as connection:
                 plan = organize.build_plan(connection, location=location,
                                            file_template=file_template,
-                                           dir_template=dir_template)
+                                           dir_template=dir_template, path=path_scope)
             if not job.checkpoint(job_id, plan=plan, batch_stamp=batch_stamp):
                 raise InterruptedError('Organizing stopped')
         job.update(job_id, total=plan["counts"]["change"], stage="Organizing")
@@ -126,9 +139,9 @@ def w_organize_apply(contract, body) -> dict:
                    completed_at=time.time())
 
     started = job.start(work, restart=True,
-                     initial={"stage": "Verifying the plan", "location": location},
+                     initial={"stage": "正在核对计划", "location": location, 'path': path_scope},
                      recovery={'confirm': True, 'location': location, 'file_template': file_template,
-                               'dir_template': dir_template, 'action': 'apply'})
+                               'dir_template': dir_template, 'path': path_scope, 'action': 'apply'})
     return {key: value for key, value in started.items() if key not in ('plan', 'batch_stamp')}
 
 

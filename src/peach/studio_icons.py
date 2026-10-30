@@ -706,7 +706,7 @@ class FaceGate:
         return face
 
 
-def site_assets(url: str, fetch) -> tuple[list[str], list[str]]:
+def site_assets(url: str, fetch, *, studio: str = '') -> tuple[list[str], list[str]]:
     """站点首页上自己挂着的标识资产：(header 里的 `<img>`, 页面上的 X 账号)。
 
     两样从同一份 HTML 里读，因为它们本来就在同一页上，分两次取只是多敲人家一次门。
@@ -715,6 +715,8 @@ def site_assets(url: str, fetch) -> tuple[list[str], list[str]]:
     if got is None:
         return [], []
     html = got[0].decode("utf-8", "replace")
+    if studio and shares_its_host(url):
+        return site_logos.logo_images(html, url, owner=studio), []
     return site_logos.logo_images(html, url), site_logos.x_profiles(html, url)
 
 
@@ -980,7 +982,7 @@ def icon_row(safe: str, target: dict[str, str], entries: list[dict[str, str]],
         # 声明那一枚够大、大位又已经有图时才免掉首页那一趟：SO MODEL AGENT 声明的
         # favicon 只有 114×114，而 header 里挂着 600×150 的完整字标，那才是大位要的。
         if not _enough(found) or not target["installed"]:
-            marks, profiles = site_assets(entry["url"], fetch)
+            marks, profiles = site_assets(entry["url"], fetch, studio=entry["studio"])
             own = first_mark(marks, fetch, policy)
             if own:
                 found.append((own[0], own[1], "站点 header 里的 <img>",
@@ -1361,7 +1363,7 @@ def land_one(name: str, entries: list[dict[str, str]], logo_root: Path,
     verdicts = [str(item["verdict"]) for item in rows]
     if faces.unavailable:
         return {"outcome": f"人像闸未生效，不自动装（{faces.unavailable}）",
-                "verdicts": verdicts, "rows": rows}
+                "face_match_unavailable": True, "verdicts": verdicts, "rows": rows}
     written = install(rows, logo_root, source=source, batch=batch)
     return {"outcome": "已装上" if written else next(iter(verdicts), MISSING),
             "verdicts": verdicts, "installed": written, "rows": rows}

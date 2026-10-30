@@ -5,15 +5,16 @@
  * `src/ui-kit/` 共用件都打进来，产物没有外部 import，页面不加载主包 `peach-app.js`，同一个模块在这一页上不会有第二份实例。
  * `@peach/legacy/ui` 落到 `src/react/pages/legacy-ui.ts`，只转出共用件真正读的那几样。
  *
- * `npm run build` 里排在第一段之后（第一段会清空 web/dist）。不加内容哈希，理由同 `vite.config.ts`。
+ * `npm run build` 里排在第一段之后（第一段会清空 web/dist）。不拆分、不加内容哈希：免登录只放行这两个固定名字。
  * Tailwind、`@` 别名、NODE_ENV 替换与 CSS 目标同 `vite.config.ts`。 */
 import { fileURLToPath } from 'node:url';
 
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
+import { browserArtifacts, browserSymbols } from './scripts/sentry-build.ts';
 
 export default defineConfig({
-  plugins: [tailwindcss()],
+  plugins: [tailwindcss(), ...browserSymbols('peach-pages')],
   resolve: {
     alias: {
       '@peach/legacy/ui': fileURLToPath(new URL('./src/react/pages/legacy-ui.ts', import.meta.url)),
@@ -22,12 +23,12 @@ export default defineConfig({
   },
   define: { 'process.env.NODE_ENV': JSON.stringify('production') },
   build: {
-    outDir: '../web/dist',
+    outDir: browserArtifacts,
     emptyOutDir: false,
     target: 'es2022',
     cssTarget: ['chrome111', 'edge111', 'firefox128', 'safari16.4', 'ios16.4'],
     minify: 'oxc',
-    sourcemap: false,
+    sourcemap: 'hidden',
     cssCodeSplit: false,
     lib: {
       entry: 'src/react/pages/index.tsx',

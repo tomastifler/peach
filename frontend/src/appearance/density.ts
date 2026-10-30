@@ -18,20 +18,30 @@ export const currentDensity = (): Density => (localStorage.getItem(DENSITY_KEY) 
    （PHOTO_SIZES 的第三位），按下去跟着换成当前状态的图标。 */
 function paintSizeGlyph(button: HTMLElement, size: string): void {
   const [big, small] = PHOTO_SIZES;
-  if (!button.querySelector('[data-icon-swap]')) button.innerHTML = iconSwapHtml(big[2], small[2], size === small[0] ? 'b' : 'a');
-  else setIconSwap(button, size === small[0] ? 'b' : 'a');
-  button.setAttribute('aria-label', size === 'big' ? 'Switch to small thumbnails' : 'Switch to large thumbnails');
+  if (!button.querySelector('[data-icon-swap]')) {
+    // 顶栏玻璃上漂移的光斑层（`[data-glass-drift]`）是这颗键的子元素，换字形时留着它。
+    const drift = button.querySelector(':scope > [data-glass-drift]');
+    button.innerHTML = iconSwapHtml(big[2], small[2], size === small[0] ? 'b' : 'a');
+    if (drift) button.append(drift);
+  } else setIconSwap(button, size === small[0] ? 'b' : 'a');
+  setAttribute(button, 'aria-label', size === 'big' ? '切换为小图' : '切换为大图');
+}
+
+/* 同值不重写：视频墙滚动时这几处每秒被叫十几次，`<body>` 上写一次属性就是整棵树重新匹配样式。 */
+function setAttribute(node: HTMLElement, name: string, value: string): void {
+  if (node.getAttribute(name) !== value) node.setAttribute(name, value);
 }
 
 const densityButton = (): HTMLElement | null => document.querySelector<HTMLElement>('#density');
 
 export function applyDensity(density: Density = currentDensity()): void {
-  document.documentElement.style.setProperty('--tile', TILES[density]);
-  document.body.dataset.density = density;
+  const root = document.documentElement;
+  if (root.style.getPropertyValue('--tile') !== TILES[density]) root.style.setProperty('--tile', TILES[density]);
+  setAttribute(document.body, 'data-density', density);
   const button = densityButton();
   if (!button) return;
-  button.setAttribute('aria-pressed', String(density === 'dense'));
-  button.title = 'Current: ' + (density === 'big' ? 'Large' : 'Dense');
+  setAttribute(button, 'aria-pressed', String(density === 'dense'));
+  setAttribute(button, 'title', '当前：' + (density === 'big' ? '大图' : '密集'));
   paintSizeGlyph(button, density === 'big' ? 'big' : 'small');
 }
 
@@ -46,7 +56,7 @@ export function toggleDensity(): void {
 export function paintPhotoSizeButton(size: string): void {
   const button = densityButton();
   if (!button) return;
-  button.setAttribute('aria-pressed', String(size === 'small'));
-  button.title = 'Current: ' + (size === 'big' ? 'Large' : 'Small');
+  setAttribute(button, 'aria-pressed', String(size === 'small'));
+  setAttribute(button, 'title', '当前：' + (size === 'big' ? '大图' : '小图'));
   paintSizeGlyph(button, size);
 }

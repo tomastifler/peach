@@ -10,11 +10,12 @@
  * `helpers.jobProgress` 盯着，跑完失效这一页的查询重取。 */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, type InfiniteData } from '@tanstack/react-query';
-import { icon, leadingGraphemes, requestErrorMessage } from '@peach/legacy/core';
+import { esc, icon, leadingGraphemes, requestErrorMessage } from '@peach/legacy/core';
 import { tagLabel } from '@peach/legacy/tags';
-import { emptyStateHtml, spinnerHtml } from '@peach/legacy/ui';
+import { spinnerHtml } from '@peach/legacy/ui';
 
-import { Button } from '@/components/base/buttons/button';
+import { Button, ButtonLink } from '@/components/base/buttons/button';
+import { EmptyState } from '../components/empty-state';
 
 import { apiGet, apiSend } from '../../api';
 import { LoadMore } from '../catalog-grid/catalog-grid-page';
@@ -22,11 +23,13 @@ import { FilterGlassRows, FilterPill } from '../components/filter-glass';
 import { LibraryShortcuts } from '../library-shortcuts/shortcut-controls';
 import { RetryNote, useSkeletonReveal } from '../components/grid-reveal';
 import { spriteGlyph } from '../components/sprite-glyph';
+import { IconSwap } from '../components/icon-swap';
 import { useViewGlide } from '../components/use-view-glide';
 import { useMasonryGrid } from '../components/use-masonry-grid';
 import { Segments, Shuffle } from '../entity-filter/entity-filter-page';
 import type { SegmentOption } from '../entity-filter/entity-filter';
 import { checkSummary, FOLLOW_CHECK_URL, FOLLOW_STATUS_URL, sourceIconUrl } from '../follow-manage/follow-manage';
+import { followManageEntry } from '../follow-manage/manage-route';
 import { Note } from '../components/note';
 import { sidebarTagCounts } from '../../sidebar';
 import { queryClient } from '../query';
@@ -45,6 +48,7 @@ const Sep = () => <span data-entity-sep="" aria-hidden="true" />;
 const SETTINGS = spriteGlyph('settings');
 const CHEVRON_DOWN = spriteGlyph('chevron-down');
 const HISTORY = spriteGlyph('history');
+const SortUpIcon = spriteGlyph('arrow-up'), SortDownIcon = spriteGlyph('arrow-down');
 
 /** 照片墙那一排的图片布局两档，同壳里 `PHOTO_LAYOUTS`。 */
 export const FOLLOW_PHOTO_LAYOUTS: readonly SegmentOption[] = [
@@ -140,7 +144,7 @@ export function FollowFeedPage(props: FollowFeedProps) {
     if (result.isError) {
       return (
         <div data-follow-feed="">
-          <Head onManage={actions.openManage} />
+          <Head />
           <RetryNote message={requestErrorMessage(result.error)} onRetry={() => void result.refetch()} />
         </div>
       );
@@ -162,7 +166,7 @@ export function FollowFeedPage(props: FollowFeedProps) {
       <div key={job.generation} ref={job.host} data-follow-progress="" />
       {!job.busy && job.report ? <Note tone="neutral" title="Check result">{job.report}</Note> : null}
       <div data-follow-feed="" data-select-mode={props.selectMode ? '' : undefined}>
-        <Head onManage={actions.openManage}>
+        <Head>
           {facets.sources.length ? (
             <Button variant="primary" data-follow-recheck="" aria-label="Check every source for updates"
               aria-busy={job.busy || undefined}
@@ -180,9 +184,10 @@ export function FollowFeedPage(props: FollowFeedProps) {
         <Glass facets={facets} view={view} total={total} busy={listPending} props={props} route={route} />
         <Combo conditions={conditions} onDrop={(row) => actions.route(dropCondition(view, row))}
           onClear={() => route({ author: '', provider: '', work: '', tags: [], durMin: 0, durMax: 0 })} />
-        {facets.broken.length ? <BrokenNote count={facets.broken.length} onManage={actions.openManage} /> : null}
+        {facets.broken.length ? <BrokenNote count={facets.broken.length} /> : null}
         <List key={query.queryKey.join('\u0000')} retryKey={result.dataUpdatedAt} pending={listPending} facets={facets} data={data} context={context}
-          props={props} />
+          props={props} checkAction={<Button size="small" variant="secondary" aria-label="检查每个来源的更新" aria-busy={job.busy || undefined}
+            aria-disabled={job.busy || undefined} onClick={() => { if (!job.busy) void job.start(false) }}>检查更新</Button>} />
         {data.has_more || canBackfill ? (
           <div data-follow-pagination="">
             {data.has_more ? (
@@ -190,7 +195,7 @@ export function FollowFeedPage(props: FollowFeedProps) {
                 {data.groups.length < FOLLOW_AUTO_LOAD_LIMIT ? (
                   <LoadMore key={result.data?.pages.length} entity enabled={() => !job.busyRef.current}
                     load={async () => { await result.fetchNextPage({ throwOnError: true }) }}>
-                    <CHEVRON_DOWN className="size-3.5" />Load more
+                    <CHEVRON_DOWN className="size-(--icon-inline)" />加载更多
                   </LoadMore>
                 ) : (
                   <ManualMore busy={result.isFetchingNextPage}
@@ -205,8 +210,8 @@ export function FollowFeedPage(props: FollowFeedProps) {
                   aria-busy={job.busy || undefined}
                   onClick={() => void job.start(true)}>
                   {job.olderBusy
-                    ? <><span className="contents" dangerouslySetInnerHTML={{ __html: spinnerHtml('Fetching') }} /><span>Fetching…</span></>
-                    : 'Fetch an earlier page'}
+                    ? <><span className="contents" dangerouslySetInnerHTML={{ __html: spinnerHtml('抓取中') }} /><span>抓取中</span></>
+                    : '抓更早的一页'}
                 </Button>
                 <span data-follow-backfill="">{backfillState(facets.sources)}</span>
               </span>
@@ -219,14 +224,14 @@ export function FollowFeedPage(props: FollowFeedProps) {
 }
 
 /** 页头：标题与「管理关注」恒在，检查更新那枚键要等来源读到才摆（`children`）。 */
-function Head({ onManage, children }: { onManage(): void; children?: ReactNode }) {
+function Head({ children }: { children?: ReactNode }) {
   return (
     <div data-follow-head="">
       <h2 data-follow-title="">Follow</h2>
       <span data-follow-head-actions="">
-        <Button variant="secondary" leadingIcon={SETTINGS} data-follow-manage="" onClick={onManage}>
-          Manage follows
-        </Button>
+        <ButtonLink variant="secondary" leadingIcon={SETTINGS} data-follow-manage="" href={manageHref()}>
+          管理关注
+        </ButtonLink>
         {children}
       </span>
     </div>
@@ -239,7 +244,7 @@ function ManualMore({ busy, error, load }: { busy: boolean; error: string; load(
   return (
     <>
       <button type="button" data-entity-more="" aria-busy={busy || undefined} aria-disabled={busy || undefined} onClick={load}>
-        <CHEVRON_DOWN className="size-3.5" />Load more
+        <CHEVRON_DOWN className="size-(--icon-inline)" />加载更多
       </button>
       {error ? <RetryNote message={error} onRetry={load} /> : null}
     </>
@@ -479,7 +484,6 @@ function Glass({ facets, view, total, busy, props, route }: {
           ) : null}
           {FOLLOW_FEED_SORTS.map(([key, label]) => {
             const pressed = view.sort === key;
-            const Arrow = spriteGlyph(view.dir === 'asc' ? 'arrow-up' : 'arrow-down');
             return (
               <button key={key} type="button" data-entity-sort={key} data-follow-sort={key} data-entity-press=""
                 aria-pressed={pressed} aria-label={sortAriaLabel(key, label, view.sort, view.dir) || undefined}
@@ -487,7 +491,7 @@ function Glass({ facets, view, total, busy, props, route }: {
                   const next = nextSort(key, view.sort, view.dir);
                   if (next) route(next);
                 }}>
-                {label}{pressed ? <Arrow className="size-3.5" /> : null}
+                {label}{pressed ? <IconSwap a={SortUpIcon} b={SortDownIcon} state={view.dir === 'asc' ? 'a' : 'b'} className="size-(--icon-inline)" /> : null}
               </button>
             );
           })}
@@ -525,21 +529,22 @@ function Combo({ conditions, onDrop, onClear }: {
 }
 
 /** 有来源上次检查失败：这一页不摊原因，指到管理页去看。Note 的边界与图标取全站那一份。 */
-function BrokenNote({ count, onManage }: { count: number; onManage(): void }) {
+function BrokenNote({ count }: { count: number }) {
   return (
-    <div data-follow-broken="" onClick={(event) => {
-      if ((event.target as HTMLElement).closest('[data-follow-manage]')) onManage();
-    }} dangerouslySetInnerHTML={{
-      __html: `<div class="geist-note geist-note-error fwarn" role="alert">${icon('alert')}<span>${count} sources failed their last check; see <button type="button" class="flink" data-follow-manage>Manage follows</button> for the reason.</span></div>`,
+    <div data-follow-broken="" dangerouslySetInnerHTML={{
+      __html: `<div class="geist-note geist-note-error fwarn" role="alert">${icon('alert')}<span>${count} 个来源上次检查失败，去<a class="flink" href="${esc(manageHref())}" data-follow-manage>管理关注</a>看原因。</span></div>`,
     }} />
   );
 }
 
+/** 管理页入口随当前地址算：旧地址上的 `tab` 仍按 `followManageEntry` 的约定改道。 */
+const manageHref = () => followManageEntry(window.location.search);
+
 /* ── 列表 ── */
 
-function List({ pending, facets, data, context, props, retryKey }: {
+function List({ pending, facets, data, context, props, retryKey, checkAction }: {
   pending: boolean; facets: Facets; data: FollowPage; context: FollowContext; props: FollowFeedProps;
-  retryKey: number;
+  retryKey: number; checkAction: ReactNode;
 }) {
   const { view, helpers } = props;
   const images = view.media === 'images';
@@ -548,15 +553,15 @@ function List({ pending, facets, data, context, props, retryKey }: {
     <div data-follow-list-body="" data-grid-reveal={reveal.fading ? '' : undefined}>
       {reveal.layer}
       {pending ? null : (
-        <Cards facets={facets} data={data} context={context} props={props} images={images} retryKey={retryKey} />
+        <Cards facets={facets} data={data} context={context} props={props} images={images} retryKey={retryKey} checkAction={checkAction} />
       )}
     </div>
   );
 }
 
-function Cards({ facets, data, context, props, images, retryKey }: {
+function Cards({ facets, data, context, props, images, retryKey, checkAction }: {
   facets: Facets; data: FollowPage; context: FollowContext; props: FollowFeedProps; images: boolean;
-  retryKey: number;
+  retryKey: number; checkAction: ReactNode;
 }) {
   const { view, actions } = props;
   const write = useFollowWrite(props);
@@ -577,7 +582,9 @@ function Cards({ facets, data, context, props, images, retryKey }: {
       );
     });
   } else {
-    body = <Empty data={data} filtered={!!(view.status || facets.author || facets.provider || view.work || view.tags.length)} />;
+    body = <Empty data={data} filtered={!!(view.status || facets.author || facets.provider || view.work || view.tags.length || view.durMin || view.durMax)}
+      checkAction={checkAction} clear={() => actions.route({ ...view, status: '', author: '', provider: '', work: '', tags: [], durMin: 0, durMax: 0,
+        media: data.groups.length ? (data.groups.some(group => groupMediaKinds(group).has('video')) ? 'videos' : 'images') : view.media })} />;
   }
   return (
     <div ref={wallRef} data-follow-list="" data-follow-wall={images ? '' : undefined} {...wall}>
@@ -593,16 +600,18 @@ function cardId(group: FollowGroup, view: FollowView): number {
 
 /** 空列表分四种：这一页有组只是媒体类型没对上；设了筛选没筛出东西；有来源但一条都还没抓到；
  *  一个来源都没有。没设筛选时不叫人去改筛选。 */
-function Empty({ data, filtered }: { data: FollowPage; filtered: boolean }) {
-  const html = (data.groups || []).length
-    ? emptyStateHtml('search-x', 'No updates under the current filter', 'Try changing the media type, creator, source, duration or tags.')
-    : (data.sources || []).length
-      ? filtered
-        ? emptyStateHtml('rss', 'No matching updates', 'Try changing the status or source filter.')
-        : emptyStateHtml('rss', 'No updates yet', 'Click "Check for updates" to fetch from every source; new content from your sources will show up here.')
-      : emptyStateHtml('rss', 'You are not following any source yet', 'After you add a creator or subscribe to a source, updates will show up here.',
-        { actions: '<a class="geist-button primary" href="/subscriptions?tab=add">Add follow</a>' });
-  return <div data-follow-empty="" className="contents" dangerouslySetInnerHTML={{ __html: html }} />;
+function Empty({ data, filtered, clear, checkAction }: {
+  data: FollowPage; filtered: boolean; clear(): void; checkAction: ReactNode;
+}) {
+  const noMatch = !!data.groups.length || filtered;
+  const hasSources = !!data.sources.length;
+  return <div data-follow-empty="" className="contents"><EmptyState icon={spriteGlyph(noMatch ? 'search-x' : 'rss')}
+    title={noMatch ? '当前筛选下没有更新' : hasSources ? '还没有更新' : '还没有关注任何来源'}
+    actions={noMatch ? <Button size="small" onClick={clear}>清除筛选</Button>
+      : hasSources ? checkAction : <ButtonLink size="small" href="/subscriptions?tab=add">添加关注</ButtonLink>}>
+    {noMatch ? '切换媒体类型、创作者、来源、时长或标签后再试。'
+      : hasSources ? '检查来源更新后，新内容会集中显示在这里。' : '添加创作者或订阅来源后，更新会集中显示在这里。'}
+  </EmptyState></div>;
 }
 
 /* ── 写操作 ──

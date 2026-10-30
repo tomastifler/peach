@@ -188,6 +188,14 @@ def ledger_writer(*, replication_enabled: bool, db: Path, shared_db: Path,
     return True, "This machine is the writer"
 
 
+def configured_ledger_writer(config) -> tuple[bool, str]:
+    """按当前配置定位本机与共享账本，并只读核对写入角色。"""
+    database = config.directory('database') / 'ledger.db'
+    shared = config.shared_root / 'database' / 'ledger.db'
+    return ledger_writer(replication_enabled=bool(config.replication.enabled), db=database,
+                         shared_db=shared, state_dir=config.directory('state'))
+
+
 class Migrations:
     """用 venv 的 `peach migrate` 子进程把账本迁到当前结构。"""
 

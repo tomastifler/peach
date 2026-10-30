@@ -1,0 +1,11 @@
+.peach-react [data-board-data-table][data-resizable-table] .bui-table { table-layout: fixed; }
+.peach-react [data-board-data-table][data-resizable-table] th { position: relative; padding-right: 16px; }
+.peach-react [data-board-data-table][data-resizable-table] td { overflow: hidden; text-overflow: ellipsis; }
+.peach-react [data-board-data-table][data-resizable-table] [data-table-space] { padding: 0; }
+.peach-react [data-board-data-table] td a { width: fit-content; max-width: 100%; align-self: flex-start; }
+/* 中间省略按元素自身宽度重算；链接随文字收缩时拉宽列也不会再展开，所以这类链接铺满单元格。 */
+.peach-react [data-board-data-table] td a:has(> [data-middle-truncate]) { width: 100%; }
+.peach-react [data-board-data-table] .react-aria-ColumnResizer { position: absolute; top: 0; right: 0; bottom: 0; width: 12px; cursor: col-resize; touch-action: none; }
+.peach-react [data-board-data-table] .react-aria-ColumnResizer::after { content: ''; position: absolute; top: 8px; bottom: 8px; left: 5px; width: 1px; background: var(--border-15); }
+.peach-react [data-board-data-table] .react-aria-ColumnResizer:is([data-hovered],[data-resizing],[data-focus-visible])::after { background: var(--ink); }
+.peach-react [data-board-data-table] .react-aria-ColumnResizer[data-focus-visible] { outline: 2px solid var(--tungsten); outline-offset: -2px; }

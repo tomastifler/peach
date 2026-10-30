@@ -162,7 +162,8 @@ class PikPakClient:
         self.profile = profile_for(self.values.get("client_id"))
         self.persist = persist
         self.clock = clock
-        self.http = httpx.Client(timeout=TIMEOUT, transport=transport, follow_redirects=False)
+        from .peach_proxy import http_client
+        self.http = http_client(timeout=TIMEOUT, transport=transport, follow_redirects=False)
 
     def close(self) -> None:
         self.http.close()

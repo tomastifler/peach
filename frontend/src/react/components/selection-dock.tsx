@@ -1,4 +1,4 @@
-import { useSyncExternalStore, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from 'react';
 import { AnimatePresence, motion, useIsPresent } from 'motion/react';
 import { useFocusVisible } from 'react-aria';
 
@@ -17,14 +17,40 @@ interface SelectionDockProps {
   visible: boolean;
 }
 
+const dockSpaces = new Map<HTMLElement, number>();
+const publishDockSpace = () => {
+  const root = document.documentElement;
+  if (dockSpaces.size) root.style.setProperty('--selection-dock-space', `${Math.max(...dockSpaces.values())}px`);
+  else root.style.removeProperty('--selection-dock-space');
+};
+
 function DockSurface({ children, count, label }: Omit<SelectionDockProps, 'visible'>) {
+  const dock = useRef<HTMLDivElement>(null);
   const present = useIsPresent();
   const reduce = useSyncExternalStore(subscribeReduce, readReduce, () => false);
   const { isFocusVisible } = useFocusVisible();
   const instant = reduce || isFocusVisible;
   const hidden = { opacity: 0, transform: 'translate(-50%, 8px)' };
+  useLayoutEffect(() => {
+    const node = dock.current;
+    if (!node || !present) return;
+    const measure = () => {
+      dockSpaces.set(node, Math.ceil(node.offsetHeight + (parseFloat(getComputedStyle(node).bottom) || 0) + 16));
+      publishDockSpace();
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    window.addEventListener('resize', measure);
+    measure();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measure);
+      dockSpaces.delete(node);
+      publishDockSpace();
+    };
+  }, [present]);
   return (
-    <motion.div role="group" aria-label={label} data-selection-dock data-glass-pane=""
+    <motion.div ref={dock} role="group" aria-label={label} data-selection-dock data-glass-pane=""
       inert={!present} aria-hidden={!present || undefined}
       initial={instant ? false : hidden}
       animate={{ opacity: 1, transform: 'translate(-50%, 0px)' }}

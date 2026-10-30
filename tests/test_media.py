@@ -25,6 +25,24 @@ class MediaEngineTests(unittest.TestCase):
             self.assertTrue(result['usable'])
             self.assertEqual(result['av1_software'], available)
 
+    def test_tool_diagnostics_probe_each_binary_file_once_until_it_changes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            binary = Path(tmp).resolve() / 'ffmpeg.exe'
+            binary.write_bytes(b'one')
+            choice = BinaryChoice(binary, 'test')
+            version = subprocess.CompletedProcess([], 0, b'ffmpeg version test\n', b'')
+            with patch('peach.ffmpeg.subprocess.run', return_value=version) as run:
+                self.assertTrue(binary_diagnostics(choice)['usable'])
+                self.assertTrue(binary_diagnostics(choice)['usable'])
+                self.assertEqual(run.call_count, 1)
+                binary.write_bytes(b'upgraded')
+                self.assertTrue(binary_diagnostics(choice)['usable'])
+                self.assertEqual(run.call_count, 2)
+            with patch('peach.ffmpeg.subprocess.run', side_effect=subprocess.TimeoutExpired('ffmpeg', 5)) as run:
+                self.assertFalse(binary_diagnostics(BinaryChoice(binary, 'other'))['usable'])
+                self.assertFalse(binary_diagnostics(BinaryChoice(binary, 'other'))['usable'])
+                self.assertEqual(run.call_count, 2)
+
     def test_tool_diagnostics_reports_execution_failure(self):
         with patch('peach.ffmpeg.subprocess.run', side_effect=subprocess.TimeoutExpired('ffmpeg', 5)):
             result = binary_diagnostics(BinaryChoice(Path('ffmpeg'), 'test'), decoders=True)

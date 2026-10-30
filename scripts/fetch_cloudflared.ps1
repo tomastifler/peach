@@ -11,7 +11,7 @@ if (-not $ManifestPath) {
     $ManifestPath = Join-Path $PSScriptRoot 'cloudflared-windows.json'
 }
 $Manifest = Get-Content -LiteralPath $ManifestPath -Raw -Encoding utf8 | ConvertFrom-Json
-$Destination = [IO.Path]::GetFullPath($OutputPath)
+$Destination = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputPath)
 $Parent = Split-Path -Parent $Destination
 New-Item -ItemType Directory -Path $Parent -Force | Out-Null
 $Temporary = Join-Path $Parent ('.cloudflared-' + [guid]::NewGuid().ToString('N') + '.tmp')

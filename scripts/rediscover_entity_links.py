@@ -42,7 +42,8 @@ FIELDS = ("entity_id", "kind", "name", "link_kind", "label", "url", "evidence",
 def fetch(url: str, timeout: float = 12.0) -> tuple[int, str, str]:
     """(status, 正文, 最终地址)。每个请求新建 client——失败的连接会漏池槽。"""
     try:
-        with httpx.Client(follow_redirects=True, timeout=timeout,
+        from peach.peach_proxy import http_client
+        with http_client(follow_redirects=True, timeout=timeout,
                           limits=httpx.Limits(max_connections=4,
                                               max_keepalive_connections=0)) as client:
             response = client.get(url, headers={"User-Agent": USER_AGENT})

@@ -1,4 +1,5 @@
 """Web 组合入口为可恢复任务装配领域处理器。"""
+from datetime import timezone
 from .job_recovery import resume
 from .web_library_processing import w_library_processing
 from .web_scraping import w_scraping_cover, w_scraping_amane_rebuild
@@ -41,7 +42,7 @@ class RecoveryService:
     def __init__(self, contract, *, available):
         self.contract = contract
         self.available = available
-        self.scheduler = BackgroundScheduler()
+        self.scheduler = BackgroundScheduler(timezone=timezone.utc)
 
     def start(self):
         if self.available and not self.scheduler.running:

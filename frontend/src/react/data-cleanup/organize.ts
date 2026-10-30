@@ -6,6 +6,7 @@
  * 来源与模板原样留着。执行与回滚是真实 ledger 写入，调用方必须先过确认弹层。 */
 import { apiGet, apiSend } from '../../api';
 import { queryClient } from '../query';
+import { PICK_FOLDER_URL } from '../../configuration-endpoints';
 /* 模板跟着数据库走（`SYNCED_SETTING_KEYS` 里的 `organizeTemplates`），写的是设置面板同一个端点。 */
 import { SETTINGS_URL } from '../settings-panel/settings-data';
 
@@ -15,6 +16,11 @@ export const ORGANIZE_APPLY_URL = '/api/organize/apply';
 export const ORGANIZE_ROLLBACK_URL = '/api/organize/rollback';
 
 export const ORGANIZE_KEY = ['organize'] as const;
+export const ORGANIZE_EXAMPLE_URL = '/api/organize/example';
+
+export interface OrganizeExample { ok: boolean; example?: string; error?: string; field?: 'file' | 'dir' }
+export const fetchOrganizeExample = (file: string, dir: string, signal?: AbortSignal) =>
+  apiGet<OrganizeExample>(`${ORGANIZE_EXAMPLE_URL}?${new URLSearchParams({ file_template: file, dir_template: dir })}`, signal);
 
 export interface OrganizeTemplate { file: string; dir: string }
 
@@ -35,7 +41,7 @@ export interface OrganizeJob {
 export interface OrganizeData extends OrganizeJob {
   locations: { location: string; roots: string[] }[];
   templates: Record<string, OrganizeTemplate>;
-  presets: ({ label: string } & OrganizeTemplate)[];
+  presets: ({ label: string; example?: string } & OrganizeTemplate)[];
   placeholders: { key: string; label: string }[];
   last_batch: string;
 }
@@ -43,6 +49,7 @@ export interface OrganizeData extends OrganizeJob {
 export interface OrganizePlanRow { current_path: string; target_path: string; action: string }
 
 export interface OrganizePlan {
+  path?: string;
   counts: { change?: number; unchanged?: number; [key: string]: number | undefined };
   reasons: Record<string, number>;
   rows: OrganizePlanRow[];
@@ -51,7 +58,7 @@ export interface OrganizePlan {
 }
 
 /** 这一次要整理什么：来源与两份模板。 */
-export interface OrganizeRequest { location: string; file_template: string; dir_template: string }
+export interface OrganizeRequest { location: string; file_template: string; dir_template: string; path: string }
 
 /** 执行还是回滚。两条都起同一个后台任务，结果落在同一格里。 */
 export type OrganizeCommand = { kind: 'apply'; request: OrganizeRequest } | { kind: 'rollback' };
@@ -64,6 +71,8 @@ export async function prefetchOrganize(signal: AbortSignal): Promise<void> {
 
 export const previewOrganize = (request: OrganizeRequest) =>
   apiSend<OrganizePlan>(ORGANIZE_PREVIEW_URL, request);
+
+export const pickOrganizeFolder = (initial: string) => apiSend<{ path: string | null }>(PICK_FOLDER_URL, { initial });
 
 export const startOrganize = (command: OrganizeCommand) => command.kind === 'apply'
   ? apiSend<OrganizeJob>(ORGANIZE_APPLY_URL, { ...command.request, confirm: true })

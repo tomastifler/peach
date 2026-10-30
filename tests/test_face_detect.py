@@ -22,7 +22,7 @@ class EnsureModelTests(unittest.TestCase):
             target.write_bytes(payload)
             with patch.object(face_detect, "MODEL_SHA256",
                               hashlib.sha256(payload).hexdigest()), \
-                 patch.object(face_detect.urllib.request, "urlopen") as opener:
+                 patch.object(face_detect, "read_url") as opener:
                 self.assertEqual(ensure_model(target), target)
             opener.assert_not_called()
 
@@ -40,31 +40,149 @@ class EnsureModelTests(unittest.TestCase):
             self.assertFalse(target.exists(), "校验不过的文件必须删掉，不能留着下次再骗一次")
 
     def test_a_download_whose_digest_differs_is_refused(self):
-        class _Response:
-            def read(self):
-                return b"not-the-model"
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *_exc):
-                return False
-
         with tempfile.TemporaryDirectory() as temp:
             target = Path(temp).resolve() / "yunet.onnx"
-            with patch.object(face_detect.urllib.request, "urlopen",
-                              return_value=_Response()):
+            with patch.object(face_detect, "read_url", return_value=b"not-the-model"):
                 with self.assertRaises(FaceModelUnavailable) as caught:
                     ensure_model(target)
             self.assertIn("checksum mismatch", str(caught.exception))
             self.assertFalse(target.exists())
 
     def test_the_pinned_digest_is_a_real_sha256(self):
-        # 定版是这条复用记录的全部意义：URL 指向 main 分支，内容可能变。
+        # 定版是这条复用记录的全部意义：地址钉在 opencv_zoo 的一个提交上，哈希再核一遍内容。
         self.assertEqual(len(MODEL_SHA256), 64)
         self.assertTrue(all(ch in "0123456789abcdef" for ch in MODEL_SHA256))
         self.assertIn("media.githubusercontent.com", face_detect.MODEL_URL,
                       "opencv_zoo 用 Git LFS，raw 域名只会回一个指针文件")
+        self.assertIn(face_detect.ZOO_COMMIT, face_detect.MODEL_URL)
+
+
+class ModelLoadingTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.model = Path(temporary.name).resolve() / "中文模型" / "检出.onnx"
+        self.model.parent.mkdir()
+        self.payload = b"verified-yunet-model"
+        self.model.write_bytes(self.payload)
+        digest = patch.object(face_detect, "MODEL_SHA256", hashlib.sha256(self.payload).hexdigest())
+        digest.start()
+        self.addCleanup(digest.stop)
+
+    def test_unicode_model_path_is_read_as_onnx_bytes(self):
+        import cv2
+        import numpy
+
+        with patch.object(cv2, "FaceDetectorYN_create") as create:
+            detector = face_detect.FaceDetector(self.model, score=0.72, nms=0.12, allow_download=False)
+        args = create.call_args.args
+        self.assertEqual(args[0], "ONNX")
+        self.assertIsInstance(args[1], numpy.ndarray)
+        self.assertEqual((args[1].dtype, args[1].ndim, args[1].tobytes()),
+                         (numpy.dtype("uint8"), 1, self.payload))
+        self.assertEqual((args[2].dtype, args[2].size), (numpy.dtype("uint8"), 0))
+        self.assertEqual(args[3:], ((320, 320), face_detect.READ_FLOOR, 0.12, 5000))
+        self.assertEqual(detector.model_path, self.model)
+        self.assertIs(detector._detector, create.return_value)
+
+    def test_model_read_error_after_verification_reaches_the_caller(self):
+        import cv2
+
+        failure = PermissionError(13, "model read denied")
+        with patch.object(Path, "read_bytes", side_effect=[self.payload, failure]), \
+                patch.object(cv2, "FaceDetectorYN_create") as create, \
+                self.assertRaises(PermissionError) as caught:
+            face_detect.FaceDetector(self.model, allow_download=False)
+        self.assertIs(caught.exception, failure)
+        create.assert_not_called()
+
+    def test_an_onnx_import_error_is_not_reported_as_no_faces(self):
+        import cv2
+
+        failure = cv2.error("invalid ONNX buffer")
+        with patch.object(cv2, "FaceDetectorYN_create", side_effect=failure), \
+                self.assertRaises(cv2.error) as caught:
+            face_detect.FaceDetector(self.model, allow_download=False)
+        self.assertIs(caught.exception, failure)
+
+    def test_mismatched_model_bytes_never_reach_opencv(self):
+        import cv2
+
+        self.model.write_bytes(b"partial-model")
+        with patch.object(cv2, "FaceDetectorYN_create") as create, self.assertRaises(FaceModelUnavailable):
+            face_detect.FaceDetector(self.model, allow_download=False)
+        create.assert_not_called()
+
+
+class BundledModelTests(unittest.TestCase):
+    """随包那份先认：在且哈希对得上就不联网、不往数据根写；对不上就退回原来的取法。"""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.bundle = self.root / "program" / "tools" / "face-models"
+        self.bundle.mkdir(parents=True)
+        self.data = self.root / "data" / "yunet" / MODEL_PATH_NAME
+        self.payload = b"bundled-yunet"
+        for patcher in (
+                patch.dict(face_detect.os.environ, {face_detect.BUNDLE_ENV: str(self.bundle)}),
+                patch.object(face_detect, "MODEL_PATH", self.data),
+                patch.object(face_detect, "MODEL_SHA256", hashlib.sha256(self.payload).hexdigest()),
+                patch.object(face_detect, "_verified", {}),
+                patch.object(face_detect, "read_url", side_effect=AssertionError("随包有模型时不该联网"))):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def test_a_matching_bundled_model_is_used_offline_without_touching_the_data_root(self):
+        (self.bundle / MODEL_PATH_NAME).write_bytes(self.payload)
+        seen = []
+        before = face_detect.downloads
+        with patch.object(face_detect, "observer", lambda *args: seen.append(args)):
+            self.assertEqual(ensure_model(), self.bundle / MODEL_PATH_NAME)
+        self.assertFalse(self.data.exists(), "随包那份不往数据根复制")
+        self.assertEqual((seen, face_detect.downloads), ([], before), "随包命中不是联网取到的")
+
+    def test_a_mismatched_bundled_model_is_kept_and_the_data_root_copy_is_used(self):
+        (self.bundle / MODEL_PATH_NAME).write_bytes(b"tampered")
+        self.data.parent.mkdir(parents=True)
+        self.data.write_bytes(self.payload)
+        with self.assertLogs("peach.face_detect", "WARNING"):
+            self.assertEqual(ensure_model(), self.data)
+        self.assertEqual((self.bundle / MODEL_PATH_NAME).read_bytes(), b"tampered", "程序目录那份归安装包管，不删")
+
+    def test_without_any_copy_the_download_fallback_still_runs(self):
+        with patch.object(face_detect, "read_url", return_value=self.payload) as read:
+            self.assertEqual(ensure_model(), self.data)
+        read.assert_called_once()
+
+    def test_a_verified_bundled_model_is_hashed_once_per_process(self):
+        (self.bundle / MODEL_PATH_NAME).write_bytes(self.payload)
+        with patch.object(face_detect, "_digest", wraps=face_detect._digest) as digest:
+            for _ in range(3):
+                face_detect.bundled_model(MODEL_PATH_NAME, face_detect.MODEL_SHA256)
+        self.assertEqual(digest.call_count, 1)
+
+    def test_a_mismatched_bundled_model_is_hashed_and_reported_once_per_process(self):
+        """活动中心轮询状态时，一份坏掉的随包模型不能每次都重算 37 MB、刷一条警告。"""
+        (self.bundle / MODEL_PATH_NAME).write_bytes(b"tampered")
+        with patch.object(face_detect, "_digest", wraps=face_detect._digest) as digest, \
+                self.assertLogs("peach.face_detect", "WARNING") as logs:
+            for _ in range(3):
+                self.assertIsNone(face_detect.bundled_model(MODEL_PATH_NAME, face_detect.MODEL_SHA256))
+        self.assertEqual((digest.call_count, len(logs.records)), (1, 1))
+
+    def test_the_frozen_desktop_package_reads_its_program_directory(self):
+        program = self.root / "Peach"
+        with patch.dict(face_detect.os.environ, {face_detect.BUNDLE_ENV: ""}), \
+                patch.object(face_detect.sys, "frozen", True, create=True), \
+                patch.object(face_detect.sys, "executable", str(program / "Peach.exe")):
+            self.assertEqual(face_detect.bundled_dir(), program.resolve() / "tools" / "face-models")
+        with patch.dict(face_detect.os.environ, {face_detect.BUNDLE_ENV: ""}):
+            self.assertIsNone(face_detect.bundled_dir(), "源码运行没有随包目录")
+
+
+MODEL_PATH_NAME = face_detect.MODEL_PATH.name
 
 
 class DetectorContractTests(unittest.TestCase):

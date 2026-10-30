@@ -74,6 +74,9 @@ def embedded_code(name: str, assets: list) -> str:
     解析得出，两头对上才算数；`is_jav_code` 把目录名冒充的番号挡在外面。
     """
     compact = compact_label(name)
+    # 番号包含数字；无数字的目录名不可能包含任何候选番号。
+    if not any(char.isdigit() for char in compact):
+        return ""
     for row in assets:
         code = (str(row["code"] or "").strip()
                 or code_from_filename(str(row["name"] or "")) or "")

@@ -9,7 +9,7 @@ export function entityPortraitImg(kind: string, entity: EntityPageData & { logo_
     mark: kind === 'agency' ? entity.mark_link_id : null,
     logo: company && entity.has_logo ? entity.canonical_name : '', logoVersion: entity.logo_version, logoVariant: 'large',
     alt: esc(entity.canonical_name), lazy: false, style: company ? '' : facePos(entity.avatar_focus),
-    focus: company ? null : entity.avatar_focus, dropStyle: true }) : '';
+    focus: company ? null : entity.avatar_focus, dropStyle: true, thumb: false }) : '';
   const follow = kind === 'creator' ? entity.follow : null;
   return own || (follow?.avatar ? `<img src="${esc(follow.avatar)}" alt="${esc(entity.canonical_name)}" referrerpolicy="no-referrer" ${
     imageFallbackAttrs({ fallbacks: [follow.avatar_fallback || ''] })}>` : '');

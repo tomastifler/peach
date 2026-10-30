@@ -4,15 +4,15 @@
  * 打开页面不会再触发一次写操作。
  *
  * 地址栏与组件状态的分界（ADR-0031「迁移桥接」）：
- * - `category` 在地址栏上。九个分类是固定的一组身份，「在看哪一条队列」链接得过来，
+ * - `category` 与 `queue` 在地址栏上，分类和处理状态都能通过链接及刷新还原，
  *   刷新也要还原——判到一半按了刷新却被扔回元数据字段，等于重新找位置。
  * - 分组、筛选、页码是组件状态。复核队列是消耗性的：判一条它就少一条，第 3 页指的是
  *   哪二十行随每一次判定而变，写进地址栏分享出去只会指向另一批东西。换分类、换分组、
  *   换筛选都回第 1 页，也正说明页码依附于此刻这一屏的看法，不是这一页的身份。 */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { RiCheckboxCircleLine } from '@remixicon/react';
-import { Tab, TabList, TabPanel, Tabs } from 'react-aria-components';
+import { Tab, TabPanel, Tabs } from 'react-aria-components';
 
 import { Button } from '@/components/base/buttons/button';
 import type { ReviewProps } from '../bundle';
@@ -21,16 +21,18 @@ import { DOTS, paginationRange } from '../../pagination';
 import { EmptyState } from '../components/empty-state';
 import { Note } from '../components/note';
 import { Page } from '../components/page';
-import { useHorizontalScroller } from '../components/use-horizontal-scroller';
+import { PillAriaTabList } from '../components/pill-aria-tab-list';
+import { ExternalLink } from '../settings/section';
 import { BulkToolbar } from './bulk-toolbar';
 import { GenreTagList } from './candidate-form';
 import { ReviewCard } from './review-card';
-import type { DecisionStatus, ReviewCategory, ReviewData, ReviewGrouping, ReviewRow, RowChoice } from './review';
+import type { DecisionStatus, ReviewCategory, ReviewData, ReviewGrouping, ReviewQueue, ReviewRow, RowChoice } from './review';
 import {
   canApprove, currentReviewRow, DEFAULT_CATEGORY, decisionPayload, decisionReceipt, defaultChoice,
-  dropReviewRows, fetchReview, filterReviewRows, groupReviewRows, isReviewCategory, mirrorText,
+  fetchReview, filterReviewRows, groupReviewRows, isReviewCategory, mirrorText,
   REVIEW_CATEGORIES, REVIEW_KEY, REVIEW_LABELS, reviewGroupingOptions,
-  reviewWindow, selectReviewRange, submitDecision,
+  REVIEW_QUEUES, REVIEW_QUEUE_LABELS, reviewQueueData, reviewQueueOf,
+  reviewWindow, selectReviewRange, settleReviewRows, submitDecision,
 } from './review';
 
 // 与配置页共用 BoardUI gray PillTab 样式；保留 tabpanel 与复核队列计数。
@@ -42,10 +44,10 @@ function Pagination(
 ) {
   if (pages <= 1) return null;
   return (
-    <nav aria-label="Review pagination" className="flex w-full flex-wrap items-center justify-between gap-2">
+    <nav aria-label="复核分页" data-pagination-layout="" className="inline-grid w-full min-w-0 items-center gap-2">
       <Button variant="secondary" size="small" disabled={page <= 1}
-        onClick={() => onPage(page - 1)}>Previous page</Button>
-      <ul className="flex flex-wrap items-center gap-1">
+        onClick={() => onPage(page - 1)}>上一页</Button>
+      <ul className="flex min-w-0 flex-wrap items-center justify-center gap-1">
         {paginationRange(page, pages).map((item, at) => (
           <li key={item === DOTS ? `dots-${at}` : item}>
             {item === DOTS
@@ -64,7 +66,6 @@ function Pagination(
 
 export function ReviewPage(props: ReviewProps) {
   const [narrow, setNarrow] = useState(() => matchMedia('(max-width:900px)').matches);
-  const categoryScroll = useHorizontalScroller<HTMLDivElement>(undefined, narrow);
   useEffect(() => {
     const query = matchMedia('(max-width:900px)');
     const update = () => setNarrow(query.matches);
@@ -77,8 +78,10 @@ export function ReviewPage(props: ReviewProps) {
   } = props;
   const [category, setCategory] = useState<ReviewCategory>(
     isReviewCategory(props.category) ? props.category : DEFAULT_CATEGORY);
+  const [queueView, setQueueView] = useState<ReviewQueue>(() => reviewQueueOf(props.queue));
   const [groupBy, setGroupBy] = useState<ReviewGrouping>('candidates');
   const [filter, setFilter] = useState('');
+  const [fieldFilter, setFieldFilter] = useState('');
   const [page, setPage] = useState(1);
   /* 勾选、选中的来源值、勾上的作品样本、失败原因，身份都是 `item_key`：翻页、换分组
      之后手里还是同一批东西。它们不进地址栏——那是这一刻手里的一批，不是这一页的身份。 */
@@ -95,17 +98,43 @@ export function ReviewPage(props: ReviewProps) {
 
   const review = useQuery({ queryKey: REVIEW_KEY, queryFn: ({ signal }) => fetchReview(signal) });
 
-  const data: ReviewData = review.data || { sections: {}, counts: {} };
-  const queue = data.sections[category] || [];
+  const data: ReviewData = review.data || { sections: {}, counts: {},
+    queues: { later: { sections: {}, counts: {} }, ignored: { sections: {}, counts: {} } } };
+  const snapshot = reviewQueueData(data, queueView);
+  const queueCounts = review.data ? Object.fromEntries(REVIEW_QUEUES.map(key => [key,
+    REVIEW_CATEGORIES.reduce((sum, category) =>
+      sum + Number(reviewQueueData(data, key).counts[category] || 0), 0)])) as Record<ReviewQueue, number> : undefined;
+  const queue = snapshot.sections[category] || [];
   const metadata = category === 'metadata_fields';
   const locked = readOnly;
 
-  const groupOptions = reviewGroupingOptions(queue, metadata);
+  useEffect(() => {
+    const available = new Set(queue.map(row => row.item_key));
+    setSelected(current => {
+      const kept = [...current].filter(key => available.has(key));
+      return kept.length === current.size ? current : new Set(kept);
+    });
+    setChoices(current => {
+      const kept = [...current].filter(([key]) => available.has(key));
+      return kept.length === current.size ? current : new Map(kept);
+    });
+    setErrors(current => {
+      const kept = [...current].filter(([key]) => available.has(key));
+      return kept.length === current.size ? current : new Map(kept);
+    });
+  }, [queue]);
+
+  const fields = useMemo(() => metadata ? groupReviewRows(queue, 'field') : [], [queue, metadata]);
+  const activeField = fields.some(field => field.key === fieldFilter) ? fieldFilter : '';
+  const fieldQueue = useMemo(() => metadata ? filterReviewRows(queue, 'field', activeField) : queue,
+    [queue, metadata, activeField]);
+  const groupOptions = useMemo(() => reviewGroupingOptions(fieldQueue, metadata), [fieldQueue, metadata]);
   const activeGroupBy: ReviewGrouping =
     groupOptions.some(([key]) => key === groupBy) ? groupBy : 'candidates';
-  const groups = groupReviewRows(queue, activeGroupBy);
+  const groups = useMemo(() => groupReviewRows(fieldQueue, activeGroupBy), [fieldQueue, activeGroupBy]);
   const activeFilter = groups.some((group) => group.key === filter) ? filter : '';
-  const win = reviewWindow(filterReviewRows(queue, activeGroupBy, activeFilter), page);
+  const win = useMemo(() => reviewWindow(filterReviewRows(fieldQueue, activeGroupBy, activeFilter), page),
+    [fieldQueue, activeGroupBy, activeFilter, page]);
   const pageKeys = win.rows.map((row) => row.item_key);
   const onPage = new Set(pageKeys);
   /* 这一页上一张都没有的组不画分组条：条子底下空着，读起来像加载坏了。 */
@@ -114,7 +143,7 @@ export function ReviewPage(props: ReviewProps) {
     .filter((group) => group.rows.length);
 
   const choiceOf = (row: ReviewRow): RowChoice => choices.get(row.item_key) || defaultChoice(row);
-  const selectedRows = queue.filter((row) => selected.has(row.item_key));
+  const selectedRows = useMemo(() => queue.filter((row) => selected.has(row.item_key)), [queue, selected]);
 
   const forget = (keys: string[]) => {
     const gone = new Set(keys);
@@ -127,26 +156,34 @@ export function ReviewPage(props: ReviewProps) {
 
   /* 换分类就是换一条队列：上一条队列里的勾选、选中的来源和失败原因都不再有对应的行，
      留着只会让工具条报一个算不出来的数。 */
-  const goCategory = (next: ReviewCategory) => {
-    setCategory(next);
+  const resetView = () => {
     setGroupBy('candidates');
     setFilter('');
+    setFieldFilter('');
     setPage(1);
     setSelected(new Set());
     setChoices(new Map());
     setErrors(new Map());
     setFeedback('');
     anchor.current = null;
-    route({ category: next === DEFAULT_CATEGORY ? '' : next });
+  };
+  const goCategory = (next: ReviewCategory) => {
+    setCategory(next);
+    resetView();
+    route({ category: next === DEFAULT_CATEGORY ? '' : next, queue: queueView === 'pending' ? '' : queueView });
+  };
+  const goQueue = (next: ReviewQueue) => {
+    setQueueView(next);
+    resetView();
+    route({ category: category === DEFAULT_CATEGORY ? '' : category, queue: next === 'pending' ? '' : next });
   };
 
   const decide = useMutation({
-    mutationFn: ({ row, status }: { row: ReviewRow; status: DecisionStatus }) =>
-      submitDecision(decisionPayload(category, currentReviewRow(category, row), status, choiceOf(row))),
-    onSuccess: (result, { row, status }) => {
-      if (!result.ok) { fail(row.item_key, result.error || 'The server rejected this decision'); return }
-      // 判过的直接移出本批并同步计数，下一条立刻顶上来；留在队列里就像没生效。
-      dropReviewRows(category, [row.item_key]);
+    mutationFn: ({ row, status, category: target }: { row: ReviewRow; status: DecisionStatus; category: ReviewCategory }) =>
+      submitDecision(decisionPayload(target, currentReviewRow(target, row), status, choiceOf(row))),
+    onSuccess: (result, { row, status, category: target }) => {
+      if (!result.ok) { fail(row.item_key, result.error || '服务端拒绝了这次判定'); return }
+      settleReviewRows(target, [row.item_key], status);
       forget([row.item_key]);
       toast(decisionReceipt(status));
     },
@@ -156,35 +193,37 @@ export function ReviewPage(props: ReviewProps) {
   /* 批量逐条提交：失败的留在屏幕上供重试，成功的立刻从队列里摘掉。整批一次性交上去的话，
      中间任何一条被服务端拒绝，用户都不知道前面几条到底写没写。 */
   const bulk = useMutation({
-    mutationFn: async (status: 'approved' | 'rejected') => {
-      const rows = selectedRows;
+    mutationFn: async ({ status, category: target, rows }: {
+      status: DecisionStatus; category: ReviewCategory; rows: ReviewRow[];
+    }) => {
       const done: string[] = [];
       const failures: [string, string][] = [];
       for (const [at, row] of rows.entries()) {
         if (!alive.current) break;
         setFeedback(`Processing ${at} / ${rows.length}`);
         try {
-          const result = await submitDecision(decisionPayload(category, currentReviewRow(category, row), status, choiceOf(row)));
-          if (!result.ok) throw new Error(result.error || 'The server did not adopt this item');
+          const result = await submitDecision(decisionPayload(target, currentReviewRow(target, row), status, choiceOf(row)));
+          if (!result.ok) throw new Error(result.error || '服务端未采用该项');
           done.push(row.item_key);
         } catch (cause) {
           failures.push([row.item_key, errorMessage(cause)]);
         }
       }
-      return { status, done, failures };
+      return { status, category: target, done, failures };
     },
-    onSuccess: ({ status, done, failures }) => {
-      dropReviewRows(category, done);
+    onSuccess: ({ status, category: target, done, failures }) => {
+      settleReviewRows(target, done, status);
       forget(done);
       failures.forEach(([key, message]) => fail(key, message));
       setFeedback('');
-      toast(`${status === 'approved' ? 'Approved' : 'Rejected'} ${done.length} items`
-        + (failures.length ? `, ${failures.length} incomplete` : ''));
+      const action = { approved: '通过', rejected: '忽略', skipped: '移至稍后处理', restore: '恢复待处理' }[status];
+      toast(`已${action} ${done.length} 项`
+        + (failures.length ? `，${failures.length} 项未完成` : ''));
     },
     onError: (cause) => { setFeedback(errorMessage(cause)) },
   });
 
-  const runBulk = (status: 'approved' | 'rejected') => {
+  const runBulk = (status: DecisionStatus) => {
     if (bulk.isPending || !selectedRows.length) return;
     if (status === 'approved' && metadata
       && selectedRows.some((row) => !choiceOf(row).candidateKey)) {
@@ -192,7 +231,7 @@ export function ReviewPage(props: ReviewProps) {
       return;
     }
     setFeedback('');
-    bulk.mutate(status);
+    bulk.mutate({ status, category, rows: selectedRows });
   };
 
   /* 统一选择来源只动所选那几行的选中项，不替人按下「通过」：改的是要写什么，判断仍归人。 */
@@ -231,9 +270,7 @@ export function ReviewPage(props: ReviewProps) {
         <Note tone="warning" title="Browse-only on this device"
           extra={writerUrl
             ? <p className="text-body-2-regular">
-                <a href={writerUrl} className="text-text-primary underline underline-offset-2">
-                  Go to the writing device to review
-                </a>
+                <ExternalLink href={writerUrl}>前往写入端复核</ExternalLink>
               </p>
             : undefined}>
           {mirror}
@@ -247,13 +284,14 @@ export function ReviewPage(props: ReviewProps) {
         if (isReviewCategory(next)) goCategory(next);
       }} className="flex flex-col gap-5 review-split:flex-row review-split:items-start review-split:gap-6">
         <div data-section-nav className="w-full min-w-0 review-split:sticky review-split:top-topbar review-split:w-review-tabs review-split:shrink-0">
-          <h2 id="reviewcategories">Review categories</h2>
-          <TabList ref={categoryScroll} aria-labelledby="reviewcategories" data-section-items
+          <h2 id="reviewcategories">复核分类</h2>
+          <PillAriaTabList scrollable={narrow} aria-labelledby="reviewcategories" data-section-items
             className="flex review-split:flex-col review-split:items-stretch">
             {REVIEW_CATEGORIES.map((key) => {
-              const count = Number(data.counts[key] || 0);
+              const count = Number(snapshot.counts[key] || 0);
               return (
-                <Tab key={key} id={key} className={TAB_CLASS}>
+                <Tab key={key} id={key} className={TAB_CLASS} isDisabled={decide.isPending || bulk.isPending}
+                  data-pill-selected={category === key ? '' : undefined} data-pill-variant="gray">
                   {REVIEW_LABELS[key]}
                   {/* 计数走独立徽标，为 0 时整枚去掉，不留一个「0」占位。 */}
                   {count
@@ -264,21 +302,22 @@ export function ReviewPage(props: ReviewProps) {
                 </Tab>
               );
             })}
-          </TabList>
+          </PillAriaTabList>
         </div>
 
         <TabPanel id={category} className="flex min-w-0 flex-1 flex-col gap-5">
-          {queue.length && !locked ? (
-            <BulkToolbar groupOptions={groupOptions} groupBy={activeGroupBy}
+            <BulkToolbar queueView={queueView} queueCounts={queueCounts} onQueueChange={goQueue} locked={locked}
+              fields={fields} fieldFilter={activeField}
+              onFieldFilter={(next) => { setFieldFilter(next); setFilter(''); setPage(1) }}
+              groupOptions={groupOptions} groupBy={activeGroupBy}
               onGroupBy={(next) => { setGroupBy(next); setFilter(''); setPage(1) }}
               groups={groups} filter={activeFilter}
               onFilter={(next) => { setFilter(next); setPage(1) }}
               pageKeys={pageKeys} selected={selected} onSelected={setSelected}
               selectedRows={selectedRows} metadata={metadata}
               approvable={selectedRows.every((row) => canApprove(category, row))}
-              busy={bulk.isPending} feedback={feedback}
+              busy={bulk.isPending || decide.isPending} feedback={feedback}
               onUnifySource={unifySource} onRun={runBulk} />
-          ) : null}
 
           {win.rows.length ? pageGroups.map((group) => (
             <section key={group.key} className="flex flex-col gap-3">
@@ -302,7 +341,7 @@ export function ReviewPage(props: ReviewProps) {
               ) : null}
               <div className="review-grid gap-5">
                 {group.rows.map((row) => (
-                  <ReviewCard key={row.item_key} category={category} row={row}
+                  <ReviewCard key={row.item_key} category={category} row={row} queueView={queueView}
                     choice={choiceOf(row)}
                     onChoice={(next) => setChoices((now) => new Map(now).set(row.item_key, next))}
                     selected={selected.has(row.item_key)}
@@ -313,13 +352,13 @@ export function ReviewPage(props: ReviewProps) {
                       return next;
                     })}
                     locked={locked}
-                    busy={decide.isPending && decide.variables?.row.item_key === row.item_key}
+                    busy={bulk.isPending || decide.isPending && decide.variables?.row.item_key === row.item_key}
                     problem={errors.get(row.item_key) || ''}
                     genreTags={genreTags}
                     onDecide={(status) => {
                       if (decide.isPending || bulk.isPending) return;
                       setErrors((now) => new Map([...now].filter(([key]) => key !== row.item_key)));
-                      decide.mutate({ row, status });
+                      decide.mutate({ row, status, category });
                     }}
                     handlers={handlers} />
                 ))}
@@ -327,14 +366,19 @@ export function ReviewPage(props: ReviewProps) {
             </section>
           )) : review.isError && !review.data ? (
             /* 读不到队列和队列是空的不是一回事：说清楚是读取失败，给一颗重试键。 */
-            <Note tone="error" title="Could not load the review queue" action={
-              <Button variant="secondary" size="small" disabled={review.isFetching} onClick={() => void review.refetch()}>Retry</Button>
+            <Note tone="error" title="复核队列读取失败" action={
+              <Button variant="secondary" size="small" disabled={review.isFetching} onClick={() => void review.refetch()}>立即重试</Button>
             }>
               {errorMessage(review.error)}
             </Note>
           ) : (
-            <EmptyState icon={RiCheckboxCircleLine} title="No items to review in this category">
-              Switch categories to see other details awaiting confirmation.
+            <EmptyState icon={RiCheckboxCircleLine} title={`此分类没有${REVIEW_QUEUE_LABELS[queueView]}项目`}
+              actions={REVIEW_CATEGORIES.some(key => key !== category && Number(snapshot.counts[key] || 0) > 0)
+                ? <Button size="small" onClick={() => {
+                    const next = REVIEW_CATEGORIES.find(key => key !== category && Number(snapshot.counts[key] || 0) > 0);
+                    if (next) goCategory(next);
+                  }}>查看其他分类</Button> : undefined}>
+              {queueView === 'pending' ? '可切换分类查看其他待确认资料。' : `${REVIEW_QUEUE_LABELS[queueView]}的资料会保留在这里，可恢复到待处理。`}
             </EmptyState>
           )}
 

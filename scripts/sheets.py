@@ -19,7 +19,7 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from peach import frame_capture
+from peach import frame_capture, junk
 from peach.config import DATABASE_PATH, FFMPEG_DIR, GENERATED_DIR, LOG_DIR, STATE_DIR
 from peach.ffmpeg import FFmpegResolver
 from peach.jobs import (
@@ -194,6 +194,9 @@ def run(args: argparse.Namespace) -> int:
             parameters += (args.limit,)
         tasks = background_rows(connection.execute(sql, parameters).fetchall(), 2)
         connection.close()
+        checked = junk.isolate(args.db, asset_ids=[row[0] for row in tasks])
+        tasks = [row for row in tasks if row[0] not in checked['ids']]
+        log(f"垃圾检查：隔离 {checked['isolated']} 个，待复核 {checked['review']} 个")
         total = len(tasks)
         log(f"待处理 {total:,} 个视频 workers={args.workers} frames={args.frames} 日志={log_path}")
         if not total:

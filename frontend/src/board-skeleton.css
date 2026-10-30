@@ -52,9 +52,11 @@
 .ui-insightpanel>header h3{margin:0;font:var(--board-heading);color:var(--color-text-primary)}
 /* 关注列表骨架的容器与按键都是 React 那侧的类名，这里只补一件 Tailwind 表达不了的事：
    工具行窄于 740px 时带字的键收成纯图标。React 按工具行自己的宽度量，骨架拿关注列表那张卡
-   做容器，它的内容宽度就是工具行的宽度，按同一条线收。 */
+   做容器，它的内容宽度就是工具行的宽度，按同一条线收。收起后的图标取纯图标那一档（Button `iconOnly`
+   的 20px），不再按行内字号缩放，宽度才与接管后一致。 */
 .ui-follow-skeleton-surface{container:follow-list/inline-size}
-@container follow-list (max-width:739.98px){.ui-follow-skeleton-toolbar [data-compact-label]{display:none}}
+@container follow-list (max-width:739.98px){.ui-follow-skeleton-toolbar [data-compact-label]{display:none}
+  .ui-follow-skeleton-toolbar button:has(>[data-compact-label])>svg{width:1.25rem;height:1.25rem}}
 
 /* 骨架里的几样通用件：一列文字条、口味页的雷达、舞台详情的画面格与活跃图那一格。雷达与画面格同时挂着
    web/css/09-skeleton.css 的 `.skeleton`（`height:18px`），播放列表新建那一行同时挂着 04-manage.css 的

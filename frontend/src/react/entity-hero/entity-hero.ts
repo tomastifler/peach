@@ -85,6 +85,10 @@ export interface EntityHeroData {
   canonical_name: string;
   aliases?: string[];
   display_aliases?: string[];
+  name_display?: {
+    choices: Record<'zh-CN' | 'ja', { value: string; label: string }[]>;
+    groups: Record<'zh-CN' | 'ja', HeroNameGroups>;
+  };
   user_aliases?: string[];
   asset_count: number;
   member_count?: number;
@@ -160,10 +164,12 @@ export const entityFeedTip = (on: boolean) => on
   ? 'Subscribed to new releases; click to unsubscribe'
   : 'Subscribe to new releases';
 
-/** 这条实体名下已有的写法，统称排第一。 */
-export function nameChoices(entity: EntityHeroData): string[] {
+/** 当前语言的可选艺名，统称只保留一项；值仍指向已登记的名称。 */
+export function nameChoices(entity: EntityHeroData, language: 'zh-CN' | 'ja' = 'zh-CN'): { value: string; label: string }[] {
+  if (entity.name_display) return entity.name_display.choices[language];
   return [entity.canonical_name, ...(entity.aliases || [])]
-    .filter((option, index, all) => option && all.indexOf(option) === index);
+    .filter((option, index, all) => option && all.indexOf(option) === index)
+    .map(value => ({ value, label: value }));
 }
 
 /** 事务所：有实体时给去处，只有 `metadata.agency` 时只写名字（那是采到的原文，还没有对应身份）。 */

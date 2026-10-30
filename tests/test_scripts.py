@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -212,6 +213,37 @@ class ProjectBoardTests(unittest.TestCase):
 
 
 class UpdateTaskSmokeTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        with mock.patch.dict(sys.modules, {'smoke_desktop': load_script('smoke_desktop')}):
+            cls.script = load_script('smoke_update_tasks')
+
+    def test_protected_gitlab_release_and_actions_require_an_unregistered_host(self):
+        gitlab = {'GITLAB_CI': 'true', 'CI_JOB_NAME': 'smoke-windows',
+                  'CI_COMMIT_REF_PROTECTED': 'true', 'CI_COMMIT_TAG': 'v1.2.3'}
+        rehearsal = {**gitlab, 'CI_COMMIT_TAG': '', 'PEACH_RELEASE_REHEARSAL': '1'}
+        for environment in ({'GITHUB_ACTIONS': 'true'}, gitlab, rehearsal):
+            with self.subTest(environment=environment), mock.patch.dict(os.environ, environment, clear=True):
+                registry = SimpleNamespace(HKEY_CURRENT_USER=object(),
+                                           OpenKey=mock.Mock(side_effect=FileNotFoundError))
+                with mock.patch.dict(sys.modules, {'winreg': registry}):
+                    self.script.validate_installer_host()
+                registry.OpenKey.assert_called_once()
+                registry.OpenKey = mock.MagicMock()
+                with mock.patch.dict(sys.modules, {'winreg': registry}), \
+                        self.assertRaisesRegex(AssertionError, '已有 Peach 安装登记'):
+                    self.script.validate_installer_host()
+
+    def test_unprotected_or_unrecognized_jobs_cannot_run_installer_acceptance(self):
+        gitlab = {'GITLAB_CI': 'true', 'CI_JOB_NAME': 'smoke-windows',
+                  'CI_COMMIT_REF_PROTECTED': 'true', 'CI_COMMIT_TAG': 'v1.2.3'}
+        for environment in ({}, {**gitlab, 'CI_COMMIT_REF_PROTECTED': 'false'},
+                            {**gitlab, 'CI_JOB_NAME': 'verify-windows'},
+                            {**gitlab, 'CI_COMMIT_TAG': ''}):
+            with self.subTest(environment=environment), mock.patch.dict(os.environ, environment, clear=True), \
+                    self.assertRaisesRegex(AssertionError, '安装包验收仅允许'):
+                self.script.validate_installer_host()
+
     def test_dry_run_does_not_open_artifacts_or_create_installation_data(self):
         with mock.patch.dict(sys.modules, {'smoke_desktop': load_script('smoke_desktop')}):
             script = load_script('smoke_update_tasks')
@@ -244,19 +276,28 @@ class DesktopSmokeTests(unittest.TestCase):
                 remote_reporting.send('errors', {'level': 'error'}, config)
             client.assert_not_called()
 
-    def test_distribution_resources_accept_an_application_without_private_exports(self):
+    def test_distribution_resources_accept_the_bundled_public_seed(self):
         with tempfile.TemporaryDirectory() as directory:
             application = Path(directory).resolve()
-            (application / '_internal/resources').mkdir(parents=True)
+            seed = application / '_internal/resources/seed/entities.json'
+            seed.parent.mkdir(parents=True)
+            seed.write_bytes((ROOT / 'resources/seed/entities.json').read_bytes())
             self.script.assert_public_resources(application)
+            pack = json.loads(seed.read_text(encoding='utf-8'))
+            pack['version'] += '.tampered'
+            seed.write_text(json.dumps(pack), encoding='utf-8')
+            with self.assertRaisesRegex(AssertionError, '摘要不一致'):
+                self.script.assert_public_resources(application)
 
-    def test_distribution_resources_reject_private_entity_exports(self):
+    def test_distribution_resources_require_a_public_seed(self):
         with tempfile.TemporaryDirectory() as directory:
             application = Path(directory).resolve()
+            with self.assertRaisesRegex(AssertionError, '缺少公共实体种子'):
+                self.script.assert_public_resources(application)
             seed = application / '_internal/resources/seed'
             seed.mkdir(parents=True)
             (seed / 'entities.json').write_text('{}', encoding='utf-8')
-            with self.assertRaisesRegex(AssertionError, '私有实体导出'):
+            with self.assertRaisesRegex(AssertionError, '格式无效'):
                 self.script.assert_public_resources(application)
 
     def test_cleanup_waits_for_a_released_windows_directory(self):
@@ -824,13 +865,14 @@ class LibraryDirectoryTests(unittest.TestCase):
         script = self.script
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
-            source, target = r'A:\outer\outer', r'A:\outer'
+            source, target = r'P:\outer\outer', r'P:\outer'
             def translate(path):
-                return root.joinpath(*PureWindowsPath(path).parts[1:]) if PureWindowsPath(path).drive.casefold() == 'a:' else Path(path)
+                return root.joinpath(*PureWindowsPath(path).parts[1:]) if PureWindowsPath(path).drive.casefold() == 'p:' else Path(path)
             translate(source).mkdir(parents=True)
             media = translate(source) / 'film.mp4'
             media.write_bytes(b'media')
-            with mock.patch.object(script, 'translate_ledger_path', side_effect=translate):
+            with mock.patch.object(script, 'translate_ledger_path', side_effect=translate), \
+                    mock.patch.object(script, 'location_roots', return_value={'pikpak': ('P:\\',)}):
                 for steps in (0, 1, 2):
                     pairs, state = script.collapse_moves(source, target)
                     self.assertTrue(Path(state['temporary']).name.startswith('peach-organize-'))
@@ -845,7 +887,7 @@ class LibraryDirectoryTests(unittest.TestCase):
         script = self.script
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
-            source, target = r'A:\old\account', r'A:\new\collection'
+            source, target = r'P:\old\account', r'P:\new\collection'
             def translate(path):
                 return root.joinpath(*PureWindowsPath(path).parts[1:])
             translate(source).mkdir(parents=True)
@@ -853,17 +895,17 @@ class LibraryDirectoryTests(unittest.TestCase):
             media = translate(source) / 'film.mp4'
             media.write_bytes(b'media')
             with mock.patch.object(script, 'translate_ledger_path', side_effect=translate):
-                pairs = script.provider_moves([(source,target)], 'A:\\')
-                self.assertEqual(pairs, [(source,r'A:\old\collection'),(r'A:\old\collection',target)])
+                pairs = script.provider_moves([(source,target)], 'P:\\')
+                self.assertEqual(pairs, [(source,r'P:\old\collection'),(r'P:\old\collection',target)])
                 for steps in (0, 1, 2):
                     for old, new in pairs[:steps]:
                         translate(old).rename(translate(new))
                     with mock.patch.object(script.organize, '_rename', side_effect=lambda old,new:translate(old).rename(translate(new))):
                         self.assertEqual(script.restore(pairs), [])
                     self.assertEqual(media.read_bytes(), b'media')
-                translate(r'A:\old\collection').mkdir()
+                translate(r'P:\old\collection').mkdir()
                 with self.assertRaises(FileExistsError):
-                    script.provider_moves([(source,target)], 'A:\\')
+                    script.provider_moves([(source,target)], 'P:\\')
 
     def test_fc_short_parts_require_matching_parent_and_publisher(self):
         row = dict(code=None, studio=None, name='@fc1780822_1.mp4',
@@ -1805,14 +1847,8 @@ class OperationalScriptTests(unittest.TestCase):
     def test_posix_entrypoint_passes_extra_args_through_on_bash_3_2(self):
         """不带额外参数直接跑 `./scripts/test.sh` 必须能跑起来，参数要原样透传。
 
-        macOS 自带 bash 3.2.57，`set -u` 下空数组的 `"${EXTRA[@]}"` 被判成未绑定变量
-        （bash 4.4 起才不报），入口于是在最后一行崩掉。CI 每次都附带
-        `--fresh --base <sha> --shard-*`，数组从不为空，这条路径只有本机会走到——而
-        AGENTS.md 规定 macOS 的唯一测试入口就是这个脚本，崩了等于没有测试门槛。
-
-        文本判据钉住 `set -euo pipefail` 还在：把 `set +u` 当解法会让其余变量的拼写错误
-        没人拦，而行为上看不出来。展开写法由下面的行为判据验：从真实脚本里截出参数处理
-        那一段来跑，CI 的 macOS 行用的就是 bash 3.2，改回裸展开时这一段会崩。
+        macOS 的 bash 3.2 使用严格模式，参数数组支持为空；CI 的恢复、基线与分片参数
+        均按原值交给运行器。行为判据执行真实入口的参数处理与 exec 展开，桩记录 argv。
         """
         source = (ROOT / "scripts" / "test.sh").read_text(encoding="utf-8")
         self.assertIn("set -euo pipefail", source)
@@ -1851,7 +1887,7 @@ class OperationalScriptTests(unittest.TestCase):
                 continue
             probe = subprocess.run([path, "-c", "uname -s"],
                                    capture_output=True, text=True, encoding="utf-8", check=False)
-            if probe.returncode == 0 and "linux" not in probe.stdout.casefold():
+            if probe.returncode == 0 and (sys.platform != "win32" or "linux" not in probe.stdout.casefold()):
                 shells.append(path)
         self.assertTrue(shells)
         for shell in dict.fromkeys(shells):
@@ -1859,6 +1895,7 @@ class OperationalScriptTests(unittest.TestCase):
             for argv, expected in (
                     ([], ["--scope", "auto", "--jobs", "auto"]),
                     (["auto"], ["--scope", "auto", "--jobs", "auto"]),
+                    (["full", "--resume"], ["--scope", "full", "--jobs", "auto", "--resume"]),
                     (["web", "--fresh", "--base", "a b"],
                      ["--scope", "web", "--jobs", "auto", "--fresh", "--base", "a b"]),
                     (["web", "--jobs", "1"], ["--scope", "web", "--jobs", "1"]),
@@ -1871,7 +1908,7 @@ class OperationalScriptTests(unittest.TestCase):
                     self.assertEqual(json.loads(done.stdout), expected)
 
     def test_python_floor_matches_runtime_and_ci(self):
-        """正式运行版本、CI 与 README 共同覆盖声明的 Python 下限。"""
+        """正式运行版本与 CI 共同覆盖声明的 Python 下限。"""
         project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
         floor = project["requires-python"].removeprefix(">=")
         self.assertEqual(floor, "3.14")
@@ -1881,8 +1918,6 @@ class OperationalScriptTests(unittest.TestCase):
         self.assertIn("fromJSON(needs.plan.outputs.matrix)", workflow)
         from scripts.ci_plan import plan
         self.assertEqual({row["python"] for row in plan("workflow_dispatch", [])["matrix"]["include"]}, {floor})
-        self.assertIn(f"Python {floor} 或更高", (ROOT / "README.md").read_text(encoding="utf-8"))
-        self.assertIn(f"Python {floor} or newer", (ROOT / "README.en.md").read_text(encoding="utf-8"))
 
     def test_functional_test_scopes_are_explicit(self):
         runner = load_script("test_runner")
@@ -1912,14 +1947,16 @@ class OperationalScriptTests(unittest.TestCase):
     def test_auto_scope_maps_changed_files_and_falls_back_to_full(self):
         """`auto` 的选域是纯函数：喂文件清单，不碰 git。"""
         runner = load_script("test_runner")
-        pick = runner.scopes_for_changes
+        def pick(paths):
+            with mock.patch.object(runner, '_import_index', return_value=({}, {}, frozenset())):
+                return runner.scopes_for_changes(paths)
         # 前缀表：多个文件取并集，反斜杠路径也认。
         self.assertEqual(pick(["src/peach/follow_store.py", "web/app.js"])[0], ("follow", "web"))
         self.assertEqual(pick(["src\\peach\\tray.py"])[0], ("sync", "tooling"))
         self.assertEqual(pick(["scripts/probe.py", "pyproject.toml", ".github/workflows/test.yml"])[0],
                          ("full",))
         self.assertEqual(pick(["README.md", "docs/STATUS.md", ".claude/skills/x/SKILL.md"])[0],
-                         ("checks", "tooling"))
+                         ("checks",))
         self.assertEqual(pick(["src/peach/web_entity.py", "src/peach/routes_pages.py"])[0],
                          ("catalog", "tooling", "web"))
         self.assertEqual(pick(["src/peach/web_follow.py"])[0], ("follow",))
@@ -1944,7 +1981,7 @@ class OperationalScriptTests(unittest.TestCase):
                                 (["package-lock.json"], "必须 full"),
                                 (["frontend/package.json"], "必须 full"),
                                 (["LICENSE"], "映射不到"),
-                                (["src/peach/kanji.py", "web/app.js"], "映射不到")):
+                                (["src/peach/not_a_module.py", "web/app.js"], "映射不到")):
             scopes, why = pick(paths)
             self.assertEqual(scopes, ("full",), paths)
             self.assertTrue(why.startswith("Peach auto scope: full <- "), why)
@@ -2067,8 +2104,21 @@ class OperationalScriptTests(unittest.TestCase):
         )
         self.assertEqual(
             propose("❤成人游戏-导航-【688GM.CC】.png"),
-            "❤成人游戏-导航.png",
+            "成人游戏-导航.png",
         )
+
+    def test_filename_cleanup_removes_symbols_and_preserves_words_and_extensions(self):
+        propose = self.clean_names.propose
+        for original, expected in (
+            ('01_Title⧹⧹Part.mp4', '01_Title Part.mp4'),
+            ('★片名💎👩🏽\u200d💻.mp4', '片名.mp4'),
+            ('片名\u200b\ue519�.mp4.jpg', '片名.mp4.jpg'),
+            ('café ガール (2) 1920×1080.mp4', 'café ガール (2) 1920×1080.mp4'),
+            ('★💎.mp4', '★💎.mp4'),
+        ):
+            with self.subTest(original=original):
+                self.assertEqual(propose(original), expected)
+                self.assertEqual(propose(expected), expected)
         self.assertEqual(
             propose("QR CODE--扫一扫.png"),
             "QR CODE--扫一扫.png",
@@ -3023,14 +3073,11 @@ class OperationalScriptTests(unittest.TestCase):
         sheets = self.sheets
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            db = root / "ledger.db"
+            db = fresh_ledger(root)
             connection = sqlite3.connect(db)
             connection.execute(
-                "CREATE TABLE asset(id INTEGER PRIMARY KEY,location TEXT,path TEXT,"
-                "medium TEXT,duration REAL,size INTEGER,snapshot_path TEXT,disposal TEXT)"
-            )
-            connection.execute(
-                "INSERT INTO asset VALUES(18349,'local',?,'video',752.24,1000,NULL,NULL)",
+                "INSERT INTO asset(id,location,path,medium,duration,size,snapshot_path,disposal) "
+                "VALUES(18349,'local',?,'video',752.24,1000,NULL,NULL)",
                 (str(root / "one.mp4"),),
             )
             connection.commit()
@@ -3059,19 +3106,17 @@ class OperationalScriptTests(unittest.TestCase):
         sheets = self.sheets
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            db = root / "ledger.db"
+            db = fresh_ledger(root)
             connection = sqlite3.connect(db)
-            connection.execute(
-                "CREATE TABLE asset(id INTEGER PRIMARY KEY,location TEXT,path TEXT,"
-                "medium TEXT,duration REAL,size INTEGER,snapshot_path TEXT,disposal TEXT)"
-            )
             # 18349 已有陈旧产物且已登记；1 是同来源的另一条待抽项，不该被顺带带走。
             connection.execute(
-                "INSERT INTO asset VALUES(18349,'local',?,'video',110.87,2000,'stale.jpg',NULL)",
+                "INSERT INTO asset(id,location,path,medium,duration,size,snapshot_path,disposal) "
+                "VALUES(18349,'local',?,'video',110.87,2000,'stale.jpg',NULL)",
                 (str(root / "one.mp4"),),
             )
             connection.execute(
-                "INSERT INTO asset VALUES(1,'local',?,'video',600.0,1000,NULL,NULL)",
+                "INSERT INTO asset(id,location,path,medium,duration,size,snapshot_path,disposal) "
+                "VALUES(1,'local',?,'video',600.0,1000,NULL,NULL)",
                 (str(root / "two.mp4"),),
             )
             connection.commit()
@@ -3137,18 +3182,16 @@ class OperationalScriptTests(unittest.TestCase):
         for named, expected in ((False, ["keep.mp4"]), (True, ["trashed.mp4"])):
             with self.subTest(named=named), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
-                db = root / "ledger.db"
+                db = fresh_ledger(root)
                 connection = sqlite3.connect(db)
                 connection.execute(
-                    "CREATE TABLE asset(id INTEGER PRIMARY KEY,location TEXT,path TEXT,"
-                    "medium TEXT,duration REAL,size INTEGER,snapshot_path TEXT,disposal TEXT)"
-                )
-                connection.execute(
-                    "INSERT INTO asset VALUES(1,'local',?,'video',600.0,2000,NULL,'trash')",
+                    "INSERT INTO asset(id,location,path,medium,duration,size,snapshot_path,disposal) "
+                    "VALUES(1,'local',?,'video',600.0,2000,NULL,'trash')",
                     (str(root / "trashed.mp4"),),
                 )
                 connection.execute(
-                    "INSERT INTO asset VALUES(2,'local',?,'video',600.0,1000,NULL,NULL)",
+                    "INSERT INTO asset(id,location,path,medium,duration,size,snapshot_path,disposal) "
+                    "VALUES(2,'local',?,'video',600.0,1000,NULL,NULL)",
                     (str(root / "keep.mp4"),),
                 )
                 connection.commit()
@@ -3181,15 +3224,12 @@ class OperationalScriptTests(unittest.TestCase):
         sheets = self.sheets
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            db = root / "ledger.db"
+            db = fresh_ledger(root)
             connection = sqlite3.connect(db)
-            connection.execute(
-                "CREATE TABLE asset(id INTEGER PRIMARY KEY,location TEXT,path TEXT,"
-                "medium TEXT,duration REAL,size INTEGER,snapshot_path TEXT,disposal TEXT)"
-            )
             for asset_id in range(1, 61):
                 connection.execute(
-                    "INSERT INTO asset VALUES(?,?,?,?,?,?,NULL,NULL)",
+                    "INSERT INTO asset(id,location,path,medium,duration,size,snapshot_path,disposal) "
+                    "VALUES(?,?,?,?,?,?,NULL,NULL)",
                     (asset_id, "local", str(root / f"{asset_id}.mp4"), "video", 600.0, 1000),
                 )
             connection.commit()
@@ -3288,14 +3328,8 @@ class OperationalScriptTests(unittest.TestCase):
         probe = self.probe
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            db = root / "ledger.db"
+            db = fresh_ledger(root)
             connection = sqlite3.connect(db)
-            connection.execute(
-                "CREATE TABLE asset(id INTEGER PRIMARY KEY,location TEXT,path TEXT,"
-                "medium TEXT,duration REAL,size INTEGER,width INTEGER,height INTEGER,"
-                "vcodec TEXT,fps REAL,has_audio INTEGER,ctx_length TEXT,ctx_orient TEXT,"
-                "ctx_quality TEXT,disposal TEXT)"
-            )
             for asset_id, duration in ((18349, 752.24), (1, None)):
                 connection.execute(
                     "INSERT INTO asset(id,location,path,medium,duration,size) "
@@ -3842,7 +3876,8 @@ class OperationalScriptTests(unittest.TestCase):
 
     @staticmethod
     def _full_payload(code, source):
-        return {"source": source, "id": code, "title": "Catalog title",
+        return {**({'javdb_rule': 2, 'source_id': 'VerifiedWork'} if source == 'javdb' else {}),
+                "source": source, "id": code, "title": "Catalog title",
                 "actresses": [{"japanese_name": "木村さん"}], "maker": "Studio A",
                 "release_date": "2020-09-13T00:00:00Z"}
 
@@ -3950,7 +3985,9 @@ class OperationalScriptTests(unittest.TestCase):
             with output.open(encoding="utf-8-sig", newline="") as handle:
                 tags = next(row for row in csv.DictReader(handle) if row["field"] == "tags")
             self.assertEqual(tags["current_value"], "肛交")
-            self.assertEqual(json.loads(tags["candidates_json"])[0]["source"], "javdb")
+            candidate = json.loads(tags["candidates_json"])[0]
+            self.assertEqual(candidate["source"], "javdb")
+            self.assertEqual((candidate.get('javdb_rule'), candidate.get('source_id')), (2, 'VerifiedWork'))
             self.assertGreaterEqual(auto_apply_metadata(LedgerDatabase(db), candidate_root)["applied"], 1)
             with closing(sqlite3.connect(db)) as con:
                 self.assertEqual(set(con.execute("SELECT tag,source FROM asset_tag WHERE asset_id=1"
@@ -4697,10 +4734,831 @@ class ScriptingConventionTests(unittest.TestCase):
         self.assertFalse(scripting.host_under("", ("x.com",)))
 
 
+class R2ArtifactTransferTests(unittest.TestCase):
+    def tools(self, root):
+        path = root / "build/release-tools" / ("rclone.exe" if os.name == "nt" else "rclone")
+        path.parent.mkdir(parents=True)
+        path.write_bytes(b"test double; subprocess calls are mocked")
+
+    def environment(self):
+        return {"CI_PROJECT_ID": "123", "CI_PIPELINE_ID": "456", "CI_COMMIT_SHA": "a" * 40,
+                "CI_COMMIT_TAG": "v1.2.3", "CI_COMMIT_REF_PROTECTED": "true", "CI_JOB_ID": "789"}
+
+    def rclone_environment(self):
+        return {"PEACH_RCLONE": "rclone", "PEACH_R2_BUCKET": "peach-releases"}
+
+    def test_platform_cli_archives_use_native_architecture_and_binary(self):
+        module = load_script("fetch_release_tools")
+        for system, machine, archive, member in (
+                ("Windows", "AMD64", "windows-amd64", "rclone.exe"),
+                ("Darwin", "arm64", "osx-arm64", "rclone"),
+                ("Darwin", "x86_64", "osx-amd64", "rclone"),
+                ("Linux", "x86_64", "linux-amd64", "rclone")):
+            with self.subTest(system=system, machine=machine):
+                tool, = module.tool_specs(rclone_only=True, system=system, machine=machine)
+                self.assertEqual(tool[0], member)
+                self.assertEqual(tool[1], f"rclone-v1.75.2-{archive}.zip")
+                self.assertEqual(tool[4], f"rclone-v1.75.2-{archive}/{member}")
+
+    def test_release_tools_without_httpx_follow_the_peach_proxy_and_check_the_digest(self):
+        """发布 runner 的系统 Python 没有 httpx：标准库下载照样校验 SHA-256，代理仍按 Peach 代理设置。"""
+        import zipfile
+        original = sys.modules.get("httpx")
+        sys.modules["httpx"] = None  # 导入 httpx 即失败，与系统 Python 相同
+        try:
+            module = load_script("fetch_release_tools")
+        finally:
+            if original is None:
+                sys.modules.pop("httpx", None)
+            else:
+                sys.modules["httpx"] = original
+        self.assertIsNone(module.httpx)
+        name, archive, base, checksums, member = module.tool_specs(rclone_only=True)[0]
+        package = io.BytesIO()
+        with zipfile.ZipFile(package, "w") as writer:
+            writer.writestr(member, b"rclone binary")
+        files = {f"{base}/{archive}": package.getvalue()}
+        handlers, requests = [], []
+
+        def build_opener(*given):
+            handlers.append(given)
+
+            def open_(request, timeout):
+                requests.append(request)
+                return io.BytesIO(files[request.full_url])
+            return SimpleNamespace(open=open_)
+
+        def install(options, digest):
+            files[f"{base}/{checksums}"] = f"{digest}  {archive}\n".encode()
+            with tempfile.TemporaryDirectory() as temporary, \
+                    mock.patch.object(module, "client_options", return_value=options), \
+                    mock.patch.object(module.urllib.request, "build_opener", side_effect=build_opener), \
+                    redirect_stdout(io.StringIO()):
+                module.install(Path(temporary), rclone_only=True)
+                return (Path(temporary) / name).read_bytes()
+
+        good = hashlib.sha256(files[f"{base}/{archive}"]).hexdigest()
+        proxy = "http://127.0.0.1:7890"
+        self.assertEqual(install({"trust_env": False, "proxy": proxy}, good), b"rclone binary")
+        self.assertEqual(handlers[-1][0].proxies, {"http": proxy, "https": proxy})
+        self.assertTrue(all(request.get_header("User-agent") for request in requests))
+        install({"trust_env": False}, good)
+        self.assertEqual(handlers[-1][0].proxies, {}, "直连模式不得落回环境代理")
+        install({"trust_env": True}, good)
+        self.assertEqual(handlers[-1], (), "环境模式用标准库默认的环境代理")
+        with self.assertRaisesRegex(ValueError, "SHA-256 不符"):
+            install({"trust_env": True}, "0" * 64)
+        with self.assertRaisesRegex(ValueError, "SOCKS"):
+            install({"trust_env": False, "proxy": "socks5://127.0.0.1:1080"}, good)
+
+    def test_round_trip_restores_only_verified_files_from_current_pipeline(self):
+        module = load_script("ci_r2_artifacts")
+        objects = {}
+
+        def run(command, **_kwargs):
+            if command[1] == "copyto":
+                objects[command[3]] = Path(command[2]).read_bytes()
+                return
+            self.assertEqual(command[1], "copy")
+            names = Path(command[command.index("--files-from-raw") + 1]).read_text().splitlines()
+            source, destination = command[2:4]
+            if destination.startswith("peach:"):
+                for name in names:
+                    objects[destination + "/" + name] = (Path(source) / name).read_bytes()
+            else:
+                for name in names:
+                    path = Path(destination) / name
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(objects[source + "/" + name])
+
+        def read(command, **_kwargs):
+            if command[0] == "git":
+                return "a" * 40 if "rev-parse" in command else ""
+            if command[1] == "cat":
+                return objects[command[2]].decode()
+            return json.dumps([{"Path": key.split("peach:peach-releases/", 1)[1], "Size": len(value)}
+                               for key, value in objects.items()])
+
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.dict(os.environ, self.environment(), clear=True), \
+                mock.patch.object(module, "rclone_environment", side_effect=self.rclone_environment), \
+                mock.patch.object(module.subprocess, "check_output", side_effect=read), \
+                mock.patch.object(module.subprocess, "run", side_effect=run):
+            root = Path(temporary).resolve()
+            self.tools(root)
+            (root / "release").mkdir()
+            artifact = root / "release/Peach-1.2.3-windows-x64.zip"
+            artifact.write_bytes(b"verified executable archive")
+            result = module.transfer(root, "windows-release", "push")
+            self.assertEqual(result["files"], 1)
+            manifest_path = root / "build/ci-artifacts/windows-release.json"
+            self.assertLess(manifest_path.stat().st_size, 2000)
+            artifact.unlink()
+            module.transfer(root, "windows-release", "pull")
+            self.assertEqual(artifact.read_bytes(), b"verified executable archive")
+            artifact.unlink()
+            manifest_path.unlink()
+            with mock.patch.dict(os.environ, {"CI_JOB_ID": "790"}):
+                self.assertTrue(module.restore(root, "windows-release")["restored"])
+            self.assertEqual(artifact.read_bytes(), b"verified executable archive")
+            key, = [name for name in objects if name.endswith("/release/Peach-1.2.3-windows-x64.zip")]
+            self.assertTrue(key.startswith("peach:peach-releases/_ci/123/456/" + "a" * 40 + "/"))
+            objects[key] = b"corrupted"
+            with self.assertRaisesRegex(ValueError, "SHA-256"):
+                module.transfer(root, "windows-release", "pull")
+            self.assertEqual(artifact.read_bytes(), b"verified executable archive")
+
+    def test_manifest_rejects_other_pipeline_path_traversal_and_duplicates(self):
+        module = load_script("ci_r2_artifacts")
+        with mock.patch.dict(os.environ, self.environment(), clear=True):
+            build = module.identity()
+        item = {"path": "release/version.txt", "size": 5, "sha256": "b" * 64}
+        manifest = {"format": 1, "identity": build, "group": "windows-release", "producer_job": "789", "files": [item]}
+        self.assertEqual(module.validate_manifest(manifest, "windows-release", build), [item])
+        with self.assertRaises(ValueError):
+            module.validate_manifest(manifest, "windows-release", {**build, "pipeline": "789"})
+        with self.assertRaises(ValueError):
+            module.validate_manifest({**manifest, "producer_job": "../other"}, "windows-release", build)
+        self.assertNotEqual(module.prefix(build, "windows-release", "789"),
+                            module.prefix(build, "windows-release", "790"))
+        for name in ("release/../../secrets/token", "release/Peach.exe:token", "release\\version.txt",
+                     "/release/version.txt", "release/private-config.toml", "src/peach/__init__.py"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                module.validate_manifest({**manifest, "files": [{**item, "path": name}]}, "windows-release", build)
+        with self.assertRaises(ValueError):
+            module.validate_manifest({**manifest, "files": [item, {**item, "path": "release/VERSION.txt"}]},
+                                     "windows-release", build)
+
+    def test_partial_upload_retry_recovers_built_bytes_and_original_remote_prefix(self):
+        module = load_script("ci_r2_artifacts")
+        objects, fail = {}, [True]
+        def run(command, **_kwargs):
+            if command[1] == "copyto":
+                objects[command[3]] = Path(command[2]).read_bytes()
+                return
+            names = Path(command[command.index("--files-from-raw") + 1]).read_text().splitlines()
+            source, destination = command[2:4]
+            for name in names:
+                if destination.startswith("peach:"):
+                    objects[destination + "/" + name] = (Path(source) / name).read_bytes()
+                else:
+                    path = Path(destination) / name
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(objects[source + "/" + name])
+            if destination.startswith("peach:") and fail[0]:
+                fail[0] = False
+                raise subprocess.CalledProcessError(1, command)
+        def read(command, **_kwargs):
+            if command[0] == "git":
+                return "a" * 40 if "rev-parse" in command else ""
+            if command[1] == "cat":
+                return objects[command[2]].decode()
+            return json.dumps([{"Path": key.split("peach:peach-releases/", 1)[1], "Size": len(value)}
+                               for key, value in objects.items()])
+        with tempfile.TemporaryDirectory() as directory, \
+                mock.patch.object(module, "rclone_environment", side_effect=self.rclone_environment), \
+                mock.patch.object(module.subprocess, "check_output", side_effect=read), \
+                mock.patch.object(module.subprocess, "run", side_effect=run):
+            root = Path(directory).resolve() / "checkout"
+            root.mkdir()
+            environment = {**self.environment(), "CI_BUILDS_DIR": str(Path(directory).resolve() / "builds")}
+            with mock.patch.dict(os.environ, environment, clear=True):
+                self.tools(root)
+                artifact = root / "release/Peach-1.2.3-windows-x64.zip"
+                artifact.parent.mkdir()
+                artifact.write_bytes(b"same built archive")
+                with self.assertRaises(subprocess.CalledProcessError):
+                    module.transfer(root, "windows-release", "push")
+                backup = module.upload_backup(root, module.identity(), "windows-release")
+                self.assertTrue((backup / "upload.json").is_file())
+                artifact.unlink()
+                with mock.patch.dict(os.environ, {"CI_JOB_ID": "790"}):
+                    result = module.restore(root, "windows-release")
+                    self.assertTrue(result["restored"])
+                    self.assertFalse(result["uploaded"])
+                    module.transfer(root, "windows-release", "push")
+                self.assertEqual(artifact.read_bytes(), b"same built archive")
+                self.assertFalse(backup.exists())
+                self.assertFalse(any("/windows-release/790/" in key for key in objects))
+
+    def test_capacity_failure_preserves_completed_build_for_retry(self):
+        module = load_script("ci_r2_artifacts")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve() / "checkout"
+            root.mkdir()
+            environment = {**self.environment(), "CI_BUILDS_DIR": str(Path(directory).resolve() / "builds")}
+            with mock.patch.dict(os.environ, environment, clear=True), \
+                    mock.patch.object(module, "rclone_environment", side_effect=self.rclone_environment), \
+                    mock.patch.object(module.subprocess, "check_output", side_effect=["a" * 40, "", "[]"]), \
+                    mock.patch.object(module, "require_capacity", side_effect=ValueError("capacity")), \
+                    mock.patch.object(module.subprocess, "run") as upload:
+                self.tools(root)
+                artifact = root / "release/Peach-1.2.3-windows-x64.zip"
+                artifact.parent.mkdir()
+                artifact.write_bytes(b"completed build")
+                with self.assertRaisesRegex(ValueError, "capacity"):
+                    module.transfer(root, "windows-release", "push")
+                backup = module.upload_backup(root, module.identity(), "windows-release")
+                self.assertEqual((backup / artifact.relative_to(root)).read_bytes(), b"completed build")
+                self.assertTrue((backup / "upload.json").is_file())
+                upload.assert_not_called()
+
+    def test_macos_inventory_keeps_signed_images_and_checks_build_identity(self):
+        module = load_script("ci_r2_artifacts")
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.dict(os.environ, self.environment(), clear=True):
+            root = Path(temporary).resolve()
+            for arch in ("arm64", "x86_64"):
+                folder = root / "dist/macos.noindex" / arch
+                folder.mkdir(parents=True)
+                image = folder / f"Peach-1.2.3-macos-{arch}.dmg"
+                image.write_bytes(b"signed application image")
+                (folder / "Peach.app").mkdir()
+                (folder / "Peach.app/app").write_bytes(b"expanded application")
+                (folder / "build-info.json").write_text(json.dumps({"version": "1.2.3", "commit": "a" * 40,
+                                                                    "architecture": arch, "dirty": False}))
+                sources = [folder / f"{tool}-macos-{arch}-corresponding-source.zip" for tool in ("ffmpeg", "untrunc")]
+                for source in sources:
+                    source.write_bytes(b"corresponding source " + source.name.encode())
+                # 与 `ci_macos.sh` 写出的清单同形：镜像一行，对应源码各一行。
+                (folder / "SHA256SUMS.txt").write_text(
+                    "".join(f"{module.checksum(path)}  {path.name}\n" for path in (image, *sources)))
+            items = module.inventory(root, "macos-release")
+            self.assertEqual(len(items), 10)
+            self.assertFalse(any(".app/" in item["path"] for item in items))
+            sources[0].write_bytes(b"tampered source")
+            with self.assertRaisesRegex(ValueError, "SHA-256"):
+                module.inventory(root, "macos-release")
+            sources[0].unlink()
+            with self.assertRaisesRegex(ValueError, "对应源码"):
+                module.inventory(root, "macos-release")
+
+    def test_rclone_path_requires_installed_project_tool(self):
+        module = load_script("ci_r2_artifacts")
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.dict(os.environ, {"PEACH_RCLONE": "arbitrary-cli"}):
+            root = Path(temporary).resolve()
+            with self.assertRaisesRegex(ValueError, "项目内"):
+                module.rclone_executable(root)
+            self.tools(root)
+            self.assertTrue(module.rclone_executable(root).startswith(str(root)))
+
+    def test_capacity_failure_prevents_upload_and_manifest_creation(self):
+        module = load_script("ci_r2_artifacts")
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.dict(os.environ, self.environment(), clear=True), \
+                mock.patch.object(module, "rclone_environment", side_effect=self.rclone_environment), \
+                mock.patch.object(module.subprocess, "check_output", side_effect=["a" * 40, "", '[{"Path":"v1.0.0/a.zip","Size":8000000000}]']), \
+                mock.patch.object(module.subprocess, "run") as upload:
+            root = Path(temporary).resolve()
+            self.tools(root)
+            (root / "release").mkdir()
+            (root / "release/version.txt").write_text("1.2.3")
+            with self.assertRaisesRegex(ValueError, "停止上传"):
+                module.transfer(root, "windows-release", "push")
+            upload.assert_not_called()
+            self.assertFalse((root / "build/ci-artifacts/windows-release.json").exists())
+
+    def test_cleanup_requires_published_commit_and_only_purges_own_prefix(self):
+        module = load_script("ci_r2_artifacts")
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.dict(os.environ, self.environment(), clear=True), \
+                mock.patch.object(module, "rclone_environment", side_effect=self.rclone_environment), \
+                mock.patch.object(module.subprocess, "check_output", return_value="[]") as read, \
+                mock.patch.object(module.subprocess, "run") as purge:
+            root = Path(temporary).resolve()
+            self.tools(root)
+            with self.assertRaisesRegex(ValueError, "保留暂存"):
+                module.cleanup(root)
+            purge.assert_not_called()
+            read.return_value = json.dumps([{"tag_name": "v1.2.3", "commit_sha": "a" * 40}])
+            module.cleanup(root)
+            command = purge.call_args.args[0]
+            self.assertEqual(command[1:3], ["purge", "peach:peach-releases/_ci/123/456/" + "a" * 40])
+
+    def test_unprotected_or_incomplete_build_identity_is_rejected(self):
+        module = load_script("ci_r2_artifacts")
+        for patch in ({"CI_COMMIT_REF_PROTECTED": "false"}, {"CI_PIPELINE_ID": "../other"}, {"CI_COMMIT_TAG": "master"},
+                      {"CI_COMMIT_TAG": ""}):
+            with mock.patch.dict(os.environ, {**self.environment(), **patch}, clear=True), self.assertRaises(ValueError):
+                module.identity()
+
+    def test_a_release_rehearsal_stages_under_the_version_of_its_commit(self):
+        """版本提交演练（ADR-0121）还没有标签：暂存身份取提交里的版本号，受保护的要求不变。"""
+        module = load_script("ci_r2_artifacts")
+        rehearsal = {**self.environment(), "CI_COMMIT_TAG": "", "PEACH_RELEASE_REHEARSAL": "1"}
+        with mock.patch.dict(os.environ, rehearsal, clear=True):
+            self.assertEqual(module.identity()["tag"], module.rehearsal_tag())
+        self.assertRegex(module.rehearsal_tag(), r"^v\d+\.\d+\.\d+$")
+        with mock.patch.dict(os.environ, {**rehearsal, "CI_COMMIT_REF_PROTECTED": "false"}, clear=True), \
+                self.assertRaises(ValueError):
+            module.identity()
+
+
+class R2ReleaseTests(unittest.TestCase):
+    def test_publication_preserves_existing_index_and_verifies_published_metadata(self):
+        module = load_script("release_r2")
+        objects = {"releases.json": json.dumps([{"tag_name": "v1.0.0"}]).encode()}
+        uploads = []
+
+        def read(command, **_kwargs):
+            if command[1] == "lsjson":
+                return json.dumps([{"Path": key, "Size": len(value)} for key, value in objects.items()])
+            self.assertEqual(command[1], "cat")
+            return objects["releases.json"].decode()
+
+        def upload(command, **_kwargs):
+            key = command[3].split("peach:peach-releases/", 1)[1]
+            objects[key] = Path(command[2]).read_bytes()
+            uploads.append((key, "--immutable" in command))
+
+        def verify(url, item):
+            key = url.split("https://downloads.example/", 1)[1].split("?", 1)[0]
+            content = objects[key]
+            self.assertEqual(len(content), item["size"])
+            self.assertEqual(hashlib.sha256(content).hexdigest(), item["sha256"])
+
+        environment = {"PEACH_RCLONE": "rclone", "PEACH_R2_BUCKET": "peach-releases",
+                       "PEACH_R2_PUBLIC_BASE": "https://downloads.example", "CI_COMMIT_SHA": "a" * 40,
+                       "CI_COMMIT_TIMESTAMP": "2026-10-21T00:00:00Z"}
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            names = [f"Peach-1.2.3-windows-x64{suffix}" for suffix in (".zip", "-setup.exe", "-lite-setup.exe", "-update.zip")]
+            names += [f"Peach-1.2.3-macos-{arch}.dmg" for arch in ("arm64", "x86_64")]
+            for name in names:
+                (root / name).write_bytes(name.encode())
+            with mock.patch.object(module, "rclone_environment", return_value=environment), \
+                    mock.patch.object(module.subprocess, "check_output", side_effect=read), \
+                    mock.patch.object(module.subprocess, "run", side_effect=upload), \
+                    mock.patch.object(module, "verify_download", side_effect=verify):
+                module.publish(root, "1.2.3", apply=True)
+        index = json.loads(objects["releases.json"])
+        self.assertEqual([item["tag_name"] for item in index], ["v1.2.3", "v1.0.0"])
+        self.assertEqual(index[0]["commit_sha"], "a" * 40)
+        self.assertTrue(all(item["digest"] == "sha256:" + item["sha256"] for item in index[0]["assets"]))
+        self.assertEqual(uploads[-1], ("releases.json", False))
+        self.assertTrue(all(immutable for _key, immutable in uploads[:-1]))
+
+    def test_capacity_keeps_existing_versions_and_stops_before_upload(self):
+        module = load_script("release_r2")
+        existing = [{"Path": "v1.0.0/old.zip", "Size": 2_000_000}, {"Path": "v1.2.3/app.zip", "Size": 3_000_000}]
+        files = [{"name": "app.zip", "size": 3_000_000}, {"name": "new.dmg", "size": 4_000_000}]
+        self.assertEqual(module.require_capacity(existing, files, "v1.2.3", 10_000_000), 10_000_000)
+        with self.assertRaisesRegex(ValueError, "停止上传"):
+            module.require_capacity(existing, files, "v1.2.3", 9_999_999)
+
+    def test_public_download_checks_all_bytes_and_checksum(self):
+        module = load_script("release_r2")
+        data = b"Peach public artifact"
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.status_code = 200
+        response.iter_bytes.return_value = iter([data[:5], data[5:]])
+        expected = {"name": "Peach.zip", "size": len(data), "sha256": hashlib.sha256(data).hexdigest()}
+        with mock.patch.object(module, "http_client") as factory:
+            factory.return_value.__enter__.return_value.stream.return_value = response
+            module.verify_download("https://downloads.example/Peach.zip", expected)
+        response.iter_bytes.return_value = iter([data[:-1]])
+        with mock.patch.object(module, "http_client") as factory:
+            factory.return_value.__enter__.return_value.stream.return_value = response
+            with self.assertRaisesRegex(ValueError, "SHA-256"):
+                module.verify_download("https://downloads.example/Peach.zip", expected)
+
+    def test_inventory_requires_complete_platforms_and_does_not_upload_helpers(self):
+        module = load_script("release_r2")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            names = [f"Peach-1.2.3-windows-x64{suffix}" for suffix in (".zip", "-setup.exe", "-lite-setup.exe", "-update.zip")]
+            names += [f"Peach-1.2.3-macos-{arch}.dmg" for arch in ("arm64", "x86_64")]
+            for name in names:
+                (root / name).write_bytes(name.encode())
+            (root / "private-config.toml").write_text("private", encoding="utf-8")
+            plan = module.publish(root, "1.2.3")
+            self.assertFalse(plan["applied"])
+            self.assertEqual({item["name"] for item in plan["files"]}, set(names))
+            (root / names[-1]).unlink()
+            with self.assertRaisesRegex(ValueError, "双架构"):
+                module.inventory(root, "1.2.3")
+
+    def test_credentials_only_enter_rclone_environment_and_https_is_required(self):
+        module = load_script("release_r2")
+        environment = {"PEACH_R2_ACCESS_KEY_ID": "access", "PEACH_R2_SECRET_ACCESS_KEY": "secret",
+                       "PEACH_R2_ENDPOINT": "https://account.r2.cloudflarestorage.com",
+                       "PEACH_R2_BUCKET": "peach-releases", "PEACH_R2_PUBLIC_BASE": "https://downloads.example"}
+        with mock.patch.dict(os.environ, environment, clear=True):
+            result = module.rclone_environment()
+        self.assertEqual(result["RCLONE_CONFIG_PEACH_SECRET_ACCESS_KEY"], "secret")
+        self.assertEqual(result["RCLONE_CONFIG_PEACH_NO_CHECK_BUCKET"], "true")
+        for key in ("PEACH_R2_ENDPOINT", "PEACH_R2_PUBLIC_BASE"):
+            with mock.patch.dict(os.environ, {**environment, key: "http://example"}, clear=True), self.assertRaises(ValueError):
+                module.rclone_environment()
+
+
+class ReleaseDownloadNotesTests(unittest.TestCase):
+    def test_default_download_notes_use_the_github_version_directory(self):
+        from scripts.package_windows_release import download_notes
+        links = re.findall(r'https://[^\s)]+', download_notes('1.0.0', lite_installer=True))
+        self.assertEqual(len(links), 8)
+        self.assertTrue(all(url.startswith('https://github.com/peach-mitao/peach/releases/download/v1.0.0/')
+                            for url in links))
+
+    def test_r2_release_notes_link_both_native_platforms_and_tagged_docs(self):
+        from scripts.package_windows_release import download_notes
+        from scripts.publish_gitlab_release import r2_release_notes
+        body = ('### 新增\n\n- **更新**：支持公开下载。\n\n'
+                '[说明](https://github.com/peach-mitao/peach/blob/master/docs/OPERATIONS.md)\n'
+                + download_notes('1.0.0', lite_installer=True))
+        result = r2_release_notes(body, '1.0.0', 'https://downloads.peach.video',
+                                  'https://gitgud.io/peach-mitao/peach')
+        links = re.findall(r'https://[^\s)]+', result)
+        self.assertIn('### 新增\n\n- **更新**：支持公开下载。', result)
+        self.assertEqual(result.count('## 下载选择'), 1)
+        self.assertEqual(links[0], 'https://gitgud.io/peach-mitao/peach/-/blob/v1.0.0/docs/OPERATIONS.md')
+        self.assertEqual(len(links[1:]), 10)
+        self.assertTrue(all(url.startswith('https://downloads.peach.video/v1.0.0/') for url in links[1:]))
+        self.assertIn('https://downloads.peach.video/v1.0.0/Peach-1.0.0-macos-arm64.dmg', links)
+        self.assertIn('https://downloads.peach.video/v1.0.0/Peach-1.0.0-macos-x86_64.dmg', links)
+
+
+class GitGudPackageMirrorTests(unittest.TestCase):
+    def fixture(self, root):
+        path = root / 'app.zip'
+        path.write_bytes(b'public release bytes')
+        asset = {'name': path.name, 'size': path.stat().st_size,
+                 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+        return {'tag_name': 'v1.2.3', 'assets': [asset]}, {
+            'file_name': path.name, 'size': asset['size'], 'file_sha256': asset['sha256']}
+
+    def test_upload_uses_official_packages_command_and_checks_server_digest(self):
+        from scripts import publish_gitlab_release as module, release_forge
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            release, row = self.fixture(root)
+            packages = [{'id': 7, 'name': 'peach-release', 'version': 'v1.2.3'}]
+            with mock.patch.object(release_forge.GitLabForge, 'api', side_effect=[[], packages, [row]]), \
+                    mock.patch.object(module.subprocess, 'run') as run:
+                links = module.gitgud_package_links(root, release, 'https://gitgud.io/owner/repo')
+            args = run.call_args.args[0]
+            self.assertEqual(args[1:4], ['packages', 'upload', str(root / 'app.zip')])
+            self.assertEqual(args[-4:], ['--name', 'peach-release', '--version', 'v1.2.3'])
+            self.assertEqual(links[0]['direct_asset_path'], '/gitgud/app.zip')
+            self.assertEqual(links[0]['url'],
+                             'https://gitgud.io/api/v4/projects/owner%2Frepo/packages/generic/peach-release/v1.2.3/app.zip')
+
+    def test_identical_files_are_reused_and_conflicts_stop_before_upload(self):
+        from scripts import publish_gitlab_release as module, release_forge
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            release, row = self.fixture(root)
+            packages = [{'id': 7, 'name': 'peach-release', 'version': 'v1.2.3'}]
+            with mock.patch.object(release_forge.GitLabForge, 'api', side_effect=[packages, [row], packages, [row]]), \
+                    mock.patch.object(module.subprocess, 'run') as run:
+                module.gitgud_package_links(root, release, 'https://gitgud.io/owner/repo')
+            run.assert_not_called()
+            with mock.patch.object(release_forge.GitLabForge, 'api', side_effect=[packages, [{**row, 'file_sha256': '0' * 64}]]), \
+                    mock.patch.object(module.subprocess, 'run') as run, self.assertRaisesRegex(ValueError, '保留原文件'):
+                module.gitgud_package_links(root, release, 'https://gitgud.io/owner/repo')
+            run.assert_not_called()
+            (root / 'app.zip').write_bytes(b'changed local data')
+            with mock.patch.object(release_forge.GitLabForge, 'api') as api, self.assertRaises(ValueError):
+                module.gitgud_package_links(root, release, 'https://gitgud.io/owner/repo')
+            api.assert_not_called()
+
+    def test_incomplete_registration_is_bounded_and_not_reported_as_published(self):
+        from scripts import publish_gitlab_release as module, release_forge
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            release, _row = self.fixture(root)
+            with mock.patch.object(release_forge.GitLabForge, 'api', return_value=[]), \
+                    mock.patch.object(module.subprocess, 'run') as run, \
+                    mock.patch.object(module.time, 'sleep') as sleep, self.assertRaisesRegex(ValueError, '尚未全部登记'):
+                module.gitgud_package_links(root, release, 'https://gitgud.io/owner/repo')
+            self.assertEqual(run.call_count, 1)
+            self.assertEqual(sleep.call_count, 2)
+
+    def test_dual_publication_keeps_cloudflare_primary_and_includes_gitgud_links(self):
+        from scripts import publish_gitlab_release as module
+        sha = '1' * 40
+        asset = {'name': 'app.zip', 'size': 3, 'sha256': 'a' * 64, 'state': 'uploaded',
+                 'browser_download_url': 'https://downloads.example/v1.2.3/app.zip'}
+        release = {'tag_name': 'v1.2.3', 'commit_sha': sha, 'assets': [asset]}
+        backup = {'name': 'app.zip · GitGud', 'url': 'https://gitgud.io/package/app.zip',
+                  'link_type': 'package', 'direct_asset_path': '/gitgud/app.zip'}
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = json.dumps(release).encode()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / 'RELEASE_NOTES.md').write_text('### 新增\n\n- 下载。\n', encoding='utf-8')
+            with mock.patch.dict(os.environ, {'CI_COMMIT_TAG': 'v1.2.3', 'CI_COMMIT_SHA': sha,
+                    'CI_PROJECT_URL': 'https://gitgud.io/owner/repo', 'PEACH_DOWNLOAD_BACKEND': 'both',
+                    'PEACH_R2_PUBLIC_BASE': 'https://downloads.example'}), \
+                    mock.patch.object(module.subprocess, 'check_output', return_value=sha), \
+                    mock.patch.object(module.subprocess, 'run') as run, \
+                    mock.patch.object(module, 'read_url', return_value=json.dumps(release).encode()), \
+                    mock.patch('scripts.release_r2.inventory', return_value=[asset]), \
+                    mock.patch.object(module, 'gitgud_package_links', return_value=[backup]) as mirror:
+                module.publish(root)
+            mirror.assert_called_once_with(root, release, 'https://gitgud.io/owner/repo')
+            command = run.call_args.args[0]
+            links = json.loads(command[command.index('--assets-links') + 1])
+            self.assertEqual(links[0]['url'], asset['browser_download_url'])
+            self.assertEqual(links[0]['direct_asset_path'], '/app.zip')
+            self.assertEqual(links[1], backup)
+            self.assertIn('https://downloads.example/v1.2.3/',
+                          (root / 'RELEASE_NOTES.md').read_text(encoding='utf-8'))
+
+
+class MainlineScopeTests(unittest.TestCase):
+    """主线推送只跑改动域与平台敏感用例；基线取不稳就退回全量（ADR-0119）。"""
+
+    @staticmethod
+    def git(root, *args):
+        command = ["git", "-c", "user.name=Peach", "-c", "user.email=peach@example.invalid",
+                   "-c", "commit.gpgsign=false", "-C", str(root), *args]
+        return subprocess.run(command, capture_output=True, text=True, encoding="utf-8", check=True).stdout.strip()
+
+    def repository(self):
+        """三个只改文档的提交；返回仓库根和提交列表（旧到新）。"""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name).resolve()
+        self.git(root, "init", "-q", "-b", "master")
+        (root / "docs").mkdir()
+        commits = []
+        for index in range(3):
+            (root / "docs" / "guide.md").write_text(f"第 {index} 版\n", encoding="utf-8")
+            self.git(root, "add", "docs/guide.md")
+            self.git(root, "commit", "-q", "-m", f"docs: 第 {index} 版")
+            commits.append(self.git(root, "rev-parse", "HEAD"))
+        return root, commits
+
+    def plan(self, root, pipelines, current):
+        from scripts import ci_scope
+        source = pipelines if callable(pipelines) else (lambda _environ: pipelines)
+        return ci_scope.plan("linux", root, {"CI_COMMIT_SHA": current}, pipelines=source)[0]
+
+    def test_the_base_is_the_newest_verified_ancestor_so_a_red_push_is_retested(self):
+        from scripts import ci_scope
+        root, (first, second, head) = self.repository()
+        pipelines = [{"sha": head, "status": "success"}, {"sha": second, "status": "failed"},
+                     {"sha": first, "status": "success"}]
+        self.assertEqual(self.plan(root, pipelines, head), [first, *ci_scope.PLATFORM_TESTS["linux"]])
+
+    def test_without_a_reachable_verified_base_the_suite_is_full(self):
+        root, (first, _second, head) = self.repository()
+        self.git(root, "checkout", "-q", "-b", "rewritten", first)
+        (root / "docs" / "other.md").write_text("强推前的提交\n", encoding="utf-8")
+        self.git(root, "add", "docs/other.md")
+        self.git(root, "commit", "-q", "-m", "docs: 被改写的历史")
+        rewritten = self.git(root, "rev-parse", "HEAD")
+        self.git(root, "checkout", "-q", "master")
+
+        def unavailable(_environ):
+            raise OSError("外部请求未取得（ConnectError）")
+        for name, pipelines in (("首次推送", []), ("强推后旧提交不是祖先", [{"sha": rewritten, "status": "success"}]),
+                                ("克隆里没有这个提交", [{"sha": "f" * 40, "status": "success"}]),
+                                ("只有本提交自己", [{"sha": head, "status": "success"}]),
+                                ("接口取不到", unavailable)):
+            with self.subTest(name):
+                self.assertEqual(self.plan(root, pipelines, head), ["full"])
+
+    def test_changes_that_need_the_full_suite_skip_the_platform_subset(self):
+        root, (_first, _second, base) = self.repository()
+        (root / ".gitlab-ci.yml").write_text("stages: [verify]\n", encoding="utf-8")
+        self.git(root, "add", ".gitlab-ci.yml")
+        self.git(root, "commit", "-q", "-m", "ci: 新流水线")
+        head = self.git(root, "rev-parse", "HEAD")
+        self.assertEqual(self.plan(root, [{"sha": base, "status": "success"}], head), ["full"])
+
+    def test_every_platform_subset_resolves_through_the_focus_entry(self):
+        from scripts import ci_scope, test_focus
+        for platform, selectors in ci_scope.PLATFORM_TESTS.items():
+            with self.subTest(platform=platform):
+                suite, browsers, _islands = test_focus.selection(ROOT, list(selectors))
+                self.assertGreater(suite.countTestCases(), 0)
+                self.assertIn("e2e/setup.test.ts", browsers)
+                self.assertEqual(len(selectors), len(set(selectors)))
+
+    def test_the_pipeline_list_is_read_anonymously(self):
+        from scripts import ci_scope
+        environ = {"CI_API_V4_URL": "https://gitgud.io/api/v4", "CI_PROJECT_ID": "42", "CI_JOB_TOKEN": "不该被带上"}
+        with mock.patch("peach.peach_proxy.read_url", return_value=b'[{"sha": "a", "status": "success"}]') as fetch:
+            self.assertEqual(ci_scope.successful_pipelines(environ), [{"sha": "a", "status": "success"}])
+        url = fetch.call_args.args[0]
+        self.assertTrue(url.startswith("https://gitgud.io/api/v4/projects/42/pipelines?"), url)
+        self.assertIn("ref=master", url)
+        self.assertIn("status=success", url)
+        headers = {key.lower(): value for key, value in fetch.call_args.kwargs["headers"].items()}
+        self.assertFalse({"job-token", "private-token", "authorization"} & headers.keys())
+
+
+class GitLabReleaseTests(unittest.TestCase):
+    SHA = "1" * 40
+
+    def test_public_ci_metadata_does_not_require_expanding_token_permissions(self):
+        from scripts import release_forge
+        forge = self.forge()
+        response = mock.MagicMock()
+        response.__enter__.return_value.read.return_value = b'[{"id":7}]'
+        for status in (401, 403):
+            forge.command.side_effect = subprocess.CalledProcessError(1, ["glab"], stderr=f"glab: HTTP {status}")
+            with self.subTest(status=status), mock.patch.dict(os.environ, {"PEACH_GLAB": "glab"}), \
+                    mock.patch.object(release_forge, "read_url", return_value=b'[{"id":7}]') as fetch:
+                self.assertEqual(forge.api("owner/repo", "pipelines"), [{"id": 7}])
+            self.assertEqual(fetch.call_args.args[0], "https://gitgud.io/api/v4/projects/owner%2Frepo/pipelines")
+            headers = {key.lower(): value for key, value in fetch.call_args.kwargs['headers'].items()}
+            self.assertNotIn("private-token", headers)
+            self.assertNotIn("authorization", headers)
+        forge.command.side_effect = subprocess.CalledProcessError(1, ["glab"], stderr="network unavailable")
+        with mock.patch.dict(os.environ, {"PEACH_GLAB": "glab"}), \
+                mock.patch.object(release_forge, "read_url") as fetch, self.assertRaises(subprocess.CalledProcessError):
+            forge.api("owner/repo", "pipelines")
+        fetch.assert_not_called()
+
+    def forge(self):
+        from scripts.release_forge import GitLabForge
+        return GitLabForge("gitgud.io", mock.Mock())
+
+    def pipeline(self, **changes):
+        return {"id": 7, "sha": self.SHA, "ref": "master", "source": "push",
+                "status": "success", "web_url": "https://gitgud.io/pipeline/7", **changes}
+
+    def jobs(self):
+        from scripts.release_forge import REQUIRED_TEST_JOBS
+        return [{"id": index, "name": name, "status": "success", "allow_failure": False,
+                 "commit": {"id": self.SHA}} for index, name in enumerate(sorted(REQUIRED_TEST_JOBS), 1)]
+
+    def test_release_requires_native_system_jobs_for_the_same_commit(self):
+        forge = self.forge()
+        for change in ({"status": "skipped"}, {"status": "failed"}, {"allow_failure": True},
+                       {"commit": {"id": "other"}}):
+            jobs = self.jobs()
+            jobs[0] = {**jobs[0], **change}
+            with self.subTest(change=change), mock.patch.object(forge, "api", side_effect=[
+                [self.pipeline()], jobs
+            ]), self.assertRaisesRegex(ValueError, "必需成功任务"):
+                forge.test_runs("owner/repo", self.SHA)
+        with mock.patch.object(forge, "api", side_effect=[[self.pipeline()], self.jobs()]) as api:
+            checked = forge.test_runs("owner/repo", self.SHA)
+        self.assertEqual(checked[0]["html_url"], "https://gitgud.io/pipeline/7")
+        self.assertEqual(checked[0]["conclusion"], "success")
+        self.assertEqual(api.call_count, 2)
+
+    def test_latest_push_pipeline_is_required_and_failed_retries_block_release(self):
+        forge = self.forge()
+        pipelines = [self.pipeline(), self.pipeline(id=8, status="failed"),
+                     self.pipeline(id=9, ref="feature"), self.pipeline(id=10, source="web")]
+        with mock.patch.object(forge, "api", return_value=pipelines):
+            checked = forge.test_runs("owner/repo", self.SHA)
+        self.assertEqual(checked[0]["id"], 8)
+        self.assertEqual(checked[0]["conclusion"], "failed")
+
+    def test_missing_native_jobs_cannot_be_replaced_by_linux_success(self):
+        forge = self.forge()
+        jobs = [job for job in self.jobs() if job["name"] != "verify-macos"]
+        with mock.patch.object(forge, "api", side_effect=[[self.pipeline()], jobs]), \
+                self.assertRaisesRegex(ValueError, "verify-macos"):
+            forge.test_runs("owner/repo", self.SHA)
+
+    def running(self, jobs, runners):
+        """流水线还在跑；`runners` 按 tag 组合给出 runner 列表，异常就当读不到。"""
+        forge = self.forge()
+        calls = []
+
+        def answer(_repo, endpoint, **options):
+            calls.append((endpoint, options))
+            if endpoint.startswith("pipelines?"):
+                return [self.pipeline(status="running")]
+            if endpoint.startswith("pipelines/7/jobs"):
+                return jobs
+            if endpoint.startswith("runners?"):
+                tags = endpoint.split("tag_list=")[1].split("&")[0].replace("%2C", ",")
+                answer_for = runners[tags]
+                if isinstance(answer_for, Exception):
+                    raise answer_for
+                return answer_for
+            raise AssertionError(f"没预料到的调用：{endpoint}")
+        with mock.patch.object(forge, "api", side_effect=answer):
+            run = forge.test_runs("owner/repo", self.SHA)[0]
+        return run, calls
+
+    def job(self, index, name, status, tags=("docker",), **changes):
+        return {"id": index, "name": name, "status": status, "tag_list": list(tags),
+                "started_at": None, "runner": None, "allow_failure": False,
+                "queued_duration": 400.0, "commit": {"id": self.SHA}, **changes}
+
+    def test_pending_jobs_report_whether_any_runner_with_their_tags_is_online(self):
+        jobs = [self.job(1, "verify-linux", "running", started_at="t", runner={"id": 1}),
+                self.job(2, "verify-windows", "pending", ("peach-windows",)),
+                self.job(3, "verify-macos", "pending", ("peach-macos",))]
+        run, calls = self.running(jobs, {
+            "peach-windows": [{"status": "offline", "paused": False}],
+            "peach-macos": [{"status": "online", "paused": False}],
+        })
+        self.assertEqual(run["status"], "in_progress")
+        self.assertEqual(run["failed_jobs"], [])
+        self.assertEqual(run["queued_jobs"], [{"id": 2, "name": "verify-windows", "tags": ["peach-windows"],
+                                               "queued": 400.0, "runners": "offline"}])
+        runner_calls = [options for endpoint, options in calls if endpoint.startswith("runners?")]
+        self.assertEqual(runner_calls, [{"public": False}] * 2, "runner 列表不走匿名回退")
+
+    def test_paused_runners_and_unreadable_lists_are_told_apart(self):
+        jobs = [self.job(2, "verify-windows", "pending", ("peach-windows",)),
+                self.job(3, "verify-macos", "pending", ("peach-macos",)),
+                self.job(4, "wheel-smoke", "pending")]
+        run, _ = self.running(jobs, {
+            "peach-windows": [{"status": "online", "paused": True}],
+            "peach-macos": subprocess.CalledProcessError(1, ["glab"], stderr="glab: 401 Unauthorized"),
+            "docker": [],
+        })
+        self.assertEqual({job["name"]: job["runners"] for job in run["queued_jobs"]},
+                         {"verify-windows": "offline", "verify-macos": "unknown", "wheel-smoke": "unknown"})
+
+    def test_jobs_waiting_on_people_or_earlier_stages_are_not_queued(self):
+        jobs = [self.job(1, "verify-linux", "running", started_at="t", runner={"id": 1}),
+                self.job(2, "verify-windows", "manual", ("peach-windows",)),
+                self.job(3, "verify-macos", "waiting_for_resource", ("peach-macos",)),
+                self.job(4, "wheel-smoke", "created"),
+                self.job(5, "later", "scheduled"),
+                self.job(6, "skipped", "skipped")]
+        run, calls = self.running(jobs, {})
+        self.assertEqual(run["queued_jobs"], [])
+        self.assertFalse([endpoint for endpoint, _ in calls if endpoint.startswith("runners?")])
+
+    def test_a_failed_required_job_is_reported_while_others_still_run(self):
+        jobs = [self.job(1, "verify-linux", "failed"),
+                self.job(2, "verify-windows", "running", ("peach-windows",), started_at="t", runner={"id": 2}),
+                self.job(3, "verify-macos", "failed", ("peach-macos",), allow_failure=True),
+                self.job(4, "wheel-smoke", "canceled"),
+                self.job(5, "wheel-smoke", "running", started_at="t", runner={"id": 1})]
+        run, _ = self.running(jobs, {})
+        self.assertEqual(run["failed_jobs"], ["verify-linux"], "重试过的以最新一次为准")
+
+    def test_a_failed_rehearsal_build_stops_the_wait_too(self):
+        """版本提交的流水线里有发布演练：构建红了整条也不会转绿，不能只盯四个必需任务。"""
+        jobs = [self.job(1, "verify-linux", "running", started_at="t", runner={"id": 1}),
+                self.job(2, "build-macos", "failed", ("peach-macos",))]
+        run, _ = self.running(jobs, {})
+        self.assertEqual(run["failed_jobs"], ["build-macos"])
+
+    def test_tagging_requires_every_rehearsal_job_to_have_passed(self):
+        from scripts.release_forge import REHEARSAL_JOBS
+        forge = self.forge()
+        passed = [self.job(index, name, "success") for index, name in enumerate(sorted(REHEARSAL_JOBS), 1)]
+        with mock.patch.object(forge, "api", return_value=passed):
+            forge.require_rehearsal("owner/repo", 7)
+        for broken in (passed[1:], [{**passed[0], "status": "failed"}, *passed[1:]]):
+            with self.subTest(jobs=len(broken)), mock.patch.object(forge, "api", return_value=broken), \
+                    self.assertRaisesRegex(ValueError, "发布演练没有全部通过"):
+                forge.require_rehearsal("owner/repo", 7)
+
+    def test_mainline_membership_uses_the_git_commit_graph(self):
+        forge = self.forge()
+        forge.command.side_effect = ["", self.SHA, "ancestor"]
+        with mock.patch.object(forge, "master_sha", return_value=self.SHA), \
+                self.assertRaisesRegex(ValueError, "不属于"):
+            forge.require_ancestor("owner/repo", "divergent")
+        self.assertEqual(forge.remote_url("owner/repo"), "https://gitgud.io/owner/repo.git")
+
+    def test_glab_is_scoped_to_the_selected_host_without_inline_credentials(self):
+        forge = self.forge()
+        forge.command.return_value = '{"commit":{"id":"sha"}}'
+        with mock.patch.dict(os.environ, {"PEACH_GLAB": "glab"}):
+            self.assertEqual(forge.master_sha("owner/repo"), "sha")
+        forge.command.assert_called_once_with("glab", "api", "--hostname", "gitgud.io", "--method", "GET",
+                                              "projects/owner%2Frepo/repository/branches/master")
+
+
 class ReleaseTagTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.release = load_script("release_tag")
+        cls.audit_dependencies = staticmethod(cls.release.require_clean_dependencies)
+
+    def setUp(self):
+        # 定版前的依赖审计要联网跑 npm；用例默认它通过，专门的用例单独让它拦下。
+        audit = mock.patch.object(self.release, "require_clean_dependencies")
+        audit.start()
+        self.addCleanup(audit.stop)
+
+    def test_dependency_audit_covers_both_npm_projects_and_names_the_failing_one(self):
+        """标签流水线第一步就是这两份 npm 审计；有一份不干净就不能定版或打标签。"""
+        root = Path("C:/repo")
+        verdicts = {root: 0, root / "frontend": 1}
+        with mock.patch("scripts.npm_audit.audit", side_effect=lambda project: verdicts[project]) as audit, \
+                self.assertRaisesRegex(ValueError, "frontend"):
+            self.audit_dependencies(root)
+        self.assertEqual([call.args[0] for call in audit.call_args_list], [root, root / "frontend"])
+        with mock.patch("scripts.npm_audit.audit", return_value=0):
+            self.audit_dependencies(root)
+
+    def test_a_vulnerable_dependency_keeps_version_files_untouched(self):
+        with self._shell(), mock.patch.object(self.release, "api", return_value=[]), \
+                mock.patch.object(self.release.version_bump, "plan_bump",
+                                  return_value=self._planned_bump()), \
+                mock.patch.object(self.release, "require_clean_dependencies",
+                                  side_effect=ValueError("依赖审计发现高危漏洞（frontend）")), \
+                mock.patch.object(self.release.version_bump, "write_version") as write, \
+                mock.patch.object(self.release.changelog, "release") as promote, \
+                self.assertRaisesRegex(ValueError, "高危漏洞"):
+            self.release.prepare("owner/repo", "auto", apply=True)
+        write.assert_not_called()
+        promote.assert_not_called()
 
     def test_latest_matching_master_run_must_finish_successfully(self):
         success = dict(id=1, head_sha="abc", head_branch="master", event="push",
@@ -4836,6 +5694,12 @@ class PinnedReleaseTests(unittest.TestCase):
     def setUpClass(cls):
         cls.release = load_script("release_tag")
 
+    def setUp(self):
+        candidate = mock.patch.object(self.release.github_release_candidate, "select",
+                                      return_value={"run_id": 9})
+        self.candidate = candidate.start()
+        self.addCleanup(candidate.stop)
+
     def _shell(self, changes=None):
         answers = {
             ("git", "status", "--porcelain"): "",
@@ -4910,6 +5774,16 @@ class PinnedReleaseTests(unittest.TestCase):
                 self.assertEqual(self.release.main(["--release-sha", self.SHA, "--apply"]), 1)
             self.assertEqual(ShipTests._writes(command), [])
 
+    def test_a_commit_without_a_promotable_rehearsal_gets_no_tag(self):
+        with self._shell(), self._api():
+            self.assertEqual(self.release.plan_commit("owner/repo", self.SHA)["rehearsal"],
+                             "https://github.com/owner/repo/actions/runs/9")
+        self.candidate.assert_called_with("owner/repo", self.SHA)
+        self.candidate.side_effect = ValueError("主线发布演练尚未成功")
+        with self._shell() as command, self._api(), redirect_stdout(io.StringIO()):
+            self.assertEqual(self.release.main(["--release-sha", self.SHA, "--apply"]), 1)
+        self.assertEqual(ShipTests._writes(command), [])
+
     def test_apply_rechecks_the_selected_commit_and_pushes_only_its_annotated_tag(self):
         with self._shell() as command, self._api(), \
                 mock.patch.object(self.release, "plan_commit", wraps=self.release.plan_commit) as plan, \
@@ -4937,6 +5811,20 @@ class ShipTests(unittest.TestCase):
     def setUpClass(cls):
         cls.release = load_script("release_tag")
 
+    def setUp(self):
+        audit = mock.patch.object(self.release, "require_clean_dependencies")
+        self.audit = audit.start()
+        self.addCleanup(audit.stop)
+
+    def test_a_vulnerable_dependency_found_after_the_test_turns_green_stops_before_the_tag(self):
+        """Test 绿了到打标签之间可能刚好公布了新漏洞：标签打出去就什么也发不了，所以标签前再查一次。"""
+        self.audit.side_effect = ValueError("依赖审计发现高危漏洞（frontend）")
+        with self._shell() as command, self._api(remote="abc"), self._version(), self._document(), \
+                self.assertRaisesRegex(ValueError, "高危漏洞"):
+            self.release.ship("owner/repo", apply=True)
+        self.assertFalse([args for args in self._writes(command) if args[:3] == ("git", "tag", "-a")
+                          or (args[:2] == ("git", "push") and any("refs/tags/" in part for part in args))])
+
     #: 一次干净的起点：在 master 上，工作区正好是那两份定版文件，本地没有这个标签。
     SHELL = {("git", "branch", "--show-current"): "master",
              ("git", "status", "--porcelain"): " M CHANGELOG.md\n M src/peach/__init__.py",
@@ -4951,7 +5839,7 @@ class ShipTests(unittest.TestCase):
         return mock.patch.object(self.release, "command",
                                  side_effect=lambda *args, **_: answers.get(args, ""))
 
-    def _api(self, *, tags=(), remote="old", runs=(SUCCESS,)):
+    def _api(self, *, tags=(), remote="old", runs=(SUCCESS,), rehearsal=(SUCCESS,)):
         def answer(_repo, endpoint):
             if endpoint.startswith("git/matching-refs/tags/"):
                 return list(tags)
@@ -4959,6 +5847,8 @@ class ShipTests(unittest.TestCase):
                 return {"object": {"sha": remote}}
             if endpoint.startswith("actions/workflows/test.yml/runs"):
                 return {"workflow_runs": list(runs)}
+            if endpoint.startswith("actions/workflows/release.yml/runs"):
+                return {"workflow_runs": list(rehearsal)}
             raise AssertionError(f"没预料到的调用：{endpoint}")
         return mock.patch.object(self.release, "api", side_effect=answer)
 
@@ -4975,6 +5865,28 @@ class ShipTests(unittest.TestCase):
         return [args for args, _ in command.call_args_list
                 if args[:2] in {("git", "add"), ("git", "commit"), ("git", "push"), ("git", "-c")}
                 or args[:3] == ("git", "tag", "-a")]
+
+    def test_an_incomplete_release_rehearsal_stops_before_the_tag(self):
+        """GitLab 上版本提交的流水线带发布演练：Test 绿了但演练缺作业或没过，不打标签。"""
+        forge = mock.Mock()
+        forge.require_rehearsal.side_effect = ValueError("版本提交的发布演练没有全部通过，不打标签：build-macos")
+        with self._shell() as command, self._version(), self._document(), \
+                mock.patch.object(self.release, "GITLAB", forge), \
+                mock.patch.object(self.release, "master_sha", return_value="abc"), \
+                mock.patch.object(self.release, "await_test", return_value={**self.SUCCESS, "id": 7}), \
+                self.assertRaisesRegex(ValueError, "发布演练"):
+            self.release.ship("owner/repo", apply=True)
+        forge.require_rehearsal.assert_called_once_with("owner/repo", 7)
+        self.assertFalse([args for args in self._writes(command) if args[:3] == ("git", "tag", "-a")])
+
+    def test_on_github_a_red_release_rehearsal_stops_before_the_tag(self):
+        """迁回 GitHub 时演练是同一提交推送触发的 Release 工作流：它没过同样不打标签。"""
+        red = {**self.SUCCESS, "conclusion": "failure", "html_url": "rehearsal-url"}
+        with self._shell() as command, self._api(remote="abc", rehearsal=(red,)), self._version(), \
+                self._document(), mock.patch.object(self.release, "GITLAB", None), \
+                self.assertRaisesRegex(ValueError, "发布演练没有通过.*rehearsal-url"):
+            self.release.ship("owner/repo", apply=True)
+        self.assertFalse([args for args in self._writes(command) if args[:3] == ("git", "tag", "-a")])
 
     def test_a_plan_without_apply_writes_nothing(self):
         with self._shell() as command, self._api(), self._version(), self._document():
@@ -5097,6 +6009,107 @@ class AwaitTestTests(unittest.TestCase):
             self.release.await_test("owner/repo", "abc", timeout=30, poll=30,
                                     sleep=lambda _: None, clock=iter([0, 30, 60]).__next__)
 
+    @staticmethod
+    def _queued(runners, queued=None):
+        return {"id": 5, "name": "verify-windows", "tags": ["peach-windows"],
+                "queued": queued, "runners": runners}
+
+    def _wait(self, *rounds, step=60):
+        naps = []
+        with self._runs(*rounds):
+            try:
+                self.release.await_test("owner/repo", "abc", timeout=1800, poll=step,
+                                        sleep=naps.append, clock=lambda: len(naps) * step)
+            except ValueError as error:
+                return str(error), naps
+        self.fail("应当判定等不到结果")
+
+    def test_a_job_whose_runners_are_offline_fails_at_once_naming_job_and_tags(self):
+        stuck = {**self.RUNNING, "queued_jobs": [self._queued("offline")]}
+        message, naps = self._wait((stuck,))
+        self.assertEqual(naps, [])
+        for part in ("verify-windows", "peach-windows", "不在线", "--ship --apply"):
+            self.assertIn(part, message)
+
+    def test_unreadable_runners_fail_once_the_job_has_queued_past_the_stall_window(self):
+        stuck = {**self.RUNNING, "queued_jobs": [self._queued("unknown")]}
+        message, naps = self._wait(*[(stuck,)] * 10)
+        self.assertEqual(len(naps) * 60, self.release.STALL_SECONDS)
+        self.assertIn("排队 5 分钟未开始", message)
+        self.assertIn("一直被占着", message)
+
+    def test_queue_time_reported_by_the_forge_counts_from_the_first_look(self):
+        stuck = {**self.RUNNING, "queued_jobs": [self._queued("unknown", queued=2254.0)]}
+        message, naps = self._wait((stuck,))
+        self.assertEqual(naps, [])
+        self.assertIn("排队 38 分钟", message)
+
+    def test_a_short_queue_with_unreadable_runners_keeps_waiting(self):
+        queued = {**self.RUNNING, "queued_jobs": [self._queued("unknown", queued=60.0)]}
+        done = {**self.RUNNING, "status": "completed", "conclusion": "success"}
+        naps = []
+        with self._runs((queued,), (queued,), (done,)):
+            checked = self.release.await_test("owner/repo", "abc", timeout=1800, poll=30,
+                                              sleep=naps.append, clock=lambda: len(naps) * 30)
+        self.assertEqual(checked["html_url"], "test-url")
+
+    def test_a_failed_required_job_fails_before_the_rest_of_the_pipeline_finishes(self):
+        red = {**self.RUNNING, "failed_jobs": ["verify-linux"]}
+        message, naps = self._wait((red,))
+        self.assertEqual(naps, [])
+        self.assertIn("verify-linux", message)
+        self.assertIn("test-url", message)
+
+    def test_a_push_that_never_starts_a_test_run_fails_after_the_stall_window(self):
+        message, naps = self._wait(*[()] * 10)
+        self.assertEqual(len(naps) * 60, self.release.STALL_SECONDS)
+        self.assertIn("没有被触发", message)
+
+    def _github(self, jobs, runners):
+        run = {**self.RUNNING, "id": 9, "status": "queued"}
+
+        def answer(_repo, endpoint):
+            if endpoint.startswith("actions/workflows/test.yml/runs"):
+                return {"workflow_runs": [dict(run)]}
+            if endpoint.startswith("actions/runs/9/jobs"):
+                return {"jobs": jobs}
+            if endpoint.startswith("actions/runners"):
+                if isinstance(runners, Exception):
+                    raise runners
+                return {"runners": runners}
+            raise AssertionError(f"没预料到的调用：{endpoint}")
+        with mock.patch.object(self.release, "GITLAB", None), \
+                mock.patch.object(self.release, "api", side_effect=answer) as api:
+            latest = self.release.latest_run(self.release.test_runs("owner/repo", "abc"), "abc")
+        return latest["queued_jobs"], [call.args[1] for call in api.call_args_list]
+
+    GITHUB_JOBS = [
+        {"id": 3, "name": "verify-windows", "status": "queued", "runner_id": None,
+         "labels": ["self-hosted", "peach-windows"]},
+        {"id": 4, "name": "hosted", "status": "queued", "runner_id": None, "labels": ["windows-latest"]},
+        {"id": 6, "name": "approval", "status": "waiting", "runner_id": None,
+         "labels": ["self-hosted", "peach-windows"]},
+    ]
+
+    @staticmethod
+    def _github_runner(status):
+        return {"status": status, "labels": [{"name": "self-hosted"}, {"name": "Peach-Windows"}]}
+
+    def test_github_self_hosted_jobs_queue_like_gitlab_ones(self):
+        queued, _ = self._github(self.GITHUB_JOBS, [self._github_runner("offline")])
+        self.assertEqual(queued, [{"id": 3, "name": "verify-windows", "tags": ["peach-windows", "self-hosted"],
+                                   "queued": None, "runners": "offline"}])
+        queued, _ = self._github(self.GITHUB_JOBS, [self._github_runner("online")])
+        self.assertEqual(queued, [], "有在线 runner 只是在排队")
+        denied = subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 403")
+        queued, _ = self._github(self.GITHUB_JOBS, denied)
+        self.assertEqual([job["runners"] for job in queued], ["unknown"])
+
+    def test_github_hosted_queues_never_look_up_runners(self):
+        queued, endpoints = self._github(self.GITHUB_JOBS[1:], AssertionError("不该查 runner"))
+        self.assertEqual(queued, [])
+        self.assertFalse([endpoint for endpoint in endpoints if endpoint.startswith("actions/runners")])
+
 
 class Fc2SellerAndDescriptiveNameRepairTests(unittest.TestCase):
     """存量修正：FC2 卖家厂牌改挂 `FC2-PPV`，描述性称呼女优删掉（ADR-0054）。"""
@@ -5202,6 +6215,65 @@ class Fc2SellerAndDescriptiveNameRepairTests(unittest.TestCase):
         code, output = self.run_repair("--apply", "--backup", str(self.root / "backup.db"))
         self.assertEqual(code, 0, output)
         self.assertEqual(self.query("SELECT count(*) FROM entity WHERE id=2"), [(0,)])
+
+
+class RealPreviewSourceTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name).resolve()
+        self.source, self.sample = self.root / 'source', self.root / 'sample'
+        (self.source / 'database').mkdir(parents=True)
+        (self.sample / 'database').mkdir(parents=True)
+        self.db = fresh_ledger(self.source / 'database')
+        self.checker = load_script('check_ui_preview')
+        with closing(sqlite3.connect(self.db)) as connection, connection:
+            connection.execute("INSERT INTO asset(id,location,path,name,medium) VALUES(1,'local','R:\\Media\\one.mp4','海边.mp4','video')")
+            connection.execute("INSERT INTO entity(id,kind,canonical_name,normalized_name,created_at,updated_at) VALUES(11,'performer','林晚晴','林晚晴','2026-10-20','2026-10-20')")
+            connection.execute("INSERT INTO asset_entity(asset_id,entity_id,role,source) VALUES(1,11,'performer','fixture')")
+        with closing(sqlite3.connect(self.db)) as source, closing(sqlite3.connect(self.sample / 'database/ledger.db')) as sample:
+            source.backup(sample)
+        manifest = {'source':str(self.db), 'counts':{'asset':1,'entity':1,'asset_entity':1}}
+        (self.sample / 'sample-manifest.json').write_text(json.dumps(manifest), encoding='utf-8')
+        cache = self.source / 'generated/avatars'
+        cache.mkdir(parents=True)
+        shutil.copy2(ROOT / 'resources/peach-logo.png', cache / 'performer-11.img')
+        shutil.copytree(self.source / 'generated', self.sample / 'generated')
+
+    def test_real_subset_is_verified_without_database_writes(self):
+        before = self.db.read_bytes()
+        result = self.checker.verify_sample(self.source, self.sample)
+        self.assertEqual(result['kind'], 'real-ledger-subset')
+        self.assertEqual(result['counts'], {'asset':1,'entity':1,'asset_entity':1})
+        self.assertEqual(result['cached_images'], 1)
+        self.assertEqual(self.db.read_bytes(), before)
+
+    def test_missing_provenance_is_rejected(self):
+        (self.sample / 'sample-manifest.json').unlink()
+        with self.assertRaisesRegex(ValueError, '来源清单未取得'):
+            self.checker.verify_sample(self.source, self.sample)
+
+    def test_invented_title_is_rejected(self):
+        with closing(sqlite3.connect(self.sample / 'database/ledger.db')) as connection, connection:
+            connection.execute("UPDATE asset SET catalog_title='样本标题' WHERE id=1")
+        with self.assertRaisesRegex(ValueError, 'catalog_title'):
+            self.checker.verify_sample(self.source, self.sample)
+
+    def test_invented_relationship_is_rejected(self):
+        with closing(sqlite3.connect(self.sample / 'database/ledger.db')) as connection, connection:
+            connection.execute("UPDATE asset_entity SET source='invented' WHERE asset_id=1")
+        with self.assertRaisesRegex(ValueError, '作品实体关联'):
+            self.checker.verify_sample(self.source, self.sample)
+
+    def test_missing_cached_artwork_is_rejected(self):
+        (self.sample / 'generated/avatars/performer-11.img').unlink()
+        with self.assertRaisesRegex(ValueError, '图像缓存未取得'):
+            self.checker.verify_sample(self.source, self.sample)
+
+    def test_invented_cached_artwork_is_rejected(self):
+        (self.sample / 'generated/avatars/performer-11.img').write_bytes(b'invented')
+        with self.assertRaisesRegex(ValueError, '图像缓存与原数据不一致'):
+            self.checker.verify_sample(self.source, self.sample)
 
 
 if __name__ == "__main__":

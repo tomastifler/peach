@@ -5,10 +5,12 @@ import re
 import subprocess
 import threading
 from pathlib import Path
+from .smb_media import input_url, SmbResource
+from contextlib import nullcontext
 
 from PIL import Image, ImageOps
 
-from . import brand_marks
+from . import brand_marks, artifact_rules, upgrade_rules
 from .ffmpeg import FFmpegResolver
 from .fsutil import atomic_path
 from .media import normalized_path
@@ -142,39 +144,56 @@ class PreviewService:
     def poster(self, asset_id: int, cell: int = 4) -> Path:
         cell = max(0, min(8, cell))
         destination = self.poster_root / f"{asset_id}_{cell}.jpg"
-        if destination.is_file():
+        if (artifact_rules.current(destination, upgrade_rules.LOCAL_POSTERS, source_required=True)
+                and self.repository.media_asset(asset_id) is not None):
             return destination
         source = self._snapshot(asset_id)
+        if artifact_rules.current(destination, source=source):
+            return destination
         ffmpeg = self._ffmpeg()
         col, row = cell % 3, cell // 3
         self.poster_root.mkdir(parents=True, exist_ok=True)
         with _generate_lock(destination):
-            if destination.is_file():
+            source = self._snapshot(asset_id)
+            if artifact_rules.current(destination, source=source):
                 return destination
+            stamp = artifact_rules.fingerprint(source)
             with atomic_path(destination) as temporary:
                 self._run([
-                    str(ffmpeg), "-y", "-v", "error", "-i", str(source),
+                    str(ffmpeg), "-y", "-v", "error", "-i", input_url(source),
                     "-vf", f"crop=iw/3:ih/3:iw/3*{col}:ih/3*{row},scale='min(640,iw)':-2",
                     "-q:v", "4", str(temporary),
                 ])
+                if stamp != artifact_rules.fingerprint(source):
+                    raise PreviewUnavailable('snapshot changed during preview generation')
+            if not artifact_rules.remember(destination, source=source, source_fingerprint=stamp):
+                raise PreviewUnavailable('snapshot changed during preview generation')
         return destination
 
     def avatar(self, asset_id: int) -> Path:
         destination = self.avatar_root / f"{asset_id}.jpg"
-        if destination.is_file():
+        try:
+            source = self._snapshot(asset_id)
+        except PreviewUnavailable:
+            # 独立保留且没有生成签名的头像不依赖九宫格。
+            if destination.is_file() and not Path(str(destination) + '.rule').exists():
+                return destination
+            raise
+        if artifact_rules.current(destination, source=source):
             return destination
-        source = self._snapshot(asset_id)
         ffmpeg = self._ffmpeg()
         self.avatar_root.mkdir(parents=True, exist_ok=True)
         candidates: list[tuple[Path, float]] = []
         with _generate_lock(destination):
-            if destination.is_file():
+            source = self._snapshot(asset_id)
+            if artifact_rules.current(destination, source=source):
                 return destination
+            stamp = artifact_rules.fingerprint(source)
             try:
                 for col, row in ((1, 1), (0, 0), (1, 2), (2, 0), (0, 2), (2, 2)):
                     temporary = destination.with_name(f"{destination.stem}.{col}{row}.tmp.jpg")
                     self._run([
-                        str(ffmpeg), "-y", "-v", "error", "-i", str(source),
+                        str(ffmpeg), "-y", "-v", "error", "-i", input_url(source),
                         "-vf", f"crop=iw/3:ih/3:iw/3*{col}:ih/3*{row},"
                                "scale=160:160:force_original_aspect_ratio=increase,crop=160:160",
                         "-q:v", "4", str(temporary),
@@ -197,7 +216,11 @@ class PreviewService:
                 best, brightness = max(candidates, key=lambda item: item[1])
                 if brightness < 12:
                     raise PreviewUnavailable("snapshot is too dark")
+                if stamp != artifact_rules.fingerprint(source):
+                    raise PreviewUnavailable('snapshot changed during avatar generation')
                 os.replace(best, destination)
+                if not artifact_rules.remember(destination, source=source, source_fingerprint=stamp):
+                    raise PreviewUnavailable('snapshot changed during avatar generation')
             finally:
                 for path, _ in candidates:
                     if path.exists() and path != destination:
@@ -374,30 +397,37 @@ class PhotoThumbnailService:
         self.root = root.resolve()
         self.width = width
 
-    def cached(self, asset_id: int) -> Path | None:
+    def cached(self, asset_id: int, *, offline: bool = False) -> Path | None:
         """已经缩好的那一份，没有就是 None。
 
-        单独开这一条是为了让调用方能先问缓存再解析原图：解析要在挂载的网盘上确认原文件
-        还在，一次往返 0.1–0.4 秒，一屏几十张就是几十次；缩略图既然已经躺在本地磁盘上，
-        这一趟问的东西对这次响应没有用处。
+        以签名记录的本地源路径复验文件代际，不读取图像正文。
+        SMB 源需要调用方解析资源后，再由 `thumbnail` 核对来源。
         """
         destination = self.root / f"{asset_id}.jpg"
-        return destination if destination.is_file() else None
+        return destination if artifact_rules.current(destination, source_required=True,
+                                                      allow_unavailable_source=True, check_source=not offline) else None
 
     def thumbnail(self, asset_id: int, source: Path) -> Path:
         destination = self.root / f"{asset_id}.jpg"
-        if destination.is_file():
+        if artifact_rules.current(destination, source=source):
             return destination
         self.root.mkdir(parents=True, exist_ok=True)
-        # 并发请求同一张图时各写各的临时文件，最后谁替换都是同一张。
-        with atomic_path(destination) as temporary:
+        with _generate_lock(destination):
+            if artifact_rules.current(destination, source=source):
+                return destination
             try:
-                with Image.open(source) as opened:
-                    image = ImageOps.exif_transpose(opened)
-                    if image.mode not in {"RGB", "L"}:
-                        image = image.convert("RGB")
-                    image.thumbnail((self.width, self.width * 8), Image.LANCZOS)
-                    image.save(temporary, "JPEG", quality=82, optimize=True)
+                stamp = artifact_rules.fingerprint(source)
+                with atomic_path(destination) as temporary:
+                    with (source.open() if isinstance(source, SmbResource) else nullcontext(source)) as readable, Image.open(readable) as opened:
+                        image = ImageOps.exif_transpose(opened)
+                        if image.mode not in {"RGB", "L"}:
+                            image = image.convert("RGB")
+                        image.thumbnail((self.width, self.width * 8), Image.LANCZOS)
+                        image.save(temporary, "JPEG", quality=82, optimize=True)
+                    if stamp != artifact_rules.fingerprint(source):
+                        raise PreviewUnavailable('photo changed during thumbnail generation')
+                if not artifact_rules.remember(destination, source=source, source_fingerprint=stamp):
+                    raise PreviewUnavailable('photo changed during thumbnail generation')
             except (OSError, ValueError, Image.DecompressionBombError) as exc:
                 raise PreviewUnavailable("photo thumbnail failed") from exc
         return destination
@@ -435,6 +465,15 @@ def entity_thumb_root(avatar_root: Path) -> Path:
 COVER_THUMB_EDGE = 1600
 COVER_THUMB_QUALITY = 90
 
+#: 卡片网格的起始档（`/cover?thumb=2`）。首页、资料页与 JAV 页的卡片实测在 1440 宽桌面上
+#: 铺开 168–360 CSS px（大图版式的整张封套按两倍卡宽摆，正封那半露在卡里），一倍屏要不到
+#: 400 设备像素，800 盖得住。这一档实测均 100 KB、上一档均 319 KB（同一组 24 张抽样）。
+#: 页面量过显示尺寸不够清楚就往上换：这一档 → 1600 那一档 → 原件（`framing.ts` 的
+#: `upgradeCover`），所以这里只管常见的小格，不为大位留余量。和上一档同一个目录、
+#: 按长边分文件名（`DerivedImageService.path_for`），按需生成，不批量预生成。
+COVER_SMALL_THUMB_EDGE = 800
+COVER_SMALL_THUMB_QUALITY = 85
+
 
 def cover_thumb_root(cover_root: Path) -> Path:
     """封面派生件的目录：封面目录旁边那一个，理由同 `entity_thumb_root`。
@@ -453,8 +492,7 @@ class DerivedImageService:
     目录由 `entity_thumb_root` 与 `cover_thumb_root` 从原件目录推出来，接线处不各写
     一份默认值。
 
-    换头像、换封面都会原子替换原件，所以派生件按原件的修改时间复验：比原件旧就重做一张。
-    只比时间不比内容——复核批准落地时原件必然变新，而人手摆进去的文件也带自己的时间。
+    签名记录规则、源路径及文件代际；换头像、换封面后按需生成。
     """
 
     def __init__(self, root: Path, edge: int = ENTITY_THUMB_EDGE,
@@ -464,7 +502,8 @@ class DerivedImageService:
         self.quality = quality
 
     def path_for(self, key: str) -> Path:
-        return self.root / f"{key}.{self.edge}.webp"
+        from .upgrade_rules import PREVIEWS
+        return self.root / f"{key}.{self.edge}.{self.quality}.{PREVIEWS}.webp"
 
     def thumbnail(self, key: str, source: Path) -> Path | None:
         """这个实体图的索引页派生件；缩不出来就是 None。
@@ -473,25 +512,27 @@ class DerivedImageService:
         矢量实体图走的就是这条路——PIL 打不开 SVG，而它本来也不需要缩。
         """
         destination = self.path_for(key)
-        try:
-            fresh = (destination.is_file()
-                     and destination.stat().st_mtime_ns >= source.stat().st_mtime_ns)
-        except OSError:
-            fresh = False
-        if fresh:
+        if artifact_rules.current(destination, source=source):
             return destination
         self.root.mkdir(parents=True, exist_ok=True)
         try:
-            # 并发请求同一张图时各写各的临时文件，最后谁替换都是同一张。
-            with atomic_path(destination) as temporary:
-                with Image.open(source) as opened:
-                    image = ImageOps.exif_transpose(opened)
-                    if image.mode not in {"RGB", "L"}:
-                        image = image.convert("RGB")
-                    # `thumbnail` 只缩不放：本来就比这一档小的图原样重编码，不上采样。
-                    image.thumbnail((self.edge, self.edge), Image.LANCZOS)
-                    image.save(temporary, ENTITY_THUMB_FORMAT,
-                               quality=self.quality, method=4)
+            with _generate_lock(destination):
+                if artifact_rules.current(destination, source=source):
+                    return destination
+                stamp = artifact_rules.fingerprint(source)
+                with atomic_path(destination) as temporary:
+                    with (source.open() if isinstance(source, SmbResource) else nullcontext(source)) as readable, Image.open(readable) as opened:
+                        image = ImageOps.exif_transpose(opened)
+                        if image.mode not in {"RGB", "L"}:
+                            image = image.convert("RGB")
+                        # `thumbnail` 只缩不放：本来就比这一档小的图原样重编码，不上采样。
+                        image.thumbnail((self.edge, self.edge), Image.LANCZOS)
+                        image.save(temporary, ENTITY_THUMB_FORMAT,
+                                   quality=self.quality, method=4)
+                    if stamp != artifact_rules.fingerprint(source):
+                        raise ValueError('image changed during thumbnail generation')
+                if not artifact_rules.remember(destination, source=source, source_fingerprint=stamp):
+                    return None
         except (OSError, ValueError, Image.DecompressionBombError,
                 Image.UnidentifiedImageError):
             return None

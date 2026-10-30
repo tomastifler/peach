@@ -35,6 +35,7 @@ import logging
 import os
 import secrets
 import sqlite3
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -201,8 +202,8 @@ body = '{"data": []}'
 def clouddrive_config(origin: str, secret: str) -> str:
     """整段抄进 CloudDrive2 的配置文本。两样缺一样就给空串，页面据此说还不能抄。
 
-    地址只能是 HTTPS。80 口上那条服务对 `POST` 回的是 426 而不是重定向——跨 origin
-    的 307 会让 CloudDrive2 把密钥和正文原样再发一遍到另一个地址上。
+    地址由配置接口按应用服务的协议与端口生成。源码部署的 HTTPS 应用入口与 HTTP
+    跳转入口分开，后者对 `POST` 回 426；独立版的 HTTP 应用入口直接接收通知。
 
     正文只留 Peach 要读的那四个字段，默认模板里的设备名、事件时间那些一概不要：
     `parse_notification` 本来就忽略它们，少发一样东西就少一处能对不上的地方。
@@ -270,6 +271,7 @@ class _Pending:
     #: 上一次探测到的大小；`None` 表示还没探测过。
     size: int | None = None
     first_seen: float = 0.0
+    move_from: str | None = None
 
 
 @dataclass
@@ -313,21 +315,26 @@ class DiscoveryQueue:
 
     # -- 入口
 
-    def submit(self, location: str, path: str, now: float) -> bool:
+    def submit(self, location: str, path: str, now: float, *, move_from=None) -> bool:
         """放一条待办进来；同一条路径再来只是把到期时间往后推。"""
         key = (location, path)
         with self._wake:
+            if move_from:
+                original = self._pending.pop((location, move_from), None)
+                move_from = original.move_from or move_from if original else move_from
             entry = self._pending.get(key)
             if entry is None:
                 if len(self._pending) >= self.max_pending:
                     self.counters.dropped += 1
                     return False
                 self._pending[key] = _Pending(location, path, now + self.debounce,
-                                              first_seen=now)
+                                              first_seen=now, move_from=move_from)
             else:
                 # 又写了一次：静置窗口重新开始，大小也重新测。
                 entry.due = now + self.debounce
                 entry.size = None
+                if move_from:
+                    entry.move_from = move_from
             self.counters.submitted += 1
             self._wake.notify()
         return True
@@ -368,7 +375,8 @@ class DiscoveryQueue:
 
     def _ingest(self, entry: _Pending) -> int:
         try:
-            wrote = self.ingest(entry.location, entry.path)
+            wrote = (self.ingest(entry.location, entry.path, entry.move_from) if entry.move_from
+                     else self.ingest(entry.location, entry.path))
         except Exception as error:  # 一条路径失败不该带走整条队列
             LOGGER.exception("Push discovery registration failed: %s", entry.path)
             self.counters.failed += 1
@@ -413,9 +421,9 @@ class DiscoveryQueue:
                 if self._stopping:
                     return
                 due = min((entry.due for entry in self._pending.values()), default=None)
-                delay = 1.0 if due is None else max(0.0, due - time.monotonic())
-                if delay > 0:
-                    self._wake.wait(min(delay, 1.0))
+                delay = None if due is None else max(0.0, due - time.monotonic())
+                if delay is None or delay > 0:
+                    self._wake.wait(delay)
                 if self._stopping:
                     return
             self.tick(time.monotonic())
@@ -496,7 +504,7 @@ class PushDiscoverySettings:
         try:
             payload = json.loads(self.path.read_text(encoding="utf-8"))
         except FileNotFoundError:
-            return PushDiscoveryConfig()
+            return PushDiscoveryConfig(enabled=True, cloud=False)
         except (OSError, ValueError):
             LOGGER.warning("Push discovery settings could not be read; running with defaults: %s", self.path)
             return PushDiscoveryConfig()
@@ -618,6 +626,7 @@ class PushDiscoveryService:
         self._observer = None
         self._lock = threading.Lock()
 
+
     # -- 出口：两条通道最后都走这里
 
     def _local_path(self, location: str, path: str) -> Path:
@@ -633,11 +642,11 @@ class PushDiscoveryService:
         except (OSError, ValueError):
             return None
 
-    def _ingest(self, location: str, path: str) -> bool:
+    def _ingest(self, location: str, path: str, move_from=None) -> bool:
         from .record_rehome import reattach_in
         from .scan import ingest_path
         result = ingest_path(self.db_path, location, path,
-                             declared_roots=self.declared_roots, mounts=self.mounts)
+                             declared_roots=self.declared_roots, mounts=self.mounts, move_from=move_from)
         # 附属文件按「处理完了」计：文件在，只是按规则不登记，不是「文件不在」。
         if result.found and not result.sidecar:
             self._measure(location, path)
@@ -660,6 +669,21 @@ class PushDiscoveryService:
         if ignored(PureWindowsPath(path).name):
             return False
         return self.queue.submit(location, path, time.monotonic())
+
+    def submit_move(self, location, old, new, *, directory=False):
+        if directory:
+            from .media_folders import path_predicate
+            from contextlib import closing
+            scope, parameters = path_predicate(location, old)
+            with closing(sqlite3.connect(self.db_path)) as connection:
+                paths = [row[0] for row in connection.execute('SELECT a.path FROM asset a WHERE '+scope, parameters)]
+            for path in paths:
+                tail = PureWindowsPath(path).relative_to(PureWindowsPath(old))
+                self.submit_move(location, path, str(PureWindowsPath(new) / tail))
+            return
+        if ignored(PureWindowsPath(new).name):
+            return
+        self.queue.submit(location, new, time.monotonic(), move_from=old)
 
     def ingest_now(self, location: str, path: str) -> bool:
         """定向登记一条路径，不经去抖队列，开关关着也照样登记。
@@ -695,6 +719,13 @@ class PushDiscoveryService:
                     "local", root, declared_roots=self.declared_roots, mounts=self.mounts)
             except ValueError:
                 continue
+            from .smb_media import SmbResource
+            if isinstance(directory, SmbResource):
+                continue
+            if os.name == 'nt':
+                import ctypes
+                if ctypes.windll.kernel32.GetDriveTypeW(str(Path(directory).anchor)) == 4:
+                    continue
             if directory.is_dir():
                 found.append(("local", root, directory))
         return found
@@ -793,12 +824,13 @@ class _LocalEventHandler:
     def __init__(self, service: PushDiscoveryService):
         self.service = service
         self.roots: list[tuple[str, PureWindowsPath, Path]] = []
+        self.started_at = time.time_ns()
 
     def register(self, location: str, declared_root: str, directory: Path) -> None:
         self.roots.append((location, PureWindowsPath(declared_root), directory))
 
     def dispatch(self, event) -> None:
-        if getattr(event, "is_directory", False):
+        if not self._current_event(event) or self._move_event(event) or getattr(event, "is_directory", False):
             return
         for attribute in ("dest_path", "src_path"):
             raw = getattr(event, attribute, "")
@@ -806,7 +838,32 @@ class _LocalEventHandler:
                 self._offer(raw)
                 return
 
+    def _current_event(self, event) -> bool:
+        # FSEvents 会补送启动前的事件；只检查事件命中的文件，不为此遍历整个来源。
+        if sys.platform != 'darwin':
+            return True
+        raw = getattr(event, 'dest_path', '') or getattr(event, 'src_path', '')
+        try:
+            return bool(raw) and Path(os.fsdecode(raw)).stat().st_ctime_ns >= self.started_at
+        except OSError:
+            return False
+
+    def _move_event(self, event) -> bool:
+        if getattr(event, 'event_type', '') != 'moved':
+            return False
+        old = self._mapped(getattr(event, 'src_path', ''))
+        new = self._mapped(getattr(event, 'dest_path', ''))
+        if old and new and old[0] == new[0]:
+            self.service.submit_move(old[0], old[1], new[1], directory=getattr(event, 'is_directory', False))
+            return True
+        return False
+
     def _offer(self, raw: str) -> None:
+        mapped = self._mapped(raw)
+        if mapped:
+            self.service.submit(*mapped)
+
+    def _mapped(self, raw):
         local = Path(os.fsdecode(raw))
         for location, declared_root, directory in self.roots:
             try:
@@ -815,8 +872,7 @@ class _LocalEventHandler:
                 continue
             if not tail:
                 return
-            self.service.submit(location, str(declared_root.joinpath(*tail)))
-            return
+            return location, str(declared_root.joinpath(*tail))
 
 
 #: 只有这几类事件算「有个文件在这里出现了」。`deleted` 不在里面。

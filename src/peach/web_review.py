@@ -12,14 +12,15 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from functools import cache, partial
 from pathlib import Path, PurePosixPath
 from typing import Protocol
 from urllib.parse import quote
 
 from .avatar_provider import install_entity_avatar
-from .catalog_rules import is_korean_mib_code, normalise_code_key
+from .catalog_rules import current_tags, is_korean_mib_code, normalise_code_key
 from .code_creators import collect
-from .entities import normalize_entity_name, resolve_entity, resolve_entity_id
+from .entities import resolve_entity, resolve_entity_id, upsert_asset_entity
 from .field_owners import (
     EXPECTED_REVISION_FIELD,
     owner_label,
@@ -38,10 +39,10 @@ from .metadata_auto_apply import (
     _entity_identity_key,
     _fold_genre_decisions,
     _landing_scope,
+    _is_automatic,
     _offers_another_stage_name,
     _only_mib_official,
     _parsed_candidates,
-    _performer_identity_keys,
     _row_candidates,
     _split_multi,
     genres_still_pending,
@@ -63,7 +64,7 @@ class ReviewContract(Protocol):
 
     def cache_bust(self) -> None: ...
     def read_connection(self): ...
-    def has_cover(self, code: str) -> bool: ...
+    def cover_path(self, code: str) -> Path | None: ...
     def has_entity_image(self, kind: str, entity_id) -> bool: ...
     def entity_image_version(self, kind: str, entity_id) -> str: ...
     def write_transaction(self): ...
@@ -321,13 +322,14 @@ def _metadata_queue_rows(connection, rows: list[dict],
     # 的行照旧留着，它讲的是另一件事（这个番号问过、谁都没给值）。
     rows = [row for row in rows if row["candidates"] or not _parsed_candidates(row)]
     refresh_current_values(connection, rows)
+    identity_key = cache(partial(_entity_identity_key, connection))
     # 和账本已有的值比一遍，只把真差异留在队列里。实测 43 条候选里 24 条
     # 没有任何新信息：17 条与当前值逐字相同、7 条标签只是顺序不同。
     # 例外是标签部分落库（ADR-0038）留下的行：认得出的标签已经写进账本，所以
     # 它对账本「没有新信息」，可留在页面上要判的本来也不是标签，是那几个谁都
     # 不认的词。按新信息剔掉它，那几个词就再没有出现的地方了。
     rows = [row for row in rows
-            if _metadata_row_adds_information(connection, row)
+            if _metadata_row_adds_information(connection, row, identity_key=identity_key)
             or genres_still_pending(genre_decisions, decisions.get(row["item_key"], {}))]
     # 韩国 MIB 的番号不适用 JAV 规则，`metadata_routes` 给它的链是空的。但候选件是
     # 历史产物，闸门只管以后不再生成，管不了已经落盘的那些：2026-09-04 实测队列里
@@ -343,7 +345,24 @@ def _metadata_queue_rows(connection, rows: list[dict],
     return [row for row in rows if row['item_key'] in kept], genre_decisions
 
 
-def _review_rows(contract: ReviewContract, category: str) -> tuple[list[dict], str | None, int]:
+def _attach_review_decisions(rows: list[dict], category: str, decisions: dict,
+                             genre_decisions: dict) -> None:
+    """保留候选顺序，并按当前证据投影仍有效的复核决定。"""
+    for position, row in enumerate(rows):
+        row['queue_order'] = position
+        decision = decisions.get(row["item_key"], {})
+        if category == "studio_logos" and row.get("content_state") == "changed":
+            # 同一厂牌的新图片仍需确认，不沿用旧图片的批准。
+            decision = {}
+        if category == "metadata_fields":
+            decision = _metadata_decision_in_force(decision, row, genre_decisions)
+        row["decision"] = decision.get("status", "pending")
+        row["decision_note"] = decision.get("note", "")
+
+
+def _review_rows(contract: ReviewContract, category: str, *, queue: str | None = 'pending') -> tuple[list[dict], str | None, int]:
+    # 复核卡片只需知道 /cover 能否取图，不加载全库的裁剪和人脸 sidecar。
+    has_cover = cache(lambda code: contract.cover_path(code) is not None)
     #: 用户对来源 genre 的决定。判「这一行还有没有词等着收录」要用它，而那一步在库
     #: 连接关掉之后才跑，所以先取出来。
     genre_decisions: dict[str, str | None] = {}
@@ -355,6 +374,10 @@ def _review_rows(contract: ReviewContract, category: str) -> tuple[list[dict], s
                 (category,),
             )
         }
+        if category == "metadata_fields":
+            rows, genre_decisions = _metadata_queue_rows(connection, rows, decisions)
+        _attach_review_decisions(rows, category, decisions, genre_decisions)
+        rows = _select_review_queue(rows, queue)
         if category in {"creator_tags", "western_identity"}:
             names = [str(row.get("creator") or "").strip() for row in rows]
             previews = _creator_previews(connection, names, include_unpictured=category == "western_identity")
@@ -365,8 +388,6 @@ def _review_rows(contract: ReviewContract, category: str) -> tuple[list[dict], s
                 name = str(row.get("creator") or "").strip()
                 row["preview_assets"] = previews.get(name, [])
                 row["entity_id"] = entities.get(name, row.get("entity_id", ""))
-        elif category == "metadata_fields":
-            rows, genre_decisions = _metadata_queue_rows(connection, rows, decisions)
         elif category == "performer_avatars":
             # 候选 CSV 里的 `current_name` 是抓取来源给的罗马音；账本早就有更好的
             # 规范名（`Alice Shaku` 的规范名是 `释爱丽丝`），罗马音本身也已经登记
@@ -374,14 +395,6 @@ def _review_rows(contract: ReviewContract, category: str) -> tuple[list[dict], s
             _use_canonical_entity_names(connection, rows)
         _attach_review_asset_context(connection, rows)
     for row in rows:
-        decision = decisions.get(row["item_key"], {})
-        if category == "studio_logos" and row.get("content_state") == "changed":
-            # 同一厂牌上游头像变化是新的事实；旧批次 approved 不得把变化静默藏掉。
-            decision = {}
-        if category == "metadata_fields":
-            decision = _metadata_decision_in_force(decision, row, genre_decisions)
-        row["decision"] = decision.get("status", "pending")
-        row["decision_note"] = decision.get("note", "")
         row["preview_url"] = (row.get("resolved_url") or row.get("source_url")
                               or row.get("avatar_url") or row.get("portrait_url") or "")
         if category == "video_endcards":
@@ -397,7 +410,7 @@ def _review_rows(contract: ReviewContract, category: str) -> tuple[list[dict], s
             row["preview_url"] = f"/cover?code={quote(str(row.get('code') or ''))}"
         asset_code = str(row.get("asset_code") or row.get("code") or "")
         if row.get("asset_id"):
-            if asset_code and contract.has_cover(asset_code):
+            if asset_code and has_cover(asset_code):
                 row["asset_preview_url"] = f"/cover?code={quote(asset_code)}"
             elif row.get("asset_has_snapshot"):
                 row["asset_preview_url"] = f"/poster?id={row['asset_id']}&c=4"
@@ -405,7 +418,7 @@ def _review_rows(contract: ReviewContract, category: str) -> tuple[list[dict], s
                 row["asset_preview_url"] = ""
         for comparison in row.get("comparison_assets") or []:
             comparison_code = str(comparison.get("code") or "")
-            if comparison_code and contract.has_cover(comparison_code):
+            if comparison_code and has_cover(comparison_code):
                 comparison["preview_url"] = f"/cover?code={quote(comparison_code)}"
             elif comparison.get("snapshot_path"):
                 comparison["preview_url"] = f"/poster?id={comparison['id']}&c=4"
@@ -425,7 +438,7 @@ def _review_rows(contract: ReviewContract, category: str) -> tuple[list[dict], s
             #: 取景与索引页、资料页同一份 sidecar、同一个换算。这张脸是复核时认人的
             #: 唯一线索，几何居中把脑袋裁掉就等于没有这一格。
             row["avatar_focus"] = contract.avatar_focus(face_kind, row.get("entity_id"))
-    return _pending_first(rows), source, skipped
+    return rows, source, skipped
 
 
 #: 元数据里的多值字段用顿号分隔；比较时按集合而不是按字符串。
@@ -436,7 +449,7 @@ MULTI_VALUE_FIELDS = {"performers", "tags"}
 ENTITY_BACKED_FIELDS = {"studio", "series"}
 
 
-def _metadata_row_adds_information(connection, row: dict) -> bool:
+def _metadata_row_adds_information(connection, row: dict, *, identity_key=None) -> bool:
     """这一行候选相对账本现值有没有新东西；没有就不该占复核队列。
 
     复核的成本是人的注意力：把「和现在一模一样」的行混在里面，真正要判的那些
@@ -447,6 +460,12 @@ def _metadata_row_adds_information(connection, row: dict) -> bool:
         return True                      # 补空值总是有信息，例如发行日期
     field = str(row.get("field") or "").strip()
     candidates = row.get("candidates") or []
+    identity_key = identity_key or partial(_entity_identity_key, connection)
+
+    def performer_keys(value):
+        return frozenset(key for name in _split_multi(value)
+                         for key in identity_key('performer', name))
+
     if not candidates:
         return False
     if field in MULTI_VALUE_FIELDS:
@@ -455,11 +474,9 @@ def _metadata_row_adds_information(connection, row: dict) -> bool:
             # libredmm 与 mgstage 给的是 `桜井奈々 28歳 某企業広報担当` 和
             # `佐倉井さん 28歳 某企業広報担当`——那是这部片给她起的称呼，不是她本人的
             # 艺名。两者不在同一层，不构成分歧（用户 2026-09-16 定「取主艺名」）。
-            current_key = _performer_identity_keys(connection, _split_multi(current))
+            current_key = performer_keys(current)
             return any(
-                _performer_identity_keys(
-                    connection, _split_multi(str(c.get("display_value") or ""))
-                ) != current_key
+                performer_keys(str(c.get("display_value") or "")) != current_key
                 for c in candidates
                 if _offers_another_stage_name(c)
             )
@@ -472,11 +489,9 @@ def _metadata_row_adds_information(connection, row: dict) -> bool:
         # 同一家厂牌在三处各有写法：账本存规范名 `Prestige`，javbus 给日文名
         # `プレステージプレミアム(PRESTIGEPREMIUM)`，libredmm 给日英并写的那一串。
         # 三者都指向同一条实体，按字符串比就成了要人判的「冲突」。
-        current_key = _entity_identity_key(connection, field, current)
+        current_key = identity_key(field, current)
         return any(
-            _entity_identity_key(
-                connection, field, str(c.get("display_value") or "").strip()
-            ) != current_key
+            identity_key(field, str(c.get("display_value") or "").strip()) != current_key
             for c in candidates
         )
     return any(str(c.get("display_value") or "").strip() != current for c in candidates)
@@ -604,21 +619,21 @@ def _use_canonical_entity_names(connection, rows: list[dict]) -> None:
             row["current_name"] = name
 
 
-def _pending_first(rows: list[dict]) -> list[dict]:
-    """判过的不再占复核队列。
+def _review_queue(row: dict) -> str | None:
+    """人工待处理、稍后与忽略分别计数；自动否决不占人工忽略队列。"""
+    status = row.get('decision', 'pending')
+    if status == 'pending':
+        return 'pending'
+    if status == 'skipped':
+        return 'later'
+    if status == 'rejected' and not _is_automatic({'note': row.get('decision_note', '')}):
+        return 'ignored'
+    return None
 
-    队列由服务端定义，前端只负责画。原样返回全部候选、只给每行挂一个 `decision`，
-    靠前端在本地把判过的行 splice 掉的话，「点通过」当场消失、一刷新全回来
-    （厂牌 logo 上最明显）。
 
-    `approved` / `rejected` 是终局，直接移出；`跳过` 按字面意思是「稍后再看」，
-    留在队列里但排到最后，否则一次跳过就等于永久隐藏，而界面上没有任何入口
-    能把它找回来。
-    """
-    return sorted(
-        (row for row in rows if row.get("decision") not in ("approved", "rejected")),
-        key=lambda row: row.get("decision") == "skipped",
-    )
+def _select_review_queue(rows: list[dict], queue: str | None) -> list[dict]:
+    return [row for row in rows if (state := _review_queue(row)) is not None
+            and (queue is None or state == queue)]
 
 
 def _review_evidence(category: str, row: dict) -> str:
@@ -676,18 +691,26 @@ def q_review(contract: ReviewContract):
     九宫格没抽出来是机械状态，没有可批准或否决的东西，和 `cover_sources` 的未取得同一条
     理由不进队列；重抽归 `scripts/sheets.py`，缺多少由 `peach status` 的加工进度报。
     """
-    sections, sources, skipped = {}, {}, {}
+    groups = {key: {} for key in ('pending', 'later', 'ignored')}
+    sources, skipped = {}, {}
     for category in REVIEW_CATEGORIES:
-        rows, source, dropped = _review_rows(contract, category)
-        sections[category] = rows
+        rows, source, dropped = _review_rows(contract, category, queue=None)
+        for row in rows:
+            # 页面使用折叠后的 candidates；CSV 原文留在磁盘，批准仍从原文件核验。
+            row.pop('candidates_json', None)
+        for key, sections in groups.items():
+            sections[category] = _select_review_queue(rows, key)
         sources[category] = source
         skipped[category] = dropped
     # 候选文件缺失和主键缺失都要说出来。静默的空列表会被读成「没有待复核项」。
     # `genre_tags` 是收录 genre 时的候选词表。给的是静态表已经投影到的那百来个内容标签，
     # 不是账本里全部 5508 个标签实体：后者大半来自文件名，拿它当建议只会把噪声接着抄下去。
-    return {"sections": sections, "sources": sources, "skipped_rows": skipped,
+    snapshots = {key: {'sections': sections,
+                       'counts': {category: len(rows) for category, rows in sections.items()}}
+                 for key, sections in groups.items()}
+    return {**snapshots['pending'], "sources": sources, "skipped_rows": skipped,
             "genre_tags": sorted(set(CONTENT_GENRES.values())),
-            "counts": {key: len(value) for key, value in sections.items()}}
+            "queues": {key: snapshots[key] for key in ('later', 'ignored')}}
 
 
 def _selected_metadata_candidate(contract: ReviewContract, item_key: str, candidate_key: str) -> tuple[dict, dict]:
@@ -866,6 +889,28 @@ def _approve_metadata_with_receipt(connection, group, candidate, now, note, expe
     return applied, revisions
 
 
+def _restore_review_decision(contract: ReviewContract, category: str, item_key: str, now: str) -> dict:
+    with contract.write_transaction() as connection:
+        prior = connection.execute(
+            'SELECT status,note FROM review_decision WHERE category=? AND item_key=?',
+            (category, item_key)).fetchone()
+        if prior is None or prior[0] not in {'skipped', 'rejected'} or _is_automatic({'note': prior[1]}):
+            raise ValueError('只有稍后处理或已忽略的资料可以恢复，已批准的资料不会撤回')
+        rows, _source, _dropped = _queue_rows(contract, category, connection)
+        if item_key not in {row['item_key'] for row in rows}:
+            raise ValueError('所选资料已不在当前候选中，未恢复')
+        connection.execute(
+            'INSERT INTO review_decision_history'
+            '(category,item_key,status,reviewer,note,decided_at,restored_at) '
+            'SELECT category,item_key,status,reviewer,note,updated_at,? '
+            'FROM review_decision WHERE category=? AND item_key=?', (now, category, item_key))
+        connection.execute('DELETE FROM review_decision WHERE category=? AND item_key=?',
+                           (category, item_key))
+    contract.cache_bust()
+    return {'ok': True, 'category': category, 'item_key': item_key,
+            'status': 'pending', 'applied_assets': 0}
+
+
 def w_review_decision(contract: ReviewContract, body):
     category = str(body.get("category", "")).strip()
     item_key = str(body.get("item_key", "")).strip()
@@ -878,9 +923,11 @@ def w_review_decision(contract: ReviewContract, body):
         "fc2_similarity", "video_endcards",
     }:
         raise ValueError("invalid review category")
-    if not item_key or status not in {"approved", "rejected", "skipped"}:
+    if not item_key or status not in {"approved", "rejected", "skipped", "restore"}:
         raise ValueError("invalid review decision")
     now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    if status == 'restore':
+        return _restore_review_decision(contract, category, item_key, now)
     note = str(body.get("note", "")).strip()[:2000]
     # 乐观并发是可选的：带上就按它验，不带就按「我是唯一写者」处理。前端只在候选钉死
     # 一条资产（`asset_path`）时带，按番号命中多条的那种组没有单一 revision 可报。
@@ -897,88 +944,80 @@ def w_review_decision(contract: ReviewContract, body):
             (category, item_key, status, note, now),
         )
         applied = 0
-        if category == "metadata_fields" and status == "approved":
-            candidate_key = str(body.get("candidate_key") or "").strip()
-            if not candidate_key:
-                raise ValueError("When approving a metadata field, choose the source to use first")
-            group, candidate = _selected_metadata_candidate(contract, item_key, candidate_key)
-            applied, asset_revisions = _approve_metadata_with_receipt(
-                connection, group, candidate, now, note, expected_revision)
-        elif category == "creator_tags" and status == "approved":
-            # 权威值只能来自候选文件本身。直接采信请求体的话，「批准候选 X」
-            # 可以写入与 X 无关的创作者和标签，而 review_decision 里留痕仍写着 X 通过。
-            candidates = {row["item_key"]: row
-                          for row in read_candidates(category, contract.candidate_root)[0]}
-            candidate = candidates.get(item_key)
-            if candidate is None:
-                raise ValueError("The selected metadata is not in the current batch and cannot be approved")
-            if str(candidate.get("status") or "").strip() != "candidate":
-                raise ValueError("Only review items in candidate status can be approved")
-            creator = str(candidate.get("creator") or "").strip()
-            tags = [tag.strip() for tag in str(candidate.get("tags") or "").split("|") if tag.strip()]
-            claimed_creator = str(body.get("creator", "")).strip()
-            claimed_tags = [tag.strip() for tag in str(body.get("tags", "")).split("|") if tag.strip()]
-            if (claimed_creator and claimed_creator != creator) or (claimed_tags and claimed_tags != tags):
-                raise ValueError("The submitted content does not match the selected metadata; not saved")
-            if not creator or not tags:
-                raise ValueError("approved creator review requires creator and tags")
-            entity = resolve_entity(connection, "creator", creator)
-            if not entity:
-                raise ValueError("creator entity not found")
-            assets = connection.execute(
-                "SELECT DISTINCT ae.asset_id FROM asset_entity ae JOIN asset a ON a.id=ae.asset_id "
-                "WHERE ae.entity_id=? AND ae.role='creator' AND a.medium='video' AND a.disposal IS NULL",
-                (entity["id"],),
-            ).fetchall()
-            selected_ids = {int(value) for value in body.get("selected_ids") or []}
-            available_ids = {asset["asset_id"] for asset in assets}
-            if selected_ids:
-                if not selected_ids <= available_ids:
-                    raise ValueError("selected assets are outside the reviewed creator")
-                asset_ids = sorted(selected_ids)
-            else:
-                # 没有勾选就是「整条候选通过」。这里什么都不写却照样把决定记成
-                # approved 的话，留痕说通过、实际没写是最糟的组合。
-                asset_ids = sorted(available_ids)
-                if len(asset_ids) > REVIEW_APPLY_LIMIT:
-                    raise ValueError(
-                        f"This creator has {len(asset_ids)} works, over the single-approval limit of "
-                        f"{REVIEW_APPLY_LIMIT}; tick them explicitly on the page and then approve"
+        if status == "approved":
+            if category == "metadata_fields":
+                candidate_key = str(body.get("candidate_key") or "").strip()
+                if not candidate_key:
+                    raise ValueError("批准资料字段时，请先选择要采用的来源")
+                group, candidate = _selected_metadata_candidate(contract, item_key, candidate_key)
+                applied, asset_revisions = _approve_metadata_with_receipt(
+                    connection, group, candidate, now, note, expected_revision)
+            elif category == "creator_tags":
+                # 权威值只能来自候选文件本身。直接采信请求体的话，「批准候选 X」
+                # 可以写入与 X 无关的创作者和标签，而 review_decision 里留痕仍写着 X 通过。
+                candidates = {row["item_key"]: row
+                              for row in read_candidates(category, contract.candidate_root)[0]}
+                candidate = candidates.get(item_key)
+                if candidate is None:
+                    raise ValueError("所选资料不在当前批次，无法批准")
+                if str(candidate.get("status") or "").strip() != "candidate":
+                    raise ValueError("只有 candidate 状态的复核项可以批准")
+                creator = str(candidate.get("creator") or "").strip()
+                tags = [tag.strip() for tag in str(candidate.get("tags") or "").split("|") if tag.strip()]
+                claimed_creator = str(body.get("creator", "")).strip()
+                claimed_tags = [tag.strip() for tag in str(body.get("tags", "")).split("|") if tag.strip()]
+                if (claimed_creator and claimed_creator != creator) or (claimed_tags and claimed_tags != tags):
+                    raise ValueError("提交内容与所选资料不一致，未保存")
+                tags = current_tags(tags)
+                if not creator or not tags:
+                    raise ValueError("approved creator review requires creator and tags")
+                entity = resolve_entity(connection, "creator", creator)
+                if not entity:
+                    raise ValueError("creator entity not found")
+                assets = connection.execute(
+                    "SELECT DISTINCT ae.asset_id FROM asset_entity ae JOIN asset a ON a.id=ae.asset_id "
+                    "WHERE ae.entity_id=? AND ae.role='creator' AND a.medium='video' AND a.disposal IS NULL",
+                    (entity["id"],),
+                ).fetchall()
+                selected_ids = {int(value) for value in body.get("selected_ids") or []}
+                available_ids = {asset["asset_id"] for asset in assets}
+                if selected_ids:
+                    if not selected_ids <= available_ids:
+                        raise ValueError("selected assets are outside the reviewed creator")
+                    asset_ids = sorted(selected_ids)
+                else:
+                    # 没有勾选就是「整条候选通过」。这里什么都不写却照样把决定记成
+                    # approved 的话，留痕说通过、实际没写是最糟的组合。
+                    asset_ids = sorted(available_ids)
+                    if len(asset_ids) > REVIEW_APPLY_LIMIT:
+                        raise ValueError(
+                            f"该创作者有 {len(asset_ids)} 条作品，超过单次批准上限 "
+                            f"{REVIEW_APPLY_LIMIT}，请在页面上显式勾选后再通过"
+                        )
+                payload = json.dumps({"review_item": item_key}, ensure_ascii=False)
+                for tag in tags:
+                    # 每种标签只解析一次，批量关系沿用同一身份与统一名称。
+                    entity_id = upsert_asset_entity(connection, kind='tag', name=tag, asset_id=asset_ids[0], role='tag',
+                        source='vision_creator_review', confidence=0.6, metadata={'review_item': item_key},
+                        now=now, update_entity_metadata=False)
+                    canonical = connection.execute('SELECT canonical_name FROM entity WHERE id=?', (entity_id,)).fetchone()[0]
+                    connection.executemany(
+                        "INSERT OR IGNORE INTO asset_tag(asset_id,tag,confidence,source) VALUES(?,?,0.6,'vision_creator_review')",
+                        [(asset_id, canonical) for asset_id in asset_ids])
+                    connection.executemany(
+                        "INSERT INTO asset_entity(asset_id,entity_id,role,source,confidence,"
+                        "metadata_json,first_seen_at,last_seen_at) "
+                        "VALUES(?,?,'tag','vision_creator_review',0.6,?,?,?) "
+                        "ON CONFLICT(asset_id,entity_id,role,source) DO UPDATE SET "
+                        "confidence=excluded.confidence,metadata_json=excluded.metadata_json,"
+                        "last_seen_at=excluded.last_seen_at",
+                        [(asset_id, entity_id, payload, now, now) for asset_id in asset_ids],
                     )
-            payload = json.dumps({"review_item": item_key}, ensure_ascii=False)
-            connection.executemany(
-                "INSERT OR IGNORE INTO asset_tag(asset_id,tag,confidence,source) "
-                "VALUES(?,?,0.6,'vision_creator_review')",
-                [(asset_id, tag) for asset_id in asset_ids for tag in tags],
-            )
-            for tag in tags:
-                # 标签实体只解析一次，关系走 executemany。
-                # 逐条调用 upsert_asset_entity 会在持写锁期间跑上千次往返，把其它写入全挡住。
-                normalized = normalize_entity_name(tag)
-                connection.execute(
-                    "INSERT INTO entity(kind,canonical_name,normalized_name,metadata_json,"
-                    "created_at,updated_at) VALUES('tag',?,?,'{}',?,?) "
-                    "ON CONFLICT(kind,normalized_name) DO UPDATE SET "
-                    "canonical_name=excluded.canonical_name,updated_at=excluded.updated_at",
-                    (tag, normalized, now, now),
-                )
-                entity_id = connection.execute(
-                    "SELECT id FROM entity WHERE kind='tag' AND normalized_name=?", (normalized,),
-                ).fetchone()[0]
-                connection.executemany(
-                    "INSERT INTO asset_entity(asset_id,entity_id,role,source,confidence,"
-                    "metadata_json,first_seen_at,last_seen_at) "
-                    "VALUES(?,?,'tag','vision_creator_review',0.6,?,?,?) "
-                    "ON CONFLICT(asset_id,entity_id,role,source) DO UPDATE SET "
-                    "confidence=excluded.confidence,metadata_json=excluded.metadata_json,"
-                    "last_seen_at=excluded.last_seen_at",
-                    [(asset_id, entity_id, payload, now, now) for asset_id in asset_ids],
-                )
-            applied = len(asset_ids)
-        elif category == "studio_logos" and status == "approved":
-            applied = _install_studio_logo(contract, item_key)
-        elif category == "performer_avatars" and status == "approved":
-            applied = _install_performer_avatar(contract, item_key)
+                applied = len(asset_ids)
+            elif category == "studio_logos":
+                applied = _install_studio_logo(contract, item_key)
+            elif category == "performer_avatars":
+                applied = _install_performer_avatar(contract, item_key)
     contract.cache_bust()   # 标签写完，聚合缓存必须失效，否则 facets 最多 90 秒还是旧数
     return {"ok": True, "category": category, "item_key": item_key, "status": status,
             "applied_assets": applied, "asset_revisions": asset_revisions}

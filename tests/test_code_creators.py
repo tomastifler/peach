@@ -4,6 +4,7 @@ import sqlite3
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -55,6 +56,13 @@ CREATE TABLE asset_entity(
 
 
 class CodeShapeTests(unittest.TestCase):
+    def test_digitless_creator_names_do_not_parse_their_files_as_embedded_codes(self):
+        from peach import code_creators
+        assets = [{'path': f'/media/{index}.mp4', 'name': f'ABP-{index:03d}.mp4', 'code': ''}
+                  for index in range(1000)]
+        with mock.patch.object(code_creators, 'code_from_filename', side_effect=AssertionError('无需解析影片名')):
+            self.assertEqual(code_creators.classify('Example Creator', assets)[0], audit.VERDICT_KEEP)
+
     def test_quality_prefix_is_not_part_of_the_code(self):
         # 这批目录名正是本次要修的：HD 是画质，不是番号的一部分。
         self.assertEqual(audit.canonical_code("HD-abp-758"), "ABP-758")

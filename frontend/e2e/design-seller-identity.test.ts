@@ -59,7 +59,7 @@ describe('卖家署名与头像', () => {
       const group = page.locator('#stage [data-id-group="creator"]');
       assert.equal(await group.locator('h5').textContent(), 'Creator');
       const img = group.locator('img');
-      assert.equal(await img.getAttribute('src'), '/entity-image?kind=creator&id=81&v=portrait-v1');
+      assert.equal(await img.getAttribute('src'), '/entity-image?kind=creator&id=81&thumb=1&v=portrait-v1');
       assert.equal(await img.getAttribute('title'), null);
       assert.deepEqual(opened.stub.writes, []);
     } finally { await opened.close() }

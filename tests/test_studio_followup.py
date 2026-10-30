@@ -65,6 +65,7 @@ class StudioFollowupCase(unittest.TestCase):
         self.contract = SimpleNamespace(
             database=self.database, logo_root=self.logos,
             candidate_root=self.root / "generated",
+            follow_secrets_root=self.root / "secrets",
             cache_bust=lambda: self.busted.append(1))
 
     def entity(self, kind: str, name: str) -> int:
@@ -150,6 +151,25 @@ class PlanTests(StudioFollowupCase):
                 "metadata_json,created_at,updated_at) VALUES(?,?,?,?,?,0,'{}',?,?)",
                 (studio, "official", "官方网站", "https://old.jp/", "old.jp", STAMP, STAMP))
         self.assertEqual(planned(), [key])
+
+    def test_stock_tries_again_after_a_round_without_the_face_gate(self):
+        """没网那天的结论不算数：模型取回来之后存量补派要再派到它。"""
+        from peach.followups import Attempts, attempts_root
+
+        studio = self.entity("studio", "OLDLABEL")
+        with self.database.write_transaction(notify=False) as connection:
+            connection.execute("INSERT INTO asset(id,location,path,name,medium,code,size)"
+                               " VALUES(1,'R:','R:\\media\\a.mp4','a.mp4','video','OLD-1',1)")
+            connection.execute("INSERT INTO asset_entity(asset_id,entity_id,role,source)"
+                               " VALUES(1,?,'studio','test')", (studio,))
+        down = {"outcome": "人像闸未生效，不自动装（取不到人脸模型）", "face_match_unavailable": True}
+        with mock.patch.object(studio_followup, "_run", return_value=down):
+            self.assertEqual(self.run_followup(studio), down)
+        attempts = Attempts(attempts_root(self.contract.candidate_root))
+        with self.database.read_connection() as connection:
+            planned = [item.key for item in
+                       studio_followup.stock(connection, self.logos, attempts, limit=10)]
+        self.assertEqual(planned, [studio_followup.followup_key(studio)])
 
     def test_stock_studios_are_not_crowded_out_by_avatarless_performers(self):
         """没头像的女优再多，存量厂牌也有自己那一份名额。"""
@@ -253,6 +273,8 @@ class MarkTests(StudioFollowupCase):
     def test_nothing_is_installed_while_the_face_gate_is_down(self):
         landed = self.land(Faces(unavailable="取不到人脸模型"))
         self.assertIn("人像闸未生效", landed["outcome"])
+        # 任务中心按这个标记把这一轮标成「发现问题」，而不是绿色的已完成。
+        self.assertIs(landed["face_match_unavailable"], True)
         self.assertEqual(list(self.logos.iterdir()), [])
 
 

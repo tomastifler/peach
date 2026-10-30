@@ -1,12 +1,10 @@
-"""数据清理：广告残留判定、批量操作、物理清除与回收站。
+"""垃圾复核展示、批量决定、物理清除与回收站。
 
-放在同一个模块是因为它们是同一条链上的四段：`q_ads` 判定哪些文件是广告残留，
-`w_batch` 把用户的批量决定落库，`purge_assets` 真正动磁盘，`w_empty_trash` 收尾。
-判定与执行分家的话，「命中推广词」和「可以删」之间那道界线就没人守了——
-剥掉推广词后还剩内容的文件不是广告，这条只有把判据和删除放在一起看才成立。
+`junk` 提供各流程共用的证据与隔离规则；本模块将评分转成页面数据，并执行用户的
+批量决定。自动隔离只进入回收站，永久删除需要独立的确认与取证流程。
 
-物理删除要清的引用表只写在 `personal_records.ASSET_REFERENCE_TABLES` 一处；文件隔离加数据库失败回滚
-（`_restore_staged_media`）是这个模块最不能出错的部分：删错的文件找不回来。
+物理删除要清的引用表只写在 `personal_records.ASSET_REFERENCE_TABLES` 一处。本地文件先隔离，
+账本失败时可以恢复；rclone FUSE 挂载直接删除，账本失败时保留回收站行供重试。
 """
 from __future__ import annotations
 
@@ -14,15 +12,16 @@ import hashlib
 import json
 import os
 import re
+import stat
 import shutil
 import tempfile
 import time
 import uuid
 
-from functools import cache
 from pathlib import Path, PureWindowsPath
 from typing import Sequence
 
+from . import junk
 from .catalog_rules import duration_clusters, is_jav_code, normalise_code_key
 from .config import GENERATED_DIR, LOCATION_ROOT_DECLARATIONS
 from .field_owners import USER_MANUAL, write_owned_fields
@@ -30,13 +29,36 @@ from .media_sources import SCANNABLE_LOCATIONS
 from .personal_records import ASSET_REFERENCE_TABLES, VANISHED
 from .platform import is_unmapped, root_online, translate_ledger_path, within_root
 from .regions import normalize_region
-from .settings_file import PROJECT_ROOT
 from .task_runs import TaskRunHandle
 from .web_activity import DEFAULT_PROFILE_ID
 from .web_catalog import attach_card_performers
 from .media_sources import cost_for
 from .web_resource_sync import clean_resource_orphans
 from .web_state import WebContract
+
+from .junk import (
+    AD_DIRPACK as AD_DIRPACK,
+    AD_DOMAIN as AD_DOMAIN,
+    AUTO_TRASH_SCORE as AUTO_TRASH_SCORE,
+    BUNDLE_DIR_ASSETS as BUNDLE_DIR_ASSETS,
+    CONTENT_BYTES as CONTENT_BYTES,
+    INTERNET_SHORTCUT_SUFFIXES as INTERNET_SHORTCUT_SUFFIXES,
+    JUNK_KINDS as JUNK_KINDS,
+    JUNK_REVIEW_SCORE as JUNK_REVIEW_SCORE,
+    JUNK_VIDEO_MAX_BYTES as JUNK_VIDEO_MAX_BYTES,
+    MEDIA_SIDECAR_SUFFIXES as MEDIA_SIDECAR_SUFFIXES,
+    PART_MARK as PART_MARK,
+    PROMO_CLUSTER_FILES as PROMO_CLUSTER_FILES,
+    PROMO_DOMAIN as PROMO_DOMAIN,
+    PROMO_FILLER as PROMO_FILLER,
+    PROMO_PHRASE as PROMO_PHRASE,
+    REAL_CODE as REAL_CODE,
+    has_sibling_original as has_sibling_original,
+    promo_residue as promo_residue,
+)
+
+# Linux 容器可从 mountinfo 识别媒体实际所在的 FUSE 文件系统。
+MOUNTINFO_PATH = Path("/proc/self/mountinfo")
 
 #: 批量操作在活动页上的名字。表里存 `operation`，人看的是这一列。
 BATCH_LABELS = {
@@ -45,213 +67,6 @@ BATCH_LABELS = {
     "dismiss-junk": "Bulk confirm not junk", "reconsider-junk": "Bulk re-evaluate junk",
     "region": "Bulk determine region",
 }
-
-
-# 只认联系方式与站点形态的推广套话。「微信」「成人游戏」这类词单独出现不算：
-# 实测正片标题里就有（「还要微信跟老公汇报战果」是剧情，不是联系方式）。
-PROMO_PHRASE = re.compile(
-    r"(扫码|扫一扫|掃一掃|扫描|掃描|QR ?CODE|二维码|二維碼|加微信|加微|威信\d|微信号|"
-    r"微信\s*[:：]|免费看|免费玩|福利群|最新地址|"
-    r"永久(?:域名|地址|发布)|地址发布器|防屏蔽|资源获取|点击(?:观看|下载|进入)|下载APP|下载|签到|代币|领取|"
-    r"强力推荐|国产大片|在线视频|線上影片每天火熱更新|手机看片|手機影城|"
-    r"大饱眼福|房间火爆|澳门|赌场|博彩|棋牌|加我|"
-    r"GAMES?\d*|APP)", re.I)
-# 只降低残留、自己不构成命中的套话。
-#
-# 手游插页整批绕过了上面的判据：`爱姬远征-免费18禁手游-扫码安装.jpg` 命中「扫码」，
-# 可剥完还剩「爱姬远征免费禁手游安装」12 个字，落在 6~14 的中间档只拿 30 分，够不上
-# 40 的门槛；`三国志侵略版-免费18禁手游-扫码安装.png` 多两字残留就到 14，连 30 分都没有。
-# 残留越多分越低，而这些残留里一个内容字都没有——广告名写得越长反而越安全。
-# 游戏名（爱姬远征、天下布魔）永远进不了词表，能剥的只有它旁边那圈固定套话。
-# 这些词单独出现说明不了什么（真片名里也有「免费」），所以只参与残留计算，不作命中依据。
-PROMO_FILLER = re.compile(
-    r"(免费\d*禁|免费|免費|手游|手遊|成人遊?戲|成人游戏|下载安装|安装|安裝|访问|訪問)",
-    re.I)
-# 结尾不能用 \b：`uuc82.com_2` 里 `m` 和 `_` 都是词字符，构不成边界，域名会漏掉。
-PROMO_DOMAIN = re.compile(
-    r"(?:https?://)?(?:www\.)?[\w-]{2,}\.(?:com|net|me|la|xyz|cc|tv|top|vip|club|"
-    r"info|org|pw|cn|app|site|online|shop)(?![a-z0-9])", re.I)
-# 真番号带厂牌前缀和连字号（ABW-153、259LUXU-1141）。RAIKUN325 这类没有连字号的
-# 是被误填进 code 的创作者账号名，不能拿来做「同番号有完整版」的比较，
-# 判据与 `is_jav_code` 同源：分隔符正是番号与账号名的唯一线索。
-REAL_CODE = re.compile(r"^(?:\d{2,3})?[A-Za-z]{2,8}-\d{2,5}$|^FC2", re.I)
-PART_MARK = re.compile(r"(CD\d|part\d|分卷|-\d{1,2}$|\(\d+\)$)", re.I)
-# 推广站目录的两种形态，与 `scripts/find_ads.py` 的判据 D/E 同源：
-# 创作者位是旧导入器的目录名投影，`bbsxv.xyz-DOCP-324` 这类广告包会直接落在那里；
-# 裸域名目录（98T.la@账号、huachishe.com@系列）是转载水印，不是广告，不能进判据。
-AD_DOMAIN = re.compile(
-    r"\b[0-9a-z][-0-9a-z]{1,20}\.(?:cc|xyz|xxx|com|net|la|me|top|vip|club|app|cn|pw|tv|gg)\b", re.I)
-AD_DIRPACK = re.compile(
-    r"[0-9a-z][-0-9a-z]{1,20}\.[a-z]{2,10}[ \-_]+\[?[A-Za-z]{2,6}-?\d{2,5}", re.I)
-#: 同一目录里有这么多资产，它就是成套下载的资源包，不是塞进别人目录的插页。
-#:
-#: `jitumi.pw(77).gif` 与 `【91狼友之家91home.cc】19.jpg` 剥完只剩域名，是最硬的
-#: 「整名推广语」信号，可它们分别躺在 `森萝财团 X-019 肉丝换白丝 [103P1V-1.39GB]`
-#: （同目录 107 项）和 `赠送-稀缺整合【91home.cc】\海角\新建文件夹`（同目录 24 项）里：
-#: 域名在这里是打包渠道给整包起的名，几十上百张成套的图本身就是要留的资源。
-#: 广告插页反过来，是一两张挤在别人的番号目录里——WAAA-415 那个目录只有 13 项。
-BUNDLE_DIR_ASSETS = 20
-#: 同一目录里有这么多同类推广名，它们就是成群塞进来的插页。
-#:
-#: 与 `BUNDLE_DIR_ASSETS` 正好对称：资源是成套的正片与图集，插页是成群的同一段套话。
-#: `三国志侵略版-免费18禁手游-扫码安装.png` 剥完仍剩 6 个字的游戏名，单看名字只够
-#: 中间档；但同目录另外 10 个文件挂着一模一样的推广尾巴，谁都不是正片的一部分。
-PROMO_CLUSTER_FILES = 3
-#: 缩略图与封面相对正片的固定尾巴（`MIAD573_02.wmv` ↔ `MIAD573_02_s.jpg`，
-#: `LXVS006-BD.iso` ↔ `lxvs006pl.jpg`）。`pl`／`ps` 是 JAV 大小海报的通用写法。
-#: 不剥数字：剥了 `MIAD573_02_s` 会退到 `MIAD573`，那已经不是同一条正片。
-SHOT_TAIL = re.compile(r"[-_. ]?(?:s|t|pl|ps|thumb|poster|cover|fanart|big|small)$", re.I)
-#: 正片自己带的画质与载体尾巴，只在配对时剥，用来让海报对上原盘。
-DISC_TAIL = re.compile(r"[-_. ]?(?:bd|bdmv|bdiso|bdrip|dvd|dvdiso|iso|uhd|fhd|hd)$", re.I)
-#: 超过这个体积的文件自己就是内容，不必再看目录名。
-#:
-#: `javme.me_LXVS-006-BD\LXVS006-BD.iso` 是 19.8 GB 的蓝光原盘，却因为住在
-#: 「域名+番号」的目录里被判 45 分。广告不会有大文件：整包插页加起来都不到 10 MB，
-#: 一个上 GB 的文件是资源站给自己的资源改了目录名，不是资源站塞进来的推广。
-CONTENT_BYTES = 1024 ** 3
-INTERNET_SHORTCUT_SUFFIXES = frozenset({".url"})
-#: 保存下来的网页。`.mhtml` 是 Edge 的整页存档，媒体目录里的这份没有内容价值；
-#: 它和 `.url` 一样是「导航页」而不是媒体，不给体积兜底留机会。
-PAGE_ARCHIVE_SUFFIXES = frozenset({".mhtml", ".mht", ".htm", ".html"})
-#: 推广品牌词。它们单独出现在视频名里不构成证据——`麻豆传媒`、`外围`、`直播` 都可能是
-#: 真片名的一部分——只有叠加推广形态、装饰符或推广目录上下文时才计分。
-#: 名单来自 2026-09 用户实例 `B:\xxr\0208 (23)` 里自曝身份的推广站与推广 APP。
-AD_BRAND = re.compile(
-    r"(91(?:短视频|视频|国产|AV|約炮|约炮)|成人抖音|快手直播|杏吧|草榴|色中色|成人头条|"
-    r"泡芙短视频|含羞草|她趣|台湾UU|全国外围|外围楼凤|楼凤|麻豆传媒映画|蜜桃影像|"
-    r"成人游戏|169BBS|SEX169)", re.I)
-#: 与品牌词同现才算推广名的形态词。`视频`、`直播` 这类过常见的词不进这张表：
-#: `麻豆传媒映画APP-限时免费体验` 是推广包，`麻豆传媒 某作品` 是资源。
-AD_BRAND_FORM = re.compile(
-    r"(APP|一键|导航|聊天室|免费体验|限时免费|扫码|资源获取|网址|发布页)", re.I)
-#: 品牌推广图的体积上限。`蜜桃影像传媒.png` 18 KB、`東方秋白…169BBS…` 75 KB，
-#: 而任何一张内容图都在 MB 量级；品牌名 + 这种体积才是广告卡，不是作品套图。
-BRAND_TINY_BYTES = 300 * 1024
-#: 装饰符名（`❤91短视频❤.jpg`）：两侧都挂或挂多个爱心的小图，名字里没有实质描述。
-DECOR_MARKS = "❤♥❥♡💕💗💖💘💝"
-#: 装饰图体积上限。`❤草榴视频❤.jpg` 705 KB 是广告卡；同名配套封面（2 MB 级）不算，
-#: 它走 `has_sibling_original` 的正片配对豁免。
-DECORATED_MAX_BYTES = 1536 * 1024
-#: 目录名自曝是推广包的形态：`-APP`、`一键约炮`、`論壇文宣`、聊天室等。
-#: 只匹配目录分量，不看文件名；命中后目录里不构成内容的文件都进复核。
-AD_DIR_FORM = re.compile(
-    r"(論壇文宣|论坛文宣|文宣|宣傳|一键约炮|全国外围|外围楼凤|楼凤|聊天室|"
-    r"免费体验|限时免费)", re.I)
-#: `APP` 按词匹配：`Happy` 里也藏着 `app`，裸子串会把正常目录卷进来；
-#: `.app` 是域名后缀，`bkm9.app` 那类推广目录靠目录里其他证据，不靠这一条。
-AD_DIR_APP = re.compile(r"(?:^|[^A-Za-z.])APP(?:[^A-Za-z.]|$)", re.I)
-#: 品牌名只在目录里还带媒体平台词时才算推广目录；`草榴视频` 是推广 APP，
-#: `麻豆传媒` 单独出现可能是这个厂牌的资源目录。
-AD_DIR_BRAND_MEDIA = re.compile(r"(?:视频|視頻|影视|影視|传媒|傳媒|直播|短视频|短視頻)", re.I)
-JUNK_KINDS = frozenset({"video", "image", "audio", "archive", "url", "other"})
-#: 达到这个体积的视频不再当广告残留。这个值与原有「小于 120 MB」证据同源；
-#: 较大的同番号短版本属于重复清理问题，由 ``q_duplicates`` 承接。
-JUNK_VIDEO_MAX_BYTES = 120 * 1024**2
-MEDIA_SIDECAR_SUFFIXES = frozenset({".nfo", ".srt", ".ass", ".ssa", ".vtt", ".sub", ".idx"})
-INSTALLER_SUFFIXES = frozenset({".apk", ".exe", ".msi"})
-#: 按固定命名识别的推广附件。名字和体积只能说明「像」，内容要人看过才算数。
-PROMO_NAMES_FILE = PROJECT_ROOT / "resources" / "junk" / "promo_attachment_names.json"
-#: 进入垃圾复核队列的分数线。
-JUNK_REVIEW_SCORE = 40
-#: `scripts/trash_junk.py --apply` 默认的自动移入回收站分数线。只能复核的证据
-#: （固定命名、未探测时长视频的目录与体积证据）单独凑不到这一档。
-AUTO_TRASH_SCORE = 60
-PAGE_COMPONENT_SUFFIXES = frozenset({".js", ".css", ".aspx"})
-PAGE_CHROME_IMAGE = re.compile(r"^(?:banner(?:_[bs])?|1000x90(?:yunding)?|count\d*|logo|lan\d*|you|zuo|zuoxia)$", re.I)
-PAGE_PROMO_CLAIM = re.compile(r"(?:记住|記住).{0,12}(?:网址|網址)|(?:网址|網址).{0,8}(?:发布|發布)")
-
-
-def promo_residue(name: str) -> int:
-    """剥掉域名和推广套话后，还剩多少实质描述字符。
-
-    这是区分「广告」与「正片被打了站点水印」的关键：
-    `点击观看 房间火爆` 剥完什么都不剩；
-    `236953.xyz 推特新晋4年绿帽美腿淫妻网黄「一个ren」…` 剥完仍有大段内容描述。
-
-    剥掉的词替换成空串而不是空格：空格自己也在计数字符集里，换成空格等于每剥一个
-    词就补回一个残留。`爱姬远征-免费18禁手游-扫码安装` 剥掉四段套话后只剩四个字，
-    却因为补进来的四个空格数成 8，正好卡在门槛外——剥得越干净残留越高。
-    """
-    text = PROMO_DOMAIN.sub("", name or "")
-    text = PROMO_PHRASE.sub("", text)
-    text = PROMO_FILLER.sub("", text)
-    # 只数中日韩文字与字母，忽略编号、扩展名和标点。
-    return len(re.findall(r"[一-鿿぀-ヿ가-힯 A-Za-z]", text))
-
-
-def _folder_index(connection) -> tuple[dict[str, int], dict[str, set[str]]]:
-    """每个目录里有多少资产，以及其中正片的文件名主体。
-
-    两条判据都要看候选的邻居而不只是它自己：成套资源看目录规模，封面与截图看
-    同目录有没有同名正片。`rsplit` 而不是 `PureWindowsPath`：ledger 路径统统是
-    Windows 形态，这里要跑全表七万多行，只取目录名不值得为每行造一个路径对象。
-
-    正片不限于 `medium='video'`：蓝光原盘在账本里是 `other`，它同样是海报要配的那份
-    内容。用体积兜住这一类，不去猜扩展名——`.iso`、`.mds`、`BDMV` 之外还有什么，
-    库里下一份原盘才知道。
-    """
-    counts: dict[str, int] = {}
-    videos: dict[str, set[str]] = {}
-    for path, medium, size in connection.execute(
-            "SELECT path,medium,size FROM asset WHERE path IS NOT NULL AND path<>''"):
-        folder, _, filename = str(path).rpartition("\\")
-        counts[folder] = counts.get(folder, 0) + 1
-        if medium == "video" or (size or 0) >= CONTENT_BYTES:
-            stem = filename.rsplit(".", 1)[0] if "." in filename else filename
-            key = stem.casefold()
-            videos.setdefault(folder, set()).add(key)
-            trimmed = DISC_TAIL.sub("", key)
-            if trimmed:
-                videos[folder].add(trimmed)
-    return counts, videos
-
-
-def has_sibling_original(stem: str, sibling_videos: set[str]) -> bool:
-    """True 表示同目录里有一条与它同名的正片，它是那条正片的封面或截图。"""
-    key = str(stem or "").casefold()
-    if not key:
-        return False
-    return key in sibling_videos or SHOT_TAIL.sub("", key) in sibling_videos
-
-
-def is_decorated_name(stem: str) -> bool:
-    """名字挂着两个以上装饰符，没有任何实质描述。
-
-    样本是 `B:\\xxr\\0208 (23)` 里那批 7~20 KB 的 `❤91短视频❤.png`。
-    只挂一个爱心不算：Telegram 导出与正常标题里单个爱心常见，两个以上才是装饰性命名。
-    """
-    return sum(str(stem or "").count(mark) for mark in DECOR_MARKS) >= 2
-
-
-def _promo_directory(parts) -> bool:
-    """路径里有任意一层目录自曝是推广包。
-
-    三种形态：`APP` 词形（`_含羞草APP`）、促销目录名（`一键约炮`、`論壇文宣`）、
-    品牌名叠加媒体词（`_草榴视频`）。只看目录分量，文件名自己是不是推广由调用方判。
-    """
-    for part in parts:
-        text = str(part)
-        if AD_DIR_APP.search(text) or AD_DIR_FORM.search(text):
-            return True
-        if AD_BRAND.search(text) and AD_DIR_BRAND_MEDIA.search(text):
-            return True
-    return False
-
-
-def _junk_rows(connection):
-    """读取能进入垃圾复核的物理文件；字幕、NFO 与大视频在最外层排除。"""
-    marks = ",".join("?" for _ in SCANNABLE_LOCATIONS)
-    rows = connection.execute(
-        "SELECT id,location,name,medium,creator,code,size,duration,width,height,snapshot_path,"
-        "feedback,disposal,play_count,leave_ratio,o_count,studio,ctx_orient,path "
-        f"FROM asset WHERE location IN ({marks}) AND disposal IS NULL "
-        "AND (COALESCE(medium,'other')<>'video' OR (size < ? "
-        "AND (duration IS NULL OR duration <= 1200)))",
-        (*SCANNABLE_LOCATIONS, JUNK_VIDEO_MAX_BYTES)).fetchall()
-    # NFO 是媒体资料边车，不是等待清理的物理内容；即使名字或所在目录带推广词，
-    # 也应由资料读取报告解析问题，不能进入会把文件移入回收站的垃圾队列。
-    return [row for row in rows if PureWindowsPath(
-        row["name"] or row["path"] or "").suffix.casefold() not in MEDIA_SIDECAR_SUFFIXES]
 
 
 def q_ads(contract: WebContract, limit=200, offset=0, kind="", status="pending"):
@@ -314,232 +129,14 @@ def q_ads(contract: WebContract, limit=200, offset=0, kind="", status="pending")
     }
 
 
-def _promo_neighbour_counts(rows) -> dict[str, int]:
-    """统计同目录中缺少内容描述的推广名。"""
-    counts: dict[str, int] = {}
-    for row in rows:
-        name = row["name"] or PureWindowsPath(row["path"] or "").name
-        stem = PureWindowsPath(name).stem
-        if not (PROMO_PHRASE.search(stem) or PROMO_DOMAIN.search(stem)):
-            continue
-        if promo_residue(stem) >= 14:
-            continue
-        folder = str(row["path"] or name).rpartition("\\")[0]
-        counts[folder] = counts.get(folder, 0) + 1
-    return counts
-
-
-@cache
-def promo_name_rules() -> tuple[dict, ...]:
-    """读取 `PROMO_NAMES_FILE` 的推广附件命名规则；文件缺失或格式不对直接报错。"""
-    data = json.loads(PROMO_NAMES_FILE.read_text(encoding="utf-8"))
-    rules = []
-    for entry in data["rules"]:
-        names = frozenset(re.sub(r"\s", "", name).casefold() for name in entry.get("names", ()))
-        patterns = tuple(re.compile(pattern, re.I) for pattern in entry.get("patterns", ()))
-        if not entry["reason"] or not (names or patterns) or int(entry["max_bytes"]) <= 0:
-            raise ValueError(f"Promotional attachment naming rule is incomplete: {entry}")
-        rules.append({
-            "reason": str(entry["reason"]),
-            "suffixes": frozenset(str(suffix).casefold() for suffix in entry["suffixes"]),
-            "max_bytes": int(entry["max_bytes"]),
-            "parent_is_name": bool(entry.get("parent_is_name")),
-            "names": names,
-            "patterns": patterns,
-        })
-    return tuple(rules)
-
-
-def _promo_name_reason(suffix: str, path: str, size: int) -> str:
-    """命中词库里推广附件固定命名的理由；只够进复核队列，见 `AUTO_TRASH_SCORE`。"""
-    item = PureWindowsPath(path)
-    stem = item.stem
-    for rule in promo_name_rules():
-        if suffix not in rule["suffixes"] or not 0 < size <= rule["max_bytes"]:
-            continue
-        if rule["parent_is_name"] and item.parent.name != stem:
-            continue
-        if (re.sub(r"\s", "", stem).casefold() in rule["names"]
-                or any(pattern.fullmatch(stem) for pattern in rule["patterns"])):
-            return rule["reason"]
-    return ""
-
-
-def _attachment_junk_reason(suffix: str, path: str, size: int) -> str:
-    """区分安装附件与网页存档组件。"""
-    if suffix in INSTALLER_SUFFIXES and size < 64 * 1024**2:
-        return "Installer attachment in a media directory"
-    if suffix in PAGE_COMPONENT_SUFFIXES and any(
-            part.casefold().endswith("_files") for part in PureWindowsPath(path).parent.parts):
-        return "Script or style attachment of a saved web page"
-    parent = PureWindowsPath(path).parent.name
-    if (parent.casefold().endswith('_files') and PAGE_PROMO_CLAIM.search(parent)
-            and AD_DOMAIN.search(parent[:-len('_files')]) and suffix in {'.gif', '.jpg', '.png'}
-            and size < 2 * 1024**2
-            and (PAGE_CHROME_IMAGE.fullmatch(PureWindowsPath(path).stem)
-                 or (PureWindowsPath(path).name.casefold() == '1.gif' and size <= 4096))):
-        return "Banner, logo or navigation image of a promotional saved web page"
-    return ""
-
-
-def _video_evidence(row, stem: str, longer: dict, promo_dir: bool,
-                    directory_points: int) -> tuple[int, int, list[str]]:
-    """视频自己的证据：同番号完整版、时长、体积与推广目录。
-
-    返回（分数，其中只够复核的分数，理由）。时长没探测到的视频可能就是正片：
-    推广创作者位或「域名+番号」目录（`directory_points`）、推广目录与体积只说明它住在哪、
-    有多大，说明不了它是广告，这些分数只够进复核队列。
-    """
-    score, why = 0, []
-    code = (row["code"] or "").strip()
-    duration = row["duration"]
-    longest = longer.get(code)
-    if longest and REAL_CODE.match(code) and duration is not None and 0 < duration < longest * 0.2 \
-            and not PART_MARK.search(stem):
-        # 分卷已排除，真番号下不到两成时长基本就是片段/预告，单独即可入队复核。
-        # 用户标记的 `反抗不如享受.mp4`（ABW-220，244 秒）正好卡在旧的 35 分门外。
-        score += 40; why.append(f"A full version of {longest/60:.0f} min exists for the same code")
-    if duration is not None and 0 < duration < 240:
-        score += 15; why.append("Under 4 minutes")
-    context = directory_points
-    if (row["size"] or 0) < JUNK_VIDEO_MAX_BYTES:
-        score += 10; context += 10; why.append("Under 120 MB")
-    if promo_dir:
-        # 30 分单独不构成删片理由：正片也可能躺在别人起错名的目录里，
-        # 要再叠一条时长或体积证据才到门槛。
-        score += 30; context += 30; why.append("Lives in a promotional directory")
-    probed = duration is not None and duration > 0
-    return score, 0 if probed else context, why
-
-
 def _scored_junk(contract: WebContract) -> tuple[list[dict], frozenset[int]]:
-    """全部候选按嫌疑分从高到低，连同用户已确认不是垃圾的 id。
-
-    与请求的类型、状态和分页无关：整份算一次（真实账本上两三秒），`q_ads` 按参数切。
-    """
-    with contract.read_connection() as c:
-        rows = _junk_rows(c)
-        # 同番号是否存在明显更长的版本；只在 code 是真番号时才有意义。
-        longer = {r[0]: r[1] for r in c.execute(
-            "SELECT code, max(duration) FROM asset WHERE medium='video' AND code IS NOT NULL "
-            "AND code<>'' AND duration IS NOT NULL GROUP BY code")}
-        dismissed_keys = [str(row[0]) for row in c.execute(
-            "SELECT item_key FROM review_decision "
-            "WHERE category='junk_file' AND status='rejected'"
-        )]
-        dismissed_ids = {int(key) for key in dismissed_keys if key.isdigit()}
-        folder_assets, folder_videos = _folder_index(c)
-    # 每个目录里挂着推广名的候选有多少个；插页判据要看它有没有同伙。
-    promo_neighbours = _promo_neighbour_counts(rows)
-    out = []
-    for r in rows:
-        d = dict(r)
-        s, why = 0, []
-        name = d.get("name") or PureWindowsPath(d.get("path") or "").name
-        name_path = PureWindowsPath(name)
-        nm = name_path.stem
-        suffix = name_path.suffix.casefold()
-        d["junk_kind"] = (
-            "url" if suffix in INTERNET_SHORTCUT_SUFFIXES
-            else (d.get("medium") if d.get("medium") in JUNK_KINDS else "other")
-        )
-        residue = promo_residue(nm)
-        promo = bool(PROMO_PHRASE.search(nm) or PROMO_DOMAIN.search(nm))
-        page_archive = suffix in PAGE_ARCHIVE_SUFFIXES
-        if suffix in INTERNET_SHORTCUT_SUFFIXES:
-            s += 60; why.append("URL shortcut")
-        elif page_archive:
-            s += 60; why.append("Saved web page")
-        attachment_reason = _attachment_junk_reason(suffix, d.get("path") or name, d.get("size") or 0)
-        if attachment_reason:
-            s += 60; why.append(attachment_reason)
-        # 只够进复核队列的分数：固定命名，和未探测时长视频的目录与体积证据。
-        review_only = 0
-        name_reason = _promo_name_reason(suffix, d.get("path") or name, d.get("size") or 0)
-        if name_reason:
-            s += JUNK_REVIEW_SCORE; review_only += JUNK_REVIEW_SCORE; why.append(name_reason)
-        # 目录维度的证据：广告包的文件名往往干净（`极道世界.mp4`），唯一线索在旧导入器
-        # 从目录名投影出来的创作者位或路径里。creator 位本身是推广站域名时，它就不再是
-        # 「有归属所以是正片」的证据，下面两处对 creator 的信任都必须先排除这种情况。
-        owner = d.get("creator") or ""
-        owner_is_promo = bool(AD_DOMAIN.search(owner))
-        real_owner = bool(owner) and not owner_is_promo
-        # ledger 路径在两个平台都是 Windows 形态。`rpartition` 没有平台依赖，
-        # 键也与 `_folder_index` 完全同源；`os.path.dirname` 在 macOS 会把整条
-        # 反斜杠路径当成文件名。
-        folder = str(d.get("path") or name).rpartition("\\")[0]
-        # 成套下载的资源包里，域名是打包渠道给整包起的名，不是插页的自我暴露。
-        bundled = folder_assets.get(folder, 0) >= BUNDLE_DIR_ASSETS
-        # 目录名带推广站域名只说明「从哪个站下的」，说明不了这个文件是广告。
-        # 文件自己是真番号、自己就有内容级的体积、或者是同目录正片的封面／截图时，
-        # 目录证据就不成立。
-        #
-        # 只放非视频：广告包里的视频本来就叫 `极道世界.mp4`，它的 code 是旧导入器从
-        # `bbsxv.xyz-DOCP-324` 目录名投影出来的真番号形状，而它自己就在同目录的正片
-        # 名单里——两条豁免对视频都会自动成立，`AD_DIRPACK` 这条判据就没了。
-        self_evident = d.get("medium") != "video" and (
-            is_jav_code(d.get("code"))
-            or (d.get("size") or 0) >= CONTENT_BYTES
-            or has_sibling_original(nm, folder_videos.get(folder, frozenset()))
-        )
-        decorated = (d.get("medium") != "video" and is_decorated_name(nm)
-                     and (d.get("size") or 0) <= DECORATED_MAX_BYTES)
-        brand_hit = bool(AD_BRAND.search(nm)) and bool(
-            AD_BRAND_FORM.search(nm)
-            or (d.get("medium") == "image"
-                and (d.get("size") or 0) <= BRAND_TINY_BYTES))
-        promo_dir = _promo_directory(PureWindowsPath(d.get("path") or name).parent.parts)
-        if promo and residue < 6 and not bundled:
-            # 名字剥完只剩广告本身，这是最硬的信号。
-            s += 60; why.append("The whole name is promotional text")
-        elif promo and residue < 14 and not real_owner and not bundled:
-            s += 30; why.append("Promotional text makes up most of the name")
-            neighbours = promo_neighbours.get(folder, 0)
-            if neighbours >= PROMO_CLUSTER_FILES:
-                s += 30
-                why.append(f"{neighbours - 1} more promotional names of the same kind in the same directory")
-        directory_points = 0
-        if owner_is_promo:
-            directory_points = 50; why.append("The creator slot is a promotional site domain")
-        elif AD_DIRPACK.search(folder) and not self_evident:
-            directory_points = 45; why.append("The directory is a promotional pack named 'domain + code'")
-        s += directory_points
-        # 非视频的推广形态：装饰符小图、品牌推广名、住在推广目录。`self_evident`
-        # （真番号、内容级体积、正片配套图）与网页存档、网址快捷方式已单独计分，
-        # 这里不重复叠加。
-        if (d.get("medium") != "video" and not self_evident and not page_archive
-                and suffix not in INTERNET_SHORTCUT_SUFFIXES):
-            if decorated:
-                s += 60; why.append("Small decorative image")
-            elif brand_hit:
-                s += 60; why.append("Promotional brand name")
-            elif promo_dir:
-                s += 50; why.append("Lives in a promotional directory")
-        if d.get("medium") == "video":
-            points, weak, reasons = _video_evidence(d, nm, longer, promo_dir, directory_points)
-            s += points; review_only += weak; why.extend(reasons)
-        # 有真实创作者归属、且名字剥完仍有实质描述的，是被打了水印的正片，不是广告。
-        if real_owner and residue >= 14 and not (attachment_reason or name_reason):
-            s -= 45
-        if review_only and s - review_only < AUTO_TRASH_SCORE:
-            s = min(s, AUTO_TRASH_SCORE - 1)
-        if s >= JUNK_REVIEW_SCORE:
-            d["score"] = s; d["why"] = " · ".join(why)
-            d["cost"] = cost_for(d['location'], d.get('path'))
-            d["has_thumb"] = contract.has_snapshot(d["snapshot_path"])
-            d.pop("snapshot_path", None)
-            d.pop("path", None)
-            out.append(d)
-    out.sort(key=lambda x: (-x["score"], -(x["size"] or 0)))
-    return out, frozenset(dismissed_ids)
-
-
-def automatic_junk_candidates(contract: WebContract) -> list[dict]:
-    """返回达到自动隔离线且未被用户驳回的候选，供组合根接入下载后处理。"""
-    scored, dismissed = contract.cached_until_changed(
-        "junk-scored", lambda: _scored_junk(contract))
-    return [row for row in scored
-            if int(row["id"]) not in dismissed and int(row["score"]) >= AUTO_TRASH_SCORE]
+    """领域评分加上页面需要的成本与缩略图状态，路径留在服务内部。"""
+    out, dismissed = junk.scored_candidates(contract)
+    for item in out:
+        item["cost"] = cost_for(item['location'], item.get('path'))
+        item["has_thumb"] = contract.has_snapshot(item.pop("snapshot_path", None))
+        item.pop("path", None)
+    return out, dismissed
 
 
 def _restore_staged_media(staged):
@@ -558,16 +155,64 @@ def _restore_staged_media(staged):
                 manifest.unlink()
                 quarantine.parent.rmdir()
             else:
-                os.rename(quarantine, original)
+                quarantine.rename(original)
+
+
+def _mountinfo_field(value: str) -> str:
+    """解码 mountinfo 中空白字符和反斜杠的八进制转义。"""
+    return re.sub(r"\\([0-7]{3})", lambda match: chr(int(match.group(1), 8)), value)
+
+
+def _is_rclone_mount(path: Path) -> bool:
+    """按最深挂载点与覆盖关系识别 rclone 文件系统；不确定时保留隔离流程。"""
+    from .smb_media import SmbResource
+    if isinstance(path, SmbResource):
+        return False
+    try:
+        lines = MOUNTINFO_PATH.read_text(encoding="utf-8", errors="surrogateescape").splitlines()
+    except OSError:
+        return False
+
+    target = Path(os.path.abspath(path))
+    matches = []
+    for line in lines:
+        before, separator, after = line.partition(" - ")
+        if not separator:
+            continue
+        fields = before.split()
+        filesystem = after.split(maxsplit=1)
+        if len(fields) < 5 or not filesystem:
+            continue
+        try:
+            mount_id, parent_id = int(fields[0]), int(fields[1])
+        except ValueError:
+            continue
+        mountpoint = Path(os.path.abspath(_mountinfo_field(fields[4])))
+        try:
+            target.relative_to(mountpoint)
+        except ValueError:
+            continue
+        matches.append((len(mountpoint.parts), mount_id, parent_id, filesystem[0]))
+    if not matches:
+        return False
+    depth = max(item[0] for item in matches)
+    deepest = [item for item in matches if item[0] == depth]
+    covered = {item[2] for item in deepest if item[1] != item[2]}
+    visible = [item for item in deepest if item[1] not in covered]
+    return len(visible) == 1 and visible[0][3] == "fuse.rclone"
 
 
 def _quarantine_media(original: Path, *, location: str | None = None) -> Path:
     """同目录改名不支持时，小文件先保留本地完整备份再删除原文件。"""
+    from .smb_media import SmbResource
     key = uuid.uuid4().hex
     name = (f'peach-purge-{key}.peach-quarantine'
-            if location == 'pikpak' or PureWindowsPath(str(original)).drive.casefold() == 'a:'
+            if location == 'pikpak'
             else f'.{original.name}.peach-purge-{key}.tmp')
     quarantine = original.with_name(name)
+    if isinstance(original, SmbResource):
+        original.rename(quarantine)
+        return quarantine
     try:
         os.rename(original, quarantine)
         return quarantine
@@ -607,8 +252,10 @@ def _online_source_roots() -> dict[str, tuple[Path, ...]]:
     for location, declarations in LOCATION_ROOT_DECLARATIONS.items():
         online = []
         for declaration in declarations:
-            root = translate_ledger_path(declaration)
-            if is_unmapped(root) or not root.is_dir() or not root_online(root):
+            from .smb_media import resolve
+            remote = resolve(declaration)
+            root = remote or translate_ledger_path(declaration)
+            if (remote is None and is_unmapped(root)) or not root.is_dir() or not root_online(root):
                 continue
             online.append(root)
         if online:
@@ -693,35 +340,70 @@ def _finish_purge(outcome):
     return outcome
 
 
-def purge_assets(connection, rows, *, missing_only: bool = False):
-    """Quarantine media, delete ledger rows, and leave final removal to the caller.
+def _purge_media_path(row, online_roots: dict[str, tuple[Path, ...]]) -> Path:
+    """核对永久删除目标的路径映射和来源可读性，失败时拒绝删除。"""
+    media = row["path"]
+    from .smb_media import resolve
+    if remote := resolve(media):
+        return remote
+    translated = translate_ledger_path(media)
+    if is_unmapped(translated):
+        raise OSError("媒体路径未映射到可访问的挂载目录")
+    if PureWindowsPath(str(media)).drive:
+        location = row["location"] if "location" in row.keys() else None
+        if not any(within_root(translated, root) and root_online(root)
+                   for root in online_roots.get(location, ())):
+            raise OSError("媒体来源未挂载或不可读取")
+    return translated
 
-    Renaming beside the source is reversible and stays on the same filesystem. The
-    caller restores the quarantined names if commit fails, then permanently removes
-    them only after the SQLite transaction has committed.
+
+def purge_assets(connection, rows, *, missing_only: bool = False):
+    """删除媒体和账本行，调用方提交后清理隔离文件。
+
+    本地文件同目录隔离，账本事务失败时恢复。rclone FUSE 直接删除，避免远端改名
+    触发复制；账本事务失败时保留记录供重试，已经删除的远端媒体无法恢复。
 
     ``missing_only`` 删的只是账本行：文件还在（或答不上在不在）的行进 ``blocked``。
     """
     purged, blocked, staged, snapshots, parents = [], [], [], [], []
+    online_roots = None
     for row in rows:
         media = row["path"]
-        if media and missing_only:
+        translated = None
+        if media:
             try:
-                present = translate_ledger_path(media).exists()
-                reason = "The file is still on disk"
+                if online_roots is None and PureWindowsPath(str(media)).drive:
+                    online_roots = _online_source_roots()
+                translated = _purge_media_path(row, online_roots or {})
             except OSError as error:
-                present, reason = True, error.strerror or str(error)
-            if present:
-                blocked.append({"id": row["id"], "path": media, "reason": reason})
+                blocked.append({"id": row["id"], "path": media,
+                                "reason": error.strerror or str(error)})
+                continue
+        media_stat = None
+        if media:
+            try:
+                media_stat = translated.stat()
+            except FileNotFoundError:
+                pass
+            except OSError as error:
+                blocked.append({"id": row["id"], "path": media,
+                                "reason": error.strerror or str(error)})
+                continue
+        if media and missing_only:
+            if media_stat is not None:
+                blocked.append({"id": row["id"], "path": media, "reason": "文件仍在盘上"})
                 continue
         elif media:
-            original = Path(media)
+            original = translated
             try:
-                if original.exists() and not original.is_file():
+                if media_stat is not None and not stat.S_ISREG(media_stat.st_mode):
                     raise OSError("not a regular file")
-                if original.is_file():
-                    quarantine = _quarantine_media(original, location=row['location'] if 'location' in row.keys() else None)
-                    staged.append((original, quarantine))
+                if media_stat is not None:
+                    if _is_rclone_mount(original):
+                        original.unlink()
+                    else:
+                        quarantine = _quarantine_media(original, location=row['location'] if 'location' in row.keys() else None)
+                        staged.append((original, quarantine))
             except OSError as error:
                 blocked.append({"id": row["id"], "path": media,
                                 "reason": error.strerror or str(error)})
@@ -730,7 +412,7 @@ def purge_assets(connection, rows, *, missing_only: bool = False):
         if snapshot:
             snapshots.append(Path(snapshot))
         if media:
-            parents.append(Path(media).parent)
+            parents.append(translated.parent)
         purged.append(row["id"])
     try:
         if purged:

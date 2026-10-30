@@ -14,6 +14,8 @@ afterEach(() => queryClient.clear());
 const item = (id: number, extra: Partial<MediaItem> = {}): MediaItem => ({ id, location: 'local', ...extra });
 const prompt = (ids = [7, 8], onComplete = vi.fn()) =>
   <QueryClientProvider client={queryClient}><LibraryCompletionPrompt assetIds={ids} onComplete={onComplete} /></QueryClientProvider>;
+const menuItem = (label: string) => [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')]
+  .find(button => button.querySelector('span > span')?.textContent === label);
 
 it('缺图提示只选择没有可用卡面且可以补全的影片，保留来源已有图片', () => {
   expect(missingPreviewIds([
@@ -30,8 +32,8 @@ it('关闭视频预览生成时保留资料同步，并禁用单独抽帧', asyn
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ status: 'idle', metadata_only: true }) })));
   const host = await mount(prompt());
   await click(host.querySelector('[aria-haspopup="dialog"]'));
-  expect(buttonNamed('Generate video previews only', document)?.disabled).toBe(true);
-  expect(buttonNamed('Complete metadata only', document)?.disabled).toBe(false);
+  expect(menuItem('仅补全预览图')?.disabled).toBe(true);
+  expect(menuItem('仅补全影片资料')?.disabled).toBe(false);
 });
 
 it('没有缺图影片时不显示入口也不查询任务', async () => {
@@ -42,20 +44,20 @@ it('没有缺图影片时不显示入口也不查询任务', async () => {
   expect(fetcher).not.toHaveBeenCalled();
 });
 
-it('默认补全与下拉分项都只提交当前缺图影片，菜单包含主动作', async () => {
+it('默认补全与下拉分项都只提交当前缺图影片，菜单仅包含分项', async () => {
   const posts: unknown[] = [];
   vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
     if (init?.method === 'POST') posts.push(JSON.parse(String(init.body)));
     return { ok: true, json: async () => ({ status: 'idle' }) };
   }));
   const host = await mount(prompt());
-  expect(host.textContent).toContain('2 videos in this batch have no preview yet');
-  await click(buttonNamed('Sync these videos', host));
-  for (const label of ['Generate video previews only', 'Complete metadata only']) {
+  expect(host.textContent).toContain('2 部暂无预览');
+  await click(buttonNamed('同步这些影片', host));
+  for (const label of ['仅补全预览图', '仅补全影片资料']) {
     await click(host.querySelector('[aria-haspopup="dialog"]'));
     const menu = document.querySelector('[role="dialog"]')!;
-    expect(buttonNamed('Sync these videos', menu)).not.toBeNull();
-    await click(buttonNamed(label, menu));
+    expect(buttonNamed('同步这些影片', menu)).toBeNull();
+    await click(menuItem(label));
   }
   expect(posts).toEqual([
     { stage: 'collect', asset_ids: [7, 8] },
@@ -87,7 +89,8 @@ it('启动等待期间不重复提交，结束后刷新馆藏并给出封面与�
   await click(primary);
   expect(posts).toHaveLength(1);
   await response.release({ status: 'running', job_id: 'complete-one' });
-  expect(host.textContent).toBe('');
+  expect(host.textContent).toContain('当前任务结束后可单独补全');
+  expect(primary.getAttribute('aria-disabled')).toBe('true');
   await click(more);
   expect(more.getAttribute('aria-expanded')).toBe('false');
   await act(async () => queryClient.setQueryData(LIBRARY_PROCESSING_KEY,
@@ -107,7 +110,7 @@ it('启动失败保留入口与处理详情，不显示完成回执', async () =
   const host = await mount(prompt());
   await click(buttonNamed('Sync these videos', host));
   expect(host.textContent).toContain('请先添加媒体目录');
-  expect(host.textContent).not.toContain('Completion finished');
-  expect(host.querySelector('a[href="/data-cleanup#libraryProcessing"]')?.textContent).toBe('Review and handle');
-  expect(buttonNamed('Sync these videos', host)?.disabled).toBe(false);
+  expect(host.textContent).not.toContain('补全完成');
+  expect(host.querySelector('a[href="/data-cleanup#libraryProcessing"]')?.textContent).toBe('打开扫描与采集');
+  expect(buttonNamed('同步这些影片', host)?.disabled).toBe(false);
 });

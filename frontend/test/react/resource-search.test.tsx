@@ -17,6 +17,8 @@ it('来源名称链接到该来源', async () => {
 });
 const field = (host: HTMLElement, label: string) => [...host.querySelectorAll('label')]
   .find((node) => node.textContent?.trim() === label)?.closest('[data-input-size]')?.querySelector('input');
+/** 索引器展开后各栏只写「名称」「API key」，读屏名带着第几个索引器。 */
+const named = (host: HTMLElement, label: string) => host.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`);
 
 it('回车按番号查询，选择候选只填表单', async () => {
   const choose = vi.fn();
@@ -103,14 +105,15 @@ it('设置保存后清空 API key，移除需再保存才生效', async () => {
     return { ok: true, json: async () => initial };
   }));
   const host = await mount(<QueryClientProvider client={queryClient}><IndexerSettings receipt={vi.fn()} /></QueryClientProvider>);
-  await vi.waitFor(async () => { await settle(); expect(section(host, 'Resource search')).not.toBeNull() });
-  expect(host.textContent).toContain('Clear saved API key');
-  await type(field(host, 'Indexer 1 API key'), 'private-test-key');
-  await submit(section(host, 'Resource search'));
+  // 等待期间骨架也带同一个分区标题，等的是表单本身。
+  await vi.waitFor(async () => { await settle(); expect(host.querySelector('form[aria-label="资源搜索"]')).not.toBeNull() });
+  expect(host.textContent).toContain('清除已保存的 API key');
+  await type(named(host, '索引器 1 API key'), 'private-test-key');
+  await submit(section(host, '资源搜索'));
   await settle();
   expect(posts).toHaveLength(1);
-  expect(field(host, 'Indexer 1 API key')?.value).toBe('');
-  await click(buttonNamed('Remove indexer 1', host));
+  expect(named(host, '索引器 1 API key')?.value).toBe('');
+  await click(host.querySelector('button[aria-label="移除索引器 1"]'));
   expect(posts).toHaveLength(1);
   await submit(section(host, 'Resource search'));
   expect(posts[1]).toEqual({ indexers: [] });

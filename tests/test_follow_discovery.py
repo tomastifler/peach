@@ -514,7 +514,7 @@ class DiscoverTests(_DiscoveryCase):
         self.assertIn("simpcity", {c.provider for c in found.candidates})
 
     def test_without_a_simpcity_cookie_the_site_is_skipped_silently(self):
-        # 来源筛选菜单里已经标着「需要配置凭据」，每查一个名字都再报一次只是噪音。
+        # 来源筛选菜单里缺凭据的站已经挂着「打开凭据设置」，每查一个名字都再报一次只是噪音。
         calls = []
         found = self._discover("solazola", self.SIMPCITY_ROUTES, providers=("simpcity",), calls=calls)
         self.assertEqual(found.candidates, ())

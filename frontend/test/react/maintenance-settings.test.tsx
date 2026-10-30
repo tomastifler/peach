@@ -7,12 +7,12 @@ import {
   AutomaticUpdates, MaintenanceSettings, TutorialSettings, UninstallSettings,
 } from '../../src/react/settings/maintenance-settings';
 import { ReleaseUpdates } from '../../src/react/settings/release-updates';
-import { buttonNamed, choose, click, fetchMock, mount, section, sentBody, settle, submit, switches } from './render';
+import { actionOrder, buttonNamed, choose, click, fetchMock, mount, section, sentBody, settle, submit, switches } from './render';
 
 const automatic = { mode: 'off', interval_hours: 24, available: true, download_available: true };
 const release: ReleaseState = {
   current_version: '0.9.0', latest_version: null, channel: '测试版', installation: '独立测试包',
-  state: 'unchecked', message: '尚未检查', release_url: 'https://github.com/longmeidao/peach/releases',
+  state: 'unchecked', message: '尚未检查', release_url: 'https://github.com/peach-mitao/peach/releases',
 };
 const uninstall = { available: true, full_available: true, message: '', data_root: 'fixture', directories: ['fixture', 'fixture/cache'] };
 
@@ -81,7 +81,7 @@ describe('检查更新', () => {
     expect([...host.querySelectorAll('a')].some((a) => a.textContent === 'Full installer package')).toBe(false);
   });
 
-  it('还没检查过时「尚未检查」只在最新版本那一行出现一次', async () => {
+  it('尚未检查的状态只显示一次，最新版本保持未取得', async () => {
     vi.stubGlobal('fetch', fetchMock(200, { state: 'idle', progress: 0 }));
     const host = await mount(<ReleaseUpdates initial={release} />);
     expect(host.textContent?.split('Not checked yet')).toHaveLength(2);
@@ -115,9 +115,17 @@ describe('检查更新', () => {
     await settle();
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls[0]?.[0]).toBe('/api/configuration/updates');
-    expect(updates.textContent).toContain('Latest version0.10.0');
-    expect(updates.querySelector('[role="status"]')?.textContent).toContain('Update available');
-    expect(buttonNamed('Download and install', updates)).not.toBeNull();
+    expect(updates.textContent).toContain('最新版本0.10.0');
+    expect(updates.querySelector('[role="status"]')?.textContent).toContain('有可用更新');
+    expect(buttonNamed('下载并安装', updates)).not.toBeNull();
+    expect(actionOrder(check.parentElement)).toEqual(['官网', 'GitHub', '查看发布页', '检查更新', '下载并安装']);
+    expect([...updates.querySelectorAll('a')].map((link) => [link.textContent, link.getAttribute('href')]))
+      .toEqual([
+        ['官网', 'https://peach.video/#download'],
+        ['GitHub', 'https://github.com/peach-mitao/peach'],
+        ['查看发布页', 'https://github.com/peach-mitao/peach/releases'],
+      ]);
+    expect(updates.textContent).not.toContain('暂无法更新');
     expect(document.activeElement).toBe(check);
     vi.stubGlobal('fetch', fetchMock(503, { detail: '连接失败' }));
     await click(check);

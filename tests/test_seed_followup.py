@@ -95,6 +95,42 @@ class PlanTests(Case):
 
 
 class RunTests(Case):
+    def chinese_pack(self):
+        pack = {**PACK, "entities": [{"kind": "performer", "name": "天使萌",
+            "aliases": [{"alias": "天使もえ", "source": "avdb-actor-mapping@test"}],
+            "refs": [], "links": []}]}
+        self.pack.write_text(seed_pack.dump(pack), encoding="utf-8")
+        return seed_followup.followup_key(VERSION, seed_validation.digest(pack))
+
+    def test_chinese_names_are_backed_up_and_reported(self):
+        import json
+        import sqlite3
+        from contextlib import closing
+
+        key = self.chinese_pack()
+        person = self.add("performer", "天使もえ")
+        summary = seed_followup.run(self.contract, key, None)
+        backups = list(self.root.rglob("ledger.pre-seed-names-*.db"))
+        self.assertEqual(len(backups), 1)
+        with closing(sqlite3.connect(backups[0])) as connection:
+            self.assertEqual(connection.execute("SELECT canonical_name FROM entity WHERE id=?", (person,)).fetchone()[0], "天使もえ")
+        with self.database.read_connection() as connection:
+            row = connection.execute("SELECT canonical_name,metadata_json FROM entity WHERE id=?", (person,)).fetchone()
+        self.assertEqual(row[0], "天使萌")
+        self.assertEqual(json.loads(row[1])["name_preference"]["previous_name"], "天使もえ")
+        self.assertEqual(summary["names"], 1)
+        self.assertIn("中文名 1", summary["outcome"])
+
+    def test_failed_name_backup_leaves_the_ledger_unchanged(self):
+        key = self.chinese_pack()
+        person = self.add("performer", "天使もえ")
+        with mock.patch("peach.migrations.sqlite_backup", side_effect=OSError("备份目录不可写")):
+            with self.assertRaisesRegex(OSError, "备份目录不可写"):
+                seed_followup.run(self.contract, key, None)
+        with self.database.read_connection() as connection:
+            self.assertEqual(connection.execute("SELECT canonical_name FROM entity WHERE id=?", (person,)).fetchone()[0], "天使もえ")
+            self.assertEqual(connection.execute("SELECT count(*) FROM entity_alias").fetchone()[0], 0)
+
     def test_queued_content_change_is_rejected_without_writing(self):
         self.add("performer", "天川そら")
         modified = seed_pack.load(self.pack)

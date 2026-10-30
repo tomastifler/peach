@@ -77,6 +77,9 @@ PROVIDERS: dict[str, ProviderSpec] = {
                      priority=2, official_identity=True),
         ProviderSpec("patreon", "Patreon", source_url="https://www.patreon.com/cw/{ref}",
                      url_hosts=("patreon.com",), priority=3, official_identity=True),
+        ProviderSpec("iwara", "Iwara", source_url="https://www.iwara.tv/profile/{ref}",
+                     hosts=("iwara.tv",), url_hosts=("iwara.tv",),
+                     priority=4, backfill=True, official_identity=True),
         # 归档站：同一套代码的姊妹站，支持真实历史分页所以可回填。
         ProviderSpec("kemono", "Kemono", source_url="https://kemono.cr/{ref}",
                      hosts=("kemono.cr",), url_hosts=("kemono.cr",),

@@ -151,7 +151,8 @@ class Fetcher:
             # 每个请求一个 client。共用一个池时，连不上的那些主机会把池槽漏掉，几十条
             # 之后所有请求一律 `PoolTimeout`——那看起来像整批站点集体挂了，而实际上
             # 只是没有空槽可用了。这一批本来就按域名限速在跑，握手的开销无关紧要。
-            transport = HttpxTransport(httpx.Client(
+            from peach.peach_proxy import http_client
+            transport = HttpxTransport(http_client(
                 verify=self._context, headers={"User-Agent": USER_AGENT},
                 limits=httpx.Limits(max_connections=4, max_keepalive_connections=0)),
                 owns_client=True)

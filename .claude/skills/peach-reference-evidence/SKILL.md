@@ -1,11 +1,11 @@
 ---
 name: peach-reference-evidence
-description: 在用户说模仿、参考、对齐、复刻、照着某个网站或 App 做，给出外部产品截图要求照做，或追更参考来源时使用。
+description: 复现或对齐外部产品界面、登记参考取证、更新已锁定参考来源时使用。
 ---
 
 # 参考产品取证与登记
 
-最后复核：2026-10-18
+最后复核：2026-10-26
 证据来源：`AGENTS.md`、[开发约定](../../../AGENTS.md)、ADR-0015、
 jakubkrehel/skills 的 explain-interface（证据分级）。
 
@@ -27,13 +27,7 @@ jakubkrehel/skills 的 explain-interface（证据分级）。
 `docs/reference-snapshots/` 顶层，正文写明不登记并指向对应 upstream 文件。`accept` 会用线上字节整个覆盖
 `snapshot`，把笔记登记成 snapshot 就等于下一次接受时把笔记删光。
 
-范例格式（现有条目照此写）：
-
-> **Beeg 卡片控件（2026-08-15）**：加载 `.../main.9442c3b8.css`（SHA-256 `E585...`），
-> 计时圈 36 px、上/右 12 px、`rgba(0,0,0,.24)`、2 px 白色圆环；Peach 按用户要求改为连续
-> 悬停 5 秒才放大，并保留自己的居中控件。
-
-## 失败报告规则
+## 失败与版本接受
 
 - 浏览器工具拒绝 URL 不等于公网不可达；本机 `curl.exe` 的 Schannel 握手失败也不等于代理失效。
   换一条可复现通道再下结论，并写明用了哪条。
@@ -52,8 +46,4 @@ jakubkrehel/skills 的 explain-interface（证据分级）。
 4. 需要改 Peach 时，同一提交包含实现、回归测试、对应公开文档与锁定快照；私有核验记录留在数据根。
 5. 人工审完后才运行 `accept`，同时传当前完整 SHA-256；Git 来源还必须传完整 revision。
 
-## 纠正记录
-
-已发生过的错误结论要写回登记，不要只删旧句：
-「取到 frost token」曾被误写成「全部表面已对齐」；旧代码注释里无证据的 `Rule34-style`
-声明已删除。
+纠正错误结论时同步更新证据登记与引用，不以删除一句话替代派生结论核对。

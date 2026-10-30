@@ -412,7 +412,15 @@ class SourceTransport:
         for _ in range(6):
             from .processing_control import checkpoint
             checkpoint('network')
-            response = self._request(request, timeout, max_bytes)
+            from .processing_traffic import CURRENT, download_route
+            if CURRENT.get() is None:
+                response = self._request(request, timeout, max_bytes)
+            else:
+                source = source_for(request.url)
+                direct = bool(source and values_for(self.root, source).get('network') == 'direct')
+                options = {'trust_env': False} if direct else peach_proxy.client_options(self.root)
+                with download_route(bool(options.get('proxy') or options.get('trust_env', True))):
+                    response = self._request(request, timeout, max_bytes)
             if response.status not in {301, 302, 303, 307, 308} or not response.headers.get("location"):
                 return response
             target = urljoin(request.url, response.headers["location"])
@@ -429,6 +437,11 @@ class SourceTransport:
         """闸门到顶的三句话都写「本趟」和「再跑一次接着采」：这三条按任务重新计数，
         读的人要据以决定的是「现在重跑一遍」，不是去查哪里还有配额。"""
         source = source_for(request.url)
+        if source == "javbus":
+            # 中文作品解析与连接检查共用语言偏好，封面请求也遵循来源策略。
+            headers = {key: value for key, value in request.headers.items() if key.lower() != "accept-language"}
+            request = HttpRequest(request.method, request.url,
+                                  {**headers, "Accept-Language": "zh-CN,zh;q=0.9"}, request.body)
         if self.max_requests and self.requests >= self.max_requests:
             raise SourcePaused("This run's scrape request count is used up; run again to continue; existing images are kept")
         if self.deadline:
@@ -516,6 +529,8 @@ class SourceTransport:
         取到 200 且不是验证页：这个来源固定到浏览器（`fix_to_browser`），本趟之后的请求也走浏览器，返回这一页。
         本机没有浏览器、浏览器没取到或同样被拦：返回 None，调用方照 HTTP 客户端被拦那样冷却。
         """
+        from .processing_control import checkpoint
+        checkpoint('network')
         browser = self._browser_for(source)
         if browser is None:
             return None

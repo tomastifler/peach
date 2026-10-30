@@ -4,16 +4,13 @@
 .index-skeleton .icell .ring{background:var(--hover)}
 .index-skeleton .icell .nm{width:60%;height:1.3em}
 .index-skeleton .icell .n{width:30%;height:1.3em}
-.index-skeleton .alphatag{pointer-events:none}
-.index-skeleton .alphatag::before{background:var(--hover)}
-.index-skeleton .alphatag .skeleton:first-of-type{width:65%;height:1.3em}
-.index-skeleton .alphatag .n{width:24px;height:1.3em}
-/* 字头占位照页面那行 26px 的标题加 8px 下边距，一组卡的高度才和落地后的一样。 */
-.index-skeleton .indexletterskeleton{display:block;width:48px;height:26px;margin:0 0 8px}
-.index-skeleton .tagwall .tg{height:auto;border-color:transparent;background:var(--hover)}
 /* 标签页骨架里的视图切换靠在读数行右缘，同页面落地后那一枚的位置。 */
 .index .board-filter-frame .count>.iconswitch{margin:0 0 0 auto}
 .skeleton{display:block;height:18px;border-radius:var(--control-radius);background:var(--hover)}
+/* 占位沿用内容的滚动布局，但不显示原生滚动条或此前内容留下的覆盖轨道。 */
+:is([data-skeleton],[data-skeleton-tier]),:is([data-skeleton],[data-skeleton-tier]) *{scrollbar-width:none}
+:is([data-skeleton],[data-skeleton-tier])::-webkit-scrollbar,:is([data-skeleton],[data-skeleton-tier]) *::-webkit-scrollbar{display:none}
+:is([data-skeleton],[data-skeleton-tier]) .ovtrack{display:none}
 [data-jav-skeleton-cover]{height:auto}
 .board-page-skeleton[data-skeleton="board/jav"]{max-width:none}
 /* 读数占位是行内的一截：它坐在最终那枚 `b`、`strong`、说明行里，行高仍由那枚元素自己给，
@@ -21,7 +18,6 @@
 .skeleton-text{display:inline-block;vertical-align:middle;height:1em;width:12em;max-width:70%}
 /* 整理卡的来源下拉按「本地」那一档的宽度画。它挂在 `.gselectfield` 上、同一档特指度，
    靠排在 01-base.css 后面压住那条 `width:100%`。 */
-.organize-source-skeleton{width:100px}
 .skeletoncard{display:grid;gap:10px;min-width:0}
 .skeletoncard i,.skeletoncard b,.skeletoncard em{display:block;
   border-radius:var(--control-radius);background:var(--hover)}
@@ -37,7 +33,7 @@
    封面与下面那组之间是 8px：行距 3px 由 .mtext 的行距定，剩下 5px 记在头像格和
    标题格的上边距里，两格一起加才不会把头像顶偏。
    首页和关注页是同一种卡，所以共用这一块；关注页只差归属行高一点，见下面那条。 */
-.postercard-skeleton>div{grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--tile)),1fr));gap:24px 16px}
+.postercard-skeleton>div{grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--tile)),1fr));gap:24px}
 .postercard-skeleton .skeletoncard{grid-template-columns:38px minmax(0,1fr);column-gap:10px;row-gap:3px;
   align-content:start}
 /* 封面格的圆角与真卡的 `.pic` 同一枚 token，到货那一下角不变形。 */
@@ -90,7 +86,8 @@
    infinite reverse，位移半个自身宽度。全局的 prefers-reduced-motion 规则会关掉它。 */
 @keyframes skeleton-sweep{to{transform:translateX(-50%)}}
 /* 本地读取在 180ms 内完成时不展示骨架；JS 到门槛后直接移除这一类，不依赖动效偏好。 */
-.skeleton-awaiting{visibility:hidden}
+.skeleton-awaiting,.skeleton-awaiting *,.skeleton-awaiting::before,.skeleton-awaiting::after,
+.skeleton-awaiting *::before,.skeleton-awaiting *::after{visibility:hidden!important}
 .skeleton,.skeletoncard i,.skeletoncard b,.skeletoncard em,
 .skeletoncard s,.skeletoncard u,
 .countskeleton,.avskeleton .ring,.avskeleton .nm,.brandskeleton,.tagskeleton{position:relative;overflow:hidden}
@@ -98,7 +95,7 @@
 .skeletoncard s::after,.skeletoncard u::after,
 .countskeleton::after,.avskeleton .ring::after,.avskeleton .nm::after,
 .brandskeleton::after,.tagskeleton::after{content:'';position:absolute;inset:0;right:-200%;
-  visibility:visible;border-radius:inherit;
+  visibility:inherit;border-radius:inherit;
   background:linear-gradient(to right,var(--hover),var(--skeleton-sheen) 50%,var(--hover));
   background-size:50% 100%;
   animation:skeleton-sweep 1.5s ease-in-out infinite reverse}
@@ -119,6 +116,11 @@
 .imgwait::after{opacity:1;filter:none;visibility:visible;transition-delay:180ms;
   animation:skeleton-sweep 1.5s ease-in-out infinite reverse}
 @starting-style{.imgwait::after{opacity:0;filter:blur(2px)}}
+/* 微光只在看得见时扫（`frontend/src/ui-kit/sweep-gate.ts` 标 `data-sweep`）：框在视口外是
+   `idle`，动画停在原处；露面后等了十秒图还没来是 `stalled`，换成不动的占位面。 */
+.imgwait[data-sweep="idle"]::after{animation-play-state:paused}
+.imgwait[data-sweep="stalled"]::after{animation:none;
+  background:linear-gradient(var(--hover),var(--hover)),var(--ground)}
 /* 封面和带脸框的头像取景完才露面：大图边下边画，取景要等 `load`，之前画出来的是几何居中，
    取景那一下画面会跳。缓存图在插入时就取景（`frameCachedImages`）；回落图摘掉脸框后不再等。 */
 img.cover:not([data-frame]),img[data-facebox]:not([data-face-framed]){visibility:hidden}

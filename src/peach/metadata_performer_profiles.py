@@ -15,6 +15,7 @@ from . import avatar_picker
 from .entities import canonicalize_entity_name, normalize_entity_name, resolve_entity
 from .http import HttpxTransport
 from .library_processing import describe_failure
+from .scraping_access import SourcePaused
 
 LOGGER = logging.getLogger(__name__)
 
@@ -178,8 +179,7 @@ def enrich_performer_profiles(database, groups, avatar_root: Path,
     if not tasks:
         return result
     transport = transport_factory() if transport_factory else None
-    owns_transport = not callable(transport)
-    if owns_transport:
+    if not callable(transport):
         transport = HttpxTransport()
     try:
         for done, (entity_id, profile) in enumerate(tasks.items()):
@@ -203,11 +203,14 @@ def enrich_performer_profiles(database, groups, avatar_root: Path,
                 reason = describe_failure(error)
                 LOGGER.warning("performer avatar failed: entity=%s url=%s: %s",
                                entity_id, profile["avatar_url"], reason, exc_info=True)
-                issue(profile["asset_id"], f'{profile["name"]} avatar not retrieved: {reason}')
+                issue(profile["asset_id"], f'{profile["name"]} 的头像未取得：{reason}')
+                if isinstance(error, SourcePaused) or isinstance(error.__cause__, SourcePaused):
+                    break
             # 每张之后上报一次：这一段每张都要联网，不报进度就会被判成「长时间没有进展」。
             progress(stage=PROFILE_STAGE, performer_avatars=result["avatars"],
                      performer_profile_failed=result["failed"])
     finally:
-        if owns_transport:
-            transport.close()
+        close = getattr(transport, "close", None)
+        if callable(close):
+            close()
     return result

@@ -4,6 +4,7 @@ import { cardArtwork } from '@peach/card-art';
 
 import { LinkButton } from '@/components/base/buttons/link-button';
 import { RiArrowRightLine } from '@remixicon/react';
+import { cx } from '@/utils/cx';
 
 import { apiSend, errorMessage } from '../../api';
 import type { MediaItem } from '../catalog-grid/types';
@@ -26,11 +27,12 @@ export function missingPreviewIds(items: PreviewItem[], javImage: string): numbe
     && !cardArtwork(item, 'small', false, javImage).html).map(item => item.id))];
 }
 
-export function LibraryCompletionPrompt({ assetIds, onComplete }: { assetIds: number[]; onComplete?(): void }) {
-  return assetIds.length ? <Completion assetIds={assetIds} onComplete={onComplete} /> : null;
+/** 单独一行；`className` 交给所在布局定外边距，列表页由父级间距负责。 */
+export function LibraryCompletionPrompt({ assetIds, onComplete, className = 'mb-4' }: { assetIds: number[]; onComplete?(): void; className?: string }) {
+  return assetIds.length ? <Completion assetIds={assetIds} onComplete={onComplete} className={className} /> : null;
 }
 
-function Completion({ assetIds, onComplete }: { assetIds: number[]; onComplete?(): void }) {
+function Completion({ assetIds, onComplete, className }: { assetIds: number[]; onComplete?(): void; className: string }) {
   const job = useQuery({ queryKey: LIBRARY_PROCESSING_KEY,
     queryFn: ({ signal }) => fetchLibraryProcessing(signal),
     refetchInterval: query => pollInterval(query.state.data, true) });
@@ -57,21 +59,20 @@ function Completion({ assetIds, onComplete }: { assetIds: number[]; onComplete?(
     void queryClient.invalidateQueries({ queryKey: ['catalog-grid'] });
     onComplete?.();
   }, [state, started, onComplete]);
-  // 运行中的进度与控制由常驻任务卡承接，缺图提示只在可发起补全时呈现。
-  if (processingActive(state)) return null;
+  // 运行时保留缺图数量；新范围等待当前任务结束，不隐式追加或替换。
   const busy = start.isPending || processingActive(state);
   const problem = start.error ? errorMessage(start.error) : job.error ? DISCONNECTED_TEXT
-    : started && state?.job_id === started && state.status === 'failed' ? state.error || 'Completion incomplete' : '';
-  const message = problem || (start.isPending ? 'Starting completion…'
-    : outcome || `${assetIds.length.toLocaleString()} videos in this batch have no preview yet; metadata and images can be completed.`);
-  return <section aria-label="Complete previews" aria-live="polite" data-library-completion="" className="@container mb-4">
+    : started && state?.job_id === started && state.status === 'failed' ? state.error || '补全未完成' : '';
+  const message = problem || (start.isPending ? '正在启动补全…'
+    : outcome || `这批影片中有 ${assetIds.length.toLocaleString()} 部暂无预览，${processingActive(state) ? '当前任务结束后可单独补全。' : '可补全资料与图片。'}`);
+  return <section aria-label="补全预览" aria-live="polite" data-library-completion="" className={cx('@container', className)}>
     <Note tone={problem ? 'warning' : 'neutral'} action={<div className="flex flex-wrap items-center gap-2"><ProcessingActions busy={busy} metadataOnly={state?.metadata_only} onRun={command => {
       if (busy) return;
       setOutcome('');
       start.mutate(command);
     }} /></div>}>
       {message}{' '}<LinkButton href="/data-cleanup#libraryProcessing" size="small" trailingIcon={RiArrowRightLine}>
-      {problem ? 'Review and handle' : 'View processing details'}
+      {problem ? '打开扫描与采集' : '查看处理详情'}
     </LinkButton></Note>
   </section>;
 }

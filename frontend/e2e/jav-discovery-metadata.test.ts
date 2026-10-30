@@ -69,8 +69,8 @@ describe('发现资料与排序', () => {
       await page.waitForTimeout(2200);
       assert.equal(requests.length, count, '停止后没有自动重启或轮询');
       completed = true;
-      await page.getByRole('button', { name: 'Read metadata again', exact: true }).click();
-      await page.getByRole('button', { name: 'Update metadata', exact: true }).waitFor({ state: 'visible' });
+      await page.getByRole('button', { name: '立即重试读取作品资料', exact: true }).click();
+      await page.getByRole('button', { name: '更新资料', exact: true }).waitFor({ state: 'visible' });
       await settle(page);
       assert.equal(details, 0);
       const geometry = await layout(page);

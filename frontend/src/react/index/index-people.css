@@ -22,3 +22,4 @@
 .peach-react [data-index-grid] [data-index-readout] {
   color: var(--muted);
 }
+.peach-react .index-feed-mark>span{color:var(--feed-mark);background:color-mix(in srgb,var(--feed-mark) 16%,var(--ground))}

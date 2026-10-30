@@ -48,10 +48,8 @@ export interface ShellActions {
   revealSource(id: number): Promise<string>;
   /** 让安装教程重新出现。 */
   reopenTutorial(): Promise<void>;
-  /** 下一次打开配置页时选中的页签，只交给那一次。 */
-  requestConfigurationSection(section: string): void;
   /** 复核页把分类写回地址栏，不重开。 */
-  routeReview(params: { category: string }): void;
+  routeReview(params: { category: string; queue?: string }): void;
   /** 关注管理页把页签、页码与排序写回地址栏，不重开。 */
   routeFollowManage(params: { tab: string; page: number; sort: string; dir: string }): void;
   /** 关注管理页的偏好改了，存储归壳。 */
@@ -166,14 +164,14 @@ export type SurfaceKind = 'management' | 'index' | 'entity' | 'catalog' | 'follo
  *  管理区那几页画进 `#stats`。 */
 export interface ManagedOpenProps extends Record<ConfigurationPath, { section?: string }> {
   '/jav': { tab: string; readOnly: boolean };
-  '/stats': { configurable: boolean };
+  '/stats': Record<string, never>;
   '/taste': { onboarding: boolean };
-  '/review': { category: string; readOnly: boolean; readOnlyMessage: string; writerUrl: string };
+  '/review': { category: string; queue?: string; readOnly: boolean; readOnlyMessage: string; writerUrl: string };
   '/data-cleanup': Record<string, never>;
   '/duplicates': Record<string, never>;
   '/quality-goals': Record<string, never>;
   '/sources': Record<string, never>;
-  /** `section`：首帧选中的那一组页签名，取走 `requestConfigurationSection` 记下的那一次（地址带 `#peachProxy` 时是「网络与访问」）。 */
+  /** `section`：首帧选中的那一组页签名，取走壳里 `configurationRequestedSection` 记下的那一次（地址带 `#peachProxy` 时是「网络与访问」）。 */
   '/settings/library': { section?: string };
   '/tasks': Record<string, never>;
   '/subscriptions': {

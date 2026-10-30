@@ -11,7 +11,7 @@ from unittest import mock
 
 from peach import organize
 from peach.organize_templates import (
-    TemplateError, render, sanitise_component, validate_template,
+    TemplateError, render, sanitise_component, validate_template, clean_filename,
 )
 from support.ledger import fresh_ledger
 
@@ -19,7 +19,7 @@ ROOT_DECLARATION = "R:\\media"
 DECLARED = {"local": (ROOT_DECLARATION,)}
 
 VALUES = {
-    "number": "ABC-123", "title": "标题", "studio": "厂牌", "series": "系列",
+    "code": "ABC-123", "title": "标题", "studio": "厂牌", "series": "系列",
     "year": "2024", "actors": "甲、乙", "cd": "2", "mosaic": "无码",
     "definition": "1080p",
 }
@@ -28,6 +28,8 @@ VALUES = {
 class TemplateRenderTests(unittest.TestCase):
     CASES = [
         # (模板, 取值覆盖, 期望)
+        ("{code}", {}, "ABC-123"),
+        ("{code}[ {title}]", {}, "ABC-123 标题"),
         ("{number}", {}, "ABC-123"),
         ("{number} {title}", {}, "ABC-123 标题"),
         ("{number}[ {title}]", {"title": ""}, "ABC-123"),
@@ -66,8 +68,34 @@ class TemplateRenderTests(unittest.TestCase):
         text, _missing = render("{studio}/{number}", VALUES, directory=True)
         self.assertEqual(text, "厂牌/ABC-123")
 
+    def test_presets_render_the_displayed_example_path(self):
+        for preset in organize.PRESETS:
+            with self.subTest(preset=preset["label"]):
+                filename, missing = render(preset["file"], VALUES)
+                directory, directory_missing = render(preset["dir"], VALUES, directory=True)
+                self.assertFalse(missing | directory_missing)
+                self.assertEqual("/".join(filter(None, (directory, filename + ".mp4"))), preset["example"])
+
 
 class SanitiseTests(unittest.TestCase):
+    def test_filename_symbols_and_invalid_unicode_are_removed(self):
+        cases = {
+            '01_First Part⧹⧹Second Part⧹⧹Last Scene.mp4':
+                '01_First Part Second Part Last Scene.mp4',
+            '★ 标题💎👑✨ → 片段 �.mp4': '标题 片段.mp4',
+            '标题＼＼片段﹨补充／附录.mp4': '标题 片段 补充 附录.mp4',
+            '标题\ue519\u200b\ufeff\x00片段.mp4': '标题片段.mp4',
+            '👩🏽\u200d💻标题❤️\ufe0f.mp4': '标题.mp4',
+            '【中日文】 café ガール 168㎝ 1920×1080 (2).mp4':
+                '【中日文】 café ガール 168㎝ 1920×1080 (2).mp4',
+            '★💎.mp4': '★💎.mp4',
+            '★CON.mp4': '_CON.mp4',
+        }
+        for original, expected in cases.items():
+            with self.subTest(original=original):
+                self.assertEqual(clean_filename(original), expected)
+                self.assertEqual(clean_filename(expected), expected)
+
     def test_illegal_characters_become_underscore(self):
         self.assertEqual(sanitise_component('a<b>c:d"e/f\\g|h?i*j'),
                          "a_b_c_d_e_f_g_h_i_j")
@@ -140,6 +168,20 @@ class PlanTests(unittest.TestCase):
         self.addCleanup(lambda: __import__("shutil").rmtree(self.holder, ignore_errors=True))
         self.db_path = fresh_ledger(self.holder)
 
+    def test_online_root_does_not_hide_another_roots_offline_state(self):
+        _seed(self.db_path, [
+            dict(id=1, path='R:\\media\\a.mp4', name='a.mp4', code='ABC-001'),
+            dict(id=2, path='S:\\media\\b.mp4', name='b.mp4', code='ABC-002'),
+        ])
+        with closing(sqlite3.connect(self.db_path)) as connection, \
+                mock.patch.object(organize, 'translate_ledger_path', side_effect=lambda root: root), \
+                mock.patch.object(organize, 'root_online', side_effect=lambda root: str(root).startswith('R:')):
+            result = organize.build_plan(connection, location='local', roots={'local': ('R:\\media', 'S:\\media')},
+                                         file_template='{number}')
+        self.assertEqual(result['counts']['change'], 1)
+        self.assertEqual(result['counts']['skip'], 1)
+        self.assertEqual(result['rows'][1]['reason'], organize.SKIP_OFFLINE)
+
     def test_rename_in_place_and_move_into_template_directory(self):
         _seed(self.db_path, [
             {"id": 1, "path": "R:\\media\\旧\\[site.com]abc123.mp4",
@@ -155,6 +197,50 @@ class PlanTests(unittest.TestCase):
         plan = _plan(self.db_path, file_template="{number}", dir_template="{studio}")
         self.assertEqual(plan["rows"][0]["action"], "move")
         self.assertEqual(plan["rows"][0]["target_path"], "R:\\media\\厂牌\\ABC-123.mp4")
+
+    def test_directory_scope_includes_descendants_and_excludes_prefix_siblings(self):
+        _seed(self.db_path, [
+            {'id': 1, 'path': r'R:\media\合集\a.mp4', 'name': 'a.mp4', 'code': 'ABC-001'},
+            {'id': 2, 'path': r'R:\media\合集\子目录\b.mp4', 'name': 'b.mp4', 'code': 'ABC-002'},
+            {'id': 3, 'path': r'R:\media\合集2\c.mp4', 'name': 'c.mp4', 'code': 'ABC-003'},
+        ])
+        plan = _plan(self.db_path, file_template='{number}', path='r:/MEDIA/合集/')
+        self.assertEqual([row['asset_id'] for row in plan['rows']], [1, 2])
+        self.assertEqual(plan['counts']['total'], 2)
+        self.assertEqual(_plan(self.db_path, file_template='{number}', path='')['counts']['total'], 3)
+
+    def test_scope_rejects_relative_outside_and_parent_paths(self):
+        for path in ('合集', r'S:\media', r'R:\media2', r'R:\media\..\other'):
+            with self.subTest(path=path), self.assertRaisesRegex(organize.OrganizeError, '整理路径'):
+                _plan(self.db_path, file_template='{number}', path=path)
+
+    def test_directory_template_uses_scope_as_base_and_checks_outside_scope_collisions(self):
+        _seed(self.db_path, [
+            {'id': 1, 'path': r'R:\media\合集\旧\a.mp4', 'name': 'a.mp4', 'code': 'ABC-001', 'studio': '厂牌'},
+            {'id': 2, 'path': r'R:\media\合集\厂牌\ABC-001.mp4', 'name': 'ABC-001.mp4', 'code': 'ABC-001'},
+        ])
+        plan = _plan(self.db_path, file_template='{number}', dir_template='{studio}', path=r'R:\media\合集', asset_ids=[1])
+        self.assertEqual(plan['counts']['skip'], 1)
+        self.assertEqual(plan['rows'][0]['reason'], organize.SKIP_TARGET_EXISTS)
+        self.assertEqual(plan['rows'][0]['target_path'], r'R:\media\合集\厂牌\ABC-001.mp4')
+
+    def test_local_mount_scope_is_translated_to_ledger_shape(self):
+        mount = self.holder / 'mounted'
+        mount.mkdir()
+        with mock.patch.object(organize, 'location_mounts', return_value={'local': (mount,)}):
+            self.assertEqual(organize.scope_path('local', str(mount / '合集'), DECLARED), r'R:\media\合集')
+
+    def test_filename_cleanup_needs_no_template_or_metadata(self):
+        _seed(self.db_path, [{'id': 1, 'path': r'R:\media\★标题⧹⧹片段.mp4',
+                             'name': '★标题⧹⧹片段.mp4'}])
+        plan = _plan(self.db_path)
+        self.assertEqual(plan['rows'][0]['target_path'], r'R:\media\标题 片段.mp4')
+
+    def test_template_values_share_filename_symbol_cleanup(self):
+        _seed(self.db_path, [{'id': 1, 'path': r'R:\media\old.mp4', 'name': 'old.mp4',
+                             'code': 'ABC-123', 'title': '★标题💎'}])
+        plan = _plan(self.db_path, file_template='{number} {title}')
+        self.assertEqual(plan['rows'][0]['target_path'], r'R:\media\ABC-123 标题.mp4')
 
     def test_row_already_named_as_asked_is_not_listed(self):
         _seed(self.db_path, [
@@ -277,6 +363,35 @@ class ApplyTests(unittest.TestCase):
         with closing(sqlite3.connect(self.db_path)) as connection:
             row = connection.execute("SELECT path,name FROM asset WHERE id=1").fetchone()
         self.assertEqual(row, ("R:\\media\\厂牌\\ABC-123.mp4", "ABC-123.mp4"))
+
+    def test_a_disposed_asset_in_a_saved_plan_is_left_on_disk(self):
+        original = self._file('old/title.mp4')
+        _seed(self.db_path, [dict(id=1, path=r'R:\media\old\title.mp4', name='title.mp4', code='ABC-123')])
+        plan = _plan(self.db_path, file_template='{number}')
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            connection.execute("UPDATE asset SET disposal='trash' WHERE id=1")
+            connection.commit()
+        result = self._apply(plan)
+        self.assertEqual((result['moved'], result['failed']), (0, 1))
+        self.assertTrue(original.is_file())
+
+    def test_scoped_symbol_cleanup_and_rollback_preserve_unselected_files(self):
+        self._file('合集/★标题⧹⧹片段.mp4')
+        self._file('合集2/★标题.mp4')
+        _seed(self.db_path, [
+            {'id': 1, 'path': r'R:\media\合集\★标题⧹⧹片段.mp4', 'name': '★标题⧹⧹片段.mp4'},
+            {'id': 2, 'path': r'R:\media\合集2\★标题.mp4', 'name': '★标题.mp4'},
+        ])
+        plan = _plan(self.db_path, path=r'R:\media\合集')
+        result = self._apply(plan)
+        self.assertEqual((result['moved'], result['failed']), (1, 0))
+        self.assertTrue((self.media / '合集/标题 片段.mp4').exists())
+        self.assertTrue((self.media / '合集2/★标题.mp4').exists())
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            self.assertEqual(connection.execute('SELECT name FROM asset WHERE id=1').fetchone()[0], '标题 片段.mp4')
+            result = organize.rollback_batch(connection, organize.latest_batch(self.holder))
+        self.assertEqual((result['restored'], result['failed']), (1, 0))
+        self.assertTrue((self.media / '合集/★标题⧹⧹片段.mp4').exists())
 
     def test_rollback_puts_everything_back(self):
         self._file("旧/abc123.mp4")
@@ -402,12 +517,42 @@ class EndpointTests(unittest.TestCase):
         self.assertEqual(result["rows"][0]["target_path"], "R:\\media\\旧\\ABC-123 标题.mp4")
         self.assertTrue(Path(result["plan_csv"]).is_file())
 
+    def test_write_reports_existing_foreign_keys_and_rejects_new_violations(self):
+        from peach.web_organize import _run_write
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            connection.execute("INSERT INTO media_binding(asset_id,backend,external_id) VALUES(99999,'test','old')")
+            connection.commit()
+        self.assertEqual(_run_write(self.contract, 'test', lambda _: {})['existing_foreign_keys'], 1)
+        def introduce(connection):
+            connection.execute("INSERT INTO media_binding(asset_id,backend,external_id) VALUES(99998,'test','new')")
+            connection.commit()
+            return {}
+        with self.assertRaisesRegex(RuntimeError, 'new_foreign_keys=1'):
+            _run_write(self.contract, 'test-new', introduce)
+
     def test_apply_without_confirmation_is_refused(self):
         from peach.web_organize import w_organize_apply
 
         with self.assertRaises(ValueError):
             w_organize_apply(self.contract, {"location": "local",
                                              "file_template": "{number}"})
+
+    def test_preview_and_apply_share_validated_scope_and_recovery_parameters(self):
+        from peach.web_organize import w_organize_preview, w_organize_apply
+
+        request = {'location': 'local', 'path': r'R:\media\旧', 'file_template': '{number}', 'dir_template': ''}
+        plan = w_organize_preview(self.contract, request)
+        self.assertEqual(plan['path'], request['path'])
+        self.assertEqual(plan['counts']['total'], 1)
+        with mock.patch.object(self.contract.organize_job, 'start', return_value={'status': 'running'}) as start:
+            w_organize_apply(self.contract, {**request, 'confirm': True})
+        self.assertEqual(start.call_args.kwargs['recovery']['path'], request['path'])
+        self.assertEqual(start.call_args.kwargs['initial']['path'], request['path'])
+        for body in ({**request, 'path': r'S:\outside'}, {**request, 'path': ['R:\\media']}):
+            with self.subTest(body=body), self.assertRaisesRegex(organize.OrganizeError, '整理路径'):
+                w_organize_preview(self.contract, body)
+            with self.subTest(body=body), self.assertRaisesRegex(organize.OrganizeError, '整理路径'):
+                w_organize_apply(self.contract, {**body, 'confirm': True})
 
     def test_apply_on_a_source_without_verified_rename_is_refused(self):
         from peach.web_organize import w_organize_apply
@@ -443,7 +588,19 @@ class EndpointTests(unittest.TestCase):
         payload = q_organize(self.contract)
         self.assertEqual(payload["status"], "idle")
         self.assertTrue(payload["presets"])
-        self.assertIn("number", [item["key"] for item in payload["placeholders"]])
+        self.assertIn("code", [item["key"] for item in payload["placeholders"]])
+        self.assertNotIn("number", [item["key"] for item in payload["placeholders"]])
+
+    def test_custom_template_example_uses_the_registered_read_route(self):
+        from peach.web_router import dispatch_api_get
+
+        output = dispatch_api_get(None, "/api/organize/example", {
+            "file_template": "自定义_{code}[_{definition}]", "dir_template": "{year}/{studio}"})
+        self.assertEqual(output, {"ok": True, "example": "2024/厂牌/自定义_ABC-123_1080p.mp4"})
+        invalid = dispatch_api_get(None, "/api/organize/example", {"file_template": "{code"})
+        self.assertFalse(invalid["ok"])
+        self.assertEqual(invalid["field"], "file")
+        self.assertIn("没有配对", invalid["error"])
 
 
 if __name__ == "__main__":

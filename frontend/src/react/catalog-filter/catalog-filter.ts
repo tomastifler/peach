@@ -89,6 +89,8 @@ export interface CatalogFilterHelpers {
 export interface CatalogFilterProps {
   /** 两排头像。首屏还在等两个聚合查询时为空：两排与标签条摆占位加一道微光，四枚视图与下排照常。 */
   tiers: CatalogTiers | null;
+  /** 壳正有一趟头像取数在路上：只有这时两排挂忙态。不取头像的页面 `tiers` 一直为空，不算在等。 */
+  tiersPending: boolean;
   /** 空馆藏：两排与标签条摆一行占位，说的是「这里将来会有东西」。 */
   empty: boolean;
   /** 标签条成员，已选的排在最前；前 `tagFirst` 枚先摆，其余横滚到右端再续。 */
@@ -124,3 +126,23 @@ export const ROW_BATCH = 12;
 export const ROW_AHEAD = 320;
 /** 空馆藏占位每排摆多少格，由容器裁到可用宽度。 */
 export const EMPTY_SLOTS = 64;
+
+/** 两排各画没画。取回之前的占位照本机上次画好时的这份排：没人的那排取回后会收起，先画出来
+ *  就是一整排的位移。没有记录或记录坏了时两排都画。 */
+export interface TiersShape { performers: boolean; studios: boolean }
+
+export const TIERS_SHAPE_KEY = 'peach.catalog.tiers.v1';
+
+export function rememberedTiers(): TiersShape {
+  try {
+    const value = JSON.parse(localStorage.getItem(TIERS_SHAPE_KEY) || '{}') as Partial<TiersShape> | null;
+    return { performers: value?.performers !== false, studios: value?.studios !== false };
+  } catch { return { performers: true, studios: true } }
+}
+
+export function rememberTiers(shape: TiersShape): void {
+  try {
+    const value = JSON.stringify({ performers: shape.performers, studios: shape.studios });
+    if (localStorage.getItem(TIERS_SHAPE_KEY) !== value) localStorage.setItem(TIERS_SHAPE_KEY, value);
+  } catch { /* 下次两排都画。 */ }
+}

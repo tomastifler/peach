@@ -19,13 +19,16 @@ import subprocess
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from contextlib import closing
+from contextvars import copy_context
 from pathlib import PureWindowsPath
 
 from .jobs import ACTIVE_ASSET_SQL
-from .media import resolve_case_insensitive
+from .media_io import resolve_case_insensitive
 from .media_sources import cost_for
 from .strm import skip_background_read
 from .processing_control import CURRENT, checkpoint
+from .catalog_rules import is_local_extra
+from . import junk, record_rehome
 
 #: 一次探测最多等多久。ffprobe 只读文件头，网盘上实测一两秒。
 TIMEOUT_SECONDS = 20.0
@@ -55,11 +58,14 @@ def context_fields(width: int, height: int, duration: float) -> tuple[str | None
 
 
 def probe_file(ffprobe: str, path: str, timeout: float = TIMEOUT_SECONDS) -> tuple:
+    from .processing_traffic import CURRENT as TRAFFIC, media_statistics
     if skip_background_read(path):
-        raise ValueError('STRM and ISO files are not probed for video')
+        raise ValueError('STRM 和 ISO 不执行视频探测')
+    from .smb_media import input_url
+    path = input_url(path)
     result = subprocess.run(
         [
-            ffprobe, "-v", "error", "-rw_timeout", "8000000",
+            ffprobe, "-v", "verbose" if TRAFFIC.get() is not None else "error", "-rw_timeout", "8000000",
             "-select_streams", "v:0", "-show_entries",
             "format=duration:stream=width,height,codec_name,avg_frame_rate",
             "-of", "json", path,
@@ -68,6 +74,7 @@ def probe_file(ffprobe: str, path: str, timeout: float = TIMEOUT_SECONDS) -> tup
         timeout=timeout,
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     )
+    media_statistics(path, result.stderr, kind='probe', successful=result.returncode == 0)
     if result.returncode:
         raise subprocess.CalledProcessError(result.returncode, 'ffprobe', stderr=result.stderr)
     payload = json.loads(result.stdout or b"{}")
@@ -96,7 +103,12 @@ def measure(ffprobe: str, asset_id: int, path: str, timeout: float = TIMEOUT_SEC
     try:
         duration, width, height, codec, fps, audio = probe_file(
             ffprobe, resolve_case_insensitive(path), timeout)
+    except InterruptedError:
+        raise
     except Exception as error:  # 超时、文件读不到、输出不是 JSON：对这一行都是「没拿到」
+        if isinstance(error, subprocess.TimeoutExpired):
+            from .processing_traffic import media_statistics
+            media_statistics(path, error.stderr)
         from .error_reporting import subprocess_failure
         subprocess_failure('media-probe', tool=ffprobe, error=error, asset_id=asset_id,
                            returncode=getattr(error, 'returncode', None), timeout_seconds=timeout)
@@ -112,14 +124,15 @@ def probe_unmeasured(
     db_path, ffprobe: str | None, location: str, root: str, *,
     report: Callable[[int, int], None] = lambda done, total: None,
     asset_ids: Sequence[int] | None = None,
-    config=None,
+    config=None, protected_ids=(), on_junk=lambda result: None,
 ) -> int:
     """`root`（账本口径）下还没探过的视频逐个探一遍，返回探了几个。"""
     if not ffprobe:
         return 0
-    prefix = str(PureWindowsPath(root)).rstrip("\\") + "\\"
+    exact = str(PureWindowsPath(root)).rstrip("\\")
+    prefix = exact + "\\"
     selected = ''
-    parameters = (location, len(prefix), prefix)
+    parameters = (location, exact, len(prefix), prefix)
     if asset_ids is not None:
         if not asset_ids:
             return 0
@@ -127,10 +140,12 @@ def probe_unmeasured(
         parameters += tuple(asset_ids)
     with closing(sqlite3.connect(db_path, timeout=30)) as connection:
         rows = connection.execute(
-            f"SELECT id,path FROM asset WHERE {_UNMEASURED} AND substr(path,1,?)=?{selected} ORDER BY id",
+            f"SELECT id,path FROM asset WHERE {_UNMEASURED} AND (path=? OR substr(path,1,?)=?){selected} ORDER BY id",
             parameters).fetchall()
     rows = [row for row in rows if cost_for(location, row[1], config) == 'free']
-    return _record(db_path, ffprobe, rows, report)
+    roots = tuple(value for values in config.locations.values() for value in values) if config else (root,)
+    return _record(db_path, ffprobe, rows, report, protected_ids=protected_ids, on_junk=on_junk,
+                   library_roots=roots)
 
 
 def probe_path(db_path, ffprobe: str | None, location: str, path: str, *, config=None) -> int:
@@ -142,12 +157,15 @@ def probe_path(db_path, ffprobe: str | None, location: str, path: str, *, config
         rows = connection.execute(
             f"SELECT id,path FROM asset WHERE {_UNMEASURED} AND path=?",
             (location, str(PureWindowsPath(path)))).fetchall()
-    return _record(db_path, ffprobe, rows, lambda done, total: None)
+    roots = tuple(value for values in config.locations.values() for value in values) if config else ()
+    return _record(db_path, ffprobe, rows, lambda done, total: None, library_roots=roots)
 
 
-def _record(db_path, ffprobe: str, rows: Sequence, report: Callable[[int, int], None]) -> int:
+def _record(db_path, ffprobe: str, rows: Sequence, report: Callable[[int, int], None], *,
+            protected_ids=(), on_junk=lambda result: None, library_roots=()) -> int:
     """探完一条写一条。`report` 抛出来（任务被停）时，还没开始的那些不再探。"""
-    rows = [row for row in rows if not skip_background_read(row[1])]
+    rows = [row for row in rows if not skip_background_read(row[1])
+            and not is_local_extra(PureWindowsPath(row[1]).name, row[1], library_roots=library_roots)]
     if not rows:
         return 0
     done = 0
@@ -158,6 +176,9 @@ def _record(db_path, ffprobe: str, rows: Sequence, report: Callable[[int, int], 
             connection.commit()
             done += 1
             report(done, len(rows))
+        record_rehome.reattach(connection, [row[0] for row in rows])
+        connection.commit()
+    on_junk(junk.isolate(db_path, asset_ids=[row[0] for row in rows], protected_ids=protected_ids))
     return done
 
 
@@ -172,7 +193,7 @@ def _measure_batches(ffprobe, rows):
             workers = {'low': 1, 'standard': 2, 'high': WORKERS}[control.mode] if control else WORKERS
             while start < len(rows) and len(futures) < workers:
                 row = rows[start]
-                futures.add(executor.submit(measure, ffprobe, row[0], row[1]))
+                futures.add(executor.submit(copy_context().run, measure, ffprobe, row[0], row[1]))
                 start += 1
             completed, futures = wait(futures, return_when=FIRST_COMPLETED)
             for future in completed:

@@ -64,6 +64,18 @@ class MediaFolderTests(unittest.TestCase):
         self.assertEqual(len(self.read(loc='115')['roots']), 1)
         self.assertEqual(self.read(library='不存在')['roots'], [])
 
+    def test_counts_follow_the_parent_directory_whatever_the_path_spelling(self):
+        """同一目录的不同写法计到同一个节点；以分隔符结尾的路径计到上一层，不跟同前缀的文件走。"""
+        spellings = ['R:/Media/精选/作者甲/e.mp4', 'R:\\Media\\精选\\\\作者甲\\f.mp4',
+                     'r:\\media\\精选\\作者甲\\g.mp4', 'R:\\Media\\精选\\作者甲\\']
+        with self.contract.write_transaction() as connection:
+            connection.executemany("INSERT INTO asset(location,path,name,medium) VALUES('local',?,'x','video')",
+                                   [(path,) for path in spellings])
+        with self.contract.read_connection() as connection:
+            index = media_folders.directory_index(connection, self.config)
+        self.assertEqual(index[self.key()]['files'], 5)
+        self.assertEqual(index[self.key('R:\\Media\\精选')]['files'], 7)
+
     def test_path_scope_is_case_insensitive_and_observes_component_boundary(self):
         with self.contract.read_connection() as connection:
             clause, args = media_folders.path_predicate('local', 'r:\\media\\精选\\作者甲')

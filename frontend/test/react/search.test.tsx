@@ -127,12 +127,12 @@ describe('输入框上的时序', () => {
   it('空搜索推荐显示封面，键盘选择新作打开作品详情', async () => {
     const s = await stage({ recommendations: async () => [{ kind: 'release', label: '订阅新作',
       items: [{ value: 'ABW-101', href: '/works/ABW-101', card: { id: 88, code: 'ABW-101' } }],
-      href: '/subscriptions?tab=feeds', action: '管理订阅',
+      href: '/subscriptions', action: '管理订阅',
     }] });
     await act(async () => s.input.focus());
     await settle();
     expect(s.menu.querySelector('[data-search-option="work"] img')).not.toBeNull();
-    expect(s.menu.querySelector('h3 a')?.getAttribute('href')).toBe('/subscriptions?tab=feeds');
+    expect(s.menu.querySelector('h3 a')?.getAttribute('href')).toBe('/subscriptions');
     await s.key('ArrowDown');
     await s.key('Enter');
     expect(s.actions.openPath).toHaveBeenCalledWith('/works/ABW-101');
@@ -149,6 +149,49 @@ describe('输入框上的时序', () => {
     await answer.release([{ kind: 'asset', label: '作品推荐', items: [{ value: '作品', id: 11 }] }]);
     await settle();
     expect(s.menu.hidden).toBe(true);
+  });
+
+  it('关闭菜单后到达的补全保持收起，继续输入可显示补全', async () => {
+    vi.useFakeTimers();
+    const answer = pending<SuggestResponse>();
+    const s = await stage({ suggest: (q) => q === '七' ? answer.answer
+      : Promise.resolve({ q, groups: [performer] }) });
+    await act(async () => s.input.focus());
+    await settle();
+    await s.typeInto('七');
+    await debounce();
+    await act(async () => s.api?.close());
+    await answer.release({ q: '七', groups: [tag] });
+    await settle();
+    expect(s.menu.hidden).toBe(true);
+    await s.typeInto('七海');
+    await debounce();
+    await settle();
+    expect(s.menu.hidden).toBe(false);
+  });
+
+  it('Escape 关闭后晚到的推荐池保持收起，再次聚焦可显示建议', async () => {
+    vi.useFakeTimers();
+    const answer = pending<string[]>();
+    const s = await stage({ loadPool: () => answer.answer,
+      suggest: async (q) => ({ q, groups: [performer] }) });
+    await act(async () => s.input.focus());
+    await s.typeInto('七海');
+    await debounce();
+    await settle();
+    expect(s.menu.hidden).toBe(false);
+    await s.key('Escape');
+    expect(s.menu.hidden).toBe(true);
+    await answer.release(['剧情']);
+    await settle();
+    expect(s.menu.hidden).toBe(true);
+    await act(async () => { s.input.blur(); s.input.focus() });
+    await settle();
+    expect(s.menu.hidden).toBe(false);
+    await s.key('Escape');
+    await act(async () => s.input.click());
+    await settle();
+    expect(s.menu.hidden).toBe(false);
   });
   it('选择关注图片以指定附件进入图片详情', async () => {
     const s = await stage({ recommendations: async () => [{ kind: 'photo', label: '关注图片',

@@ -7,6 +7,7 @@
 import type { Page, Route } from 'playwright-core';
 
 import { settle, visit, type Viewport, type Visit } from './harness.ts';
+import { mockSubtitleMemory } from './subtitle-fixture.ts';
 
 export const AUTHORS = ['Kou', 'Mira', 'Opal', 'Remi', 'Nanase', 'Lazy'];
 const PROVIDERS = [['kemono', 'Kemono'], ['rule34xxx', 'Rule34.xxx'], ['fanbox', 'pixivFANBOX']] as const;
@@ -151,6 +152,7 @@ export interface FollowStub {
 }
 
 async function stub(page: Page, bindAuthors = false): Promise<FollowStub> {
+  await mockSubtitleMemory(page);
   const held: { route: Route; url: URL }[] = [];
   const statuses = new Map<number, string>();
   const hidden = new Map([[DETAIL.hidden, new Set([3, 4])]]);
@@ -172,6 +174,7 @@ async function stub(page: Page, bindAuthors = false): Promise<FollowStub> {
     return route.fulfill({ json: payload(url, statuses, bindAuthors) });
   });
   await page.route('**/api/follow/credentials', (route) => route.fulfill({ json: { providers: [] } }));
+  await page.route('**/api/tag-management**', route => route.fulfill({ json: { items: [], total:0, categories:{}, duplicate_groups: [] } }));
   // 起过一趟之后 GET 一直报「在跑」：画面停在忙态，量得到两枚键一起忙。
   let started = false;
   await page.route('**/api/follow/check', (route) => {
@@ -224,21 +227,22 @@ export interface FollowVisit extends Visit {
   stub: FollowStub;
 }
 
-/** 打开关注页：桩与定种子装好之后重新载入，等到岛的卡片画出来、等待态结束。 */
+/** 打开关注页：导航前装好桩与定种子，等到岛的卡片画出来、等待态结束。 */
 export async function openFollowFeed(browser: import('playwright-core').Browser, path: string, viewport: Viewport,
   { settings = {}, ready = '[data-follow-list] > [data-follow-item]', bindAuthors = false }: {
     settings?: Record<string, unknown>; ready?: string; bindAuthors?: boolean;
   } = {},
 ): Promise<FollowVisit> {
-  const opened = await visit(browser, '/', viewport);
+  let stubbed!: FollowStub;
+  const opened = await visit(browser, path, viewport, async page => {
+    await page.context().addInitScript((value) => {
+      localStorage.setItem('peach.settings.v1', JSON.stringify(value));
+      let state = 20260928;
+      Math.random = () => { state = (state * 1664525 + 1013904223) >>> 0; return state / 4294967296 };
+    }, { detailAutoplay: false, ...settings });
+    stubbed = await stub(page, bindAuthors);
+  });
   const page = opened.page;
-  await page.context().addInitScript((value) => {
-    localStorage.setItem('peach.settings.v1', JSON.stringify(value));
-    let state = 20260928;
-    Math.random = () => { state = (state * 1664525 + 1013904223) >>> 0; return state / 4294967296 };
-  }, { detailAutoplay: false, ...settings });
-  const stubbed = await stub(page, bindAuthors);
-  await page.goto(new URL(path, page.url()).toString(), { waitUntil: 'load' });
   await page.locator(ready).first().waitFor({ timeout: 15_000 });
   await settle(page);
   return { ...opened, stub: stubbed };

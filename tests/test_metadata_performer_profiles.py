@@ -78,6 +78,38 @@ class ImportedPerformerProfileTests(unittest.TestCase):
         self.assertTrue((self.root / "avatars" / "performer-7.img").is_file())
         transport.assert_called_once()
 
+    def test_a_paused_transport_stops_the_avatar_phase(self):
+        from peach.scraping_access import SourcePaused
+        group = self.group()
+        people = json.loads(group["candidates_json"])
+        with self.database.write_transaction() as connection:
+            connection.execute("INSERT INTO entity(id,kind,canonical_name,normalized_name,created_at,updated_at) VALUES(9,'performer','八乃つばさ','八乃つばさ','t','t')")
+            connection.execute("INSERT INTO asset_entity(asset_id,entity_id,role,source) VALUES(1,9,'performer','test')")
+        people[0]["value"].append({"name": "八乃つばさ", "external_id": "1041234", "profile_source": "r18dev", "thumb_url": "https://pics.dmm.co.jp/mono/actjpgs/hachino_tsubasa.jpg"})
+        group["candidates_json"] = json.dumps(people, ensure_ascii=False)
+        transport = Mock(side_effect=SourcePaused("本趟采集时间已用完，再跑一次接着采；已有图片保留"))
+        with self.assertLogs("peach.metadata_performer_profiles", "WARNING"):
+            result = enrich_performer_profiles(self.database, [group], self.root / "avatars", self.root / "providers", transport_factory=lambda: transport)
+        self.assertEqual(result["failed"], 1)
+        transport.assert_called_once()
+
+    def test_profile_avatars_have_their_own_phase_budget(self):
+        from types import SimpleNamespace
+        from peach.library_processing import _enrich_finished_performers
+        from peach.scraping_access import SourcePaused
+
+        remote = Mock()
+        remote.provider.return_value.transport.side_effect = SourcePaused("本趟采集时间已用完")
+        transport = Mock(return_value=HttpResponse(200, {"content-type": "image/jpeg"}, picture(), self.group()["candidates_json"]))
+        config = SimpleNamespace(directory=lambda key: self.root / key)
+        groups = {"asset:1:performers": self.group()}
+        with patch("peach.scraping_access.SourceTransport", return_value=transport), patch("peach.avatar_provider.FaceProbe") as face:
+            face.return_value.return_value = None
+            result = _enrich_finished_performers(self.database, groups, config, self.root / "providers", remote, lambda: True)
+        self.assertEqual(result["avatars"], 1)
+        remote.provider.return_value.transport.assert_not_called()
+        transport.close.assert_called_once()
+
     def test_refreshed_approval_selects_the_confirmed_profile_evidence(self):
         with self.database.write_transaction() as connection:
             connection.execute(

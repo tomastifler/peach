@@ -4,6 +4,8 @@
 .video-js .vjs-subtitles-control>button[aria-pressed=true]:after{content:"";position:absolute;left:calc(50% - 9px);bottom:5px;width:18px;height:2px;background:var(--tungsten)}
 .video-js.vjs-peach-xsmall .vjs-subtitles-control>button>svg{width:27px;height:27px}
 .vjs-peach-menu-cc{display:grid;place-items:center;width:40px}
+.video-js .vjs-peach-menu-option[data-subtitle-track]{padding-block:10px!important}
+.vjs-peach-menu-option[data-subtitle-track] .vjs-peach-option-label{overflow-wrap:anywhere}
 [data-player-subtitles] b{max-width:90px;overflow:hidden;text-overflow:ellipsis}
 .vjs-peach-settings-menu .vjs-peach-caption-options{display:grid;place-items:center;flex:0 0 48px;width:48px;margin-left:auto;padding:0}
 .vjs-peach-settings-menu .vjs-peach-caption-action{padding:10px 16px;text-align:left;overflow-wrap:anywhere}
@@ -21,6 +23,7 @@
 .vjs-peach-settings-menu:has([data-subtitle-style]){overscroll-behavior:contain}
 /* 原生 TextTrack 保留时间轴与辅助技术语义，显示层按已选外观绘制。 */
 .video-js[data-peach-captions] video::cue{color:transparent;background:transparent;text-shadow:none}
+.video-js[data-peach-captions] video::-webkit-media-text-track-container{display:none}
 .vjs-peach-captions{position:absolute;z-index:1;left:5%;right:5%;bottom:80px;display:flex;justify-content:center;pointer-events:none;
   font-family:var(--peach-caption-font);font-size:calc(clamp(14px,calc(var(--peach-player-h,480px)*.045),32px)*var(--peach-caption-scale));
   font-variant:var(--peach-caption-variant);font-weight:400;line-height:1.3;text-align:center;color:var(--peach-caption-color);text-shadow:var(--peach-caption-edge)}

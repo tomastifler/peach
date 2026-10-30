@@ -14,7 +14,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from typing import Mapping
 
-from . import follow_providers
+from . import error_reporting, follow_providers
 from .follow import FollowHistoryEnd, FollowSourceError, FollowSourceRateLimited
 from .follow_secrets import CredentialError
 from .follow_sources import SourceFetch, enrichment_mark, history_window, published_stamp
@@ -126,6 +126,7 @@ def run_check(row: Mapping, *, credentials, writer, connector_factory,
     cutoff, floor = _history_limits(row, metadata, writer, moment,
                                     older=older, initial_days=initial_days)
     recorder = _PageRecorder(row, writer, moment, cutoff)
+    phase = "fetch"
     try:
         connector = build_connector_for(
             provider, credentials, connector_factory,
@@ -142,33 +143,36 @@ def run_check(row: Mapping, *, credentials, writer, connector_factory,
             last_modified=None if force else row["last_modified"],
             page=page,
         )
+        candidates = history_window(fetch.candidates, cutoff, floor)
+        history_skipped = getattr(connector, 'history_skipped', 0) + len(fetch.candidates) - len(candidates)
+        fetch = replace(fetch, candidates=candidates)
+        phase = "record"
+        with writer() as store:
+            if not fetch.not_modified:
+                if replay_first:
+                    store.merge_source_metadata(source_id, {'initial_history_first_page_pending': False}, moment)
+                elif history_skipped and page == 0 and 'initial_history_first_page_pending' not in metadata:
+                    store.merge_source_metadata(source_id, {'initial_history_first_page_pending': True}, moment)
+            outcome = recorder.record_in(store, fetch, page)
+        if floor and not fetch.not_modified:
+            phase = "history"
+            recorder.cutoff = None
+            fetch, outcome = _fill_floor(row, connector, writer, fetch, outcome, cutoff, floor, moment,
+                                         recorder=recorder)
+        with writer() as store:
+            phase = "identity"
+            learned = store.learn_official_author_alias(provider, ref, fetch.candidates)
+        return CheckResult(**base, fetch=fetch, outcome=outcome,
+                           author_alias_learned=learned, history_skipped=history_skipped)
     except FollowHistoryEnd:
         with writer() as store:
             store.record_history_end(source_id, moment)
         return CheckResult(**base, exhausted=True, message="No more history")
     except CredentialError as error:
-        return _record_failure(writer, base, error, moment, "unauthorized")
+        return _record_failure(writer, base, error, moment, "unauthorized", phase=phase)
     except FollowSourceError as error:
         _pause_if_rate_limited(cooldown, provider, error)
-        return _record_failure(writer, base, error, moment, "error")
-    candidates = history_window(fetch.candidates, cutoff, floor)
-    history_skipped = getattr(connector, 'history_skipped', 0) + len(fetch.candidates) - len(candidates)
-    fetch = replace(fetch, candidates=candidates)
-    with writer() as store:
-        if not fetch.not_modified:
-            if replay_first:
-                store.merge_source_metadata(source_id, {'initial_history_first_page_pending': False}, moment)
-            elif history_skipped and page == 0 and 'initial_history_first_page_pending' not in metadata:
-                store.merge_source_metadata(source_id, {'initial_history_first_page_pending': True}, moment)
-        outcome = recorder.record_in(store, fetch, page)
-    if floor and not fetch.not_modified:
-        recorder.cutoff = None
-        fetch, outcome = _fill_floor(row, connector, writer, fetch, outcome, cutoff, floor, moment,
-                                     recorder=recorder)
-    with writer() as store:
-        learned = store.learn_official_author_alias(provider, ref, fetch.candidates)
-    return CheckResult(**base, fetch=fetch, outcome=outcome,
-                       author_alias_learned=learned, history_skipped=history_skipped)
+        return _record_failure(writer, base, error, moment, "error", phase=phase)
 
 
 def _pause_if_rate_limited(cooldown, provider: str, error: FollowSourceError) -> None:
@@ -237,9 +241,12 @@ def _fill_floor(row, connector, writer, fetch, outcome, cutoff, floor, moment, *
 
 
 def _record_failure(writer, base: dict, error: Exception, moment: datetime,
-                    status: str) -> CheckResult:
+                    status: str, *, phase: str) -> CheckResult:
     with writer() as store:
         store.record_error(base["source_id"], str(error), moment, status=status)
+    error_reporting.event("follow-check", error, provider=base["provider"],
+                          source_id=base["source_id"], phase=phase,
+                          page=base["page"], older=base["older"], status=status)
     return CheckResult(**base, ok=False, status=status, error=str(error))
 
 

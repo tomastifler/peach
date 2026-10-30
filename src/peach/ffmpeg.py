@@ -14,12 +14,40 @@ class BinaryChoice:
     source: str
 
 
+def bundled_tools_root() -> Path:
+    executable = Path(sys.executable).resolve()
+    if sys.platform == "darwin" and executable.parent.name == "MacOS":
+        return executable.parent.parent / "Resources/tools"
+    return executable.parent / "tools"
+
+
+#: 探测成功的结果按可执行文件的路径、修改时间与字节数记住。系统诊断页每开一次要起三个
+#: 子进程，合计三四百毫秒，而同一个文件的版本与解码器不会变；换了文件这三样至少变一样。
+_PROBED: dict[tuple, dict] = {}
+
+
 def binary_diagnostics(choice: BinaryChoice | None, *, decoders=False) -> dict:
-    """检查实际工具版本与 AV1 软件解码器；路径存在和可执行分别报告。"""
+    """检查实际工具版本与 AV1 软件解码器；路径存在和可执行分别报告。
+
+    失败不记：超时、拒绝执行这类可能是一时的，下一次照样重探。"""
     facts = {'available': choice is not None, 'source': choice.source if choice else None,
              'path': str(choice.path) if choice else None, 'usable': False}
     if choice is None:
         return facts
+    try:
+        stat = choice.path.stat()
+        key = (str(choice.path), choice.source, stat.st_mtime_ns, stat.st_size, decoders)
+    except OSError:
+        key = None
+    if key in _PROBED:
+        return dict(_PROBED[key])
+    facts = _probe(choice, facts, decoders)
+    if key is not None and facts['usable']:
+        _PROBED[key] = dict(facts)
+    return facts
+
+
+def _probe(choice: BinaryChoice, facts: dict, decoders: bool) -> dict:
     try:
         for option in ('-version', '-decoders') if decoders else ('-version',):
             result = subprocess.run([str(choice.path), '-hide_banner', option], capture_output=True,
@@ -62,7 +90,7 @@ class FFmpegResolver:
                 return BinaryChoice(path.resolve(), "environment")
 
         if getattr(sys, "frozen", False):
-            bundled = Path(sys.executable).parent / "tools" / "ffmpeg" / "bin" / f"{executable}{suffix}"
+            bundled = bundled_tools_root() / "ffmpeg" / "bin" / f"{executable}{suffix}"
             if bundled.is_file():
                 return BinaryChoice(bundled.resolve(), "peach-bundled")
 

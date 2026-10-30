@@ -12,6 +12,9 @@ describe('接着看状态', () => {
     await rerender(<RelatedSection wireDrag={wireDrag} empty />);
     expect(host.querySelector('[data-empty-state] h3')?.textContent).toBe('Nothing up next');
     expect(host.querySelector('[data-related-row]')).toBeNull();
+    expect(host.querySelector('a')?.getAttribute('href')).toBe('/');
+    await rerender(<RelatedSection wireDrag={wireDrag} online empty />);
+    expect(host.querySelector('a')?.getAttribute('href')).toBe('/follow');
   });
 
   it('失败显示原因和重试按钮，恢复后显示推荐', async () => {

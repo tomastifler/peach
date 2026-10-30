@@ -3,18 +3,21 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sys
 import tempfile
+import threading
 import time
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from peach import feed_followup, feeds, web_feeds, web_settings  # noqa: E402
+from peach import feed_followup, feeds, web_feeds, web_settings, web_state  # noqa: E402
 from peach.http import HttpResponse  # noqa: E402
 from peach.web_contract import WebContract  # noqa: E402
 from peach.web_router import dispatch_api_get, dispatch_api_post  # noqa: E402
@@ -47,12 +50,29 @@ class FakeTransport:
         return self.responses[request.url]
 
 
+def remove_when_released(temporary: tempfile.TemporaryDirectory, timeout: float = 15.0) -> None:
+    """删临时目录；Windows 上文件还被占用（WinError 32）时等它放手再删。
+
+    `stop_background_jobs` 只等每个线程 2 秒（关停不该被外部请求拖住），满载时取资料、拉取
+    线程可能还拿着 `update-tasks/admission.lock`。等到时限仍被占用就照常报错，真泄漏的线程不会被掩盖。
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            temporary.cleanup()
+            return
+        except PermissionError as error:
+            if getattr(error, "winerror", None) != 32 or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.2)
+
+
 class FeedWebFixture(unittest.TestCase):
     """临时账本、本地 feed 字节和替掉的取资料一步。不带用例，两个套件共用。"""
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
-        self.addCleanup(self.temporary.cleanup)
+        self.addCleanup(remove_when_released, self.temporary)
         self.db_path = fresh_ledger(self.temporary.name)
         self.contract = WebContract(self.db_path)
         self.addCleanup(self.contract.stop_background_jobs)
@@ -89,6 +109,13 @@ class FeedWebFixture(unittest.TestCase):
         self._fetch_cover = feed_followup.fetch_cover
         feed_followup.fetch_cover = self._fake_cover
         self.addCleanup(lambda: setattr(feed_followup, "fetch_cover", self._fetch_cover))
+        self.addCleanup(self._finish_feed_job)
+
+    def _finish_feed_job(self):
+        thread = self.contract.feed_job.thread
+        self.contract.feed_job.stop(timeout=15)
+        if thread is not None:
+            self.assertFalse(thread.is_alive(), '检查线程未结束，不能还原替身或删除临时账本')
 
     def _fake_cover(self, contract, code, cover_url=None):
         self.cover_urls[code] = cover_url
@@ -123,12 +150,67 @@ class FeedWebFixture(unittest.TestCase):
         original = web_feeds._transport
         web_feeds._transport = lambda contract: self.transport
         try:
-            return dispatch_api_post(self.contract, "/api/feeds/check", {"all": True, **body})
+            result = dispatch_api_post(self.contract, "/api/feeds/check", {"all": True, **body})
+            if not body.get('background'):
+                thread = self.contract.feed_job.thread
+                if thread is not None:
+                    thread.join(15)
+                    self.assertFalse(thread.is_alive(), '本轮结算未退出，不能启动下一轮或还原传输替身')
+            return result
         finally:
             web_feeds._transport = original
 
 
 class FeedWebTest(FeedWebFixture):
+    def test_synchronous_checks_wait_for_settlement_before_returning(self):
+        self._add()
+        settling, release, returned = threading.Event(), threading.Event(), threading.Event()
+        errors = []
+        original = self.contract.feed_job._finish_execution
+        def finish(job_id):
+            settling.set()
+            if not release.wait(5):
+                raise TimeoutError('未释放测试结算')
+            original(job_id)
+        def check():
+            try:
+                self._check()
+            except Exception as error:
+                errors.append(error)
+            finally:
+                returned.set()
+        with patch.object(self.contract.feed_job, '_finish_execution', side_effect=finish):
+            caller = threading.Thread(target=check)
+            caller.start()
+            try:
+                self.assertTrue(settling.wait(5))
+                self.assertFalse(returned.wait(0.05), '同步夹具在后台结算完成前返回')
+            finally:
+                release.set()
+                caller.join(5)
+        self.assertTrue(returned.is_set())
+        self.assertEqual(errors, [])
+        self.assertFalse(self.contract.feed_job.thread.is_alive())
+
+    def test_schedule_route_reports_feed_scheduler_failures(self):
+        from peach.follow_scheduler import FEED_JOB_ID, FollowScheduleConfig, FollowUpdateScheduler
+        idle = dispatch_api_get(self.contract, "/api/feeds/schedule", {})
+        self.assertEqual((idle["available"], idle["interval_minutes"]),
+                         (False, feeds.DEFAULT_INTERVAL_MINUTES))
+
+        def failing():
+            return {"ok": True, "checked": 2, "results": [{"ok": False}, {"ok": True, "added": 1}]}
+        self.contract.feed_scheduler = FollowUpdateScheduler(
+            Path(self.temporary.name) / "schedule", failing, available=True, job_id=FEED_JOB_ID,
+            filename="feed-schedule.json",
+            default=FollowScheduleConfig(enabled=True, interval_minutes=feeds.DEFAULT_INTERVAL_MINUTES))
+        self.contract.feed_scheduler._run()
+        self.contract.feed_scheduler._run()
+        status = dispatch_api_get(self.contract, "/api/feeds/schedule", {})
+        self.assertEqual((status["available"], status["enabled"], status["interval_minutes"]),
+                         (True, True, feeds.DEFAULT_INTERVAL_MINUTES))
+        self.assertEqual((status["last_error"], status["consecutive_failures"]), ("1 个来源检查失败", 2))
+
     def test_recovery_keeps_source_selection_progress_and_discovered_codes(self):
         from peach import job_recovery
         first = self._add()
@@ -157,14 +239,17 @@ class FeedWebTest(FeedWebFixture):
         target = self.contract.cover_root / 'SSIS-950.jpg'
         target.parent.mkdir(parents=True, exist_ok=True)
         Image.new('RGB', (800, 538)).save(target)
+        from peach.fsutil import atomic_write_text
+        # 来源边车与 `install_cover` 一样换名写入：封面索引只认封面目录的修改时间。
         evidence = target.with_suffix('.scraping.json')
-        evidence.write_text(json.dumps({'source_url': 'https://c0.jdbstatic.com/covers/a.jpg'}), encoding='utf-8')
-        self.contract.cache_bust()
+        atomic_write_text(evidence, json.dumps({'source_url': 'https://c0.jdbstatic.com/covers/a.jpg'}))
         self.assertFalse(self.contract.has_cover('SSIS-950'))
         self.assertIsNone(self.contract.cover_path('SSIS-950'))
-        evidence.write_text(json.dumps({'source_url': 'https://pics.dmm.co.jp/a.jpg'}), encoding='utf-8')
-        self.contract.cache_bust()
-        self.assertTrue(self.contract.has_cover('SSIS-950'))
+        atomic_write_text(evidence, json.dumps({'source_url': 'https://pics.dmm.co.jp/a.jpg'}))
+        # 两次换名可能落在同一个时钟刻度，目录时间不变；刚写过的目录索引过了静置时效才重扫。
+        later = web_state.time.monotonic() + web_state.SETTLE_TTL + 1
+        with patch.object(web_state.time, 'monotonic', return_value=later):
+            self.assertTrue(self.contract.has_cover('SSIS-950'))
         self.assertEqual(self.contract.cover_path('SSIS-950'), target)
 
     def test_known_discovery_without_cover_address_has_no_javdb_image_fallback(self):
@@ -355,6 +440,25 @@ class FeedWebTest(FeedWebFixture):
         self.assertEqual((row["last_error"], row["name"], row["page_name"]),
                          (None, "森日向子", "白石アイリ"))
 
+    def test_login_page_keeps_discoveries_and_reports_cookie_action(self):
+        self._add()
+        self._check()
+        before = dispatch_api_get(self.contract, "/api/feeds/discoveries", {})["items"]
+        login = "<title>登入 | JavDB</title>".encode("utf-8")
+        self.transport.responses[self.url] = HttpResponse(200, {}, login, self.url)
+        report = self._check()["results"][0]
+        self.assertFalse(report["ok"])
+        self.assertIn("Cookie", report["error"])
+        [row] = dispatch_api_get(self.contract, "/api/feeds", {})["sources"]
+        self.assertEqual(row["last_error"], report["error"])
+        self.assertIsNotNone(row["next_fetch_at"])
+        after = dispatch_api_get(self.contract, "/api/feeds/discoveries", {})["items"]
+        self.assertEqual([item["code"] for item in after], [item["code"] for item in before])
+        self.transport.responses[self.url] = HttpResponse(200, {}, SAMPLE.encode("utf-8"), self.url)
+        self.assertTrue(self._check()["results"][0]["ok"])
+        [recovered] = dispatch_api_get(self.contract, "/api/feeds", {})["sources"]
+        self.assertIsNone(recovered["last_error"])
+
     def test_read_and_ignore_are_separate_and_idempotent(self):
         self._add()
         self._check()
@@ -408,7 +512,7 @@ class FeedWebTest(FeedWebFixture):
     def _backlog(self) -> list[str]:
         hidden = web_settings.hidden_compilations(self.contract.database)
         with self.contract.database.read_connection() as connection:
-            return feed_followup.backlog(connection, self.contract.cover_root, hidden=hidden)
+            return feed_followup.scrape_batch(connection, hidden=hidden)
 
     def test_a_group_compilation_is_neither_listed_counted_nor_rescheduled(self):
         self._compilation("波多野結衣、篠田ゆう")
@@ -501,15 +605,13 @@ class FeedWebTest(FeedWebFixture):
         self.assertEqual(len(listing["items"]), 2)
 
     def _drain(self, expected):
-        """等后继排上再跑掉它们。
-
-        `w_feed_check` 在任务体收尾时就放行调用方，而声明的后继是任务包装那一层在
-        之后派的（ADR-0040）。直接 `drain()` 会赶在入队之前，跑到零条。
-        """
-        deadline = time.monotonic() + 5.0
-        done = 0
-        while done < expected and time.monotonic() < deadline:
-            done += self.contract.followups.drain()
+        """等待检查线程完成派发，再同步执行已入队的后继（ADR-0040）。"""
+        thread = self.contract.feed_job.thread
+        if thread is not None:
+            thread.join(5)
+            self.assertFalse(thread.is_alive(), self.contract.feed_job.snapshot())
+        done = self.contract.followups.drain()
+        self.assertGreaterEqual(done, expected, "检查线程结束后未取得预期后继")
         return done
 
     def test_the_scrape_followup_fills_the_shell_and_links_the_performer(self):
@@ -631,15 +733,121 @@ class FeedWebTest(FeedWebFixture):
         target.write_text(json.dumps({'layout': 'still', 'face': None}), encoding='utf-8')
         self.assertEqual(self.contract._cover_focus(str(target)), {'layout': 'still'})
 
+    def _attempted(self, code: str, seconds_ago: float) -> None:
+        path = feed_followup.cover_attempt_path(self.contract.cover_root, code)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"code": code, "ok": False}), encoding="utf-8")
+        moment = time.time() - seconds_ago
+        os.utime(path, (moment, moment))
+
+    def _cover_backlog(self, **options) -> list[str]:
+        with self.contract.database.read_connection() as connection:
+            return feed_followup.cover_backlog(connection, self.contract.cover_root, hidden=frozenset(),
+                                               retry_after=timedelta(0), **options)
+
     def test_cover_backlog_prioritises_the_least_recent_attempt(self):
         self._add()
         self._check()
         with self.contract.database.write_transaction() as connection:
             connection.execute("UPDATE feed_discovery SET scraped_at='2026-01-01T00:00:00Z',release_date='2026-10-01' WHERE code='SSIS-950'")
-            connection.execute("UPDATE feed_discovery SET scraped_at='2025-01-01T00:00:00Z',release_date='2025-01-01' WHERE code='HMN-071'")
+            connection.execute("UPDATE feed_discovery SET scraped_at='2026-01-01T00:00:00Z',release_date='2025-01-01' WHERE code='HMN-071'")
+        self._attempted('SSIS-950', 3600)
+        self._attempted('HMN-071', 86400)
+        self.assertEqual(self._cover_backlog(limit=1), ['HMN-071'])
+        # 资料没取到的壳归取资料那一批，不进补封面。
+        with self.contract.database.write_transaction() as connection:
+            connection.execute("UPDATE feed_discovery SET scrape_error='来源连接未取得' WHERE code='HMN-071'")
+        self.assertEqual(self._cover_backlog(), ['SSIS-950'])
         with self.contract.database.read_connection() as connection:
-            result = feed_followup.backlog(connection, self.contract.cover_root, hidden=frozenset(), limit=1)
-        self.assertEqual(result, ['HMN-071'])
+            self.assertEqual(feed_followup.scrape_batch(connection, hidden=frozenset(),
+                                                        retry_after=timedelta(0)), ['HMN-071'])
+
+    def test_failed_old_rows_keep_a_share_of_a_batch_full_of_new_codes(self):
+        """一轮发现的新番号比一批还多时，上次没取到资料的旧壳仍有保底名额，不被挤到轮不上。"""
+        fresh = [f"NEW-{number:03d}" for number in range(feed_followup.MAX_BATCH + 10)]
+        self._add()
+        with self.contract.database.write_transaction() as connection:
+            for number in range(feed_followup.RETRY_SHARE + 2):
+                connection.execute(
+                    "INSERT INTO feed_discovery(code,source_id,title,link,release_date,discovered_at,"
+                    "scraped_at,scrape_error) VALUES(?,1,'',NULL,'2026-09-22',?,?,'来源连接未取得')",
+                    (f"OLD-{number:03d}", feeds.stamp(), f"2026-01-{number + 1:02d}T00:00:00Z"))
+        with self.contract.database.read_connection() as connection:
+            batch = feed_followup.scrape_batch(connection, fresh, hidden=frozenset(),
+                                               retry_after=timedelta(0))
+        self.assertEqual(len(batch), feed_followup.MAX_BATCH)
+        self.assertEqual(batch[:feed_followup.MAX_BATCH - feed_followup.RETRY_SHARE],
+                         fresh[:feed_followup.MAX_BATCH - feed_followup.RETRY_SHARE])
+        # 保底名额给最久没试过的那几部。
+        self.assertEqual(batch[-feed_followup.RETRY_SHARE:],
+                         [f"OLD-{number:03d}" for number in range(feed_followup.RETRY_SHARE)])
+
+    def test_scraping_one_code_stops_at_the_metadata_budget(self):
+        """来源连不上时一部最多问到资料预算为止，原因写成哪几家在多少秒内没答复。"""
+        from peach.jav_cover_fetch import DeadlineExceeded
+        from peach.library_processing import ACTION_BUDGETS
+
+        seen = {}
+
+        class Silent:
+            def community(self, code, *, deadline=None, route=None):
+                seen["remaining"] = float(deadline) - time.monotonic()
+                raise DeadlineExceeded("动作预算已用尽")
+
+        with self.assertRaisesRegex(DeadlineExceeded, "秒内没有答复"):
+            self._collect(Silent(), "SSIS-950")
+        self.assertLessEqual(seen["remaining"], ACTION_BUDGETS["querying_metadata"])
+        self.assertGreater(seen["remaining"], ACTION_BUDGETS["querying_metadata"] - 5)
+
+    def test_codes_already_queued_are_not_planned_again(self):
+        """在队里的那一批还没跑完，下一轮检查只带新的番号，不把同一批换个组合再派一条。"""
+        self._add()
+        self.assertEqual([item["key"] for item in self._check()["followups"]],
+                         ["feed-scrape:SSIS-950,HMN-071"])
+        with self.contract.database.write_transaction() as connection:
+            connection.execute("INSERT INTO feed_discovery(code,source_id,title,link,release_date,discovered_at)"
+                               " VALUES('ABP-123',1,'',NULL,'2026-09-22',?)", (feeds.stamp(),))
+        self.transport.responses[self.url] = HttpResponse(304, {}, b"", self.url)
+        thread = self.contract.feed_job.thread
+        if thread is not None:
+            thread.join(5)
+        self.assertEqual([item["key"] for item in self._check()["followups"]], ["feed-scrape:ABP-123"])
+
+    def test_a_missing_cover_gets_its_own_batch_outside_the_ledger_lane(self):
+        """资料齐了只缺封面的壳另派补封面：只取图，不再问资料来源，也不排在写账本的后继后面。"""
+        self.cover_misses.add("HMN-071")
+        self._add()
+        self._check()
+        self._drain(1)
+        self.cover_misses.clear()
+        self.transport.responses[self.url] = HttpResponse(304, {}, b"", self.url)
+        asked = []
+        feed_followup.collect = lambda provider, code: asked.append(code)
+        self.assertEqual([item["key"] for item in self._check()["followups"]], ["feed-cover:HMN-071"])
+        self.assertFalse(feed_followup.COVER_TYPE.writes_ledger)
+        self._drain(1)
+        self.assertEqual(asked, [])
+        self.assertTrue(feed_followup.has_local_cover(self.contract.cover_root, "HMN-071"))
+        [run] = self.contract.task_runs.query(task_key=feed_followup.COVER_TASK_KEY)
+        self.assertEqual(run.result_summary, {"total": 1, "covers": 1})
+
+    def test_a_resumed_batch_does_not_retry_a_code_it_already_tried(self):
+        """服务重启后续跑这一批：上次试过没取到的那部不再在批首重耗一遍，计数接着上次的。"""
+        self._add()
+        self._check()
+        thread = self.contract.feed_job.thread
+        if thread is not None:
+            thread.join(5)
+        asked = []
+        collect = feed_followup.collect
+        feed_followup.collect = lambda provider, code: asked.append(code) or collect(provider, code)
+        saved = {"done_codes": ["SSIS-950"], "fetched": 0, "covers": 0, "miss": 1}
+        handle = SimpleNamespace(saved=saved, progress=lambda **_: None,
+                                 checkpoint=lambda **fields: saved.update(fields))
+        summary = feed_followup.run(self.contract, "feed-scrape:SSIS-950,HMN-071", handle)
+        self.assertEqual(asked, ["HMN-071"])
+        self.assertEqual(summary, {"total": 2, "ok": 1, "miss": 1, "covers": 1})
+        self.assertEqual(saved["done_codes"], ["HMN-071", "SSIS-950"])
 
     def test_covers_cut_off_at_the_connection_are_counted_for_the_new_release_row(self):
         """连不上图片主机的几部单独记数，列表把最近一轮的数带给页面去提示换线路；
@@ -672,12 +880,9 @@ class FeedWebTest(FeedWebFixture):
         self.transport.responses[self.url] = HttpResponse(304, {}, b"", self.url)
         # 定时那一轮：刚试过的不再排；已经有封面、资料也齐的那部永远不再排。
         self.assertEqual(self._check(automatic=True)["followups"], [])
-        earlier = feeds.stamp(datetime.now(timezone.utc)
-                              - feed_followup.RETRY_AFTER - timedelta(minutes=1))
-        with self.contract.database.write_transaction() as connection:
-            connection.execute("UPDATE feed_discovery SET scraped_at=?", (earlier,))
+        self._attempted("HMN-071", feed_followup.RETRY_AFTER.total_seconds() + 60)
         self.assertEqual([item["key"] for item in self._check(automatic=True)["followups"]],
-                         ["feed-scrape:HMN-071"])
+                         ["feed-cover:HMN-071"])
         # 人说了不想看的，不再替它花配额。
         first = {row["code"]: row for row in dispatch_api_get(
             self.contract, "/api/feeds/discoveries", {})["items"]}["HMN-071"]
@@ -691,12 +896,15 @@ class FeedWebTest(FeedWebFixture):
         self._add()
         self._check()
         self._drain(1)
+        attempt = self.contract.cover_root.parent / 'feed-cover-attempts' / 'SSIS-950.json'
+        self.assertTrue(feed_followup.has_local_cover(self.contract.cover_root, 'SSIS-950'),
+                        attempt.read_text(encoding='utf-8') if attempt.exists() else '未取得封面处理记录')
         self.transport.responses[self.url] = HttpResponse(304, {}, b"", self.url)
         self.assertEqual([item["key"] for item in self._check()["followups"]],
-                         ["feed-scrape:HMN-071"])
+                         ["feed-cover:HMN-071"])
 
     def test_every_check_carries_performers_still_missing_an_avatar(self):
-        """资料处理不跑的日子，缺头像的存量女优跟着定时拉取补（ADR-0097）。试过的不再带。"""
+        """缺头像的存量女优跟着定时拉取补；当前图库下已取证的跳过，图库变化后重新派发。"""
         from peach import avatar_followup
         from peach.followups import Attempts, attempts_root
 
@@ -712,11 +920,18 @@ class FeedWebTest(FeedWebFixture):
                 "INSERT INTO asset_entity(asset_id,entity_id,role,source)"
                 " VALUES(9001,?,'performer','test')", (entity_id,))
         key = avatar_followup.followup_key("performer", entity_id)
+        providers_root = self.contract.candidate_root / "provider-cache" / "performer-avatars"
+        index_dir = providers_root / "gfriends"
+        index_dir.mkdir(parents=True, exist_ok=True)
+        index_path = index_dir / "gfriends-filetree.json"
+        index_path.write_text('{"Content": {}}', encoding="utf-8")
         self.assertIn(key, [item["key"] for item in self._check(automatic=True)["followups"]])
         with self.contract.database.read_connection() as connection:
-            current = avatar_followup.fingerprint(connection, entity_id)
+            current = avatar_followup.fingerprint(connection, entity_id, providers_root)
         Attempts(attempts_root(self.contract.candidate_root)).record(key, current, "图库 6 张认不准")
         self.assertNotIn(key, [item["key"] for item in self._check(automatic=True)["followups"]])
+        index_path.write_text(json.dumps({"Content": {"1-S1": {"二の宮すずか.jpg": "二の宮すずか.jpg"}}}), encoding="utf-8")
+        self.assertIn(key, [item["key"] for item in self._check(automatic=True)["followups"]])
 
     def test_an_unknown_action_is_refused(self):
         with self.assertRaises(ValueError):

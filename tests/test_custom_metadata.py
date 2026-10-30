@@ -135,6 +135,7 @@ class CustomMetadataTests(unittest.TestCase):
             self.assertEqual(custom.fetch_json('https://metadata.example.com/ABW-001', 3,
                 client_options={'proxy': 'http://127.0.0.1:7890', 'trust_env': False}), {'ok': True})
             options = session.call_args.kwargs
+            self.assertEqual(options['curl_options'][custom.CurlOpt.NOPROXY], '')
             target = options['curl_options'][custom.CurlOpt.CONNECT_TO]
             self.assertEqual(custom.ffi.string(target.data), b'metadata.example.com:443:1.1.1.1:443')
             stream = session.return_value.__enter__.return_value.stream

@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { growCollapse, setCollapseOpen } from '../src/ui-kit';
+import { growCollapse, setCollapseOpen, setCollapseRegionOpen } from '../src/ui-kit';
 
 afterEach(() => { vi.useRealTimers(); document.body.replaceChildren(); });
 
@@ -62,4 +62,21 @@ it('收到一半又点开时，收起那次的收尾不再合上 details', () =>
   expect(details.open).toBe(true);
   expect(body.inert).toBe(false);
   expect(body.style.height).toBe('auto');
+});
+
+it('外置触发器保留正文，收起即退出焦点顺序，反向展开取消隐藏', () => {
+  vi.useFakeTimers();
+  const body = document.createElement('div'); document.body.append(body);
+  Object.defineProperty(body, 'scrollHeight', { configurable: true, value: 180 });
+  setCollapseRegionOpen(body, false);
+  expect(body.hidden).toBe(false);
+  expect(body.inert).toBe(true);
+  setCollapseRegionOpen(body, true);
+  vi.advanceTimersByTime(260);
+  expect(body.hidden).toBe(false);
+  expect(body.inert).toBe(false);
+  expect(body.style.height).toBe('auto');
+  setCollapseRegionOpen(body, false);
+  vi.advanceTimersByTime(260);
+  expect(body.hidden).toBe(true);
 });

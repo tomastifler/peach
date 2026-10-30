@@ -14,6 +14,25 @@ from peach.metadata import (
 
 
 class MetadataProviderTests(unittest.TestCase):
+    def test_damaged_source_fields_leave_healthy_fields_available(self):
+        fields = extract_peach_fields({'title':'壊\ufffdれた題名', 'maker':'正しいメーカー',
+            'release_date':'2026-01-02', 'actresses':[{'japanese_name':'名前\ufffd'}],
+            'genres':['未\ufffd分類']})
+        self.assertNotIn('title', fields)
+        self.assertNotIn('performers', fields)
+        self.assertNotIn('tags', fields)
+        self.assertEqual(fields['studio']['value'], '正しいメーカー')
+        self.assertEqual(fields['release_date']['value'], '2026-01-02')
+        self.assertNotIn('title', extract_catalog_evidence({'title':'壊\ufffdれた題名'}))
+
+    def test_valid_non_latin_source_text_and_performer_aliases_remain_available(self):
+        fields = extract_peach_fields({'title':'日本語 中文 café',
+            'actresses':[{'japanese_name':'正常な名前','aliases':['別名\ufffd']}],
+            'maker':'正常な会社'})
+        self.assertEqual(fields['title']['value'], '日本語 中文 café')
+        self.assertNotIn('performers', fields)
+        self.assertEqual(fields['studio']['value'], '正常な会社')
+
     def test_all_unmapped_genres_are_reviewable_without_fabricated_tags(self):
         fields = extract_peach_fields({"genres": ["未知类别甲", "未知类别乙"]})
         self.assertEqual(fields["tags"]["value"], [])
@@ -189,6 +208,12 @@ class MetadataProviderTests(unittest.TestCase):
         }})
 
 class SourceIdentityTests(unittest.TestCase):
+    def test_explicit_release_suffix_is_not_satisfied_by_a_plain_or_different_product(self):
+        self.assertTrue(identifies_code("DANDY-851C", {"content_id": "1dandy00851c"}))
+        self.assertFalse(identifies_code("DANDY-851C", {"content_id": "1dandy00851"}))
+        self.assertFalse(identifies_code("DANDY-851C", {"content_id": "1dandy00851ch"}))
+        self.assertFalse(identifies_code("DANDY-851", {"content_id": "1dandy00851c"}))
+
     def test_prefixed_release_requires_matching_product_evidence(self):
         dvd = {"id": "JAC-040", "content_id": "118jac040",
                "source_url": "https://www.dmm.co.jp/mono/dvd/-/detail/=/cid=118jac040/"}

@@ -1,0 +1,43 @@
+/* 三种处理方式对比表：步骤一列，三档各一列，做与不做用符号，不靠颜色单独分辨。 */
+.peach-react [data-policy-matrix] { width: 100%; max-width: 560px; margin-top: 4px; border-collapse: collapse; color: var(--ink-2); }
+.peach-react [data-policy-matrix] :is(th, td) { padding: 6px 8px; border-bottom: 1px solid var(--line-soft); text-align: center; font-weight: 400; }
+.peach-react [data-policy-matrix] thead th { color: var(--muted); }
+.peach-react [data-policy-matrix] tbody th { text-align: left; color: var(--ink-2); }
+.peach-react [data-policy-matrix] [data-policy-cell="on"] { color: var(--ink); }
+.peach-react [data-policy-matrix] [data-policy-cell="off"] { color: var(--muted); }
+.peach-react [data-policy-matrix] tr:last-child > * { border-bottom: 0; }
+/* 「媒体库与目录」按媒体库分组，照关注页「作者卡 → 来源行」的结构：一个媒体库一张白卡，标题行在上、
+ * 下面一道分隔线；同一库的文件夹在卡里一行一行排，行与行之间是通栏细线，「添加文件夹」在最后一行。
+ * 分隔线取 button border：Peach 暗色 primary 与 separator 同为 neutral-800，用 separator 会看不见。 */
+.peach-react [data-library-head] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--color-border-button-default);
+}
+.peach-react [data-library-head] > * { min-width: 0; max-width: 100%; }
+.peach-react [data-library-head] > :nth-child(2) { flex: 1 1 180px; width: auto; }
+.peach-react [data-library-head] > :last-child { flex: 1 1 200px; width: auto; }
+.peach-react [data-library-head] > :is(:first-child, :nth-child(3)) { flex-shrink: 0; }
+.peach-react [data-library-block] > :not([data-library-head], [data-library-folders]) { padding: 10px 8px 0; }
+.peach-react [data-library-folders] { display: flex; flex-direction: column; }
+.peach-react [data-library-folders] > * { padding: 12px 8px; }
+.peach-react [data-library-folders] > * + * { border-top: 1px solid var(--color-border-button-default); }
+.peach-react [data-library-folders] > [data-folder-row] { border-width: 0; border-radius: 0; background: none; }
+.peach-react [data-library-folders] > [data-folder-row] + * { border-top-width: 1px; }
+/* 来源色的触发键：一颗当前色的球加色名；「无颜色」是一颗中性球加一道斜线。 */
+/* 和同一行的图标键、下拉框同档：36px 高、同样的边框与圆角。 */
+.peach-react [data-library-color-trigger] {
+  display: inline-flex; width: auto; height: 36px; gap: 8px; padding: 0 10px 0 7px;
+  border: 1px solid var(--color-border-button-default); border-radius: 10px;
+  background: var(--color-background-primary-default); box-shadow: var(--shadow-xs);
+  color: var(--color-text-primary); white-space: nowrap;
+}
+.peach-react [data-library-color-trigger]:hover { background: var(--color-background-primary-hover); }
+.peach-react [data-library-color-trigger] [data-glow-ball] { width: 20px; height: 20px; }
+.peach-react [data-library-colors] { grid-template-columns: repeat(7, 28px); padding: 0; }
+.peach-react [data-glow-ball][data-library-none] {
+  --glow-chip: linear-gradient(135deg, transparent 46%, var(--color-text-tertiary) 46% 54%, transparent 54%), var(--color-background-tertiary-default);
+}

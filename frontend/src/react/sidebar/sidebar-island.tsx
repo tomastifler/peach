@@ -112,8 +112,12 @@ function Navigation({ host: at, epoch, version }: { host: SidebarHost; epoch: nu
     const head = scroll.querySelector<HTMLElement>(':scope > [data-sidebar-head]');
     const resize = new ResizeObserver(() => sync());
     [drawer, scroll, head].forEach((node) => { if (node) resize.observe(node) });
-    document.addEventListener('board:sidebar', sync);
-    return () => { resize.disconnect(); document.removeEventListener('board:sidebar', sync) };
+    /* 开合事件在点击回调里同步发出，那一刻整页样式刚因开合类名变脏，当场量就是一次整树重算；
+       挪到下一帧和尺寸观察器一起量。 */
+    let frame = 0;
+    const later = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; sync() }) };
+    document.addEventListener('board:sidebar', later);
+    return () => { resize.disconnect(); cancelAnimationFrame(frame); document.removeEventListener('board:sidebar', later) };
   }, [at, sync]);
 
   const [dragging, setDragging] = useState<string | null>(null);
@@ -152,7 +156,9 @@ function Navigation({ host: at, epoch, version }: { host: SidebarHost; epoch: nu
             data-dragging={dragging === key ? '' : undefined}
             data-drop={drop?.key === key ? (drop.after ? 'after' : 'before') : undefined}
             onClick={() => at.navTo(key)} onPointerEnter={glide.hover} {...drag(key)}>
-            {key === '' ? <img data-sidebar-home-logo="" src="/peach-logo.png" alt="" /> : <Icon name={glyph} />}
+            {key === '' ? <img data-sidebar-home-logo="" src="/peach-logo-64.png"
+              srcSet="/peach-logo-64.png 64w, /peach-logo-128.png 128w" sizes="24px" width={24} height={24} alt=""
+              decoding="async" /> : <Icon name={glyph} />}
             <span>{label}</span>
           </button>
         ))}
@@ -178,7 +184,7 @@ function countsOf(latest: SidebarFacets | null): Map<string, number> | null {
   if (!latest) return null;
   const counts = new Map<string, number>();
   const rows: [string, SidebarChip[]][] = [['loc', latest.locations], ['orient', latest.orientations],
-    ['region', latest.regions], ['creator', latest.creators], ['tag', latest.tags], ['tag', latest.tech]];
+    ['region', latest.regions], ['year', latest.years || []], ['creator', latest.creators], ['tag', latest.tags], ['tag', latest.tech]];
   for (const [key, chips] of rows) for (const chip of chips) counts.set(`${key}\n${chip.value}`, chip.n ?? 0);
   return counts;
 }
@@ -231,11 +237,12 @@ function catalogGroups(
       ? { title: 'Duration', kind: 'meta', active: false, body: <Duration host={at} filters={filters} /> }
       : null,
     /* 产地紧挨着来源：两者回答的都是「这批片打哪来」，一个说存储，一个说发行体系。可多选。 */
-    spec('Region', 'general', facets.regions, 'region', true),
-    spec('Orientation', 'meta', facets.orientations, 'orient', false),
-    spec('Creator', 'artist', facets.creators, 'creator', false, 'creator'),
-    spec('Content tags', 'general', facets.tags, 'tag', false, 'tag'),
-    spec('Video attributes', 'meta', facets.tech, 'tag', false, 'tech'),
+    spec('产地', 'general', facets.regions, 'region', true),
+    spec('发行年份', 'meta', facets.years || [], 'year', true),
+    spec('画幅', 'meta', facets.orientations, 'orient', false),
+    spec('创作者', 'artist', facets.creators, 'creator', false, 'creator'),
+    spec('内容标签', 'general', facets.tags, 'tag', false, 'tag'),
+    spec('影片属性', 'meta', facets.tech, 'tag', false, 'tech'),
     facets.followTags.length ? {
       title: 'Followed tags', kind: 'online', active: false,
       body: <FollowChips rows={facets.followTags} host={at} selected={null} badges />,

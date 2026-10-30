@@ -21,12 +21,17 @@
 .iconswap>[data-icon]{grid-area:1/1;display:grid;place-items:center;
   transition:opacity var(--motion-swap),filter var(--motion-swap),transform var(--motion-swap)}
 .iconswap[data-icon-state="a"]>[data-icon="a"],
-.iconswap[data-icon-state="b"]>[data-icon="b"]{opacity:1;filter:blur(0);transform:scale(1)}
+.iconswap[data-icon-state="b"]>[data-icon="b"],
+[data-icon-state="a"]>.iconswap:not([data-icon-state])>[data-icon="a"],
+[data-icon-state="b"]>.iconswap:not([data-icon-state])>[data-icon="b"]{opacity:1;filter:blur(0);transform:scale(1)}
 /* 退场那一枚要收掉指针和读屏：它还占着同一个格子，不收的话按钮上有两个可点区域，
    读屏也会把两枚字形的名称连着念出来。 */
 .iconswap[data-icon-state="a"]>[data-icon="b"],
-.iconswap[data-icon-state="b"]>[data-icon="a"]{opacity:0;filter:blur(2px);transform:scale(.25);
+.iconswap[data-icon-state="b"]>[data-icon="a"],
+[data-icon-state="a"]>.iconswap:not([data-icon-state])>[data-icon="b"],
+[data-icon-state="b"]>.iconswap:not([data-icon-state])>[data-icon="a"]{opacity:0;filter:blur(2px);transform:scale(.25);
   pointer-events:none}
+.iconswap[data-motion-instant]>[data-icon]{transition:none}
 
 /* ── 读数按位错峰 ──
    每一位从下方 8px 处带模糊长上来，相邻两位差一个 `--motion-stagger`。缓动那条超出

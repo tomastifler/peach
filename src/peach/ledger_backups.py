@@ -9,23 +9,43 @@
 主文件已经不在的 `-wal`／`-shm` 另外扫一遍。清退按 `.db` 列举，边车只跟着主文件走，所以
 主文件删掉而边车没删掉的那一刻，这几个文件就再没有人会看它们一眼：下一轮列不到，只会
 一直留在账本目录里。2026-09-13 在真实数据目录数到 20 个，最早的来自 08-21。
+
+整理（下载后整理与手动整理）的备份放在 `<generated>/organize-backups/`，由
+`organize_backup` 写出并在同一处清退，只认 `ORGANIZE_PATTERN` 两种文件名。下载一波能在
+一小时里整理四十个文件，按年龄保留在这里等于不设上限，所以这一类只按份数留
+（`ORGANIZE_KEEP_RECENT`，`ORGANIZE_MIN_AGE` 为零）；整理进行中的那份由 `holding`
+登记，同一进程里的清退都不碰它。登记不跨进程：手动脚本给 `--keep 0` 时只靠份数保护。
 """
 from __future__ import annotations
 
 import logging
 import re
 import sqlite3
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+
+from .migrations import sqlite_backup
 
 log = logging.getLogger(__name__)
 
 BACKUP_PATTERN = re.compile(r"^ledger\.pre-.+\.db$")
 SIDECAR_SUFFIXES = ("-wal", "-shm")
-SIDECAR_PATTERN = re.compile(r"^ledger\.pre-.+\.db(?:" + "|".join(SIDECAR_SUFFIXES) + r")$")
 KEEP_RECENT = 5
 MIN_AGE = timedelta(hours=24)
+
+ORGANIZE_DIRNAME = "organize-backups"
+ORGANIZE_PATTERN = re.compile(r"^ledger\.pre-(?:download|organize)-.+\.db$")
+ORGANIZE_KEEP_RECENT = 5
+ORGANIZE_MIN_AGE = timedelta(0)
+
+#: 本进程里正在被一轮写入引用的备份。下载后整理与手动整理都在 Web 服务进程的线程里跑，
+#: 一方清退时要看得见另一方手上的那份。
+_held: set[Path] = set()
+_held_lock = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -35,6 +55,47 @@ class BackupPlan:
     refused: str | None = None   # 不为 None 时一份都不删，这里写原因
     removable_bytes: int = 0     # 算计划时量好，删完文件就量不到了
     orphans: tuple[Path, ...] = ()   # 主文件已不在的 `-wal`／`-shm`，和 remove 一起删
+
+
+@contextmanager
+def holding(path: Path) -> Iterator[Path]:
+    """登记一份正在使用的备份；登记期间本进程里的清退都把它留下。"""
+    key = path.resolve()
+    with _held_lock:
+        _held.add(key)
+    try:
+        yield path
+    finally:
+        with _held_lock:
+            _held.discard(key)
+
+
+def _is_held(path: Path) -> bool:
+    with _held_lock:
+        return path.resolve() in _held
+
+
+def organize_dir(generated_root: Path | str) -> Path:
+    return Path(generated_root) / ORGANIZE_DIRNAME
+
+
+@contextmanager
+def organize_backup(live: Path, generated_root: Path | str, name: str) -> Iterator[Path]:
+    """整理前写一份整库备份，整理期间持有它，并清退同目录里超出保留份数的旧备份。
+
+    清退失败只记日志：少删几份旧备份不能让这次整理失败。
+    """
+    if not ORGANIZE_PATTERN.match(name):
+        raise ValueError(f"整理备份文件名不合规则：{name}")
+    backup = organize_dir(generated_root) / name
+    sqlite_backup(live, backup)
+    with holding(backup):
+        try:
+            prune(live, apply=True, directory=backup.parent, pattern=ORGANIZE_PATTERN,
+                  keep_recent=ORGANIZE_KEEP_RECENT, min_age=ORGANIZE_MIN_AGE)
+        except Exception:
+            log.warning("整理备份清退失败", exc_info=True)
+        yield backup
 
 
 def _size_with_sidecars(path: Path) -> int:
@@ -47,28 +108,29 @@ def _size_with_sidecars(path: Path) -> int:
     return total
 
 
-def list_backups(live: Path) -> list[Path]:
-    """同目录下所有备份，按修改时间从旧到新。"""
-    if not live.parent.is_dir():
+def list_backups(directory: Path, pattern: re.Pattern[str] = BACKUP_PATTERN) -> list[Path]:
+    """目录下所有备份，按修改时间从旧到新。"""
+    if not directory.is_dir():
         return []
     found = [
-        path for path in live.parent.iterdir()
-        if path.is_file() and BACKUP_PATTERN.match(path.name)
+        path for path in directory.iterdir()
+        if path.is_file() and pattern.match(path.name)
     ]
     return sorted(found, key=lambda path: path.stat().st_mtime)
 
 
-def orphan_sidecars(live: Path) -> list[Path]:
+def orphan_sidecars(directory: Path, pattern: re.Pattern[str] = BACKUP_PATTERN) -> list[Path]:
     """主文件已经不在的备份边车，按名字排序。"""
-    if not live.parent.is_dir():
+    if not directory.is_dir():
         return []
     found = []
-    for path in live.parent.iterdir():
-        if not path.is_file() or not SIDECAR_PATTERN.match(path.name):
+    for path in directory.iterdir():
+        if not path.is_file():
             continue
-        base = path.with_name(path.name.rsplit("-", 1)[0])
-        if not base.is_file():
-            found.append(path)
+        for suffix in SIDECAR_SUFFIXES:
+            base = path.name.removesuffix(suffix)
+            if base != path.name and pattern.match(base) and not (directory / base).is_file():
+                found.append(path)
     return sorted(found)
 
 
@@ -97,12 +159,16 @@ def _live_mtime(live: Path) -> float:
 def plan(
     live: Path,
     *,
+    directory: Path | None = None,
+    pattern: re.Pattern[str] = BACKUP_PATTERN,
     keep_recent: int = KEEP_RECENT,
     min_age: timedelta = MIN_AGE,
     now: datetime | None = None,
 ) -> BackupPlan:
-    backups = list_backups(live)
-    orphans = tuple(orphan_sidecars(live))
+    """`directory` 缺省是账本所在目录；完整性检查总是针对 `live`。"""
+    folder = directory if directory is not None else live.parent
+    backups = list_backups(folder, pattern)
+    orphans = tuple(orphan_sidecars(folder, pattern))
     if not backups and not orphans:
         return BackupPlan((), ())
     if not live.is_file():
@@ -118,7 +184,7 @@ def plan(
     for backup in backups:
         mtime = backup.stat().st_mtime
         young = moment - datetime.fromtimestamp(mtime) < min_age
-        if backup in recent or young or mtime > live_mtime:
+        if backup in recent or young or mtime > live_mtime or _is_held(backup):
             keep.append(backup)
         else:
             remove.append(backup)
@@ -132,12 +198,15 @@ def prune(
     live: Path,
     *,
     apply: bool,
+    directory: Path | None = None,
+    pattern: re.Pattern[str] = BACKUP_PATTERN,
     keep_recent: int = KEEP_RECENT,
     min_age: timedelta = MIN_AGE,
     now: datetime | None = None,
 ) -> BackupPlan:
     """算出计划；`apply` 为真且没有拒绝理由时真的删。删不掉的记日志、继续。"""
-    decided = plan(live, keep_recent=keep_recent, min_age=min_age, now=now)
+    decided = plan(live, directory=directory, pattern=pattern,
+                   keep_recent=keep_recent, min_age=min_age, now=now)
     if not apply or decided.refused:
         return decided
     doomed = [target for backup in decided.remove

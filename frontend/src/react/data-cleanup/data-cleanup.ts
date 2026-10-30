@@ -25,6 +25,7 @@ import {
   fetchLinkCheck, fetchLinkPrune, fetchLinkStats, LINK_CHECK_KEY, LINK_PRUNE_KEY, LINKS_KEY,
 } from './links';
 import { prefetchOrganize } from './organize';
+import { fetchOrphanRecords, ORPHAN_RECORDS_KEY } from './orphan-records';
 import { prefetchResourceSync } from './resource-sync';
 
 export const REVIEW_COUNTS_URL = '/api/review?counts=1';
@@ -98,6 +99,7 @@ const LAZY_QUERIES: [QueryKey, (context: { signal: AbortSignal }) => Promise<unk
   [LINKS_KEY, ({ signal }) => fetchLinkStats(signal)],
   [LINK_CHECK_KEY, ({ signal }) => fetchLinkCheck(signal)],
   [LINK_PRUNE_KEY, ({ signal }) => fetchLinkPrune(signal)],
+  [ORPHAN_RECORDS_KEY, ({ signal }) => fetchOrphanRecords(signal)],
 ];
 
 /** 首屏：顶上那排读数、这次会扫哪几个来源，以及两张后台任务卡、整理卡与资源同步。
@@ -109,10 +111,9 @@ const LAZY_QUERIES: [QueryKey, (context: { signal: AbortSignal }) => Promise<unk
  *  不重取已缓存的键，不在这里推一把，读数就停在上一次进来时的样子。第一次进来时它们还
  *  没有缓存，由各自的 `useQuery` 挂载时取。
  *
- *  直达页底的资源同步（`#resource-sync`）时这几份也要等：链接管理在它上面，读数与检查结果
- *  在滚动之后才接上的话，落点会被撑下去几百像素。 */
+ *  锚点定位要等读数、链接管理与孤儿记录就绪，让滚动使用内容落地后的坐标。 */
 export async function prefetchDataCleanup(signal: AbortSignal): Promise<void> {
-  const anchored = location.hash === '#resource-sync';
+  const anchored = !!location.hash;
   const lazy = LAZY_QUERIES.map(([queryKey, queryFn]) => {
     if (anchored) return queryClient.fetchQuery({ queryKey, queryFn: () => queryFn({ signal }) }).catch(() => undefined);
     if (queryClient.getQueryState(queryKey)) void queryClient.prefetchQuery({ queryKey, queryFn });

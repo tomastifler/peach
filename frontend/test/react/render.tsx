@@ -75,6 +75,15 @@ export const submit = (form: Element | null | undefined) => act(async () => {
 export const buttonNamed = (name: string, root: ParentNode = document) =>
   [...root.querySelectorAll('button')].find((button) => button.textContent?.trim() === name) ?? null;
 
+/** 按可见文字找链接，同样默认从整页找。 */
+export const linkNamed = (name: string, root: ParentNode = document) =>
+  [...root.querySelectorAll('a')].find((link) => link.textContent?.trim() === name) ?? null;
+
+/** 一组动作按文档顺序的名称，按钮与链接都算，纯图标键取 `aria-label`：断言链接在左、主动作在最右用它。 */
+export const actionOrder = (root: ParentNode | null | undefined) =>
+  root ? [...root.querySelectorAll('button, a[href]')]
+    .map((node) => node.textContent?.trim() || node.getAttribute('aria-label') || '') : [];
+
 /** 分区以标题作无障碍名称。 */
 export const section = (root: ParentNode, title: string) =>
   root.querySelector(`:is(form,section)[aria-label="${title}"]`);

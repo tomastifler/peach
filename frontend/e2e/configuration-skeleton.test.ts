@@ -3,7 +3,7 @@ import { after, before, describe, it } from 'node:test';
 import type { Browser, Page } from 'playwright-core';
 import { configurationBody, expectBody, launch, layout, settle, visit, VIEWPORTS } from './harness.ts';
 
-const measure = (page: Page, names = ['Media folders']) => page.locator('.ui-configpage').evaluate((root, names) => {
+const measure = (page: Page, names = ['媒体库与目录']) => page.locator('.ui-configpage').evaluate((root, names) => {
   const rect = (el: Element) => {
     const r = el.getBoundingClientRect();
     return { x: r.x, y: r.y, width: r.width, height: r.height };
@@ -117,6 +117,60 @@ describe('配置页等待态', () => {
       }
     });
   }
+  /* 来源与订阅有四块另取数据的分区：整页骨架、分区骨架与读回后的终态画的是同一套结构，来源凭据的
+     站点行取自静态登记，行数与终态一致。各块的位置与高度允许细小出入，不允许超过一行（40px）的位移。
+     本机没有记录（冷启动）与正常再开两种都测：随配置变化的部分在冷启动时按最小结构画。 */
+  for (const cold of [true, false]) it(`来源与订阅的整页骨架、分区骨架与读回的分区结构一致、位移不超过一行（${cold ? '本机没有记录' : '再次打开'}）`, { timeout: 90_000 }, async () => {
+    const opened = await visit(browser, '/settings/subscriptions', VIEWPORTS[0]);
+    let release = () => {};
+    let mount = () => {};
+    try {
+      const { page } = opened;
+      const names = ['来源凭据', '关注采集', '资源搜索', '作品资料站点'];
+      /* 骨架淡出时新旧两份 `.ui-configpage` 可能同时在：取最后挂上的那一份。 */
+      const sections = () => page.locator('.ui-configpage').last().evaluate((root, names) => names.map((name) => {
+        const section = root.querySelector(`[aria-label="${name}"]`);
+        if (!section) return null;
+        const r = section.getBoundingClientRect();
+        return { name, y: r.y, height: r.height, sites: section.querySelectorAll('b').length };
+      }), names);
+      const done = () => page.waitForFunction(() => document.querySelector('.ui-configpage section[aria-label="来源凭据"]')
+        && !document.querySelector('.ui-configpage [data-skeleton]'), null, { timeout: 30_000 });
+      await done();
+      await settle(page);
+      if (cold) await page.evaluate(() => localStorage.removeItem('peach.configuration.shape.v1'));
+      /* 两道门：配置读回之前是整页骨架；配置放行、分区自己的数据还压着时是分区骨架。 */
+      const configuration = new Promise<void>((resolve) => { mount = resolve });
+      const held = new Promise<void>((resolve) => { release = resolve });
+      await page.route('**/api/configuration', async (route) => { await configuration; await route.continue() });
+      for (const url of ['**/api/follow/credentials', '**/api/configuration/indexers', '**/api/follow/schedule', '**/api/feeds/schedule']) {
+        await page.route(url, async (route) => { await held; await route.continue() });
+      }
+      await page.reload({ waitUntil: 'commit' });
+      await page.locator('[data-skeleton="board/settings/subscriptions"]').waitFor();
+      const pageSkeleton = await sections();
+      mount();
+      await page.getByLabel('正在读取来源凭据', { exact: true }).waitFor();
+      const sectionSkeleton = await sections();
+      release();
+      await done();
+      await settle(page);
+      const live = await sections();
+      for (const [phase, shape] of [['整页骨架', pageSkeleton], ['分区骨架', sectionSkeleton]] as const) {
+        shape.forEach((section, i) => {
+          const end = live[i]!;
+          assert.ok(section && Math.abs(section.y - end.y) <= 40 && Math.abs(section.height - end.height) <= 40,
+            `${phase}「${names[i]}」${JSON.stringify(section)}，读回后 ${JSON.stringify(end)}`);
+        });
+        assert.equal(shape[0]!.sites, live[0]!.sites, `${phase}的来源凭据站点行数`);
+      }
+      assert.deepEqual(opened.problems, []);
+    } finally {
+      mount();
+      release();
+      await opened.close();
+    }
+  });
   for (const path of ['/settings/library', '/review']) {
     it(`${path} 的明暗主题使用透明容器与灰色 Pills 选中底色`, { timeout: 60_000 }, async () => {
       const opened = await visit(browser, path, VIEWPORTS[0]);
@@ -136,12 +190,13 @@ describe('配置页等待态', () => {
           }, dark);
           const colors = await nav.evaluate(node => {
             const selected = getComputedStyle(node.querySelector('[aria-selected=true]')!);
+            const selection = getComputedStyle(node.querySelector('[data-pill-thumb]')!);
             const inactive = getComputedStyle(node.querySelector('[aria-selected=false]')!);
             return {
               surface: getComputedStyle(node).backgroundColor,
-              selected: selected.backgroundColor,
+              selected: selection.backgroundColor,
               border: selected.borderWidth,
-              radius: selected.borderRadius,
+              radius: selection.borderRadius,
               text: selected.color,
               inactive: inactive.color,
               inactiveBackground: inactive.backgroundColor,

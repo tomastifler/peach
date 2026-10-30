@@ -4,16 +4,19 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import struct
 import threading
 import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from PIL import Image, UnidentifiedImageError
+from filelock import FileLock
+from PIL import Image, ImageOps, UnidentifiedImageError
 
 from .avatar_face import FaceProbe, drop_sidecar, write_sidecar
 from .fsutil import atomic_write_bytes
+from .images import CROP_JPEG_QUALITY
 
 
 POLICY_VERSION = "performer-avatar-provider-v1"
@@ -21,6 +24,41 @@ SUPPORTED_FORMATS = {
     "JPEG": ("image/jpeg", ".jpg"),
     "PNG": ("image/png", ".png"),
 }
+INPUT_FORMATS = frozenset({"JPEG", "PNG", "WEBP", "AVIF", "GIF", "BMP", "DIB", "TIFF", "ICO", "JPEG2000"})
+
+
+class AvatarImageError(ValueError):
+    """头像输入无法识别、解码或转换。"""
+
+
+def prepare_avatar(data: bytes) -> bytes:
+    """完整读取第一帧并转正，输出浏览器可预览的静态 JPEG 或 PNG。"""
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            image_format = (image.format or "").upper()
+            if image_format not in INPUT_FORMATS:
+                raise AvatarImageError(f"暂不支持 {image_format or '这种'} 图片格式，请换用 JPEG、PNG、WebP 或 AVIF 图片")
+            image.verify()
+        with Image.open(io.BytesIO(data)) as image:
+            image.seek(0)
+            image.load()
+            if (image_format in SUPPORTED_FORMATS and not getattr(image, "is_animated", False)
+                    and image.getexif().get(0x0112, 1) in (1, None)):
+                return data
+            upright = ImageOps.exif_transpose(image)
+            transparent = "A" in upright.getbands() or "transparency" in upright.info
+            converted = upright.convert("RGBA" if transparent else "RGB")
+            output = io.BytesIO()
+            converted.save(output, format="PNG" if transparent else "JPEG", quality=CROP_JPEG_QUALITY)
+            return output.getvalue()
+    except AvatarImageError:
+        raise
+    except Image.DecompressionBombError as error:
+        raise AvatarImageError("图片像素尺寸过大，请缩小后重新选择") from error
+    except UnidentifiedImageError as error:
+        raise AvatarImageError("无法识别图片内容，文件可能损坏或格式未支持，请重新导出图片") from error
+    except (OSError, SyntaxError, ValueError, EOFError, struct.error) as error:
+        raise AvatarImageError("图片数据不完整或无法解码，请重新下载或导出图片") from error
 
 
 @dataclass(frozen=True)
@@ -51,13 +89,17 @@ class AvatarProvenance:
 
 
 def inspect_avatar(data: bytes) -> InspectedAvatar | None:
-    """Decode the whole raster and derive type from bytes, never URL suffixes."""
+    """完整解码可保存的头像，按字节确定格式和尺寸。"""
     try:
         with Image.open(io.BytesIO(data)) as image:
             width, height = image.size
             image_format = (image.format or "").upper()
+            if image_format not in SUPPORTED_FORMATS:
+                return None
             image.verify()
-    except (OSError, UnidentifiedImageError, Image.DecompressionBombError):
+        with Image.open(io.BytesIO(data)) as image:
+            image.load()
+    except (OSError, SyntaxError, ValueError, EOFError, struct.error, Image.DecompressionBombError):
         return None
     media = SUPPORTED_FORMATS.get(image_format)
     if media is None:
@@ -104,20 +146,22 @@ def install_entity_avatar(avatar_root: Path, kind: str, entity_id: int, body: by
     """
     from .previews import entity_image_key
 
-    destination = atomic_write_bytes(
-        avatar_root / f"{entity_image_key(kind, entity_id)}.img", body)
-    Path(f"{destination}.ct").write_text(content_type, encoding="utf-8")
-    record = FaceProbe()(destination) if probe_face and face is None else face
-    if record:
-        write_sidecar(destination, record)
-    else:
-        drop_sidecar(destination)
-    Path(f"{destination}.provenance.json").write_text(
-        json.dumps({**provenance,
-                    "imported_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                    "purpose": "local performer identity cache"},
-                   ensure_ascii=False, indent=2),
-        encoding="utf-8")
+    destination = avatar_root / f"{entity_image_key(kind, entity_id)}.img"
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with FileLock(destination.with_suffix('.install.lock'), timeout=30):
+        atomic_write_bytes(destination, body)
+        Path(f"{destination}.ct").write_text(content_type, encoding="utf-8")
+        record = FaceProbe()(destination) if probe_face and face is None else face
+        if record:
+            write_sidecar(destination, record)
+        else:
+            drop_sidecar(destination)
+        Path(f"{destination}.provenance.json").write_text(
+            json.dumps({**provenance,
+                        "imported_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        "purpose": "local performer identity cache"},
+                       ensure_ascii=False, indent=2),
+            encoding="utf-8")
     return destination
 
 

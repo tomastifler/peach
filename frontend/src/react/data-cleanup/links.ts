@@ -32,12 +32,16 @@ export interface LinkStats {
   entities: number;
   by_kind: Record<string, number>;
   top_hosts: [string, number][];
+  top_host_link_ids: Record<string, number>;
 }
 
 /** 一条被判出来的链接。`note` 是站点回的那句结果。 */
 export interface LinkRow {
   id: number;
   entity: string;
+  entity_id?: number;
+  entity_kind?: string;
+  face?: { id: number; name: string; has_image: boolean; image_version?: string; avatar_focus?: unknown };
   link_kind: string;
   label: string;
   url: string;

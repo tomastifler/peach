@@ -50,6 +50,15 @@ it('运行中的任务发布确认结果时更新列表，状态与凭据查询�
   expect(queryClient.getQueryState(['index', 'performers'])?.isInvalidated).toBe(true);
 });
 
+it('关注结果变了，统计与口味也重取：两页的服务端缓存都读关注来源', async () => {
+  // 页面与版本键的对应和 `tests/test_ledger_revision.py` 的 `ResultVersionTablesTests` 一致。
+  for (const key of [['stats'], ['taste', 'all'], ['catalog-grid']]) queryClient.setQueryData(key, '旧');
+  await createResultRefresher()({ follow: '1' }, { follow: '2' });
+  expect(queryClient.getQueryState(['stats'])?.isInvalidated).toBe(true);
+  expect(queryClient.getQueryState(['taste', 'all'])?.isInvalidated).toBe(true);
+  expect(queryClient.getQueryState(['catalog-grid'])?.isInvalidated).toBe(false);
+});
+
 it('版本到达前已发出的读取结束后再核查一次，旧响应不能盖住确认结果', async () => {
   const old = pending<string>();
   let reads = 0;

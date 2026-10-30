@@ -12,6 +12,7 @@ import { wireHorizontalScroller } from '../../ui-kit/scroll';
 import { DiscoveryFaces } from './discovery-faces';
 import { javContentSkeleton, javTagSkeleton, JAV_RECOMMENDATION_GRID } from '../../jav-skeleton';
 import { errorMessage } from '../../api';
+import { textLang } from '../../core/text-lang';
 import { CloudDownloadDialog, type DownloadPrefill } from '../activity/cloud-download-dialog';
 import { Note } from '../components/note';
 import { EmptyState } from '../components/empty-state';
@@ -54,7 +55,7 @@ export function JavPage({ tab, readOnly, navigate, receipt }: {
     </form>
     {tab === 'discover'
       ? <Discover readOnly={readOnly} receipt={receipt} resource={setDownload} query={text.trim()} navigate={navigate} clearText={() => setText('')} />
-      : <WantList readOnly={readOnly} toast={receipt} query={text.trim()} />}
+      : <WantList readOnly={readOnly} toast={receipt} query={text.trim()} clearQuery={() => setText('')} />}
     <CloudDownloadDialog prefill={download} close={() => setDownload(null)} receipt={receipt} />
   </div>;
 }
@@ -147,11 +148,14 @@ function Discover({ readOnly, receipt, resource, query, navigate, clearText }: {
         label={`Reading work metadata · ${metadata.completed} / ${metadata.total}`} value={metadata.completed} total={metadata.total} /></div> : null}
     {metadata && metadata.status !== 'running' && (metadata.status !== 'complete' || metadata.failed > 0)
       ? <Note tone="neutral" action={<Button variant="secondary" {...busyProps(metadataAction.busy === 'retry')}
-        onClick={() => updateMetadata('retry')}>Read metadata again</Button>}>{metadata.message || `Work metadata ${metadata.completed} / ${metadata.total}`}</Note> : null}
+        aria-label="立即重试读取作品资料" onClick={() => updateMetadata('retry')}>立即重试</Button>}>{metadata.message || `作品资料 ${metadata.completed} / ${metadata.total} 部`}</Note> : null}
     {metadataAction.error ? <Note tone="error">{metadataAction.error}</Note> : null}
-    {!waiting && !discoveries.error && !items.length ? <EmptyState shell="plain" icon={RiCompassLine} title={query || tag ? 'No matching recommendations' : 'No works match your taste yet'}
-      actions={<ButtonLink href="/taste" variant="secondary">View taste</ButtonLink>}>
-      {query || tag ? 'Clear the filters to see other works.' : scope === 'library' ? 'After you watch or mark works, you can explore rarely watched library items.' : 'You can look up a code or update your followed sources.'}
+    {!waiting && !discoveries.error && !items.length ? <EmptyState icon={RiCompassLine} title={query || tag ? '没有符合条件的推荐' : '暂无匹配口味的作品'}
+      actions={<><ButtonLink size="small" href="/taste" variant="secondary">查看口味</ButtonLink>
+        {query || tag ? <Button variant="primary" size="small" onClick={() => { clearText(); changeTag(''); writeJavQuery({ q: '', tag: '' }) }}>清除筛选</Button>
+        : scope === 'library' ? <ButtonLink variant="primary" size="small" href="/">浏览馆藏</ButtonLink>
+        : <Button variant="primary" size="small" onClick={() => resource({})}>查找作品</Button>}</>}>
+      {query || tag ? '清除筛选后查看其他作品。' : scope === 'library' ? '观看或标记作品后，可以探索少看的馆藏。' : '可以查找番号，或更新关注来源。'}
     </EmptyState> : null}
     {action.error ? <Note tone="error">{action.error}</Note> : null}
     <div data-media-grid="" className={JAV_RECOMMENDATION_GRID} style={{ '--card-ratio': ratio } as CSSProperties}>
@@ -174,7 +178,7 @@ function Discover({ readOnly, receipt, resource, query, navigate, clearText }: {
         <div data-media-meta="">
           <DiscoveryFaces item={item} />
           <div data-media-text="">
-            <h3 data-jav-title="" data-media-title="" title={`${item.code} · ${item.title || 'Title unavailable'}`}><b>{item.code}</b> {item.title || 'Title unavailable'}</h3>
+            <h3 data-jav-title="" data-media-title="" title={`${item.code} · ${item.title || '标题未取得'}`}><b>{item.code}</b> {item.title ? <span lang={textLang(item.title)}>{item.title}</span> : '标题未取得'}</h3>
             <div data-media-byline="">
               {item.performer_refs?.[0]?.id ? <a data-media-who="" href={entityPath('performer', item.performer_refs[0].name)} title={performers}>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-user-round" /></svg><span>{item.performer_refs[0].name}</span></a>
@@ -192,13 +196,13 @@ function Discover({ readOnly, receipt, resource, query, navigate, clearText }: {
           </div>
         </div>
         <div data-jav-actions="" className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => resource({ ...item, cover: item.has_cover ? coverUrl(item, true) : item.cover_url, origin: `${item.asset_id ? 'asset' : 'feed'}:${item.id}` })}>Find resources</Button>
+          {item.link ? <ButtonLink data-button-link="" variant="secondary" trailingIcon={RiExternalLinkLine} href={item.link} target="_blank" rel="noopener noreferrer">作品来源</ButtonLink> : null}
           <Button variant="ghost" disabled={readOnly || item.wanted || !!item.asset_id} {...busyProps(action.busy === String(item.id))} onClick={() => {
             void action.run(String(item.id), signal => addWant({ code: item.code }, signal), () => {
               receipt('Added to want list'); void invalidateWants(); void discoveries.refetch();
             });
-          }}>{item.asset_id ? 'In library' : item.wanted ? 'On want list' : 'Want'}</Button>
-          {item.link ? <ButtonLink data-button-link="" variant="secondary" trailingIcon={RiExternalLinkLine} href={item.link} target="_blank" rel="noopener noreferrer">Work source</ButtonLink> : null}
+          }}>{item.asset_id ? '已入库' : item.wanted ? '已加入想要' : '想要'}</Button>
+          <Button variant="secondary" onClick={() => resource({ ...item, cover: item.has_cover ? coverUrl(item, true) : item.cover_url, origin: `${item.asset_id ? 'asset' : 'feed'}:${item.id}` })}>查找资源</Button>
         </div>
       </article>})}
     </div>

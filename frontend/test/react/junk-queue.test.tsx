@@ -59,7 +59,9 @@ function countShape(root: Element | null | undefined): string {
   const copy = root?.cloneNode(true) as Element | undefined;
   if (!copy) return '';
   copy.querySelectorAll('.ovtrack,.ui-ov-edges').forEach((track) => track.remove());
-  copy.querySelectorAll('[data-overlay-scrollbar]').forEach((el) => el.removeAttribute('data-overlay-scrollbar'));
+  copy.querySelectorAll('[data-overlay-scrollbar]').forEach((el) => {
+    el.removeAttribute('data-overlay-scrollbar');el.removeAttribute('data-overlay-axes');
+  });
   copy.querySelectorAll('[class]').forEach((el) => el.setAttribute('class', el.className.toString().trim().split(/\s+/).join(' ')));
   return copy.outerHTML;
 }
@@ -159,7 +161,7 @@ describe('计数行', () => {
     const { host } = await open(p);
     expect(p.countRow!.querySelector('[data-skeleton]')).toBeNull();
     expect(p.countRow!.querySelector('[data-collection-summary] strong')?.textContent).toBe('—');
-    expect(host.querySelector('[data-media-error] [data-note-action]')?.textContent).toBe('Retry');
+    expect(host.querySelector('[data-media-error] [data-note-action]')?.textContent).toBe('立即重试');
     expect(cards(host)).toHaveLength(0);
   });
 });

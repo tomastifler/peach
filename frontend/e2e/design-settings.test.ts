@@ -96,9 +96,9 @@ describe('设计决定：设置、口味、统计与筛选玻璃', () => {
     const opened = await openTaste(browser, DESKTOP);
     try {
       const page = opened.page;
-      await page.getByRole('tablist', { name: 'Taste evidence source' }).getByRole('tab', { name: 'Inside Peach' }).click();
-      for (const name of ['Performers', 'Creators']) {
-        await page.getByRole('tablist', { name: 'Peach taste dimensions' }).getByRole('tab', { name }).click();
+      await page.getByRole('tablist', { name: '口味分析的数据来源' }).getByRole('tab', { name: 'Peach 观看与评价' }).click();
+      for (const name of ['女优', '创作者']) {
+        await page.getByRole('tablist', { name: 'Peach 口味维度' }).getByRole('tab', { name }).click();
         const img = page.getByRole('tabpanel', { name }).locator('img[data-facebox]').first();
         await img.scrollIntoViewIfNeeded();
         // 放大是图加载后 `avatarFrame` 写进内联 style 的；等到那一步落地再量。
@@ -344,6 +344,7 @@ describe('设计决定：设置、口味、统计与筛选玻璃', () => {
           head: [top.left, top.width, top.bottom], body: [body.left, body.width, body.top],
           z: getComputedStyle(head).zIndex, shadow: getComputedStyle(head).boxShadow, clip: getComputedStyle(head).clipPath,
           overflow: style.overflowY, overscroll: style.overscrollBehaviorY, gap: style.paddingTop,
+          navigationClip: getComputedStyle(panel.querySelector('[data-settings-nav]')!).clipPath,
         };
       });
       const resting = await read();
@@ -353,6 +354,7 @@ describe('设计决定：设置、口味、统计与筛选玻璃', () => {
       assert.equal(resting.overflow, 'auto');
       assert.equal(resting.overscroll, 'contain', '滚到底之后滚动会漏给背后的页面');
       assert.equal(resting.shadow, 'none', '还没滚动标题栏就投了影');
+      assert.equal(resting.navigationClip, 'inset(0px)', '玻璃导航的外部投影越过列边界');
       // 影子只要往下那一半：往上会糊在标题自己头上、往左会糊到左栏上。
       assert.equal(resting.clip, 'inset(0px 0px -96px)');
 
@@ -362,6 +364,11 @@ describe('设计决定：设置、口味、统计与筛选玻璃', () => {
       await page.locator(`${PANEL} [data-settings-scroll]`).evaluate((scroll) => { scroll.scrollTop = 80 });
       await page.waitForFunction((want) => getComputedStyle(
         document.querySelector('#settingsPanel [data-settings-head]')!).boxShadow === want, shadow);
+      await page.locator(`${PANEL} [data-settings-scroll]`).evaluate((scroll) => { scroll.scrollTop = 0 });
+      await page.waitForFunction(() => getComputedStyle(document.querySelector('#settingsPanel [data-settings-head]')!).boxShadow === 'none');
+      await page.locator(`${PANEL} [data-settings-scroll]`).evaluate((scroll) => { scroll.scrollTop = 80 });
+      await page.locator(PANEL).getByRole('tab', { name: '浏览与播放', exact: true }).click();
+      await page.waitForFunction(() => getComputedStyle(document.querySelector('#settingsPanel [data-settings-head]')!).boxShadow === 'none');
       assert.deepEqual(opened.problems, []);
     } finally {
       await opened.close();
@@ -379,13 +386,16 @@ describe('设计决定：设置、口味、统计与筛选玻璃', () => {
         .evaluate((node) => Math.round(node.getBoundingClientRect().top));
       const selected = await nav.getByRole('tab', { name: 'Appearance & navigation', exact: true }).evaluate((node) => {
         const style = getComputedStyle(node), icon = getComputedStyle(node.querySelector('svg')!);
-        return { face: style.backgroundColor, ring: style.boxShadow, icon: [icon.width, icon.height, icon.fill === style.color, icon.stroke] };
+        // 与文字同行的图标取 `--icon-inline`（1.2em），按所在文字字号算出应有的边长。
+        const side = (value: string) => `${Math.round(parseFloat(value) * 10) / 10}px`;
+        return { face: style.backgroundColor, ring: style.boxShadow, inline: side(String(parseFloat(style.fontSize) * 1.2)),
+          icon: [side(icon.width), side(icon.height), icon.fill === style.color, icon.stroke] };
       });
       assert.equal(selected.face, 'rgba(0, 0, 0, 0)', '当前项自己铺了底，滑动的那块玻璃被盖住');
       assert.equal(selected.ring, 'none');
       // Remix 的线条是 `fill` 画出的轮廓，全站默认的 `stroke:currentColor;fill:none` 会让它整枚消失。
-      assert.deepEqual(selected.icon, ['20px', '20px', true, 'none']);
-      assert.equal(await glide(), await top('Appearance & navigation'), '玻璃没有落在当前项上');
+      assert.deepEqual(selected.icon, [selected.inline, selected.inline, true, 'none']);
+      assert.equal(await glide(), await top('外观与导航'), '玻璃没有落在当前项上');
 
       await nav.getByRole('tab', { name: 'Browsing & playback', exact: true }).hover();
       const target = await top('Browsing & playback');
@@ -415,7 +425,7 @@ describe('设计决定：设置、口味、统计与筛选玻璃', () => {
             const rect = node.getBoundingClientRect();
             return [Math.round(rect.width), Math.round(rect.height)];
           };
-          const group = getComputedStyle(panel.querySelector('[data-setting-group]:not([hidden])')!);
+          const group = getComputedStyle(panel.querySelector('[data-setting-group]:not([hidden]) [data-setting-card]')!);
           const toggles = [...panel.querySelectorAll('[data-setting-group]:not([hidden]) [data-toggle]')];
           const on = panel.querySelector('#uiSoundsSetting')!, row = on.closest('[data-setting-row]')!;
           const title = row.querySelector('b')!.getBoundingClientRect(), knob = on.getBoundingClientRect();
@@ -436,6 +446,58 @@ describe('设计决定：设置、口味、统计与筛选玻璃', () => {
         assert.deepEqual(shown.theme, ['32×32', '32×32', '32×32'], `${viewport.name}：主题三档不是 32px 的圆`);
         assert.equal(shown.themeIcon, '16×16');
         assert.deepEqual(shown.close, ['24×24', '50%', '0px'], `${viewport.name}：关闭键不是 24px 的圆钮`);
+        assert.deepEqual(opened.problems, []);
+      } finally {
+        await opened.close();
+      }
+    }
+  });
+
+  it('偏好设置按标题与控件的实际宽度同行，空间不足时完整换行', { timeout: 60_000 }, async () => {
+    for (const width of [320, 375, 390, 428, DESKTOP.width]) {
+      const opened = await openHome(browser, { ...(width > 760 ? DESKTOP : MOBILE), width });
+      try {
+        await openPanel(opened.page);
+        for (const section of ['外观与导航', '浏览与播放', 'JAV 与新作', '搜索与推荐', '内容显示']) {
+          await opened.page.locator(PANEL).getByRole('tab', { name: section, exact: true }).click();
+          const subheadings = ({ '浏览与播放': ['作品列表', '播放'], 'JAV 与新作': ['作品显示', '新作显示'] } as
+            Record<string, string[] | undefined>)[section];
+          if (subheadings) {
+            const headings = await opened.page.locator(`${PANEL} [data-setting-group]:not([hidden]) [data-settings-subheading]`)
+              .evaluateAll((nodes) => nodes.map((node) => ({ text: node.textContent, padding: getComputedStyle(node).padding,
+                left: node.getBoundingClientRect().left - node.parentElement!.getBoundingClientRect().left })));
+            assert.deepEqual(headings, subheadings.map((text) => ({ text, padding: '16px 0px 6px', left: 12 })));
+          }
+          const rows = await opened.page.locator(`${PANEL} [data-setting-group]:not([hidden]) [data-setting-row]`)
+          .evaluateAll((nodes) => nodes.map((row) => {
+            const title = row.querySelector('b')!;
+            const control = row.lastElementChild!.getBoundingClientRect();
+            const bounds = row.getBoundingClientRect();
+            const style = getComputedStyle(row);
+            const range = document.createRange();
+            range.selectNodeContents(title);
+            const text = range.getBoundingClientRect();
+            return {
+              title: title.textContent,
+              textLines: range.getClientRects().length,
+              sameLine: text.top < control.bottom && control.top < text.bottom,
+              fits: text.width + control.width + 12 <= bounds.width - parseFloat(style.paddingRight),
+              gap: control.left - text.right,
+              contained: control.left >= bounds.left - 1 && control.right <= bounds.right + 1,
+              rightGap: bounds.right - control.right - parseFloat(style.paddingRight),
+            };
+          }));
+          assert.ok(rows.length > 0);
+          for (const row of rows) {
+            assert.equal(row.textLines, 1, `${width}px：${row.title}标题发生折行`);
+            assert.equal(row.contained, true, `${width}px：${row.title}控件越出设置行`);
+            assert.ok(Math.abs(row.rightGap) <= 1, `${width}px：${row.title}控件没有靠右`);
+            if (row.fits || (section === '搜索与推荐' && width >= 375)) {
+              assert.equal(row.sameLine, true, `${width}px：${row.title}控件没有与标题同行`);
+              assert.ok(row.gap >= 11, `${width}px：${row.title}与控件之间缺少间距`);
+            }
+          }
+        }
         assert.deepEqual(opened.problems, []);
       } finally {
         await opened.close();
@@ -528,7 +590,7 @@ describe('设计决定：设置、口味、统计与筛选玻璃', () => {
     }
   });
 
-  it('光晕参数块自己让出分组右侧的留白、下边距与设置行同一档；「玻璃原色」那一档只留漂移速度', { timeout: 60_000 }, async () => {
+  it('光晕配色与自定义颜色使用独立卡片；「玻璃原色」只留漂移速度', { timeout: 60_000 }, async () => {
     for (const viewport of [DESKTOP, MOBILE]) {
       const opened = await openHome(browser, viewport);
       const { page } = opened;
@@ -538,22 +600,77 @@ describe('设计决定：设置、口味、统计与筛选玻璃', () => {
         await block.waitFor({ state: 'visible', timeout: 10_000 });
         const shown = await block.evaluate((node) => {
           const group = node.closest('[data-setting-group]')!.getBoundingClientRect(), rect = node.getBoundingClientRect();
-          const row = node.parentElement!.querySelector('[data-setting-row]')!;
+          const cards = [...node.querySelectorAll('[data-setting-card]')];
           return {
             right: Math.round(group.right - rect.right), left: rect.left >= group.left,
             overflow: node.scrollWidth > node.clientWidth,
-            pad: getComputedStyle(node).paddingBottom, rowPad: getComputedStyle(row).paddingBottom,
+            cards: cards.map((card) => ({ radius: getComputedStyle(card).borderTopLeftRadius,
+              left: card.getBoundingClientRect().left - group.left, right: group.right - card.getBoundingClientRect().right })),
+            headings: [...node.querySelectorAll('h4')].map((heading) => heading.textContent),
           };
         });
-        assert.ok(shown.right >= 16 && shown.left, `${viewport.name}：参数块压到了分组的圆角上（右侧只剩 ${shown.right}px）`);
+        assert.equal(shown.right, 0);
+        assert.ok(shown.left);
         assert.equal(shown.overflow, false, `${viewport.name}：参数块被内容顶宽`);
-        assert.equal(shown.pad, shown.rowPad, `${viewport.name}：参数块的下边距和上面每一行不是同一档`);
+        assert.deepEqual(shown.headings, ['光晕配色', '自定义颜色']);
+        assert.equal(shown.cards.length, 2);
+        for (const card of shown.cards) {
+          assert.equal(card.radius, '16px');
+          assert.ok(Math.abs(card.left) <= .5 && Math.abs(card.right) <= .5, JSON.stringify(card));
+        }
+
+        const colorRow = block.locator('[data-glow-stop="spot1"] [data-glow-stop-toggle]');
+        await colorRow.hover();
+        assert.equal(await colorRow.evaluate((node) => getComputedStyle(node).backgroundColor),
+          await tokenColor(page, PANEL, '--control-hover'));
+        assert.equal(await colorRow.evaluate((node) => getComputedStyle(node).borderRadius), '0px');
+        const hoverEdges = await colorRow.evaluate((node) => {
+          const card = node.closest('[data-glow-colour-card]')!.getBoundingClientRect();
+          const button = node.getBoundingClientRect();
+          const stop = node.closest('[data-glow-stop]')!.getBoundingClientRect();
+          const dot = node.querySelector('[data-glow-stop-dot]')!.getBoundingClientRect();
+          return { left: button.left - card.left, right: card.right - button.right,
+            contentLeft: dot.left - card.left, separatorLeft: stop.left - card.left };
+        });
+        assert.ok(Math.abs(hoverEdges.left) <= .5 && Math.abs(hoverEdges.right) <= .5, JSON.stringify(hoverEdges));
+        assert.equal(hoverEdges.contentLeft, 12);
+        assert.equal(hoverEdges.separatorLeft, 12);
+        const middleRow = block.locator('[data-glow-stop="spot2"] [data-glow-stop-toggle]');
+        await middleRow.hover();
+        const seam = await middleRow.evaluate((node) => {
+          const style = getComputedStyle(node), row = node.closest('[data-glow-stop]')!;
+          const button = node.getBoundingClientRect(), bounds = row.getBoundingClientRect();
+          return { shadow: style.boxShadow, zIndex: style.zIndex,
+            above: getComputedStyle(row.previousElementSibling!).borderBottomWidth,
+            below: getComputedStyle(row).borderBottomWidth, gap: bounds.bottom - button.bottom };
+        });
+        assert.match(seam.shadow, /0px -1px 0px 0px/);
+        assert.match(seam.shadow, /0px 1px 0px 0px/);
+        assert.equal(seam.zIndex, '1');
+        assert.equal(seam.above, '1px');
+        assert.equal(seam.below, '1px');
+        assert.equal(seam.gap, 1);
+        await colorRow.click();
+        const palette = block.locator('[data-glow-stop="spot1"] [data-glow-palette]');
+        await palette.waitFor({ state: 'visible' });
+        const scrolling = await palette.evaluate((node) => ({
+          native: getComputedStyle(node).scrollbarWidth, overlay: node.getAttribute('data-overlay-scrollbar'),
+          tracks: node.parentElement!.querySelectorAll('[data-overlay-track]').length,
+          popupWidth: node.closest('[data-glow-stop-pop]')!.getBoundingClientRect().width,
+          rowWidth: node.closest('[data-glow-stop]')!.querySelector('[data-glow-stop-toggle]')!.getBoundingClientRect().width,
+        }));
+        assert.equal(scrolling.native, 'none');
+        assert.equal(scrolling.overlay, 'true');
+        assert.equal(scrolling.tracks, 2);
+        assert.ok(Math.abs(scrolling.popupWidth - scrolling.rowWidth) <= 1, JSON.stringify(scrolling));
+        await colorRow.click();
 
         await block.locator('[data-glow-preset="native"]').click();
         await block.locator('[data-glow-native-note]').waitFor({ state: 'visible', timeout: 5_000 });
         const fields = await block.locator('[data-glow-field]').evaluateAll((nodes) => nodes
           .filter((node) => node.getClientRects().length > 0).map((node) => (node as HTMLElement).dataset.glowField));
         assert.deepEqual(fields, ['speed'], `${viewport.name}：「玻璃原色」下还摆着管不着任何东西的拉条`);
+        assert.equal(await block.locator('[data-glow-colours]').isVisible(), false);
         assert.deepEqual(opened.problems, []);
       } finally {
         await opened.close();
@@ -636,7 +753,7 @@ describe('设计决定：设置、口味、统计与筛选玻璃', () => {
       }));
       const release = await holdApi(page);
       await page.reload({ waitUntil: 'load' });
-      await page.locator('#index [data-skeleton^="index/tags/"]').waitFor({ timeout: 15_000 });
+      await page.locator('#index [data-skeleton^="tags/"]').waitFor({ timeout: 15_000 });
       const measure = (glass: string, group: string, view: string) => page.evaluate(([glassSelector, groupSelector, viewSelector]) => {
         const rect = (selector: string) => {
           const box = document.querySelector(selector)?.getBoundingClientRect();
@@ -648,7 +765,7 @@ describe('设计决定：设置、口味、统计与筛选玻璃', () => {
           pills: document.querySelectorAll(`${glassSelector} [data-filter-row="top"] > *`).length,
           view: rect(`${glassSelector} [data-filter-row="bottom"] ${viewSelector}`) };
       }, [glass, group, view] as const);
-      const skeleton = await measure('#index .board-filter-frame', '#index [data-skeleton] .ui-alphagroup', '.iconswitch');
+      const skeleton = await measure('#index [data-filter-glass]', '#index [data-skeleton] section', '.iconswitch');
       release();
       await page.locator('#index [data-alphabet]').waitFor({ timeout: 15_000 });
       await settle(page);

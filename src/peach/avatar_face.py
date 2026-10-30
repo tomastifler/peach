@@ -13,6 +13,7 @@ sidecar 的形状是契约的一部分，读它的是 `peach.web_state.avatar_fo
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 from peach import face_detect
@@ -165,31 +166,47 @@ def drop_sidecar(image_path: Path) -> None:
     sidecar_path(image_path).unlink(missing_ok=True)
 
 
+#: 模型取不到之后隔多久再试。服务进程里的探针活得和进程一样久：启动时恰好没网，
+#: 联网后要能自己恢复；但也不能每张图都在请求线程里重下一遍。
+RETRY_SECONDS = 3600
+
+
 class FaceProbe:
     """按需构造模型的人脸探针，检不出与检不了分得开。
 
     模型是懒构造的：这一趟一个候选都没走到就不必去下 232 KB 的 ONNX。取不到模型也不
     让整轮停下——那会把「今天没网」变成「所有人都没有头像」——但要把原因记进 `unavailable`
     让调用方报出来，不然一次下载失败会静悄悄地把整批退回不看脸的旧判据。
+    取不到之后 `RETRY_SECONDS` 内直接回 None，过了这段再试一次；取到了 `unavailable` 清空。
+    窗口内别处取到了模型（活动中心的「立即重试」）就不再等，下一张图当场重试。
     """
 
-    def __init__(self):
+    def __init__(self, clock=time.monotonic):
         self._detector: FaceDetector | None = None
         self._unavailable = ""
+        self._failed_at: float | None = None
+        self._failed_generation = 0
+        self._clock = clock
 
     @property
     def unavailable(self) -> str:
         return self._unavailable
 
     def _ready(self) -> FaceDetector | None:
-        if self._unavailable:
+        if self._detector is not None:
+            return self._detector
+        if (self._failed_at is not None and self._failed_generation == face_detect.downloads
+                and self._clock() - self._failed_at < RETRY_SECONDS):
             return None
-        if self._detector is None:
-            try:
-                self._detector = FaceDetector()
-            except Exception as error:          # 缺模型、缺 OpenCV、下载失败
-                self._unavailable = str(error)
-                return None
+        try:
+            self._detector = FaceDetector()
+        except Exception as error:              # 缺模型、缺 OpenCV、下载失败
+            self._unavailable = str(error)
+            self._failed_at = self._clock()
+            self._failed_generation = face_detect.downloads
+            return None
+        self._unavailable = ""
+        self._failed_at = None
         return self._detector
 
     def __call__(self, image_path: Path) -> dict | None:

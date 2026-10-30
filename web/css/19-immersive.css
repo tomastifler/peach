@@ -9,7 +9,6 @@
   :root{--tile:168px;--topH:52px;--sortH:60px}
   /* 确认弹层的两个键是本项目 44px 命中区的对象，桌面的 32px 是 Geist 控件高度。 */
   .geist-modal-footer .geist-button{min-height:44px;padding:0 14px}
-  .cleanupgrid{grid-template-columns:minmax(0,1fr)}
   .count{align-items:center;flex-direction:row;gap:10px;padding-block:8px;
     overflow-x:auto;overflow-y:hidden;scrollbar-width:none;overscroll-behavior-inline:contain}
   .count::-webkit-scrollbar{display:none}

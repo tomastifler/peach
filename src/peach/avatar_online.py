@@ -6,12 +6,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from urllib.parse import parse_qs, urlsplit
 
-from .avatar_picker import Choice, MAX_ASSET_CHOICES, MAX_IMAGE_BYTES, PickerError, accept_image
-from .avatar_provider import inspect_avatar
+from .avatar_picker import Choice, MAX_ASSET_CHOICES, MAX_IMAGE_BYTES, PickerError, prepare_image
 from .follow_avatar import profile_identities
 from .follow_identity import official_avatar_url
 from .follow_store import FollowItemRow, FollowStore
-from . import images
 
 
 @dataclass(frozen=True)
@@ -106,11 +104,6 @@ def resolve(ref: str, connection: sqlite3.Connection, entity_id: int, *, project
             body = media(item, index)
         provider = "follow-content"
     if not body or len(body) > MAX_IMAGE_BYTES:
-        raise PickerError("This image could not be fetched or is too large")
-    if not inspect_avatar(body):
-        size = images.measure_image_size(body)
-        body = images.crop_to_box(body, (0, 0, *size)) if size else None
-    if not body:
-        raise PickerError("This is not a recognisable image")
-    accept_image(body)
+        raise PickerError("这张图未取得或太大了")
+    body = prepare_image(body)
     return body, {"source": "avatar picker", "provider": provider, "external_id": ref}

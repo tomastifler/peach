@@ -77,6 +77,24 @@ class ManifestTests(unittest.TestCase):
                   if row["file"].startswith(("performer-", "creator-"))]
         self.assertEqual([], person)
 
+    def test_browser_catalog_contains_original_identifiers_with_sources_and_matching_bytes(self):
+        from peach.browser_icons import catalog, ROOT
+        icons = catalog()
+        supported = {'firefox','zen','chrome','aside','edge','brave','vivaldi','opera','opera-gx',
+                     '115','qq','360chrome','360chromex','360se','sogou','2345','maxthon','chromium','safari'}
+        self.assertLessEqual(supported, icons.keys())
+        listed = set()
+        for key, row in icons.items():
+            self.assertTrue(row['source_url'].startswith('https://'), key)
+            self.assertEqual(pathlib.Path(row['file']).name, row['file'])
+            body = (ROOT / row['file']).read_bytes()
+            self.assertLessEqual(len(body), brand_marks.MAX_FILE_BYTES)
+            self.assertEqual(len(body), row['bytes'])
+            self.assertEqual(hashlib.sha256(body).hexdigest(), row['sha256'])
+            listed.add(row['file'])
+        self.assertEqual(listed, {path.name for path in ROOT.iterdir() if path.name != 'manifest.json'})
+        self.assertLessEqual(sum((ROOT / name).stat().st_size for name in listed), brand_marks.MAX_TOTAL_BYTES)
+
 
 class LookupTests(unittest.TestCase):
     """内置资源要被找得到，但不能盖住用户自己那份。"""

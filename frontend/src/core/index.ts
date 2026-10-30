@@ -6,6 +6,7 @@ import { entityLinkId, registerEntityLink, registerResponseEntities } from './en
 import { SOURCE_LABELS } from './media-sources';
 import { requestErrorMessage } from './request-error';
 import { iconGeometry } from './icon-geometry';
+import { libraryScopedPath } from './library-scope';
 export { registerEntityLink, registerResponseEntities } from './entity-links';
 export { requestErrorMessage } from './request-error';
 const $=(s:string)=>document.querySelector(s);
@@ -19,10 +20,7 @@ const icon=(name:string,cls='')=>{
    还没读完的请求，「这个请求可被取消」得在签名上看得见。 */
 /** 遗留层的取数入口：JSON 请求体，失败抛带人话原因的 Error。 */
 const api=async(p:string,o?:RequestInit):Promise<unknown>=>{
-  if(!o?.method||o.method==='GET'){
-    const library=sessionStorage.getItem('peach.library');
-    if(library&&/^\/api\/(items|facets)(\?|$)/.test(p))p+=(p.includes('?')?'&':'?')+'library='+encodeURIComponent(library);
-  }
+  if(!o?.method||o.method.toUpperCase()==='GET')p=libraryScopedPath(p);
   const {signal=null,...rest}=o||{};
   const init:RequestInit={headers:{'Content-Type':'application/json'},...rest};
   if(signal)init.signal=signal;

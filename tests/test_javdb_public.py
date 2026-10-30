@@ -6,20 +6,107 @@ import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+from urllib.parse import parse_qs, urlsplit
 
 from PIL import Image
 
 from peach.http import HttpResponse
-from peach.javdb_public import PublicAPI, PublicSourceUnavailable, decode_image, preview_video_url
+from peach.javdb_public import PublicAPI, PublicSourceUnavailable, decode_image, preview_video_url, public_signature_parts
 from peach.javdb_public import PublicBudgetExceeded, PublicRequestBudget, actor_gender
-from peach.web_jav_detail import q_jav_detail, q_jav_image, q_jav_reviews, q_jav_resources
+from peach.web_jav_detail import (JAV_ACTOR_IMAGE_MAX_AGE, JAV_IMAGE_MAX_AGE, jav_image, q_jav_detail,
+                                  q_jav_reviews, q_jav_resources)
 from peach.web_state import WebContract
 from peach.web_router import dispatch_api_get
 from support.ledger import fresh_ledger
 
 
 class PublicProtocolTests(unittest.TestCase):
+    def test_same_number_source_ids_are_ambiguous_in_both_orders(self):
+        rows = [{'id': 'XeYkdb', 'number': 'MIKR-023', 'maker_name': 'MOODYZ', 'release_date': '2025-06-17',
+                 'duration': 120, 'actors': [{'id': 'ActorA', 'name': '甲'}]},
+                {'id': 'MO50k', 'number': 'MIKR-023', 'maker_name': 'Mr.michiru', 'release_date': '2022-05-26',
+                 'duration': 120, 'actors': [{'id': 'ActorB', 'name': '乙'}]}]
+        for matches in (rows, rows[::-1]):
+            api = PublicAPI(sleeper=lambda _: None)
+            with patch.object(api, '_rows', return_value=matches), patch.object(api, '_json') as detail:
+                with self.assertRaisesRegex(PublicSourceUnavailable, '多个作品'):
+                    api.movie('MIKR-023')
+                detail.assert_not_called()
+
+    def test_old_number_only_cache_and_unmarked_hint_do_not_bypass_ambiguity(self):
+        from peach.jav_cache import PublicSnapshots
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            old = PublicSnapshots(root)
+            old.save('movie-id:MIKR-023', 'XeYkdb', None)
+            old.save('movie:MIKR-023', {'id': 'XeYkdb', 'number': 'MIKR-023'}, '2025-06-17')
+            paths = {path: path.read_bytes() for path in root.glob('*.json')}
+            api = PublicAPI(cache_root=root, sleeper=lambda _: None)
+            api.remember_movie_identity('MIKR-023', {'id': 'XeYkdb', 'number': 'MIKR-023'})
+            with patch.object(api, '_rows', return_value=[{'id': identity, 'number': 'MIKR-023'}
+                                                        for identity in ('XeYkdb', 'MO50k')]):
+                with self.assertRaisesRegex(PublicSourceUnavailable, '多个作品'):
+                    api.movie('MIKR-023')
+            for path, body in paths.items():
+                self.assertEqual(path.read_bytes(), body)
+
+    def test_refresh_ambiguity_is_not_replaced_by_previous_success_snapshot(self):
+        api = self.api()
+        self.assertEqual(api.movie('EXM-001')['id'], 'Exact')
+        rows = [{'id': identity, 'number': 'EXM-001'} for identity in ('Exact', 'Another')]
+        with patch.object(api, '_rows', return_value=rows):
+            with self.assertRaisesRegex(PublicSourceUnavailable, '多个作品'):
+                api.movie('EXM-001', refresh=True)
+            with self.assertRaisesRegex(PublicSourceUnavailable, '多个作品'):
+                api.movie('EXM-001')
+
+    def test_transient_identity_refresh_failure_reuses_the_same_confirmed_work(self):
+        api = self.api()
+        first = api.movie('EXM-001')
+        with patch.object(api, '_rows', side_effect=PublicSourceUnavailable('临时网络失败')):
+            self.assertEqual(api.movie('EXM-001', refresh=True)['id'], first['id'])
+
+    def test_bound_resources_do_not_resolve_the_number_to_another_work(self):
+        api = PublicAPI(sleeper=lambda _: None)
+        first = {'id': 'XeYkdb', 'number': 'MIKR-023'}
+        with patch.object(api, 'movie', return_value={'id': 'MO50k', 'number': 'MIKR-023'}) as lookup, \
+                patch.object(api, '_rows', return_value=[]) as rows:
+            self.assertEqual(api.magnets('MIKR-023', movie=first), [])
+            self.assertEqual(api.reviews('MIKR-023', 1, movie=first), [])
+        lookup.assert_not_called()
+        self.assertEqual([call.args[0] for call in rows.call_args_list],
+                         ['/v1/movies/XeYkdb/magnets', '/v1/movies/XeYkdb/reviews'])
+
+    def test_javdb_preview_cache_is_bound_to_source_id_and_ignores_old_number_only_result(self):
+        api = PublicAPI()
+        api._cached('preview:javdb:MIKR-023', lambda: {'url': 'old'})
+        for identity, url in (('XeYkdb', 'first'), ('MO50k', 'second'), (None, 'checked-search')):
+            fetch = Mock(return_value=url)
+            self.assertEqual(api.official_preview('MIKR-023', fetch, provider='javdb', source_id=identity)['url'], url)
+            fetch.assert_called_once()
+
+    def test_signature_rejects_multiple_recipes_unknown_time_and_control_literals(self):
+        script = ('const AA="sample-middle",BB="sample-suffix";'
+                  'function makeHeader(){const now=Math.floor(Date.now()/1e3).toString();'
+                  'return`${now}.${AA}.${digest(now+BB)}`}const headers={jdsignature:makeHeader()};')
+        function=script[script.index('function'):script.index('const headers')]
+        for invalid in (script+'const other={jdsignature:otherHeader()};', script+function,
+                        script.replace('Date.now()','clock()'),
+                        script.replace('sample-suffix', r'bad\nvalue')):
+            with self.subTest(script=invalid):
+                self.assertIsNone(public_signature_parts(invalid))
+        self.assertEqual(public_signature_parts(script.replace('1e3','1000')),
+                         ('sample-middle','sample-suffix'))
+
+    def test_signature_follows_header_recipe_with_minified_identifiers(self):
+        script = ('const AA="sample-middle",BB="sample-suffix";'
+                  'function makeHeader(){const now=Math.floor(Date.now()/1e3).toString();'
+                  'return`${now}.${AA}.${digest(now+BB)}`}const headers={jdsignature:makeHeader()};')
+        self.assertEqual(public_signature_parts(script), ('sample-middle', 'sample-suffix'))
+        self.assertIsNone(public_signature_parts(script.replace('now+BB', 'now+window.token')))
+        self.assertIsNone(public_signature_parts(script + 'BB="ambiguous";'))
+
     def test_api_and_image_cooldowns_have_independent_scope(self):
         requests = []
         def transport(request, *_):
@@ -47,7 +134,8 @@ class PublicProtocolTests(unittest.TestCase):
             started.set()
             self.assertTrue(release.wait(3))
             return 'pixels'
-        api._cached('movie:EXM-001', lambda: {'id': 'Exact'})
+        api._cached('movie-id:EXM-001', lambda: ['Exact'])
+        api._cached('movie:EXM-001:Exact', lambda: {'id': 'Exact'})
         with ThreadPoolExecutor(max_workers=3) as pool:
             first = pool.submit(api._cached, 'image:Exact:0', fetch)
             self.assertTrue(started.wait(1))
@@ -64,7 +152,8 @@ class PublicProtocolTests(unittest.TestCase):
 
     def test_images_use_three_slots_and_leave_api_interval_intact(self):
         api = PublicAPI(lambda *_: HttpResponse(200, {}, b'pixels'))
-        api._cached('movie:EXM-001', lambda: {'id': 'Exact', 'number': 'EXM-001',
+        api._cached('movie-id:EXM-001', lambda: ['Exact'])
+        api._cached('movie:EXM-001:Exact', lambda: {'id': 'Exact', 'number': 'EXM-001',
                     'preview_images': [f'https://tp.spfcas.com/{index}.jpg' for index in range(6)]})
         started, release = threading.Event(), threading.Event()
         lock = threading.Lock()
@@ -113,11 +202,11 @@ class PublicProtocolTests(unittest.TestCase):
 
     def test_known_movie_identity_skips_search_and_keeps_full_detail_validation(self):
         api = self.api()
-        api.remember_movie_identity('EXM-001', {'id': 'Exact', 'number': 'EXM-001'})
+        api.remember_movie_identity('EXM-001', {'id': 'Exact', 'number': 'EXM-001', 'javdb_rule': 2})
         self.assertEqual(api.movie('EXM-001')['id'], 'Exact')
         self.assertFalse(any('/v2/search' in request.url for request in self.requests))
         wrong = self.api(wrong_code=True)
-        wrong.remember_movie_identity('EXM-001', {'id': 'Exact', 'number': 'EXM-001'})
+        wrong.remember_movie_identity('EXM-001', {'id': 'Exact', 'number': 'EXM-001', 'javdb_rule': 2})
         with self.assertRaises(PublicSourceUnavailable):
             wrong.movie('EXM-001')
 
@@ -129,7 +218,7 @@ class PublicProtocolTests(unittest.TestCase):
         self.assertEqual(api.movie('EXM-001')['id'], 'Exact')
         self.assertTrue(any('/v2/search' in request.url for request in self.requests))
 
-    def api(self, *, wrong_code=False, blocked=False):
+    def api(self, *, wrong_code=False, blocked=False, number='EXM-001'):
         self.requests = []
 
         def transport(request, timeout, max_bytes):
@@ -137,20 +226,29 @@ class PublicProtocolTests(unittest.TestCase):
             if request.url.endswith('/'):
                 body = b'<script src="/assets/index-test.js"></script>'
             elif '/assets/' in request.url:
-                body = b'const S1="test-middle",E1="test-suffix";'
+                body = (b'const S1="test-middle",E1="test-suffix";function signature(){const n=Math.floor(Date.now()/1e3).toString();'
+                        b'return`${n}.${S1}.${digest(n+E1)}`}const headers={jdsignature:signature()};')
             else:
                 if blocked:
                     return HttpResponse(429, {}, b'')
                 if '/search' in request.url:
-                    data = {'movies': [{'id': 'Exact', 'number': 'EXM-001'}, {'id': 'Other', 'number': 'EXM-002'}]}
+                    data = {'movies': [{'id': 'Exact', 'number': number}, {'id': 'Other', 'number': 'EXM-002'}]}
                 elif '/reviews' in request.url:
                     data = {'reviews': [{'id': 'second' if 'page=2' in request.url else 'first', 'content': '示例评论'}]}
                 else:
-                    data = {'movie': {'id': 'Exact', 'number': 'EXM-002' if wrong_code else 'EXM-001', 'title': '示例作品'}}
+                    data = {'movie': {'id': 'Exact', 'number': 'EXM-002' if wrong_code else number, 'title': '示例作品'}}
                 body = json.dumps({'success': 1, 'data': data}).encode()
             return HttpResponse(200, {}, body)
 
         return PublicAPI(transport, sleeper=lambda _: None)
+
+    def test_fc2_search_uses_product_number_and_validates_canonical_identity(self):
+        api = self.api(number='FC2-1627464')
+        self.assertEqual(api.movie('FC2-PPV-1627464')['number'], 'FC2-1627464')
+        search = next(request for request in self.requests if '/v2/search' in request.url)
+        self.assertEqual(parse_qs(urlsplit(search.url).query)['q'], ['1627464'])
+        with self.assertRaises(PublicSourceUnavailable):
+            self.api().movie('FC2-PPV-1627464')
 
     def test_exact_work_is_cached_and_signed_without_credentials(self):
         api = self.api()
@@ -275,6 +373,73 @@ class PublicProtocolTests(unittest.TestCase):
 
 
 class DetailProjectionTests(unittest.TestCase):
+    def test_ambiguous_detail_does_not_fall_back_to_number_bound_preview(self):
+        from peach.javdb_public import PublicIdentityAmbiguous
+        with patch('peach.web_jav_detail.PUBLIC_API.movie', side_effect=PublicIdentityAmbiguous('多个作品')), \
+                patch('peach.web_jav_detail._preview_fields') as preview:
+            result = q_jav_detail(self.contract, {'code': 'MIKR-023'})
+        self.assertEqual(result['state'], 'partial')
+        self.assertEqual(result['preview_state'], 'unavailable')
+        self.assertEqual(result['source_url'], '')
+        preview.assert_not_called()
+
+    def test_ambiguous_artwork_does_not_present_previous_number_bound_cover_or_link(self):
+        from peach.web_jav_detail import _artwork_fields
+        with patch.object(self.contract, 'has_cover', return_value=True):
+            result = _artwork_fields(self.contract, 'MIKR-023', {
+                'link': 'https://javdb.com/v/OldFirst',
+                'cover_url': 'https://pics.dmm.co.jp/digital/video/mikr00023/mikr00023pl.jpg'}, {}, ambiguous=True)
+        self.assertFalse(result['has_cover'])
+        self.assertEqual((result['cover_url'], result['source_url']), ('', ''))
+
+    def test_review_refresh_uses_the_identity_returned_by_that_refresh(self):
+        api = PublicAPI()
+        first = {'id': 'XeYkdb', 'number': 'MIKR-023'}
+        with patch.object(api, 'movie', side_effect=[first, {'id': 'MO50k', 'number': 'MIKR-023'}]) as movie, \
+                patch.object(api, '_rows', return_value=[]) as rows, \
+                patch('peach.web_jav_detail.PUBLIC_API', api):
+            result = q_jav_reviews(self.contract, {'code': 'MIKR-023', 'refresh': '1'})
+        self.assertTrue(result['ok'])
+        movie.assert_called_once_with('MIKR-023', refresh=True)
+        rows.assert_called_once_with('/v1/movies/XeYkdb/reviews', 'reviews', {'page': 1})
+
+    def test_detail_preserves_original_title_and_does_not_edit_display_title(self):
+        movie = {'id': 'XeYkdb', 'number': 'MIKR-023', 'title': '自动翻译标题',
+                 'origin_title': 'Original *A* **j*yqy*pq* 日本語'}
+        with patch('peach.web_jav_detail.PUBLIC_API.movie', return_value=movie):
+            result = q_jav_detail(self.contract, {'code': 'MIKR-023'})
+        self.assertEqual(result['title'], movie['origin_title'])
+        self.assertEqual(movie['title'], '自动翻译标题')
+
+    def test_legacy_image_bytes_cannot_bypass_ambiguous_source_and_new_ids_have_distinct_bytes(self):
+        from peach.remote_media_cache import cache_for
+        cache_for(self.contract).bytes('jav:MIKR-023:image:cover', lambda: b'old wrong work')
+        with patch('peach.web_jav_detail.PUBLIC_API.movie', side_effect=PublicSourceUnavailable('多个作品')):
+            with self.assertRaisesRegex(PublicSourceUnavailable, '多个作品'):
+                jav_image(self.contract, {'code': 'MIKR-023'})
+        for identity, data in (('XeYkdb', 'Zmlyc3Q='), ('MO50k', 'c2Vjb25k')):
+            source = {'id': identity, 'number': 'MIKR-023'}
+            with patch('peach.web_jav_detail.PUBLIC_API.movie', return_value=source), \
+                    patch('peach.web_jav_detail.PUBLIC_API.image', return_value='data:image/jpeg;base64,' + data) as image:
+                self.assertEqual(jav_image(self.contract, {'code': 'MIKR-023'})[0],
+                                 b'first' if identity == 'XeYkdb' else b'second')
+            image.assert_called_once_with('MIKR-023', 'cover', movie=source)
+
+    def test_browser_people_projects_local_actor_rules_without_writes(self):
+        from peach.web_jav_browser_people import cached_people
+        source = {'actors': [{'name': '甲', 'gender': 0}, {'name': '乙', 'gender': 1},
+                             {'name': '丙'}, {'id': 'missing-name'}, None]}
+        with self.contract.database.read_connection() as connection:
+            before = connection.execute('SELECT COUNT(*) FROM entity').fetchone()[0]
+        with patch('peach.web_jav_browser_people._snapshots', return_value={'EXM-001': source}):
+            result = cached_people(self.contract, None, 'EXM-001,exm001')
+        self.assertEqual(result['source'], 'local-cache')
+        self.assertEqual(result['items'], {'EXM-001': [{'id': None, 'name': '甲'}, {'id': None, 'name': '丙'}]})
+        with self.contract.database.read_connection() as connection:
+            self.assertEqual(connection.execute('SELECT COUNT(*) FROM entity').fetchone()[0], before)
+        with self.assertRaises(ValueError):
+            cached_people(self.contract, None, 'invalid')
+
     def test_official_thumbnail_does_not_enable_a_javdb_cover(self):
         from peach.web_jav_detail import _artwork_fields
         for url in ('https://c0.jdbstatic.com/a.jpg', 'https://tp.spfcas.com/a.jpg?expires=100'):
@@ -290,11 +455,13 @@ class DetailProjectionTests(unittest.TestCase):
         original = io.BytesIO()
         Image.new('RGB', (800, 438), '#777').save(original, 'JPEG')
         data_url = 'data:image/jpeg;base64,' + base64.b64encode(original.getvalue()).decode('ascii')
-        with patch('peach.web_jav_detail.PUBLIC_API.image', return_value=data_url) as fetch:
-            detail = q_jav_image(self.contract, {'code': 'MIDA-085'})
-        with patch('peach.web_jav_detail.PUBLIC_API.image', side_effect=AssertionError('缓存命中不请求来源')):
-            self.assertEqual(q_jav_image(self.contract, {'code': 'MIDA-085'})['image'], data_url)
-        self.assertTrue(detail['ok'])
+        source = {'id': 'Exact', 'number': 'MIDA-085'}
+        with patch('peach.web_jav_detail.PUBLIC_API.movie', return_value=source):
+            with patch('peach.web_jav_detail.PUBLIC_API.image', return_value=data_url) as fetch:
+                detail, _max_age = jav_image(self.contract, {'code': 'MIDA-085'})
+            with patch('peach.web_jav_detail.PUBLIC_API.image', side_effect=AssertionError('缓存命中不请求图片')):
+                self.assertEqual(jav_image(self.contract, {'code': 'MIDA-085'})[0], original.getvalue())
+        self.assertEqual(detail, original.getvalue())
         fetch.assert_called_once()
 
     def test_source_cover_url_projects_known_work_without_changing_source_fields(self):
@@ -304,13 +471,20 @@ class DetailProjectionTests(unittest.TestCase):
         self.assertIsNone(item['cover_url'])
         self.assertEqual(discovery_cover_url({**item, 'cover_url': 'https://c0.jdbstatic.com/a.jpg'}, {}), '')
         self.assertEqual(discovery_cover_url({**item, 'link': ''}, {'id': 'Exact'}), '')
-        self.assertEqual(discovery_cover_url({**item, 'cover_url': 'https://pics.dmm.co.jp/a.jpg'}, {}), 'https://pics.dmm.co.jp/a.jpg')
+        official = 'https://pics.dmm.co.jp/digital/video/mida00085/mida00085pl.jpg'
+        self.assertEqual(discovery_cover_url({**item, 'cover_url': official}, {}), official)
+        self.assertEqual(discovery_cover_url(item, {'cover_url': 'https://image.mgstage.com/images/a/pb_e_a.jpg'}),
+                         'https://image.mgstage.com/images/a/pb_e_a.jpg')
+        for url in ('https://pics.dmm.co.jp/a.jpg', 'https://www.javbus.com/pics/cover/a_b.jpg',
+                    official.replace('https:', 'http:'), 'https://evil.example/digital/video/mida00085/mida00085pl.jpg'):
+            with self.subTest(url=url):
+                self.assertEqual(discovery_cover_url({**item, 'cover_url': url}, {}), '')
         self.assertEqual(discovery_cover_url({**item, 'link': 'https://private.invalid/'}, {}), '')
 
     def test_saved_identity_fetches_actor_portrait_without_code_search(self):
         from peach.jav_discovery_metadata import discovery_metadata
         metadata = discovery_metadata(self.contract)
-        metadata.remember('EXM-001', {'id': 'Exact', 'number': 'EXM-001', 'actors': [
+        metadata.remember('EXM-001', {'id': 'Exact', 'number': 'EXM-001', 'javdb_rule': 2, 'actors': [
             {'id': 'Person', 'name': '甲', 'gender': 0,
              'avatar_url': 'https://tp.spfcas.com/actor.jpg?signature=expired'}]})
         original = io.BytesIO()
@@ -325,7 +499,8 @@ class DetailProjectionTests(unittest.TestCase):
             elif request.url.endswith('/'):
                 body = b'<script src="/assets/index-test.js"></script>'
             elif '/assets/' in request.url:
-                body = b'const S1="test-middle",E1="test-suffix";'
+                body = (b'const S1="test-middle",E1="test-suffix";function signature(){const n=Math.floor(Date.now()/1e3).toString();'
+                        b'return`${n}.${S1}.${digest(n+E1)}`}const headers={jdsignature:signature()};')
             else:
                 body = json.dumps({'success': 1, 'data': {'movie': {'id': 'Exact', 'number': 'EXM-001',
                     'actors': [{'id': 'Person', 'name': '甲', 'gender': 0,
@@ -333,10 +508,10 @@ class DetailProjectionTests(unittest.TestCase):
             return HttpResponse(200, {}, body)
         api = PublicAPI(transport, sleeper=lambda _: None)
         with patch('peach.web_jav_detail.PUBLIC_API', api):
-            first = q_jav_image(self.contract, {'code': 'EXM-001', 'image': 'actor:Person'})
-            second = q_jav_image(self.contract, {'code': 'EXM-001', 'image': 'actor:Person'})
-        self.assertTrue(first['ok'])
-        self.assertTrue(first['image'].startswith('data:image/jpeg;base64,'))
+            first = jav_image(self.contract, {'code': 'EXM-001', 'image': 'actor:Person'})
+            second = jav_image(self.contract, {'code': 'EXM-001', 'image': 'actor:Person'})
+        self.assertTrue(first[0].startswith(b'\xff\xd8\xff'))
+        self.assertEqual(first[1], JAV_ACTOR_IMAGE_MAX_AGE)
         self.assertEqual(second, first)
         self.assertEqual(sum('/movies/Exact' in url for url in requests), 1)
         self.assertEqual(sum(url.startswith('https://tp.spfcas.com/') for url in requests), 1)
@@ -348,8 +523,8 @@ class DetailProjectionTests(unittest.TestCase):
                                                'avatar_url': 'https://tp.spfcas.com/actor.jpg'}]})
         with patch('peach.web_jav_detail.PUBLIC_API.image_from_url', return_value='data:image/jpeg;base64,c2FtcGxl') as image, \
                 patch('peach.web_jav_detail.PUBLIC_API.movie') as movie:
-            result = q_jav_image(self.contract, {'code': 'EXM-001', 'image': 'actor:Actor1'})
-        self.assertTrue(result['ok'])
+            result = jav_image(self.contract, {'code': 'EXM-001', 'image': 'actor:Actor1'})
+        self.assertEqual(result[0], b'sample')
         movie.assert_not_called()
         image.assert_called_once_with('https://tp.spfcas.com/actor.jpg')
 
@@ -442,7 +617,7 @@ class DetailProjectionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 q_jav_detail(self.contract, {'code': '../secret'})
             with self.assertRaises(ValueError):
-                q_jav_image(self.contract, {'code': 'EXM-001', 'image': '-1'})
+                jav_image(self.contract, {'code': 'EXM-001', 'image': '-1'})
             movie.assert_not_called()
 
     def test_resources_normalize_and_deduplicate_valid_magnets(self):
@@ -454,7 +629,7 @@ class DetailProjectionTests(unittest.TestCase):
                 patch('peach.web_jav_detail.PUBLIC_API.magnets', return_value=rows) as magnets, \
                 patch('peach.web_jav_detail.PUBLIC_API.reviews', return_value=[]):
             result = q_jav_resources(self.contract, {'code': 'EXM-001', 'refresh': '1'})
-        magnets.assert_called_once_with('EXM-001', refresh=True)
+        magnets.assert_called_once_with('EXM-001', refresh=True, movie={'id': 'Exact'})
         self.assertEqual(result['state'], 'ready')
         self.assertEqual(len(result['items']), 1)
         self.assertEqual(result['items'][0]['info_hash'], fingerprint)
@@ -521,15 +696,18 @@ class DetailProjectionTests(unittest.TestCase):
         self.assertEqual(result['studio_refs'][0]['has_logo'], True)
         self.assertEqual(result['studio_refs'][0]['logo_version'], 'logo-version')
         with patch('peach.web_jav_detail.PUBLIC_API.image_from_url', return_value='data:image/jpeg;base64,c2FtcGxl') as image:
-            self.assertTrue(q_jav_image(self.contract, {'code': 'EXM-001', 'image': 'actor:Unknown'})['ok'])
+            self.assertEqual(jav_image(self.contract, {'code': 'EXM-001', 'image': 'actor:Unknown'})[0], b'sample')
         image.assert_called_once_with('https://tp.spfcas.com/b.jpg')
 
-    def test_image_bytes_are_reused_without_querying_source_again(self):
-        with patch('peach.web_jav_detail.PUBLIC_API.image', return_value='data:image/jpeg;base64,c2FtcGxl') as image:
-            first = q_jav_image(self.contract, {'code': 'EXM-001'})
-        image.assert_called_once()
-        with patch('peach.web_jav_detail.PUBLIC_API.image', side_effect=PublicSourceUnavailable('offline')) as offline:
-            replay = q_jav_image(self.contract, {'code': 'EXM-001'})
+    def test_image_bytes_are_reused_for_the_same_confirmed_source_identity(self):
+        source = {'id': 'Exact', 'number': 'EXM-001'}
+        with patch('peach.web_jav_detail.PUBLIC_API.movie', return_value=source):
+            with patch('peach.web_jav_detail.PUBLIC_API.image', return_value='data:image/jpeg;base64,c2FtcGxl') as image:
+                first = jav_image(self.contract, {'code': 'EXM-001'})
+            image.assert_called_once_with('EXM-001', 'cover', movie=source)
+            with patch('peach.web_jav_detail.PUBLIC_API.image', side_effect=PublicSourceUnavailable('offline')) as offline:
+                replay = jav_image(self.contract, {'code': 'EXM-001'})
+        self.assertEqual(first, (b'sample', JAV_IMAGE_MAX_AGE))
         self.assertEqual(replay, first)
         offline.assert_not_called()
 

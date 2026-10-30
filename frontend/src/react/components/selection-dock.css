@@ -1,0 +1,19 @@
+/* 主界面与独立页面共用的浮动操作条几何。 */
+.peach-react [data-selection-dock] {
+  position: fixed;
+  z-index: 180;
+  bottom: max(22px, env(safe-area-inset-bottom));
+  left: 50%;
+  display: flex;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  padding: 9px 11px;
+  transform: translateX(-50%);
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 22px;
+  backdrop-filter: var(--glass-optic, blur(22px)) saturate(145%);
+  -webkit-backdrop-filter: var(--glass-optic, blur(22px)) saturate(145%);
+}

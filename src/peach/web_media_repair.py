@@ -24,7 +24,7 @@ import subprocess
 import time
 from pathlib import Path, PureWindowsPath
 
-from . import media_libraries, media_probe, mp4recover, settings_file
+from . import media_libraries, media_probe, mp4recover, mp4repair, settings_file
 from .mp4repair import RepairUnavailable
 from .platform import translate_ledger_path
 
@@ -34,6 +34,7 @@ SCAN_CACHE_NAME = "mp4-repair-scan.json"
 #: 文件身份对应的判定缓存；修复产物由边车或新文件核验。
 CLEAN = "clean"
 UNAVAILABLE = "unavailable"
+LEGACY_UNAVAILABLE = "unavailable-layout-v1"
 
 #: 缺时间戳表，修的是边车。
 HEADER = "header"
@@ -53,7 +54,10 @@ def _load_cache(contract) -> dict[str, str]:
     except (OSError, ValueError):
         return {}
     entries = payload.get("entries") if isinstance(payload, dict) else None
-    return {str(key): str(value) for key, value in entries.items()} if isinstance(entries, dict) else {}
+    if not isinstance(entries, dict):
+        return {}
+    return {str(key): LEGACY_UNAVAILABLE if value == UNAVAILABLE and payload.get('version', 1) == 1
+            else str(value) for key, value in entries.items()}
 
 
 def _save_cache(contract, entries: dict[str, str]) -> None:
@@ -61,7 +65,7 @@ def _save_cache(contract, entries: dict[str, str]) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_name(path.name + ".tmp")
-        temporary.write_text(json.dumps({"version": 1, "entries": entries}), encoding="utf-8")
+        temporary.write_text(json.dumps({"version": 2, "entries": entries}), encoding="utf-8")
         temporary.replace(path)
     except OSError:
         # 结论缓存丢了只是下次重扫一遍，不该让整轮任务失败。
@@ -113,10 +117,24 @@ def _survey(contract, job, job_id: str, rows, cache: dict[str, str]) -> list[tup
             key = _key(asset_id, source)
         except OSError:
             continue
-        if store.lookup(asset_id, source) is not None or cache.get(key) in (CLEAN, UNAVAILABLE):
+        if store.lookup(asset_id, source) is not None:
             _advance(job, job_id, index, skipped=True)
             continue
         kind = cache.get(key)
+        if kind == LEGACY_UNAVAILABLE:
+            try:
+                kind = None if mp4repair.has_tail_moov(source) else UNAVAILABLE
+            except OSError:
+                _advance(job, job_id, index, skipped=True)
+                continue
+            if kind == UNAVAILABLE:
+                cache[key] = kind
+                _save_cache(contract, cache)
+        if kind == UNAVAILABLE and store.has_invalid_sidecar(asset_id, source):
+            kind = HEADER
+        if kind in (CLEAN, UNAVAILABLE):
+            _advance(job, job_id, index, skipped=True)
+            continue
         if kind not in (HEADER, INDEX):
             try:
                 kind = _diagnose(contract, source, duration)
@@ -126,8 +144,8 @@ def _survey(contract, job, job_id: str, rows, cache: dict[str, str]) -> list[tup
             found.append((asset_id, raw, kind))
         cache[key] = kind or CLEAN
         _save_cache(contract, cache)
-        if not job.checkpoint(job_id, survey_checked=index, survey_cache=dict(cache)):
-            raise InterruptedError('Media check stopped')
+        if not job.checkpoint(job_id, survey_checked=index, survey_cache=dict(cache), survey_cache_version=2):
+            raise InterruptedError('媒体检查已停止')
         _advance(job, job_id, index, skipped=False)
     return found
 
@@ -175,6 +193,9 @@ def _record_replacement(contract, asset_id: int, source: Path, ffprobe: Path) ->
 
 
 def _recover(contract, asset_id: int, raw: str, tools: tuple[Path, Path, Path]) -> bool:
+    from .smb_media import resolve
+    if resolve(raw) is not None:
+        return False
     with contract.read_connection() as connection:
         row = connection.execute("SELECT location FROM asset WHERE id=?", (asset_id,)).fetchone()
     if row is None:
@@ -247,9 +268,13 @@ def run_media_repair(contract, job_id: str, scope: tuple[str, list]) -> None:
     """一轮完整的批量修复。异常由 `BackgroundJob` 变成可轮询的失败状态。"""
     job = contract.media_repair_job
     cache = _load_cache(contract)
-    cache.update((job.snapshot() or {}).get('survey_cache') or {})
-    rows = _candidates(contract, scope)
     previous = job.snapshot() or {}
+    resumed_cache = previous.get('survey_cache') or {}
+    if previous.get('survey_cache_version', 1) == 1:
+        resumed_cache = {key: LEGACY_UNAVAILABLE if value == UNAVAILABLE else value
+                         for key, value in resumed_cache.items()}
+    cache.update(resumed_cache)
+    rows = _candidates(contract, scope)
     job.update(job_id, stage="扫描", total=len(rows), checked=previous.get('survey_checked', 0))
     found = _survey(contract, job, job_id, rows, cache)
     _save_cache(contract, cache)

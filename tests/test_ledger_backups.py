@@ -1,4 +1,6 @@
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import sqlite3
@@ -6,8 +8,9 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
-from peach import ledger_backups
+from peach import ledger_backups, web_organize
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -195,6 +198,139 @@ class LedgerBackupRetentionTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertIn("已删除 1 份", buffer.getvalue())
             self.assertFalse(old.exists())
+
+
+class OrganizeBackupRetentionTests(unittest.TestCase):
+    """整理备份放在 generated 下，只按份数留，进行中的那份任何清退都不碰。"""
+
+    make_ledger = LedgerBackupRetentionTests.make_ledger
+    make_backup = LedgerBackupRetentionTests.make_backup
+
+    def layout(self, root: Path) -> tuple[Path, Path, Path]:
+        database = root / "database"
+        database.mkdir()
+        generated = root / "generated"
+        folder = ledger_backups.organize_dir(generated)
+        folder.mkdir(parents=True)
+        return self.make_ledger(database, when=datetime.now()), generated, folder
+
+    def aged(self, folder: Path, names: list[str]) -> list[Path]:
+        """一个月前写的一批备份，越靠后越新。"""
+        return [self.make_backup(folder, name, datetime.now() - timedelta(days=30, hours=-index))
+                for index, name in enumerate(names)]
+
+    def test_keeps_only_the_recent_count_and_touches_nothing_but_the_two_names(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            live, _generated, folder = self.layout(root)
+            backups = [
+                self.make_backup(
+                    folder,
+                    f"ledger.pre-download-{index}-20260905-10{index:02d}00.db" if index % 2
+                    else f"ledger.pre-organize-20260905-10{index:02d}00-job{index}.db",
+                    NOW - timedelta(hours=2, minutes=-index))
+                for index in range(8)
+            ]
+            stamp(live, NOW)
+            foreign = self.make_backup(folder, "ledger.pre-migrate-20260801.db",
+                                       NOW - timedelta(days=30))
+            beside = self.make_backup(live.parent, "ledger.pre-old.db", NOW - timedelta(days=30))
+
+            decided = ledger_backups.prune(
+                live, apply=True, directory=folder, pattern=ledger_backups.ORGANIZE_PATTERN,
+                keep_recent=ledger_backups.ORGANIZE_KEEP_RECENT,
+                min_age=ledger_backups.ORGANIZE_MIN_AGE, now=NOW)
+
+            self.assertEqual(ledger_backups.ORGANIZE_KEEP_RECENT, 5)
+            self.assertEqual(set(decided.remove), set(backups[:3]),
+                             "两小时内的也只留最近 5 份：下载一波一小时能写四十份")
+            self.assertEqual(set(decided.keep), set(backups[3:]))
+            for path in backups[:3]:
+                self.assertFalse(path.exists())
+            for path in (*backups[3:], foreign, beside, live):
+                self.assertTrue(path.exists(), "只认两种整理备份名，也不碰账本目录")
+
+    def test_a_held_backup_survives_any_prune_until_released(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            live, _generated, folder = self.layout(root)
+            backup = self.make_backup(folder, "ledger.pre-organize-20260801-000000-a.db",
+                                      NOW - timedelta(days=30))
+            scope = {"directory": folder, "pattern": ledger_backups.ORGANIZE_PATTERN,
+                     "keep_recent": 0, "min_age": timedelta(0), "now": NOW}
+
+            with ledger_backups.holding(backup):
+                decided = ledger_backups.prune(live, apply=True, **scope)
+                self.assertEqual(decided.remove, ())
+                self.assertTrue(backup.exists(), "整理还在用的那份不能删")
+
+            ledger_backups.prune(live, apply=True, **scope)
+            self.assertFalse(backup.exists())
+
+    def test_organize_backup_writes_a_copy_and_prunes_down_to_the_recent_count(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            live, generated, folder = self.layout(root)
+            old = self.aged(folder, [f"ledger.pre-download-{index}-20260801-000000.db"
+                                     for index in range(6)])
+            name = "ledger.pre-download-99-20260905-120000.db"
+
+            with ledger_backups.organize_backup(live, generated, name) as backup:
+                self.assertEqual(backup, folder / name)
+                self.assertEqual(ledger_backups.integrity(backup), "ok", "是一份完整的账本副本")
+                remaining = ledger_backups.list_backups(folder, ledger_backups.ORGANIZE_PATTERN)
+                self.assertEqual(remaining, [*old[2:], backup])
+                ledger_backups.prune(live, apply=True, directory=folder,
+                                     pattern=ledger_backups.ORGANIZE_PATTERN,
+                                     keep_recent=0, min_age=timedelta(0))
+                self.assertTrue(backup.exists(), "同进程另一处清退也看得见这份在用")
+
+            with self.assertRaises(ValueError):
+                with ledger_backups.organize_backup(live, generated, "ledger.pre-migrate-x.db"):
+                    pass
+            self.assertFalse((folder / "ledger.pre-migrate-x.db").exists())
+
+    def test_manual_organize_write_backs_up_into_the_organize_folder(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            live, generated, folder = self.layout(root)
+            old = self.aged(folder, [f"ledger.pre-organize-20260801-00000{index}-j{index}.db"
+                                     for index in range(6)])
+            contract = SimpleNamespace(db_path=live, candidate_root=generated,
+                                       cache_bust=lambda: None)
+            seen = []
+
+            def work(_connection):
+                seen.extend(ledger_backups.list_backups(folder, ledger_backups.ORGANIZE_PATTERN))
+                return {"moved": 0}
+
+            result = web_organize._run_write(contract, "job1", work)
+
+            backup = Path(result["backup"])
+            self.assertEqual(backup.parent, folder)
+            self.assertEqual(seen, [*old[2:], backup], "写入开始前已清到最近 5 份")
+            self.assertTrue(backup.exists())
+
+    def test_script_organize_mode_plans_the_organize_folder_only(self):
+        script = load_script()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            live, generated, folder = self.layout(root)
+            backups = self.aged(folder, [f"ledger.pre-download-{index}-20260801-000000.db"
+                                         for index in range(7)])
+            beside = self.make_backup(live.parent, "ledger.pre-old.db",
+                                      datetime.now() - timedelta(days=30))
+
+            buffer = io.StringIO()
+            with contextlib.redirect_stdout(buffer):
+                code = script.main(["--db", str(live), "--organize", str(generated), "--json"])
+
+            self.assertEqual(code, 0)
+            report = json.loads(buffer.getvalue())
+            self.assertFalse(report["applied"])
+            self.assertEqual(report["remove"], [path.name for path in backups[:2]])
+            for path in (*backups, beside):
+                self.assertTrue(path.exists(), "缺省是 dry-run")
 
 
 if __name__ == "__main__":

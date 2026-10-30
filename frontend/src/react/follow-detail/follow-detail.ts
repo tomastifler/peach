@@ -37,6 +37,8 @@ export interface FollowDetailItem extends FollowItem {
   resource_urls?: string[];
   hidden_media?: FollowDetailMedia[];
   detail_tags?: string[];
+  custom_tags?: string[];
+  blocked_tags?: string[];
   variant_kind?: string;
   variant_label?: string;
   has_media?: boolean;

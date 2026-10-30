@@ -3,7 +3,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 import type { Browser } from 'playwright-core';
-import { launch, layout, settle, VIEWPORTS, visit } from './harness.ts';
+import { launch, layout, settle, VIEWPORTS, visit, withPageDiagnostics } from './harness.ts';
 
 describe('馆藏卡片与列表', () => {
   let browser: Browser;
@@ -88,32 +88,35 @@ describe('馆藏卡片与列表', () => {
       } finally { await opened.close() }
     });
     it(`${viewport.name} 全集排序、每页数量与跨页选择`, { timeout: 90_000 }, async () => {
-      const opened = await visit(browser, '/?browse=folders&loc=local', viewport);
+      const requests: URLSearchParams[] = [];
+      const entries = Array.from({ length: 45 }, (_, index) => ({
+        id: 9000 + index, name: `条目 ${String(index + 1).padStart(2, '0')}${index === 44 ? '超长文件名'.repeat(60) : ''}.mp4`,
+        medium: 'video', location: 'local', duration: 45 - index, size: index * 1024,
+      }));
+      /* 导航前挂上：首屏网格的请求可能早于 load，挂晚了它会落到真实服务上。 */
+      const opened = await visit(browser, '/?browse=folders&loc=local', viewport, page => page.route('**/api/items?*', route => {
+        const params = new URL(route.request().url()).searchParams;
+        requests.push(params);
+        const direction = params.get('dir') === 'asc' ? 1 : -1;
+        const sorted = [...entries].sort((a, b) => params.get('sort') === 'dur'
+          ? direction * (a.duration - b.duration) : direction * a.name.localeCompare(b.name));
+        const offset = Number(params.get('offset') || 0), limit = Number(params.get('limit') || 60);
+        return route.fulfill({ json: { items: sorted.slice(offset, offset + limit), total: sorted.length } });
+      }));
       const { page } = opened;
       try {
-        const requests: URLSearchParams[] = [];
-        const entries = Array.from({ length: 45 }, (_, index) => ({
-          id: 9000 + index, name: `条目 ${String(index + 1).padStart(2, '0')}${index === 44 ? '超长文件名'.repeat(60) : ''}.mp4`,
-          medium: 'video', location: 'local', duration: 45 - index, size: index * 1024,
-        }));
-        await page.route('**/api/items?*', route => {
-          const params = new URL(route.request().url()).searchParams;
-          requests.push(params);
-          const direction = params.get('dir') === 'asc' ? 1 : -1;
-          const sorted = [...entries].sort((a, b) => params.get('sort') === 'dur'
-            ? direction * (a.duration - b.duration) : direction * a.name.localeCompare(b.name));
-          const offset = Number(params.get('offset') || 0), limit = Number(params.get('limit') || 60);
-          return route.fulfill({ json: { items: sorted.slice(offset, offset + limit), total: sorted.length } });
-        });
-        await page.getByRole('radiogroup', { name: 'Library view mode' }).locator('label')
-          .filter({ has: page.getByRole('radio', { name: 'List', exact: true }) }).click();
-        await page.locator('[data-catalog-row][data-id="9044"]').waitFor();
+        await page.locator('#grid [data-media-card]').first().waitFor({ state: 'visible' });
+        await page.getByRole('radiogroup', { name: '馆藏显示方式' }).locator('label')
+          .filter({ has: page.getByRole('radio', { name: '列表', exact: true }) }).click();
+        await withPageDiagnostics(page, '切到列表后第一页没有出现', () =>
+          page.locator('[data-catalog-row][data-id="9044"]').waitFor());
         assert.equal(await page.locator('[data-catalog-row]').count(), 20);
         assert.equal(requests.at(-1)!.get('limit'), '20');
         assert.equal(requests.at(-1)!.get('loc'), 'local');
         assert.equal(requests.at(-1)!.get('browse'), 'folders');
         const first = page.locator('[data-catalog-row]').first();
         const firstId = await first.getAttribute('data-id');
+        await page.locator('#selectMode').click();
         await first.locator('label').click();
         assert.equal(await first.getAttribute('data-board-selected'), 'true');
         await page.getByRole('button', { name: 'Next', exact: true }).click();
@@ -145,7 +148,13 @@ describe('馆藏卡片与列表', () => {
         await pageSizeButton.scrollIntoViewIfNeeded();
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         await pageSizeButton.click();
-        await page.getByRole('option', { name: '10 works per page', exact: true }).click();
+        try { await page.getByRole('option', { name: '每页 10 部', exact: true }).click({ timeout: 5000 }) }
+        catch (error) {
+          console.info('分页菜单', await pageSizeButton.getAttribute('aria-expanded'),
+            await page.locator('[role="option"]').allTextContents(), await pageSizeButton.boundingBox());
+          await page.screenshot({ path: `../build/agent-verification/pagination-menu-${viewport.name}.png` });
+          throw error;
+        }
         await page.waitForFunction(() => document.querySelectorAll('[data-catalog-row]').length === 10);
         assert.equal(requests.at(-1)!.get('limit'), '10');
         if (!viewport.mobile) {
@@ -153,11 +162,22 @@ describe('馆藏卡片与列表', () => {
             const url = new URL(response.url());
             return url.pathname === '/api/items' && url.searchParams.get('sort') === 'name';
           });
-          await page.getByRole('columnheader', { name: /Name/ }).click();
+          await page.getByRole('columnheader', { name: /^作品/ }).click();
           await namedResponse;
           await page.waitForFunction(() => document.querySelector('[data-catalog-row]')?.getAttribute('data-id') === '9000');
           assert.equal(requests.at(-1)!.get('dir'), 'asc');
         }
+        const durationSort = page.locator('[data-entity-sort="dur"]');
+        await durationSort.scrollIntoViewIfNeeded();
+        const durationResponse = page.waitForResponse(response => {
+          const url = new URL(response.url());
+          return url.pathname === '/api/items' && url.searchParams.get('sort') === 'dur' && url.searchParams.get('dir') === 'desc';
+        });
+        await durationSort.click();
+        await durationResponse;
+        await page.waitForFunction(() => document.querySelector('[data-catalog-row]')?.getAttribute('data-id') === '9000');
+        assert.equal(await durationSort.getAttribute('aria-pressed'), 'true');
+        assert.equal(requests.at(-1)!.get('offset'), '0');
         const measured = await layout(page);
         assert.ok(measured.scrollWidth <= measured.viewportWidth + 1, JSON.stringify(measured));
         assert.deepEqual(opened.problems.filter(line => !line.includes('VIDEOJS')), []);

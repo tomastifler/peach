@@ -4,6 +4,7 @@ import sqlite3
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -209,6 +210,64 @@ class TaskRunStoreTests(unittest.TestCase):
         self.assertIn(live.id, remaining)
         self.assertEqual(len(remaining), 3)
         self.assertEqual(len(self.store.query(task_key="other")), 1)
+
+    def test_prune_preserves_followups_with_only_existing_task_references(self):
+        connect = self.database.connect
+        for foreign_keys in (0, 1):
+            with self.subTest(foreign_keys=foreign_keys):
+                def configured_connect(*args, _foreign_keys=foreign_keys, **kwargs):
+                    connection = connect(*args, **kwargs)
+                    connection.execute(f'PRAGMA foreign_keys={_foreign_keys}')
+                    return connection
+                with mock.patch.object(self.database, 'connect', configured_connect):
+                    key = f'parent-{foreign_keys}'
+                    active = self.store.start(key, trigger='manual')
+                    parent = self.store.start(key, trigger='manual')
+                    children = self.store.enqueue_followups(parent.id, [
+                        (f'{key}:running', f'child-{foreign_keys}', '正在处理'),
+                        (f'{key}:finished', 'child', '已经处理'),
+                        (f'{key}:pending', 'child', '等待处理'),
+                    ])['queued']
+                    self.store.claim_followup([f'child-{foreign_keys}'])
+                    self.store.finish(children[1], 'succeeded', summary={'changed':2})
+                    grandchild = self.store.enqueue_followups(children[0], [
+                        (f'{key}:grandchild', 'grandchild', '后续处理')])['queued'][0]
+                    self.store.finish(parent.id, 'succeeded')
+                    kept = self.store.start(key, trigger='manual')
+                    kept_child = self.store.enqueue_followups(kept.id, [
+                        (f'{key}:kept', 'child', '保留关联')])['queued'][0]
+                    self.store.finish(kept.id, 'succeeded')
+                    snapshots = {run_id:self.store.get(run_id) for run_id in
+                                 [active.id, kept.id, kept_child, grandchild, *children]}
+                    self.assertEqual(self.store.prune(key, keep=1), 1)
+                    self.assertIsNone(self.store.get(parent.id))
+                    for run_id, before in snapshots.items():
+                        expected = replace(before,
+                            parent_run_id=None if before.parent_run_id==parent.id else before.parent_run_id,
+                            root_run_id=None if before.root_run_id==parent.id else before.root_run_id)
+                        self.assertEqual(self.store.get(run_id), expected)
+                    with self.database.read_connection() as connection:
+                        self.assertEqual(connection.execute('PRAGMA foreign_key_check').fetchall(), [])
+                    self.assertEqual(self.store.prune(key, keep=1), 0)
+                    self.assertEqual(self.store.prune(key, keep=0), 1)
+                    self.assertEqual(self.store.get(active.id), snapshots[active.id])
+                    self.assertIsNone(self.store.get(kept_child).parent_run_id)
+                    self.assertIsNone(self.store.get(kept_child).root_run_id)
+
+    def test_task_reference_cleanup_rolls_back_with_a_batch_delete(self):
+        parents = [self.store.start(f'parent-{i}', trigger='manual') for i in range(2)]
+        for parent in parents:
+            self.store.enqueue_followups(parent.id, [(f'child:{parent.id}', 'child', '待处理')])
+            self.store.finish(parent.id, 'succeeded')
+        with self.database.write_transaction(notify=False) as connection:
+            before = connection.execute('SELECT * FROM task_run').fetchall()
+            connection.execute('SAVEPOINT cleanup')
+            connection.execute('DELETE FROM task_run WHERE id IN (?,?)', tuple(p.id for p in parents))
+            self.assertEqual(connection.execute('PRAGMA foreign_key_check').fetchall(), [])
+            self.assertEqual(connection.execute('SELECT count(*) FROM task_run').fetchone()[0], 2)
+            connection.execute('ROLLBACK TO cleanup')
+            connection.execute('RELEASE cleanup')
+            self.assertEqual(connection.execute('SELECT * FROM task_run').fetchall(), before)
 
     def test_query_filters_by_status_group_and_task(self):
         first = self.store.start("demo", trigger="manual")

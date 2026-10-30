@@ -17,6 +17,7 @@ import sqlite3
 from datetime import datetime
 
 from .task_runs import ACTIVE_STATUSES, TERMINAL_STATUSES
+from .task_results import RESULT_FIELDS, result_counts
 from .web_result_versions import result_versions
 
 #: 不带筛选时「最近完成」那一段每页的默认条数。一屏看得完，更早的往前翻。
@@ -40,6 +41,7 @@ def q_tasks(contract, args):
 
 
 def _tasks(contract, args):
+    payload = _payload_reader(contract)
     status = str((args or {}).get("status") or "").strip()
     task_key = str((args or {}).get("task_key") or "").strip()
     limit = _limit(args)
@@ -49,33 +51,55 @@ def _tasks(contract, args):
     if status or task_key:
         rows = contract.task_runs.query(status=status, task_key=task_key, limit=limit)
         return {"ok": True, "filtered": True, "available": True,
-                "runs": [row.payload() for row in rows]}
+                "runs": [payload(row) for row in rows]}
     finished, has_more = contract.task_runs.finished_page(before=before, limit=limit)
     if before is not None:
         return {"ok": True, "filtered": False, "available": True,
-                "finished": [row.payload() for row in finished],
-                "finished_has_more": has_more}
-    running = contract.task_runs.query(status="active", limit=limit)
+                "finished": [payload(row) for row in finished],
+                "finished_has_more": has_more,
+                "followup_counts": _parent_counts(contract, finished)}
+    running = _active(contract, limit)
     # 还在跑的那一轮已经跑完的后继：它们挂在「正在进行」那张卡下面，不在哪一页里。
     finished += contract.task_runs.settled_followups(
         [row.id for row in running if not row.followup])
+    # 后继还在排或在跑、自己已经结束的父任务：它可能比「最近完成」这一页还早，不单独下发的话，
+    # 它派出的后继在页面上找不到父卡，会一条条散开。它不进 `finished`，翻页游标才不会跳过中间那段。
+    shown = {row.id for row in (*running, *finished)}
+    working = [row for row in contract.task_runs.active_parents() if row.id not in shown]
     return {
         "ok": True,
         "filtered": False,
         "available": True,
         "result_versions": result_versions(contract),
-        "running": [row.payload() for row in running],
+        "running": [payload(row) for row in running],
         # 被挡掉的那些也在 `finished` 里（它们是 `cancelled`），这里单独再挑一份：
         # 「为什么没跑」是用户来这一页的主要问题，不该让他在完成列表里自己找。
-        "skipped": [row.payload() for row in finished
+        "skipped": [payload(row) for row in finished
                     if row.status == "cancelled" and "blocked_by" in row.result_summary],
-        "finished": [row.payload() for row in finished],
+        "finished": [payload(row) for row in finished],
         "finished_has_more": has_more,
+        "working_parents": [payload(row) for row in working],
+        "followup_counts": _parent_counts(contract, (*running, *finished, *working)),
         "statuses": {"active": list(ACTIVE_STATUSES), "finished": list(TERMINAL_STATUSES)},
     }
 
 
+def _active(contract, limit: int) -> list:
+    """正在跑的一条不落，排队的取最近几条：一轮派出上千条后继时，按 id 取最近的只剩排队那些，
+    真正在跑的那条反而被挤掉。"""
+    started = contract.task_runs.query(status="running", limit=500)
+    queued = contract.task_runs.query(status="pending", limit=limit)
+    return sorted({row.id: row for row in (*started, *queued)}.values(), key=lambda row: row.id, reverse=True)
+
+
+def _parent_counts(contract, rows) -> dict[str, dict[str, int]]:
+    """后继只下发了一部分，父任务做到哪一步、还算不算在进行，按这份计数回答。"""
+    counts = contract.task_runs.followup_counts(row.id for row in rows if not row.followup)
+    return {str(parent): states for parent, states in counts.items()}
+
+
 def q_task(contract, run_id):
+    payload = _payload_reader(contract)
     run = contract.task_runs.get(int(run_id))
     if run is None:
         # KeyError 在 API 层被翻成 404；ValueError 会变成 400，那是参数错，不是这里的事。
@@ -84,11 +108,38 @@ def q_task(contract, run_id):
     # 要知道派出去的几条跑成什么样（ADR-0040）。父只给一层，链根在 `root_run_id` 上。
     parent = (contract.task_runs.get(run.parent_run_id)
               if run.parent_run_id else None)
-    followups = [child.payload() for child in contract.task_runs.children(run.id)]
-    return {"ok": True, "run": run.payload(),
-            "parent": parent.payload() if parent else None,
+    followups = [payload(child) for child in contract.task_runs.children(run.id)]
+    return {"ok": True, "run": payload(run),
+            "parent": payload(parent) if parent else None,
             "followups": followups,
             "followup_counts": _counts(followups)}
+
+
+def _payload_reader(contract):
+    """同一轮的完成检查点可补充摘要，读取不回写任务记录。"""
+    from .job_recovery import read
+
+    saved = {}
+
+    def payload(row):
+        result = row.payload()
+        if row.task_key not in RESULT_FIELDS or row.status not in ('succeeded', 'failed'):
+            return result
+        if all(field in row.result_summary for field in RESULT_FIELDS[row.task_key]):
+            return result
+        if row.task_key not in saved:
+            saved[row.task_key] = read(contract.task_runs.database.db_path, row.task_key)
+        recovery = saved[row.task_key]
+        if recovery.get('run_id') != row.id or recovery.get('status') not in ('complete', 'failed'):
+            return result
+        checkpoint = recovery.get('checkpoint')
+        if not isinstance(checkpoint, dict):
+            return result
+        counts = result_counts(row.task_key, checkpoint)
+        result['result_summary'] = {**counts, **result['result_summary']}
+        return result
+
+    return payload
 
 
 def _counts(rows) -> dict:

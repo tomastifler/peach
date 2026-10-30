@@ -64,6 +64,72 @@ describe('关注详情岛', () => {
     await browser.close();
   });
 
+  for (const viewport of VIEWPORTS) {
+    it(`详情标签选择器进入顶层并在可用空间内滚动（${viewport.name}）`, async () => {
+      const opened = await openDetail(browser, 1002, viewport);
+      try {
+        const { page } = opened;
+        await page.locator('#stage [data-tag-plus]').click();
+        const menu = page.locator('#stage [data-tag-picker]');
+        await menu.waitFor({ state: 'visible' });
+        const visible = await menu.evaluate(node => {
+          const r = node.getBoundingClientRect();
+          return { topLayer: node.matches(':popover-open'), top:r.top, bottom:r.bottom, right:r.right,
+            height:r.height, screen:[innerWidth,innerHeight],
+            inside:node.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)) };
+        });
+        assert.equal(visible.topLayer, true);
+        assert.ok(visible.inside && visible.height > 50 && visible.top >= 0 && visible.bottom <= visible.screen[1]);
+        assert.ok(visible.right <= visible.screen[0]);
+        const appearance = await menu.evaluate(node => {
+          const probe = document.createElement('span'); probe.style.backgroundColor = 'var(--surface)'; node.append(probe);
+          const expected = getComputedStyle(probe).backgroundColor; probe.remove();
+          return { background:getComputedStyle(node).backgroundColor, expected, blur:getComputedStyle(node).backdropFilter,
+            icons:[...node.querySelectorAll('svg')].map(svg => ({ fill:getComputedStyle(svg).fill, stroke:getComputedStyle(svg).stroke })) };
+        });
+        assert.equal(appearance.background, appearance.expected);
+        assert.equal(appearance.blur, 'none');
+        assert.ok(appearance.icons.every(icon => icon.fill === 'none' && icon.stroke !== 'none'));
+        const scrollbar = await menu.locator('[data-tag-body]').evaluate(node => ({
+          hidden:getComputedStyle(node).scrollbarWidth,
+          track:!!node.parentElement?.querySelector('.ovtrack.ov-y'),
+          positioned:getComputedStyle(node.parentElement!).position,
+        }));
+        assert.equal(scrollbar.hidden, 'none');
+        assert.equal(scrollbar.track, true);
+        assert.equal(scrollbar.positioned, 'relative');
+      } finally { await opened.close(); }
+    });
+
+    it(`在线影院模式保留可见播放器和同一媒体节点（${viewport.name}）`, async () => {
+      const opened = await openDetail(browser, 1002, viewport);
+      try {
+        const { page } = opened;
+        const player = page.locator('#stage .video-js');
+        await player.locator('.vjs-peach-bezel').waitFor({ state: 'attached' });
+        const node = await player.elementHandle();
+        const normal = await player.boundingBox();
+        assert.ok(normal && normal.height > 100);
+        await page.locator('#stage [data-player-theater]').dispatchEvent('click');
+        await page.locator('#stage[data-theater]').waitFor();
+        const scroll = page.locator('#stage > [data-stage-scroll]');
+        await page.waitForFunction(() => document.querySelector('#stage > [data-stage-scroll]')?.hasAttribute('data-overlay-scrollbar'));
+        assert.equal(await scroll.evaluate(node => getComputedStyle(node).scrollbarWidth), 'none');
+        assert.equal(await page.locator('#stage > .ovtrack.ov-y').count(), 1);
+        await page.waitForFunction(() => {
+          const region=document.querySelector<HTMLElement>('#stage > [data-stage-scroll]')!;
+          return region.scrollHeight<=region.clientHeight+1 || !document.querySelector<HTMLElement>('#stage > .ovtrack.ov-y')?.hidden;
+        });
+        const cinema = await player.boundingBox();
+        assert.ok(cinema && cinema.height > 100, `影院画面不可见：${JSON.stringify(cinema)}`);
+        assert.equal(await node!.evaluate(element => element === document.querySelector('#stage .video-js')), true);
+        await page.locator('#stage [data-player-theater]').dispatchEvent('click');
+        const restored = await player.boundingBox();
+        assert.ok(restored && Math.abs(restored.height - normal.height) < 2);
+      } finally { await opened.close(); }
+    });
+  }
+
   it('列表点卡进详情：地址换成这一条，不再单条取数；关掉回列表不重取', { timeout: 60_000 }, async () => {
     const opened = await openFollowFeed(browser, '/follow', DESKTOP);
     try {
@@ -141,6 +207,8 @@ describe('关注详情岛', () => {
         assert.ok(box && box.height > 120, `详情等待画面高度不足：${JSON.stringify(box)}`);
         assert.equal(await page.locator('#stage [data-skeleton="detail"] [data-stage-side-content]')
           .evaluate((node) => getComputedStyle(node).rowGap), '12px');
+        assert.equal(await page.locator('#stage [data-skeleton="detail"] [data-stage-side-content]')
+          .evaluate((node) => getComputedStyle(node).scrollbarWidth), 'none');
       } finally {
         releaseItem();
       }

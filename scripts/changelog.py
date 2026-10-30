@@ -39,9 +39,11 @@ UNRELEASED = "未发布"
 
 #: Release 页正文里跟在变更日志后面的安装提示。每一版都一样，所以只写在这里一处，
 #: 工作流不再自己抄一份。
-INSTALL_NOTE = ("Windows x64，支持本机和局域网浏览器访问；无需另装 Python 或媒体工具。"
+INSTALL_NOTE = ("Windows x64 提供安装包与免安装包，包内含 Python 与媒体工具；"
+                "macOS 提供 Apple Silicon 与 Intel DMG，媒体工具需另行准备。"
+                "macOS 测试包使用本地 ad-hoc 签名，未完成 Apple 公证。"
                 "安装与使用见 [Windows 使用说明](https://github.com/peach-mitao/peach/blob/master/docs/TESTING_DESKTOP.md)，"
-                "macOS 见 [源码运行](https://github.com/peach-mitao/peach/blob/master/docs/OPERATIONS.md#从源码运行windowsmacos)。")
+                "macOS 见 [macOS 使用说明](https://github.com/peach-mitao/peach/blob/master/docs/OPERATIONS.md)。")
 
 #: Conventional Commits 的主题形状：`type(scope)!: 描述`。
 SUBJECT = re.compile(r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]*)\))?(?P<bang>!)?:\s*(?P<text>.+)$")

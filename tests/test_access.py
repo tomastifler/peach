@@ -42,6 +42,21 @@ class AccessTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.client.cookies)
         self.assertEqual((await self.client.post("/private", headers={"Origin": "https://evil.example"})).status_code, 403)
 
+    async def test_same_origin_normalizes_default_ports_and_preserves_cross_origin_rejection(self):
+        access.save(self.path, '')
+        for address, origin in (('http://nas.example:80', 'http://nas.example'),
+                                ('http://nas.example', 'http://nas.example:80'),
+                                ('https://nas.example:443', 'https://nas.example'),
+                                ('https://nas.example', 'https://nas.example:443')):
+            with self.subTest(address=address, origin=origin):
+                async with httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app), base_url=address) as client:
+                    self.assertEqual((await client.post('/private', headers={'Origin': origin})).status_code, 200)
+                    for refused in ('https://evil.example', 'http://nas.example:8080'):
+                        response = await client.post('/private', headers={'Origin': refused})
+                        self.assertEqual(response.status_code, 403)
+                    response = await client.post('/private', headers={'Origin': origin, 'Sec-Fetch-Site': 'cross-site'})
+                    self.assertEqual(response.status_code, 403)
+
     async def test_password_sessions_expire_on_server_and_survive_independent_app_reads(self):
         access.save(self.path, "correct-password")
         self.assertEqual((await self.client.get("/private")).status_code, 401)

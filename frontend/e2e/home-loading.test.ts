@@ -65,6 +65,8 @@ describe('首页加载结构',()=>{
     const tiers=await page.locator('[data-catalog-tier]').first().elementHandle();
     assert.equal(await page.locator('#feedNew .feednewskeleton').count()>0,hasFeed);
     if(hasFeed){
+     assert.equal(await page.locator('#feedNew .feednewrow').evaluate(node=>getComputedStyle(node).scrollbarWidth),'none','新作骨架不显示原生横向滚动条');
+     assert.equal(await page.locator('#feedNew > .ovtrack.ov-x:visible').count(),0,'新作骨架不显示外层横向轨道');
      const colors=await page.locator('#feedNew .feednewskeleton .pic').first().evaluate(node=>{
       const probe=document.createElement('i');probe.style.background='var(--hover)';node.append(probe);
       const expected=getComputedStyle(probe).backgroundColor,actual=getComputedStyle(node).backgroundColor;

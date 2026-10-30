@@ -52,10 +52,15 @@ LINE_BUDGET = {name: changes[-1][0] for name, changes in BUDGET_CHANGES.items()}
 # 字节天花板同样只在官方或项目口径变化时才动。
 MAX_EVER_BYTES = {
     "AGENTS.md": 16 * 1024,
+    "CLAUDE.md": 2 * 1024,
+    "SKILL.md": 8 * 1024,
 }
 
 # 字节预算的变更记录，语义与 BUDGET_CHANGES 完全一致：只能降，上调要写明理由。
 BYTE_BUDGET_CHANGES = {
+    "CLAUDE.md": [
+        (2 * 1024, "2026-10-26", "入口仅保留导入与 Claude 专有边界，流程按职责读取技能"),
+    ],
     "AGENTS.md": [
         (12 * 1024, "2026-09-03", "初始值"),
         # 清退腾出来的余量留着不动，等于把位置空出来让散文回填——这个文件就是这么长到
@@ -73,6 +78,8 @@ BYTE_BUDGET = {name: changes[-1][0] for name, changes in BYTE_BUDGET_CHANGES.ite
 MAX_LINE_CHARS = 400
 
 SKILL_MAX_LINES = 120
+# 组件规范与算法细节按任务进入参考，正文保留流程与必要边界。
+SKILL_MAX_BYTES = 8 * 1024
 DESCRIPTION_MAX_CHARS = 200
 REVIEW_MAX_DAYS = 180
 
@@ -139,6 +146,10 @@ def check_budget_history() -> list[str]:
         problems.append(
             f"SKILL.md 预算 {SKILL_MAX_LINES} 越过天花板 {MAX_EVER['SKILL.md']}"
         )
+    if SKILL_MAX_BYTES > MAX_EVER_BYTES["SKILL.md"]:
+        problems.append(
+            f"SKILL.md 字节预算 {SKILL_MAX_BYTES} 越过天花板 {MAX_EVER_BYTES['SKILL.md']}"
+        )
     if DESCRIPTION_MAX_CHARS > MAX_EVER["description"]:
         problems.append(
             f"description 预算 {DESCRIPTION_MAX_CHARS} 越过天花板 {MAX_EVER['description']}"
@@ -173,12 +184,13 @@ def check_byte_budgets(root: Path) -> list[str]:
 
 
 def check_line_lengths(root: Path) -> list[str]:
-    """入口文件的单行长度按字符数算，不按字节：中文一个字算一个。"""
+    """入口与技能的单行长度按字符数计算，中文一个字算一个。"""
     problems: list[str] = []
-    for name in BYTE_BUDGET:
-        path = root / name
+    paths = [*(root / name for name in BYTE_BUDGET), *_skill_files(root)]
+    for path in paths:
         if not path.is_file():
             continue
+        name = path.relative_to(root).as_posix()
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if len(line) > MAX_LINE_CHARS:
                 problems.append(
@@ -193,6 +205,10 @@ def check_skills(root: Path) -> tuple[list[str], list[tuple[str, datetime.date]]
     for path in _skill_files(root):
         rel = path.relative_to(root).as_posix()
         text = path.read_text(encoding="utf-8")
+
+        size = len(path.read_bytes())
+        if size > SKILL_MAX_BYTES:
+            problems.append(f"{rel}: {size} 字节，超出技能预算 {SKILL_MAX_BYTES} 字节")
 
         count = _count_lines(text)
         if count > SKILL_MAX_LINES:

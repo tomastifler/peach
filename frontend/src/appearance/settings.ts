@@ -33,9 +33,11 @@ export interface AppSettings {
   seekSeconds: number;
   searchHistoryLimit: number;
   relatedLimit: number;
+  feedLimit: number;
   javLayout: string;
   homeLayout: string;
   javImage: string;
+  performerNameLanguage: 'zh-CN' | 'ja';
   followLayout: string;
   peopleLayout: string;
   photoSize: string;
@@ -60,10 +62,10 @@ export interface AppSettings {
 
 export const DEFAULT_SETTINGS = {
   batchSize: 60, defaultSort: 'seed', sortDefaultsVersion: 3, hoverDelaySeconds: 5, seekSeconds: 10,
-  searchHistoryLimit: 10, relatedLimit: 20, javLayout: 'big', homeLayout: 'small', javImage: 'cover',
+  searchHistoryLimit: 10, relatedLimit: 20, feedLimit: 12, javLayout: 'big', homeLayout: 'small', javImage: 'cover',
   followLayout: 'default', peopleLayout: 'big', photoSize: 'small', ambientMode: true, miniplayer: true,
   theaterMode: false, theme: 'system', groupCollapse: true, sidebarOrder: [...DEFAULT_SIDEBAR_ORDER],
-  homeGlow: DEFAULT_HOME_GLOW, accent: DEFAULT_ACCENT,
+  homeGlow: DEFAULT_HOME_GLOW, accent: DEFAULT_ACCENT, performerNameLanguage: 'zh-CN',
 } as const;
 
 /** 白名单里的值原样给回，否则给 `fallback`。 */
@@ -103,8 +105,10 @@ export function normalizeAppSettings(raw: unknown): { settings: AppSettings; mig
   settings.feedHideExcerpts = settings.feedHideExcerpts !== false;
   settings.searchHistoryLimit = boundedPreference(+(settings.searchHistoryLimit as number), 0, 50, 10);
   settings.relatedLimit = boundedPreference(+(settings.relatedLimit as number), 0, 60, 20);
+  settings.feedLimit = boundedPreference(+(settings.feedLimit as number), 1, 100, 12);
   Object.assign(settings, normalizeJavPreferences(settings));
   settings.theme = allowedSetting(settings.theme, THEME_CHOICES, 'system');
+  settings.performerNameLanguage = allowedSetting(settings.performerNameLanguage, ['zh-CN', 'ja'], 'zh-CN');
   settings.homeGlow = normalizeHomeGlow(settings.homeGlow);
   settings.accent = normalizeAccent(settings.accent);
   settings.sidebarOrder = normalizeSidebarOrder(settings.sidebarOrder);
@@ -130,10 +134,11 @@ export function appSettingsStore(): SettingsStore<AppSettings> {
 }
 
 /** 数据库那一份要求某个壳侧效果跟着做时报的名字（同设置面板的效果名）。 */
-export type SyncedEffect = 'searchHistoryLimit';
+export type SyncedEffect = 'searchHistoryLimit' | 'performerNameLanguage';
 
 /** 搜索记录条数在 `/api/settings` 上的形状：还没定过时是 null。 */
 export interface SyncedSettings {
+  performerNameLanguage?: unknown;
   followInitialDays?: unknown;
   feedHideGroupCompilations?: unknown;
   feedHideSoloCompilations?: unknown;
@@ -150,6 +155,12 @@ export function applySyncedSettings(
   target: SettingsStore<AppSettings> = appSettingsStore(),
 ): void {
   const settings = target.value;
+  const language = remote?.performerNameLanguage;
+  if ((language === 'zh-CN' || language === 'ja') && language !== settings.performerNameLanguage) {
+    settings.performerNameLanguage = language;
+    target.save();
+    changed('performerNameLanguage');
+  }
   const initial = remote && remote.followInitialDays;
   if (FOLLOW_INITIAL_DAYS.includes(initial as number)) { settings.followInitialDays = initial as number; target.save() }
   for (const key of FEED_COMPILATION_KEYS) {

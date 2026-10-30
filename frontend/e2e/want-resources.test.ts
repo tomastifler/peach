@@ -44,10 +44,10 @@ describe('JAV 入库作品卡', () => {
         await page.getByRole('heading', { name: 'Resource links · 8' }).waitFor();
         await settle(page);
         const card = page.locator('[data-want-id="9001"]');
-        assert.equal(await page.locator('#stats').getByRole('button', { name: 'Find resources', exact: true }).count(), 2, '通用入口与作品入口分别保留一处');
-        assert.equal(await page.getByRole('combobox', { name: 'Download to', exact: true }).count(), 0, '下载目标在资源下载面板中选择');
-        const source = card.getByRole('link', { name: 'Source page', exact: true });
-        assert.deepEqual(await source.evaluate(node => [...node.parentElement!.querySelectorAll('button, a')].map(action => action.textContent)), ['Find resources', 'Remove', 'Source page']);
+        assert.equal(await page.locator('#stats').getByRole('button', { name: '查找资源', exact: true }).count(), 2, '通用入口与作品入口分别保留一处');
+        assert.equal(await page.getByRole('combobox', { name: '下载到', exact: true }).count(), 0, '下载目标在资源下载面板中选择');
+        const source = card.getByRole('link', { name: '来源页', exact: true });
+        assert.deepEqual(await source.evaluate(node => [...node.parentElement!.querySelectorAll('button, a')].map(action => action.textContent)), ['来源页', '移除', '查找资源']);
         const style = await card.evaluate(el => ({ radius: getComputedStyle(el).borderRadius,
           border: getComputedStyle(el).borderTopWidth }));
         assert.notEqual(style.radius, '0px');

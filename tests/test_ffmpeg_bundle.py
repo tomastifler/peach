@@ -21,7 +21,7 @@ class FFmpegBundleTests(unittest.TestCase):
             self.manifest["files"][name] = ffmpeg_bundle.digest(path)
         self.manifest["sources"] = [
             {"name": name, "revision": "fixed", "url": f"https://example.org/{name}.tar.gz", "sha256": "1" * 64}
-            for name in ("ffmpeg", "x264", "nv-codec-headers", "dav1d")]
+            for name in sorted(ffmpeg_bundle.POLICIES["ffmpeg"][1])]
         archive = self.source.parent / "ffmpeg-corresponding-source.zip"
         archive.write_bytes(b"source fixture")
         self.manifest["source_archive"] = {"name": archive.name, "sha256": ffmpeg_bundle.digest(archive)}

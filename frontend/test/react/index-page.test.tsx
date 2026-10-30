@@ -5,9 +5,12 @@
  * 页面把什么交了出去。 */
 import { notifyManager, QueryClientProvider } from '@tanstack/react-query';
 import { act, useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { registerResponseEntities } from '../../src/core/entity-links';
+import { registerNameWritings, setNameLanguage } from '../../src/core/entity-names';
 
 import { refitNativeImages } from '@peach/card-art';
+import { tagLabel } from '@peach/legacy/tags';
 
 import { indexKey, indexRoute, type IndexProps, type IndexRoute } from '../../src/react/index/index-data';
 import { IndexPage } from '../../src/react/index/index-page';
@@ -21,6 +24,7 @@ vi.mock('@peach/card-art', async (importOriginal) => ({
 }));
 
 afterEach(() => { queryClient.clear() });
+beforeEach(() => { registerNameWritings([]); setNameLanguage('zh-CN') });
 notifyManager.setScheduler((notify) => notify());
 
 const person = (k: string, patch: Record<string, unknown> = {}) => ({ k, n: 3, entity_id: 1, ...patch });
@@ -49,7 +53,7 @@ function props(route: Partial<IndexRoute> = {}, patch: Partial<IndexProps> = {})
     route: vi.fn(), savePreference: vi.fn(), exitSelectMode: vi.fn(),
     personAvatar: vi.fn(() => ({ html: '<span class="ini">A</span>', face: '' })),
     authorAvatar: vi.fn(() => '<span class="ini">B</span>'),
-    tagLabel: (value: string) => value,
+    tagLabel,
     openEntity: vi.fn(), showTags: vi.fn(), openFollowAuthor: vi.fn(), openFollowTag: vi.fn(),
     configurable: true, ...patch,
   };
@@ -72,6 +76,53 @@ const tab = (host: ParentNode, value: string) => host.querySelector(`[role="tab"
 const alphaTag = (host: ParentNode, k: string) => host.querySelector(`[data-alpha-tag][data-k="${k}"]`);
 
 describe('地址栏上的类型', () => {
+  it('名称接口的共享字形覆盖名册标签，切换语言不改资料页的原始参数', async () => {
+    registerResponseEntities('/api/entity/shapes', { entities: [], name_variants: [], name_glyphs: { 鈴: '铃' } });
+    const given = props();
+    seed(indexKey('performers', ''), [person('山田鈴奈')]);
+    const host = await open(given); await settle();
+    expect(cells(host)[0]?.textContent).toContain('山田铃奈');
+    await click(cells(host)[0]);
+    expect(given.openEntity).toHaveBeenCalledWith('performer', '山田鈴奈');
+    await act(async () => setNameLanguage('ja'));
+    expect(cells(host)[0]?.textContent).toContain('山田鈴奈');
+  });
+  it('标签分页只显示当前页，搜索条件变化回到首页', async () => {
+    const all = Array.from({ length:230 }, (_, index) => tag(`tag-${index}`));
+    const fetcher = serve(url => {
+      const params = new URL(url, 'http://localhost').searchParams;
+      const offset = Number(params.get('offset')), limit = Number(params.get('limit'));
+      const rows = all.filter(row => row.k.includes(params.get('q') || ''));
+      return { items:rows.slice(offset, offset+limit), total:rows.length, has_more:offset+limit < rows.length, categories:{ role:rows.length } };
+    });
+    const host = await open(props({ kind:'tags', view:'cloud' })); await settle();
+    expect(host.querySelectorAll('[data-tag-chip]')).toHaveLength(100);
+    await click(buttonNamed('下一页', host)); await settle();
+    expect(host.querySelectorAll('[data-tag-chip]')).toHaveLength(100);
+    expect(host.querySelector('[data-tag-chip][data-k="tag-0"]')).toBeNull();
+    expect(host.querySelector('[data-tag-chip][data-k="tag-100"]')).not.toBeNull();
+    await type(search(host), 'tag-229');
+    await act(async () => search(host).dispatchEvent(new KeyboardEvent('keydown', { key:'Enter', bubbles:true })));
+    await settle();
+    expect(host.querySelectorAll('[data-tag-chip]')).toHaveLength(1);
+    const last = new URL(urls(fetcher).at(-1)!, 'http://localhost');
+    expect(last.searchParams.get('offset')).toBe('0');
+    expect(last.searchParams.get('limit')).toBe('100');
+    expect(host.querySelector('[data-index-more]')).toBeNull();
+  });
+
+  it('筛选无结果时清除条件并保留当前在线索引和版式', async () => {
+    seed(onlineTagsKey('missing', 'artist'), []);
+    serve(() => ({ items: [], has_more: false }));
+    const given = props({ kind: 'tags', scope: 'online', q: 'missing', category: 'artist', view: 'alphabet' });
+    const host = await open(given);
+    await settle();
+    await click(buttonNamed('清除筛选', host));
+    expect(given.route).toHaveBeenLastCalledWith(expect.objectContaining({
+      kind: 'tags', scope: 'online', view: 'alphabet', q: '', category: 'all',
+    }), { replace: false });
+    expect(search(host).value).toBe('');
+  });
   it('认不出的类型回到「全部」，名册页不带词表那一档', () => {
     expect(indexRoute({ kind: 'tags', q: '', scope: 'local', view: 'alphabet', category: 'bogus' }).category).toBe('all');
     expect(indexRoute({ kind: 'tags', q: '', scope: 'local', view: 'alphabet', category: 'role' }).category).toBe('role');
@@ -341,6 +392,27 @@ describe('过滤框', () => {
 });
 
 describe('标签', () => {
+  for (const scope of ['local', 'online'] as const) for (const view of ['alphabet', 'cloud'] as const) {
+    it(`${scope} ${view} 浏览使用当前名称且仅管理模式提供编辑`, async () => {
+      const row = { ...tag('眼镜', 'appearance'), entity_id: 4472, id: 'glasses', aliases: ['眼镜娘'], hidden: false };
+      seed(indexKey('tags', '', 'all'), [row]);
+      seed(onlineTagsKey('', 'all'), [row]);
+      serve(() => ({ items: [row], total:1, categories:{ appearance:1 }, duplicate_groups: [], favorites: [], filters: [], has_more: false }));
+      const host = await open(props({ kind: 'tags', scope, view }));
+      await settle();
+      expect(host.querySelector('[data-alpha-tag], [data-tag-chip]')?.textContent).toContain('眼镜');
+      expect(host.querySelector('[data-alpha-tag], [data-tag-chip]')?.textContent).not.toContain('眼镜娘');
+      expect(host.querySelector('[aria-label="收藏眼镜"]')).not.toBeNull();
+      expect(host.querySelector('[aria-label="编辑标签 眼镜"]')).toBeNull();
+      expect(host.querySelector('[data-tag-mode] use')?.getAttribute('href')).toBe('#i-pencil');
+      await click(host.querySelector('[aria-label="管理标签"]'));
+      await settle();
+      expect(host.querySelector('[data-tag-manager] [aria-label="编辑标签 眼镜"]')).not.toBeNull();
+      await click(host.querySelector('[aria-label="返回标签浏览"]'));
+      expect(host.querySelector('[aria-label="编辑标签 眼镜"]')).toBeNull();
+    });
+  }
+
   it('浮层只摆数得到的类型；点一类写回地址', async () => {
     seed(indexKey('tags', '', 'all'), [tag('痴女'), tag('秘书OL', 'scene')], false, { role: 1, scene: 1 });
     serve(() => ({ items: [tag('痴女')], has_more: false, categories: { role: 1 } }));

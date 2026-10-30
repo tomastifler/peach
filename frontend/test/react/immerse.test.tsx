@@ -168,7 +168,7 @@ function shellActions(): ShellActions {
     openItem: vi.fn(), openEntity: vi.fn(), openTag: vi.fn(), openTasteSignal: vi.fn(), navigate: vi.fn(),
     openManage: vi.fn(), managePath: vi.fn(() => ''), openFollow: vi.fn(), receipt: vi.fn(), toast: vi.fn(),
     failure: vi.fn(), revealSource: vi.fn(async () => ''), reopenTutorial: vi.fn(async () => {}),
-    requestConfigurationSection: vi.fn(), routeReview: vi.fn(),
+    routeReview: vi.fn(),
     routeFollowManage: vi.fn(), saveFollowPreference: vi.fn(), srcBadge: () => '', routeIndex: vi.fn(),
     savePeopleLayout: vi.fn(), exitSelectMode: vi.fn(), personAvatar: vi.fn(() => ({ html: '', face: '' })),
     authorAvatar: vi.fn(() => ''), showIndexTags: vi.fn(), openFollowAuthor: vi.fn(), openFollowTag: vi.fn(),
@@ -281,6 +281,9 @@ describe('片单与起播', () => {
     expect(playable(row(2, { cost: 'metered' }), offline)).toBe(false);
     expect(playable(row(3, { duration: 0 }), offline)).toBe(false);
     expect(playable(row(4, { location: 'gone' }), offline)).toBe(false);
+    const rootOffline = (key: string) => key === 'root-offline';
+    expect(playable(row(5, { location: 'local', root_id: 'root-offline' }), rootOffline)).toBe(false);
+    expect(playable(row(6, { location: 'local', root_id: 'root-online' }), rootOffline)).toBe(true);
     serve({ draws: [[row(1, { location: 'gone' }), row(2)]] });
     await open();
     expect(current().item.id).toBe(2);
@@ -363,7 +366,8 @@ describe('片单与起播', () => {
     await act(async () => { opening = api.open(null) });
     await until(() => !!q('[data-immerse-loader]') && !q('[data-immerse-loader]')!.hidden);
     expect(root().hasAttribute('data-idle')).toBe(true);
-    expect(q('[data-immerse-loader]')!.textContent).toContain('Loading…');
+    expect(q('[data-immerse-loader]')!.textContent).toContain('加载中');
+    expect(q('[data-immerse-loader]')!.textContent, '转圈已经在动，字不带省略号').not.toContain('…');
     expect(document.body.hasAttribute('data-immerse-open')).toBe(true);
     await hold.release();
     await act(async () => { await opening });
@@ -492,7 +496,7 @@ describe('作者与标题', () => {
     const author = q<HTMLAnchorElement>('[data-immerse-author]>a')!;
     expect(author.textContent).toBe('甲, 乙, 丙 and 1 more');
     expect(q('[data-immerse-avatar] .ini')!.textContent).toBe('甲');
-    expect(q('[data-immerse-avatar] img')!.getAttribute('src')).toBe('/entity-image?kind=performer&id=91');
+    expect(q('[data-immerse-avatar] img')!.getAttribute('src')).toBe('/entity-image?kind=performer&id=91&thumb=1');
     await click(author);
     expect(host.closed).toHaveBeenCalledTimes(1);
     expect(host.openEntity).toHaveBeenCalledWith('performer', '甲');
@@ -716,7 +720,7 @@ describe('常驻组件', () => {
     expect(root().hidden, '同步段里外框已经显出来').toBe(false);
     expect(root().hasAttribute('data-idle')).toBe(true);
     expect(q('[data-immerse-loader]')!.hidden).toBe(false);
-    expect(q('[data-immerse-loader]')!.textContent).toContain('Loading content…');
+    expect(q('[data-immerse-loader]')!.textContent).toContain('加载内容');
     expect(document.body.hasAttribute('data-immerse-open')).toBe(true);
     await opening;
     expect(root().hasAttribute('data-idle'), '返回时已经画完，不等下一次渲染').toBe(false);

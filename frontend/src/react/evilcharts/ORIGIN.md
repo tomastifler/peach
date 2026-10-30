@@ -22,6 +22,7 @@
 | `recharts-dot` | `registry/ui/recharts-dot.tsx` | `recharts` |
 | `recharts-bar-chart` | `registry/charts/recharts-bar-chart.tsx` | `recharts`、`motion` |
 | `recharts-radial-chart` | `registry/charts/recharts-radial-chart.tsx` | `recharts`、`motion` |
+| `recharts-pie-chart` | `registry/charts/recharts-pie-chart.tsx` | `recharts`、`motion` |
 | `recharts-radar-chart` | `registry/charts/recharts-radar-chart.tsx` | `recharts`、`motion` |
 
 `recharts-brush` 与 `recharts-dot` 没有页面直接用，是柱状图和雷达图 import 的部件。
@@ -47,4 +48,5 @@
 | `../stats/radial-card.tsx` 的 `RadialCard` | `EvilRadialChart` | 键写成 `s0`…`sN`，名字放进 `label`：键会进 CSS 变量名与渐变 id，来源名、库名不能直接当键。圈的形状与点击走 `radialBarProps`，按 React 状态淡化其余段、点下钉住；图例格子由 Peach 自己画。超过六段时并掉尾部成「其余 N 项」（`radialSlices`）；圈画的是 `arc` 列，不为 0 的段至少画满圈的 2%（`radialArc`），浮层经 `ChartTip` 的 `valueKey` 读原始 `value`；没有分段时换成 `ChartEmpty` 说明卡 |
 | `../taste/charts.tsx` 的 `TasteRadar` | `EvilRadarChart` | 取分数最高的三到六个口味维度，少于三个画不成面，整块不出现，画像卡只留排行条。画的是 `radius = √(次数 / 最大次数)` 一列，半径轴定死 `[0, 1]`，最大的维度落在外圈；浮层经 `ChartTip` 的 `valueKey` 读原始次数。`chartProps.outerRadius` 压到 58%；顶点外侧的维度名换成自己的 `RadarTick`，按顶点到图框边的距离截断加省略号，全名进 `<title>` |
 | `../taste/charts.tsx` 的 `RankedBars` | `EvilBarChart`（`layout="horizontal"`） | 前八个口味维度，柱端标数、右侧留白与类别轴刻度的写法同 `BarCard`；高度按条数取档 |
+| `../settings/storage-charts.tsx` 的 `StorageOverview` | `EvilPieChart`、`EvilBarChart`（`layout="horizontal"`、`stackType="percent"`） | 设置页「存储空间」。环形图画数据目录各类占比，键用类别键（都是 ASCII 标识符），颜色按类别固定取 `chart-1`…`chart-9`，其余几类并成灰色的「其余」；总量写在圈中央，由 Peach 自己叠一层文字，不用上游 `Label`。磁盘那根横向百分比堆叠柱只有一行三段：Peach、其他文件、可用。两张图的浮层都经 `ChartTip` 的 `format` 写成字节读数 |
 | `../charts/chart-tip.tsx` 的 `ChartTip` | `ChartTooltip`、`useChart`、`getPayloadConfigFromPayload` | 见上表「浮层内容」；画图的列经过刻度换算时，`valueKey` 指定浮层读原始数的那一列 |

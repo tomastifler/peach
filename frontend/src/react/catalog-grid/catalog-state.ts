@@ -21,7 +21,7 @@ export interface CatalogState extends CatalogFilters {
 
 const HOME_QUERY_KEYS = [
   'loc', 'creator', 'studio', 'owner', 'tag', 'tag_match', 'len', 'dur_min', 'dur_max',
-  'orient', 'region', 'sort', 'dir', 'q', 'jav',
+  'orient', 'region', 'year', 'sort', 'dir', 'q', 'jav',
   'browse', 'folder', 'folder_recursive',
 ] as const;
 
@@ -42,7 +42,7 @@ export function initialCatalogFilters(address: CatalogAddress, preferences: Cata
     owner: read('owner') === 'none' ? 'none' : '', tag: cleanTagFilter(read('tag')),
     tag_match: read('tag_match') === 'any' ? 'any' : 'all', len: read('len') || '',
     dur_min: read('dur_min') || '', dur_max: read('dur_max') || '', orient: read('orient') || '',
-    region: read('region') || '', state: ROUTE_STATES[pathname] || read('state') || '',
+    region: read('region') || '', year: read('year') || '', state: ROUTE_STATES[pathname] || read('state') || '',
     ...resolveSort(read('sort'), read('dir'), preferences), seed: read('seed') || seed(),
     q: read('q') || '', jav: read('jav') || '', thumb: read('thumb') || '0',
     browse: read('browse') === 'folders' || read('folder') ? 'folders' : '',
@@ -78,7 +78,7 @@ export function resetCatalogFilters(previous: Readonly<CatalogFilters>, preferen
   seed: () => string): CatalogState {
   return {
     loc: previous.loc ?? '', creator: '', studio: '', owner: '', tag: '', tag_match: 'all',
-    len: '', dur_min: '', dur_max: '', orient: '', region: '', state: '',
+    len: '', dur_min: '', dur_max: '', orient: '', region: '', year: '', state: '',
     sort: preferences.defaultSort,
     dir: preferredDirection(preferences.defaultSort, preferences.defaultSort, preferences.defaultSortDirection),
     seed: seed(), q: '', jav: '', thumb: '0',

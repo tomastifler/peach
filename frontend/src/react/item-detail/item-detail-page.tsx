@@ -7,13 +7,13 @@
  *
  * 写操作（评分、标签、反馈、稍后看、高清目标、偏好、播放列表排序与移出）都在岛里发，成功后
  * 把服务端回的那几个字段换进 `['item', id]`，目录网格缓存里的同一张卡一起换，不重读列表。 */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { fmtDur, fmtSize, icon, requestErrorMessage } from '@peach/legacy/core';
 import {
   coverUrl, mixLabel, performerLabel, queueAvatarHtml, queueThumbHtml,
 } from '@peach/card-art';
-import { confirmModal, dismissMenu, presentMenu, spinnerHtml } from '@peach/legacy/ui';
+import { confirmModal, spinnerHtml } from '@peach/legacy/ui';
 
 import { apiGet, apiSend } from '../../api';
 import { Button } from '@/components/base/buttons/button';
@@ -25,6 +25,9 @@ import { RetryNote } from '../components/grid-reveal';
 import { MixQueue, MixQueueRow } from '../components/mix-queue';
 import { RelatedSection } from '../components/related-section';
 import { DetailContinuation } from '../components/detail-continuation';
+import { DetailTags } from '../components/detail-tags';
+import { RatingStars } from '../components/rating-stars';
+import { CollapseChevron } from '../components/collapse-region';
 import { IdentityCell, IdentitySeries } from '../components/identity-cell';
 import { useFoldedTitle } from '../components/folded-title';
 import { MediaCarousel } from '../components/media-carousel';
@@ -38,11 +41,11 @@ import { LibraryCompletionPrompt, missingPreviewIds } from '../library-processin
 import {
   CAST_SHOWN, EDITION_TONE, FEEDBACK_URL, ITEM_TAG_URL, PLAYLIST_URL, PREFERENCE_URL, QUALITY_GOAL_URL,
   RELATED_URL, WATCH_LATER_URL, chooseItem, clampRating, detailTags, feedbackReceipt, fetchItem, fetchQueue,
-  hasTag, identityGroups, isVanished, itemKey, mediaGate, movedOrder, nextPart, nextRating, partLabel, partLabelHtml, pickerSections, playlistQueue,
-  queueCopy, queueKey, ratingStars, ratingText, realWatched, recentTags, relatedKey, rememberTag, sameOrder,
+  hasTag, identityGroups, isVanished, itemKey, mediaGate, movedOrder, nextPart, nextRating, partLabel, partLabelHtml, playlistQueue,
+  queueCopy, queueKey, ratingStars, ratingText, realWatched, relatedKey, rememberTag, sameOrder,
   withPartLabel, withTag, withoutTag,
   type DetailEntityRef, type DetailItem, type DetailQueue, type DetailTag, type ItemDetailActions,
-  type ItemDetailHelpers, type ItemDetailProps, type MediaGate, type PlaylistPayload, type TagCount,
+  type ItemDetailHelpers, type ItemDetailProps, type MediaGate, type PlaylistPayload,
 } from './item-detail';
 
 /** 字形原样取壳那一份 `icon()`：骨架与遗留详情画的就是它，换成别的字形接管那一拍会跳。 */
@@ -104,7 +107,7 @@ function Detail(props: ItemDetailProps & { item: DetailItem; queue: DetailQueue 
     apiSend(PLAYLIST_URL, { action: 'progress', id: queue.playlistId, asset_id: item.id }).catch(() => {});
   }, []);
 
-  const gate = mediaGate(item, helpers.sourceOffline(item.location || ''));
+  const gate = mediaGate(item, helpers.sourceOffline(String(item.root_id || item.location || '')));
   const next = nextPart(queue, item.id);
   const continuePart = () => {
     if (next && queue) actions.openQueueItem({ kind: queue.kind, seedId: queue.seedId, autoplay: true }, next.id);
@@ -116,7 +119,7 @@ function Detail(props: ItemDetailProps & { item: DetailItem; queue: DetailQueue 
           autoplay={props.queue?.autoplay} onEnded={continuePart} />
         <Side item={item} queue={queue} write={write} helpers={helpers} actions={actions} />
       </div>
-      <DetailContinuation editionCards={queue?.kind === 'editions' ? queue.items.length : undefined}
+      <DetailContinuation queueCards={queue?.kind === 'parts' || queue?.kind === 'editions' ? queue.items.length : undefined}
         queue={queue ? <Queue queue={queue} itemId={item.id} helpers={helpers} actions={actions} /> : null}>
         {props.relatedLimit > 0 && (!queue || queue.kind === 'parts' || queue.kind === 'editions')
           ? <Related {...props} item={queue ? { ...item, id: queue.seedId ?? item.id } : item} /> : null}
@@ -172,24 +175,29 @@ function MediaFrame({ item, gate, helpers, actions, autoplay, onEnded }: {
     <div ref={frameRef} data-stage-media="" data-item-media={gate || 'video'} data-item-gallery={hasPictures ? '' : undefined}
       data-item-picture={image !== -2 ? '' : undefined}>
       <CloseStage onClose={actions.close} />
+      <div data-player-toolbar="">
+        <span data-player-stats-slot="" />
+        {hasPictures ? <button type="button" data-jav-preview-toggle="" aria-pressed={image !== -2}
+          onClick={() => selectImage(image === -2 ? media[0]!.index : -2)}><Glyph name={image === -2 ? 'image' : 'play'} />{image === -2 ? '查看图片' : '播放正片'}</button>
+          : null}
+        <span data-player-net-slot="" />
+      </div>
       {hasPictures ? <>
-        <button type="button" data-jav-preview-toggle="" aria-pressed={image !== -2}
-          onClick={() => selectImage(image === -2 ? media[0]!.index : -2)}><Glyph name={image === -2 ? 'image' : 'play'} />{image === -2 ? 'View images' : 'Play feature'}</button>
-        {image !== -2 ? <CatalogPicture key={image} item={item} image={image} source={samples.find(sample => sample.index === image)?.source} /> : null}
+        {image !== -2 ? <CatalogPicture key={item.id} item={item} image={image} source={samples.find(sample => sample.index === image)?.source} /> : null}
         <MediaCarousel items={media} position={Math.max(0, media.findIndex(entry => entry.index === image))} onSelect={selectImage}
           below renderThumbnail={entry => <CatalogPicture item={item} image={entry.index === -2 ? media[0]!.index : entry.index}
             source={samples.find(sample => sample.index === (entry.index === -2 ? media[0]!.index : entry.index))?.source} thumbnail />} />
       </> : null}
-      {item.is_jav && item.code && !item.sample_images?.length && (source.isPending || source.error || source.data?.state === 'partial') ?
-        <div data-item-samples-state="">{source.isPending ? <span data-skeleton="samples" role="status" aria-label="Loading sample images" className="relative block h-12 w-20 skeleton-sheen" />
+      {image !== -2 && item.is_jav && item.code && !item.sample_images?.length && (source.isPending || source.error || source.data?.state === 'partial') ?
+        <div data-item-samples-state="">{source.isPending ? <span data-skeleton="samples" role="status" aria-label="正在读取样图" className="relative block h-12 w-20 skeleton-sheen" />
           : <Button variant="secondary" {...busyProps(source.isFetching)} title={source.data?.message || requestErrorMessage(source.error)}
-            onClick={() => { refreshSamples.current = true; void source.refetch() }}>Retry sample images</Button>}</div> : null}
+            aria-label="立即重试样图" onClick={() => { refreshSamples.current = true; void source.refetch() }}>立即重试</Button>}</div> : null}
       {gate === 'offline' ? <OfflineGate item={item} badge={badge} helpers={helpers} actions={actions} />
         : gate === 'disc' ? (
           <div role="status" data-item-gate="disc">
-            <b>ISO disc image</b>
-            <span>Open it with an external player that supports disc images.</span>
-            <ExternalPlayback id={item.id} />
+            <b>ISO 原盘</b>
+            <span>请使用支持原盘的外部播放器打开。</span>
+            <ExternalPlayback key={item.id} id={item.id} onOpened={() => actions.toast('已请求打开本地播放器')} />
           </div>
         ) : gate === 'online' ? (
           <div id="onlineGate" role="status" data-item-gate="online">
@@ -223,8 +231,8 @@ function OfflineGate({ item, badge, helpers, actions }: {
   return (
     <div id="offlineGate" role="status" data-item-gate="offline">
       <Html html={badge} />
-      <b>Media folder unreachable</b>
-      <span>{helpers.offlineReason(item.location || '')}</span>
+      <b>媒体目录无法访问</b>
+      <span>{helpers.offlineReason(String(item.root_id || item.location || ''))}</span>
       <button className="chip" id="offlineRetry" type="button" disabled={checking} onClick={() => void retry()}>
         {still ? 'Still unreadable · Refresh' : 'Refresh status'}
       </button>
@@ -388,12 +396,13 @@ function Side({ item, queue, write, helpers, actions }: {
             </button>
           ) : null}
         </div>
+        {(item.medium || 'video') === 'video' && !online && !String(item.name || '').toLowerCase().endsWith('.iso')
+          ? <ExternalPlayback key={item.id} id={item.id} onOpened={() => actions.toast('已请求打开本地播放器')} /> : null}
         <Identity item={item} helpers={helpers} actions={actions} />
         <Tags item={item} write={write} helpers={helpers} actions={actions} />
         <LibraryCompletionPrompt assetIds={missingPreviewIds([item], helpers.javImage())}
           onComplete={() => { void queryClient.invalidateQueries({ queryKey: itemKey(item.id) }) }} />
         <Trace item={item} />
-        {item.medium === 'video' && item.location !== 'online' ? <ExternalPlayback key={item.id} id={item.id} /> : null}
         <div data-stage-actions="" data-item-feedback="">
           <button type="button" id="likeBtn" data-fb="like" aria-label={item.liked ? 'Remove like' : 'Like'} title="Like · record taste preference"
             aria-pressed={!!item.liked} {...busy('like')} onClick={() => write.preference({ liked: !item.liked })}><Glyph name="thumbs-up" /></button>
@@ -442,8 +451,8 @@ function DetailTitle({ item, queue, helpers, actions, onStatus }: {
           dangerouslySetInnerHTML={{ __html: html }} />
         <span data-title-tools="">
           <button type="button" data-title-fold="" hidden={!foldable} aria-expanded={expanded}
-            aria-label={expanded ? 'Collapse title' : 'Expand title'} title={expanded ? 'Collapse title' : 'Expand full title'} onClick={toggle}>
-            <Glyph name={expanded ? 'chevron-up' : 'chevron-down'} />
+            aria-label={expanded ? '收起标题' : '展开标题'} title={expanded ? '收起标题' : '展开完整标题'} onClick={toggle}>
+            <CollapseChevron />
           </button>
           {/* 取景框存的是坐标不是图片：存完重取这一条，封面地址没变，变的是接口给的 `poster_box`。
               背后网格里同一番号的卡不重取，就地换上新框，关掉详情看到的就是框过的样子。 */}
@@ -499,15 +508,10 @@ function SourceTools({ id, actions, onStatus }: { id: number; actions: ItemDetai
 function Rating({ item, write }: { item: DetailItem; write: DetailWrite }) {
   const on = ratingStars(item.rating);
   return (
-    <div id="detailRating" role="group" data-item-rating="" aria-label="Rating" data-value={clampRating(item.rating)}>
-      <div data-rating-stars="">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <button key={star} type="button" data-rate={star} data-on={String(star <= on)}
-            title={star === on ? 'Click again to clear the rating' : `${star} stars`}
-            aria-label={star === on ? `Clear rating (currently ${star} stars)` : `Rate ${star} stars`}
-            {...write.busyAttrs(`rate:${star}`)} onClick={() => write.rate(star)}><Glyph name="star" /></button>
-        ))}
-      </div>
+    <div id="detailRating" role="group" data-item-rating="" aria-label="评分" data-value={clampRating(item.rating)}>
+      <RatingStars value={on} onRate={star => write.rate(star)}
+        busyStar={[1, 2, 3, 4, 5].find(star => write.busy.has(`rate:${star}`))}
+        busyAttrs={star => write.busyAttrs(`rate:${star}`)} />
       <span data-rating-value="" aria-live="polite">{ratingText(item.rating)}</span>
     </div>
   );
@@ -562,129 +566,11 @@ function Identity({ item, actions }: { item: DetailItem; helpers: ItemDetailHelp
 function Tags({ item, write, helpers, actions }: {
   item: DetailItem; write: DetailWrite; helpers: ItemDetailHelpers; actions: ItemDetailActions;
 }) {
-  const tags = detailTags(item, helpers);
-  return (
-    <div data-stage-tags="" id="detailTags" data-item-tags="">
-      {tags.map((tag) => (
-        <span key={tag.k} data-detail-tag="">
-          <button type="button" data-tag={tag.k} title={helpers.tagLabel(tag.k)} onClick={() => actions.openTag(tag.k)}>{helpers.tagLabel(tag.k)}</button>
-          <button type="button" data-remove-tag={tag.k} title="Hide this tag from this video"
-            aria-label={`Remove tag ${helpers.tagLabel(tag.k)}`} {...write.busyAttrs(`tag:${tag.k}`)}
-            onClick={() => write.removeTag(tag)}><Glyph name="x" /></button>
-        </span>
-      ))}
-      <TagPicker item={item} write={write} helpers={helpers} />
-    </div>
-  );
-}
-
-/* 标签选择器：最近使用 + 全部（或搜索结果），上下键挑、回车加，输入的词没有完全命中就多一格
-   「新建」。开合走全站菜单那一对口（`presentMenu`／`dismissMenu`），`hidden` 由它们管。
-   选字过程中框里是半截拼音，筛选按 `term` 走、组完字才跟上，不拿「zhon」去筛。 */
-function TagPicker({ item, write, helpers }: { item: DetailItem; write: DetailWrite; helpers: ItemDetailHelpers }) {
-  const plus = useRef<HTMLButtonElement>(null);
-  const picker = useRef<HTMLDivElement>(null);
-  const search = useRef<HTMLInputElement>(null);
-  const composing = useRef(false);
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
-  const [term, setTerm] = useState('');
-  const [active, setActive] = useState(-1);
-  const close = useCallback(() => {
-    if (picker.current) dismissMenu(picker.current);
-    setOpen(false);
-  }, []);
-  /* 点外面就收起。延一拍再挂：打开它的这一次 pointerdown 还在冒泡，立刻挂上会自己把自己关掉。 */
-  useEffect(() => {
-    if (!open) return undefined;
-    const handler = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!picker.current?.contains(target) && target !== plus.current) close();
-    };
-    const timer = setTimeout(() => document.addEventListener('pointerdown', handler, true), 0);
-    return () => { clearTimeout(timer); document.removeEventListener('pointerdown', handler, true) };
-  }, [open, close]);
-  const sections = open ? pickerSections(term, helpers.tagCandidates(), recentTags()) : { recent: [], results: [], create: '' };
-  const options = [...sections.recent, ...sections.results, ...(sections.create ? [{ k: sections.create, n: -1 }] : [])];
-  const pick = (tag: TagCount, selected: boolean) => {
-    close();
-    if (!selected) write.addTag(tag.k);
-  };
-  const keydown = (event: KeyboardEvent<HTMLInputElement>) => {
-    /* 选字那一下的回车是定字，不是「新建这个标签」——半截拼音会真的建成标签。 */
-    if (event.nativeEvent.isComposing) return;
-    if (event.key === 'Escape') { event.preventDefault(); close(); plus.current?.focus(); return }
-    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      if (!options.length) return;
-      const next = (active + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
-      setActive(next);
-      picker.current?.querySelectorAll('[data-pick]')[next]?.scrollIntoView({ block: 'nearest' });
-      return;
-    }
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      const chosen = active >= 0 ? options[active] : null;
-      if (chosen) pick(chosen, chosen.n !== -1 && hasTag(item, chosen.k));
-      else if (query.trim()) { close(); write.addTag(query.trim()) }
-    }
-  };
-  let index = -1;
-  const button = (tag: TagCount) => {
-    index += 1;
-    const at = index;
-    const selected = hasTag(item, tag.k);
-    return (
-      <button key={`${at}:${tag.k}`} type="button" data-pick={tag.k} data-active={at === active ? '' : undefined}
-        aria-pressed={selected} onClick={() => pick(tag, selected)}>
-        <Glyph name={selected ? 'check' : 'tags'} /><span data-pick-name="">{helpers.tagLabel(tag.k)}</span>
-        <span data-pick-count="">{(tag.n || 0).toLocaleString()}</span>
-      </button>
-    );
-  };
-  return (
-    <>
-      <button ref={plus} type="button" id="tagPlus" data-tag-plus="" title="Add tag" aria-label="Add tag" aria-expanded={open}
-        onClick={() => {
-          if (!picker.current) return;
-          presentMenu(picker.current);
-          setOpen(true); setQuery(''); setTerm(''); setActive(-1);
-          requestAnimationFrame(() => search.current?.focus());
-        }}><Glyph name="plus" /></button>
-      <div ref={picker} id="tagPicker" data-tag-picker="" role="dialog" aria-label="Add tag" hidden>
-        <label data-tag-search="">
-          <Glyph name="search" />
-          <input ref={search} id="tagPickSearch" maxLength={80} placeholder="Search or enter a new tag" autoComplete="off" value={query}
-            onChange={(event) => { setQuery(event.target.value); setActive(-1); if (!composing.current) setTerm(event.target.value) }}
-            onCompositionStart={() => { composing.current = true }}
-            onCompositionEnd={(event) => { composing.current = false; setTerm(event.currentTarget.value) }} onKeyDown={keydown} />
-        </label>
-        <div id="tagPickBody" data-tag-body="">
-          {open && sections.recent.length ? (
-            <section data-tag-section=""><h4>Recently used</h4><div data-tag-grid="">{sections.recent.map(button)}</div></section>
-          ) : null}
-          {open ? (
-            <section data-tag-section="">
-              <h4>{term.trim() ? 'Search results' : 'All tags'}</h4>
-              <div data-tag-grid="">
-                {sections.results.map(button)}
-                {sections.create ? (() => {
-                  index += 1;
-                  const at = index;
-                  return (
-                    <button key="create" type="button" data-pick={sections.create} data-active={at === active ? '' : undefined}
-                      onClick={() => { close(); write.addTag(sections.create) }}>
-                      <Glyph name="plus" /><span data-pick-name="">Create "{sections.create}"</span>
-                    </button>
-                  );
-                })() : null}
-              </div>
-            </section>
-          ) : null}
-        </div>
-      </div>
-    </>
-  );
+  return <div data-item-tags="">
+    <DetailTags id="detailTags" tags={detailTags(item, helpers)} candidates={helpers.tagCandidates()} label={helpers.tagLabel}
+      adding={[...write.busy].some(key => key.startsWith('add:'))}
+      onOpen={actions.openTag} onAdd={write.addTag} onRemove={write.removeTag} busyAttrs={tag => write.busyAttrs(`tag:${tag}`)} />
+  </div>;
 }
 
 /* ── 观看轨迹 ──
@@ -722,7 +608,7 @@ function Preference({ item, open, write }: { item: DetailItem; open: boolean; wr
         <span id="preferenceState" aria-live="polite">{write.preferenceState}</span>
         <button type="button" className="geist-button primary" id="savePreference" data-save-preference="" title="Submit reason" aria-label="Submit reason"
           {...write.busyAttrs('preference')} onClick={() => write.preference({ reason })}
-          dangerouslySetInnerHTML={{ __html: saving ? `${spinnerHtml('Submitting reason')}<span>Submitting…</span>` : '<span>Submit</span>' }} />
+          dangerouslySetInnerHTML={{ __html: saving ? `${spinnerHtml('正在提交喜爱理由')}<span>提交中</span>` : '<span>提交</span>' }} />
       </div>
     </div>
   );

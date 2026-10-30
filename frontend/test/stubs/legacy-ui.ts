@@ -19,9 +19,12 @@ export {attachOverlayScrollbar, growCollapse, iconSwapHtml, indexSkeletonHtml, p
 export {closeAnchoredMenu, dialSliderHtml, iconSwitchHtml, wireAnchoredMenu, wireDialSlider, wireHorizontalScroller, wireIconSwitch} from '../../src/ui-kit';
 // 骨架露面的等待门槛用正式那一个数；管理区的加载态用正式模板，骨架交给整页的淡出用正式实现。
 export {configurationSkeletonHtml, revealSkeleton, SKELETON_REVEAL_DELAY, skeletonHtml} from '../../src/ui-kit';
+// 微光的视口照看与底板动画的撤销用正式实现。
+export {cancelGlide, gateSweep, releaseSweep} from '../../src/ui-kit';
 /* 测试环境没有布局，骨架补齐量不出东西，这里什么都不做。 */
 export const fitSkeleton = (_root: Element | null): void => {};
 export const loadingDotsHtml = (label: string): string => `<span>${label}</span>`;
+export {LOAD_MORE_STATUS} from '../../src/ui-kit';
 export const spinnerHtml = (label: string): string => `<span role="status" aria-label="${label}"></span>`;
 export const checkboxHtml = (attrs = ''): string => `<span class="ui-pcheck"><input type="checkbox" ${attrs}></span>`;
 export const progressHtml = (label: string, value: number, max = 100): string =>

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { RiCompassLine, RiPauseLine, RiPlayLine, RiDeleteBinLine } from '@remixicon/react';
+import { RiPauseLine, RiPlayLine, RiDeleteBinLine } from '@remixicon/react';
 import { Button } from '@/components/base/buttons/button';
 import { Input } from '@/components/base/input/input';
 import { confirmModal } from '@peach/legacy/ui';
 import { errorMessage } from '../../api';
 import { cardClass } from '../components/card';
+import { BrowserIcon } from '../components/browser-icon';
 import { Note } from '../components/note';
 import { queryClient } from '../query';
 import { busyProps } from '../settings/use-action';
@@ -28,8 +29,8 @@ export function BrowserSources({ browsers, sources, range, children }:
   });
   return <section className={`${cardClass()} flex flex-col gap-4`} aria-label="Data sources">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <h3 className="text-title-2-medium text-text-primary">Data sources</h3>
-      <Button variant="secondary" size="small" onClick={() => setAdding(true)} disabled={adding}>Add browser</Button>
+      <h3 className="text-title-2-medium text-text-primary">数据源</h3>
+      <Button variant="secondary" onClick={() => setAdding(true)} disabled={adding}>添加浏览器</Button>
     </div>
     {change.error ? <Note tone="error">{errorMessage(change.error)}</Note> : null}
     {adding ? <form className="flex flex-col gap-3" onSubmit={event => {
@@ -39,8 +40,8 @@ export function BrowserSources({ browsers, sources, range, children }:
       <Input label="Profile folder or history file" value={path} onChange={setPath} maxLength={1024} isRequired isDisabled={change.isPending}
         hint="Choose browser data on the computer running Peach." />
       <div className="flex gap-2">
-        <Button type="submit" variant="secondary" disabled={!name.trim() || !path.trim()} {...busyProps(change.isPending)}>Add</Button>
-        <Button variant="ghost" disabled={change.isPending} onClick={() => { setAdding(false); change.reset() }}>Cancel</Button>
+        <Button variant="ghost" disabled={change.isPending} onClick={() => { setAdding(false); change.reset() }}>取消</Button>
+        <Button type="submit" variant="secondary" disabled={!name.trim() || !path.trim()} {...busyProps(change.isPending)}>添加</Button>
       </div>
     </form> : null}
     <div className="inline-grid w-full min-w-0 gap-2 sm:grid-cols-2">
@@ -51,7 +52,7 @@ export function BrowserSources({ browsers, sources, range, children }:
         const bookmarks = records.reduce((total, source) => total + (source.bookmarks || 0), 0);
         return <div key={browser.id} data-taste-source="browser" className={SOURCE_TILE}>
         <span className="inline-grid size-8 shrink-0 place-items-center rounded-lg text-text-secondary">
-          <RiCompassLine aria-hidden className="size-4" />
+          <BrowserIcon name={browser.name} />
         </span>
         <div className="flex min-w-0 grow flex-col gap-0.5">
           <b className="text-body-2-medium break-words text-text-primary">{browser.name}</b>
@@ -68,9 +69,9 @@ export function BrowserSources({ browsers, sources, range, children }:
               onConfirm: () => change.mutateAsync({ operation: 'disable', id: browser.id }) });
           }} />
         <Button variant="secondary" size="small" iconOnly leadingIcon={RiDeleteBinLine} {...busyProps(change.isPending)}
-          aria-label={`Delete ${browser.name}`} onClick={() => {
-            void confirmModal({ title: `Delete ${browser.name}`, body: "This removes the browser's read configuration and the imported history and bookmarks; the browser's own files are kept. You can reconnect it by adding the browser again.",
-              confirmLabel: 'Delete browser source', onConfirm: () => change.mutateAsync({ operation: 'delete_browser', id: browser.id }) });
+          aria-label={`删除 ${browser.name}`} onClick={() => {
+            void confirmModal({ title: `删除 ${browser.name}`, body: '移除该浏览器的读取配置和已导入历史、书签，浏览器原文件保留。可以通过添加浏览器重新接入。',
+              confirmLabel: '删除浏览器来源', danger: true, onConfirm: () => change.mutateAsync({ operation: 'delete_browser', id: browser.id }) });
           }} />
         </span>
       </div>})}

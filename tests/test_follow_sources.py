@@ -5,6 +5,7 @@
 thread 50685），不是凭记忆构造的形状。测试本身不联网：transport 全部注入。
 """
 import json
+import hashlib
 import os
 import tempfile
 import unittest
@@ -17,7 +18,7 @@ from peach import follow_sources
 from peach.follow import FollowHistoryEnd, FollowSourceError, FollowSourceRateLimited
 from peach.follow_secrets import Credential, CredentialError, CredentialStore
 from peach.follow_sources import (
-    USER_AGENT, F95ZoneConnector, FanboxConnector, KemonoConnector,
+    USER_AGENT, F95ZoneConnector, FanboxConnector, IwaraConnector, KemonoConnector,
     PatreonConnector, Rule34PahealConnector, Rule34VideoConnector, Rule34XxxConnector,
     SimpCityConnector, SubscribeStarConnector, build_connector,
     _iso_from_relative, origin_group_key, parse_source_url,
@@ -2060,6 +2061,123 @@ class ParseSourceUrlTests(unittest.TestCase):
                     "ftp://kemono.cr/fanbox/user/1", ""):
             with self.assertRaises(FollowSourceError):
                 parse_source_url(url)
+
+
+class IwaraConnectorTests(unittest.TestCase):
+    PROFILE = {"user": {"id": "user-id", "name": "Test Creator", "username": "creator"}}
+    VIDEO = {"id": "Video123", "title": "Test animation", "body": "Description",
+             "createdAt": "2026-10-01T12:00:00Z", "tags": [{"id": "animation", "type": "general"}],
+             "file": {"id": "file-id", "height": 1080, "duration": 20.5}}
+
+    def connector(self, payloads, **kwargs):
+        requests = []
+        queue = list(payloads)
+
+        def transport(request, timeout, max_bytes):
+            requests.append(request)
+            payload = queue.pop(0)
+            return payload if isinstance(payload, HttpResponse) else HttpResponse(
+                200, {"ETag": "list-version"}, json.dumps(payload).encode())
+
+        return IwaraConnector(transport=transport, **kwargs), requests
+
+    def test_author_urls_and_refs_have_one_identity(self):
+        for url in ("https://www.iwara.tv/profile/Creator", "iwara.tv/profile/creator/videos",
+                    "https://ecchi.iwara.tv/profile/creator/"):
+            parsed = parse_source_url(url)
+            self.assertEqual((parsed.provider, parsed.ref), ("iwara", "creator"))
+            self.assertEqual(parsed.url, "https://www.iwara.tv/profile/creator")
+        self.assertEqual(follow_sources.canonical_source_ref("iwara", "Creator"), "creator")
+        self.assertEqual(follow_sources.profile_link_identity(
+            "https://www.iwara.tv/profile/Creator/videos"), ("iwara", "creator"))
+        for path in ("/video/abc", "/videos", "/profile/creator/images", "/profile/a/b"):
+            with self.assertRaises(FollowSourceError):
+                parse_source_url("https://www.iwara.tv" + path)
+
+    def test_list_projects_stable_media_metadata_and_no_short_lived_addresses(self):
+        connector, requests = self.connector([self.PROFILE, {"results": [self.VIDEO]}])
+        result = connector.fetch("Creator", etag="old-version")
+        item = result.candidates[0]
+        self.assertEqual(result.ref, "creator")
+        self.assertEqual(item.media_url, "https://www.iwara.tv/video/Video123")
+        self.assertEqual(item.thumb_url,
+                         "https://files.iwara.tv/image/thumbnail/file-id/thumbnail-00.jpg")
+        self.assertEqual((item.author, item.duration), ("Test Creator", 20.5))
+        self.assertEqual(item.published_at, "2026-10-01T12:00:00Z")
+        self.assertEqual(item.extra, {"media_kind": "video", "tags": ["animation"],
+                                     "tag_types": {"animation": "general"},
+                                     "source_tag_types": {"animation": "general"}})
+        self.assertNotIn("If-None-Match", requests[0].headers)
+        self.assertEqual(requests[1].headers["If-None-Match"], "old-version")
+        query = urllib.parse.parse_qs(urllib.parse.urlsplit(requests[1].url).query)
+        self.assertEqual(query, {"user": ["user-id"], "page": ["0"], "limit": ["32"],
+                                 "sort": ["date"], "rating": ["all"]})
+
+    def test_paging_and_history_end_use_upstream_results(self):
+        connector, requests = self.connector([self.PROFILE, {"results": []}])
+        with self.assertRaises(FollowHistoryEnd):
+            connector.fetch("creator", page=2, etag="first-page")
+        self.assertIn("page=2", requests[1].url)
+        self.assertNotIn("If-None-Match", requests[1].headers)
+        connector, _ = self.connector([self.PROFILE, {"results": []}])
+        self.assertEqual(connector.fetch("creator").candidates, ())
+
+    def test_unchanged_list_keeps_the_conditional_receipt(self):
+        connector, _ = self.connector([self.PROFILE, HttpResponse(304, {"ETag": "same"}, b"")])
+        result = connector.fetch("creator", etag="same")
+        self.assertTrue(result.not_modified)
+        self.assertEqual(result.etag, "same")
+
+    def test_external_player_has_an_explicit_state(self):
+        video = {**self.VIDEO, "embedUrl": "https://example.org/video/123"}
+        connector, _ = self.connector([self.PROFILE, {"results": [video]}])
+        item = connector.fetch("creator").candidates[0]
+        self.assertIsNone(item.media_url)
+        self.assertIn("外部播放器", item.extra["media_error"])
+
+    def test_invalid_list_and_access_failures_are_not_empty_successes(self):
+        for payload in ({}, {"results": {}}, {"results": [{"title": "missing id"}]},
+                        {"message": "errors.privateVideo"}):
+            connector, _ = self.connector([self.PROFILE, payload])
+            with self.assertRaises(FollowSourceError):
+                connector.fetch("creator")
+        for status in (401, 403, 404, 429):
+            connector, _ = self.connector([HttpResponse(status, {}, b"")])
+            with self.assertRaises(FollowSourceError):
+                connector.fetch("creator")
+
+    def test_playback_signs_the_file_request_and_keeps_credentials_on_the_api(self):
+        file_url = "https://files.iwara.tv/file/file-id?expires=2000000000"
+        formats = [{"name": "540", "src": {"view": "//hime.iwara.tv/540.mp4"}},
+                   {"name": "Source", "src": {"download": "//mikoto.iwara.tv/source.mp4"}},
+                   {"name": "1080", "src": {"view": "https://iwara.tv.evil.org/stolen.mp4"}}]
+        connector, requests = self.connector(
+            [{**self.VIDEO, "fileUrl": file_url}, formats],
+            credential=Credential("iwara", {"access_token": "secret-token"}))
+        self.assertEqual(connector.playback_formats("Video123"), (
+            (1080, "https://mikoto.iwara.tv/source.mp4"), (540, "https://hime.iwara.tv/540.mp4")))
+        self.assertEqual(requests[0].headers["Authorization"], "Bearer secret-token")
+        self.assertNotIn("Authorization", requests[1].headers)
+        self.assertEqual(requests[1].headers["X-Version"], hashlib.sha1(
+            b"file-id_2000000000_mSvL05GfEmeEmsEYfGCnVpEjYgTJraJN").hexdigest())
+        self.assertNotIn("secret-token", requests[0].url)
+
+    def test_playback_refuses_untrusted_or_incomplete_file_interfaces(self):
+        for url in ("http://files.iwara.tv/file/x?expires=1", "https://evil.org/file/x?expires=1",
+                    "https://files.iwara.tv/file/x", "https://user:pw@files.iwara.tv/file/x?expires=1",
+                    "https://files.iwara.tv:8443/file/x?expires=1"):
+            connector, requests = self.connector([{**self.VIDEO, "fileUrl": url}])
+            with self.assertRaises(FollowSourceError):
+                connector.playback_formats("Video123")
+            self.assertEqual(len(requests), 1)
+
+    def test_source_format_is_preferred_when_original_dimensions_are_unknown(self):
+        connector, _ = self.connector([
+            {"fileUrl": "https://files.iwara.tv/file/id?expires=2000000000", "file": {}},
+            [{"name": "540", "src": {"view": "//hime.iwara.tv/540.mp4"}},
+             {"name": "Source", "src": {"view": "//mikoto.iwara.tv/original.mp4"}}]])
+        self.assertEqual(connector.playback_formats("Video123")[0],
+                         (0, "https://mikoto.iwara.tv/original.mp4"))
 
 
 class BuildConnectorTests(unittest.TestCase):

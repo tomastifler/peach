@@ -26,8 +26,8 @@ describe('非 Windows 媒体目录配置', () => {
             ] } });
         });
         await page.reload();
-        const form = page.getByRole('form', { name: 'Media folders', exact: true });
-        const path = form.getByRole('textbox', { name: 'Media folder 1', exact: true });
+        const form = page.getByRole('form', { name: '媒体库与目录', exact: true });
+        const path = form.getByRole('textbox', { name: '媒体目录 1', exact: true });
         await path.waitFor({ state: 'visible' });
         const internal = form.getByRole('textbox', { name: 'Path prefix in database', exact: true });
         assert.equal(await internal.count(), 0);
@@ -42,8 +42,8 @@ describe('非 Windows 媒体目录配置', () => {
         assert.deepEqual((await layout(page)).offenders, []);
         await form.screenshot({ path: `../build/media-path-${viewport.name}.png` });
         assert.equal(await path.inputValue(), '/media/影视');
-        await form.getByRole('button', { name: 'Add folder', exact: true }).click();
-        await form.getByRole('textbox', { name: 'Media folder 2', exact: true }).fill('/media/other');
+        await form.getByRole('button', { name: '给 电影 添加文件夹', exact: true }).click();
+        await form.getByRole('textbox', { name: '媒体目录 2', exact: true }).fill('/media/other');
         assert.equal(await internal.count(), 0);
         await form.getByRole('button', { name: 'Save settings', exact: true }).click();
         await page.getByText('Settings saved', { exact: true }).first().waitFor();

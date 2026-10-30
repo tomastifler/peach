@@ -260,12 +260,13 @@
     },
     {
       "id": "fiu758-studio-logo-discovery",
-      "cadence": "monthly",
+      "cadence": "manual",
+      "volatile": true,
       "name": "AV研究所厂牌分类与 Logo 发现证据",
       "url": "https://fiu758.com/?cat=37",
       "snapshot": "docs/reference-snapshots/fiu758-studio-logo-discovery.md",
       "checked_on": "2026-08-27",
-      "sha256": "18c384344c0889885ba236081d75db5675902f78d88859230290b57c8ed3d427",
+      "sha256": "30c61c9894e465badf897451248d1103cffdcac6d2c8b4dcab6bdced2b721c1f",
       "role": "只作厂牌日文分类名和 Logo 候选发现；第三方博客不直接升级为 Peach 真相或已安装素材。",
       "consumers": [
         "scripts/normalize_studio_logos.py"
@@ -273,12 +274,12 @@
     },
     {
       "id": "rule34-follow-tags-and-collections",
-      "cadence": "monthly",
+      "cadence": "manual",
       "name": "Rule34 标签类型与 Rule34Video 合集证据",
       "url": "https://rule34.xxx/css/desktop.css?46",
       "snapshot": "docs/reference-snapshots/rule34-follow-tags-and-collections.md",
       "checked_on": "2026-09-08",
-      "sha256": "ecb09c351d934ac18f1cb8f335d4e20102a3e4f57a7922c58e157b8cc8f70197",
+      "sha256": "b301be02d6c547866363128f48345d5721b809b4ea64de171926802c3df9fc63",
       "role": "关注页标签类型配色、Rule34Video 内容标签补全与跨作者合集排除证据。",
       "consumers": [
         "src/peach/follow_sources.py",
@@ -292,12 +293,12 @@
     },
     {
       "id": "f95-masked-gofile-media",
-      "cadence": "monthly",
+      "cadence": "manual",
       "name": "F95 掩码链接与 Gofile 文件列表证据",
       "url": "https://f95zone.to/assets/js/masked.js",
       "snapshot": "docs/reference-snapshots/f95-masked-gofile-media.md",
       "checked_on": "2026-08-28",
-      "sha256": "b4fa8a7c397f330ed2f2880fe0dbc1bc7a34e47bb91d935e5f42f2c9502f206d",
+      "sha256": "0bcd972cb7c89880151d84d976c4c29ffaa5b5b8122c8aa6ac41111afdc37911",
       "role": "F95 Cookie 解掩码、文件站目标校验、Gofile 文件列表未取得说明与 Mix 计数边界。",
       "consumers": [
         "src/peach/follow_sources.py",
@@ -524,7 +525,7 @@
       "role": "短定位、下载与文档入口、精简功能层级；Peach 仅借鉴信息结构。",
       "consumers": [
         "README.md",
-        "README.en.md"
+        "README.zh-CN.md"
       ]
     },
     {
@@ -538,7 +539,7 @@
       "role": "小尺寸具象 Logo 配短介绍；Peach 使用自己的桃形 Logo，不复制上游品牌素材。",
       "consumers": [
         "README.md",
-        "README.en.md"
+        "README.zh-CN.md"
       ]
     },
     {
@@ -552,7 +553,7 @@
       "role": "集中导航与图片替代文本；Peach 统一三枚 flat 徽章，不复制长功能清单。",
       "consumers": [
         "README.md",
-        "README.en.md"
+        "README.zh-CN.md"
       ]
     },
     {
@@ -643,7 +644,7 @@
       "role": "同类本地馆藏管理器的信息组织：人物页三个直达入口、本地作品与作品总数并列、页头的数据质量计数。源码未公开（README 自己写着这一条），结论来自 README 与它挂的 5 张演示图，加上论坛帖里 8 张真实截图的测读；截图给不出可哈希的上游字节，登记的是 README 本体。Peach 不复制它的界面，只取这三处的组织方式。README 另取它的页头链接行、粗体引导的主要功能短列表和「问题反馈要附什么、遮盖什么」的写法。",
       "consumers": [
         "README.md",
-        "README.en.md"
+        "README.zh-CN.md"
       ]
     },
     {
@@ -662,7 +663,7 @@
       "role": "同类本地影片管理器的 README 信息结构：页头几条粗体承诺、规格速览表、截图表与常见问题。Peach 只借结构，不复制文案、截图、功能承诺与免责声明条款。",
       "consumers": [
         "README.md",
-        "README.en.md"
+        "README.zh-CN.md"
       ]
     },
     {
@@ -671,17 +672,17 @@
       "name": "amane 说明",
       "url": "https://raw.githubusercontent.com/sqzw-x/amane/main/README.md",
       "snapshot": "docs/reference-snapshots/upstream/readme-amane.md",
-      "checked_on": "2026-10-13",
+      "checked_on": "2026-10-27",
       "sha256": "eeb3a4313b593d38847abab0135df7b19b60dbe983daed684ede01813d589036",
       "git": {
         "repository": "https://github.com/sqzw-x/amane.git",
         "ref": "refs/heads/main",
-        "revision": "cc42cee6ecf290cf05af1caa347d2dc2d5aeffcd"
+        "revision": "01c6695df643b615adf660ab57fe0f93d229ba51"
       },
       "role": "同类项目的极简 README：一行一个功能、安装只给入口、开发说明压到最后。Peach 只借篇幅控制，不复制文案。",
       "consumers": [
         "README.md",
-        "README.en.md"
+        "README.zh-CN.md"
       ]
     },
     {
@@ -700,7 +701,7 @@
       "role": "自托管成人馆藏应用的 README：一句定位加大截图、演示视频入口、首次运行的未签名提示与 FFmpeg 说明。Peach 只借这几处的位置，不复制文案与截图。",
       "consumers": [
         "README.md",
-        "README.en.md"
+        "README.zh-CN.md"
       ]
     },
     {
@@ -719,7 +720,7 @@
       "role": "同类元数据插件的 README：功能一行一条、详细说明全部链到文档。Peach 只借「README 不展开细节」的做法。",
       "consumers": [
         "README.md",
-        "README.en.md"
+        "README.zh-CN.md"
       ]
     },
     {
@@ -738,7 +739,7 @@
       "role": "同类刮削器的 README：上游项目谱系与致谢写法。Peach 只借致谢的位置，不复制附加使用条款。",
       "consumers": [
         "README.md",
-        "README.en.md"
+        "README.zh-CN.md"
       ]
     },
     {
@@ -789,15 +790,18 @@
       "name": "SakuraMedia 客户端说明",
       "url": "https://raw.githubusercontent.com/tinypinglite/sakuramedia/main/README.md",
       "snapshot": "docs/reference-snapshots/upstream/readme-sakuramedia.md",
-      "checked_on": "2026-10-13",
-      "sha256": "09ddc717b3ba9e62abc0846a0cb265d02ad3bdb32b451c516e44a30b537f38fc",
+      "checked_on": "2026-10-27",
+      "sha256": "6fd3716a2487187f946bc4ed9bc2d7f04133542f32698c00334bcb162a209114",
       "git": {
         "repository": "https://github.com/tinypinglite/sakuramedia.git",
         "ref": "refs/heads/main",
-        "revision": "8cfc99b7963404694ae563ef0d1f3af58254b195"
+        "revision": "17b5fe414c273437ef5586480f097c9f862d5174"
       },
-      "role": "SakuraMedia 的 Flutter 客户端只作行为证据：诊断提示的「原因、修法、跳转」三元组（待办第 26 条）、先看画面再选片（第 49 条）与多端原生客户端（第 70 条）。",
-      "consumers": []
+      "role": "README 的主图、折叠截图与安装导航；诊断提示、播放交互和多端客户端仅作产品行为证据，不复制源码、文案或功能承诺。",
+      "consumers": [
+        "README.md",
+        "README.zh-CN.md"
+      ]
     },
     {
       "id": "readme-neoavdc",

@@ -31,7 +31,9 @@ it('在横排上开头的滚轮手势整段归这一排，鼠标一格逐帧走�
   // 半路再来一格，从上一格的终点接着算，一路走到头停下。
   now+=40;node.dispatchEvent(wheel(60));flush();
   expect(left).toBe(100);expect(frames).toHaveLength(0);
-  node.dispatchEvent(new Event('scroll'));expect(node.dataset.overflowRight).toBe('false');
+  // 一帧里的几次 scroll 合成下一帧写一次渐隐标记。
+  node.dispatchEvent(new Event('scroll'));node.dispatchEvent(new Event('scroll'));expect(frames).toHaveLength(1);
+  step();expect(node.dataset.overflowRight).toBe('false');
   // 到头以后还在转、隔一会再转，都不交给页面：要滚整页得把指针挪出这一排。
   now+=40;const still=wheel(60);node.dispatchEvent(still);expect(still.defaultPrevented).toBe(true);
   now+=1000;const next=wheel(60);node.dispatchEvent(next);expect(next.defaultPrevented).toBe(true);

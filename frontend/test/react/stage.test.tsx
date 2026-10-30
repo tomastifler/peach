@@ -122,7 +122,7 @@ function shellActions(): ShellActions {
     openItem: vi.fn(), openEntity: vi.fn(), openTag: vi.fn(), openTasteSignal: vi.fn(), navigate: vi.fn(),
     openManage: vi.fn(), managePath: vi.fn(() => ''), openFollow: vi.fn(), receipt: vi.fn(), toast: vi.fn(),
     failure: vi.fn(), revealSource: vi.fn(async () => ''), reopenTutorial: vi.fn(async () => {}),
-    requestConfigurationSection: vi.fn(), routeReview: vi.fn(),
+    routeReview: vi.fn(),
     routeFollowManage: vi.fn(), saveFollowPreference: vi.fn(), srcBadge: () => '', routeIndex: vi.fn(),
     savePeopleLayout: vi.fn(), exitSelectMode: vi.fn(), personAvatar: vi.fn(() => ({ html: '', face: '' })),
     authorAvatar: vi.fn(() => ''), showIndexTags: vi.fn(), openFollowAuthor: vi.fn(), openFollowTag: vi.fn(),
@@ -175,6 +175,35 @@ afterEach(async () => {
 });
 
 describe('常驻组件', () => {
+  it('Escape 命令与原生取消优先关闭内层，没有弹层时关闭详情', async () => {
+    serve();
+    const opened = request(1);
+    await act(async () => { await api.open(opened) });
+    const dialog = q<HTMLDialogElement>('#stage')!;
+    const { overlayHost } = await import('../../src/react/components/overlay-host');
+    const host = overlayHost(dialog);
+    const inner = document.createElement('div');
+    inner.setAttribute('role', 'dialog');
+    inner.tabIndex = -1;
+    const close = vi.fn((event: KeyboardEvent) => {
+      event.preventDefault(); event.stopPropagation(); inner.remove();
+    });
+    inner.addEventListener('keydown', close);
+    const sentinel = document.createElement('span');
+    sentinel.hidden = true;
+    sentinel.dataset.focusScopeEnd = '';
+    host.append(inner, sentinel);
+    act(() => api.requestEscape());
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(opened.actions.close).not.toHaveBeenCalled();
+    host.insertBefore(inner, sentinel);
+    act(() => { dialog.dispatchEvent(new Event('cancel', { cancelable: true })) });
+    expect(close).toHaveBeenCalledTimes(2);
+    expect(opened.actions.close).not.toHaveBeenCalled();
+    act(() => api.requestEscape());
+    expect(opened.actions.close).toHaveBeenCalledTimes(1);
+  });
+
   it('画上之后句柄才交出；宿主是 body 末尾的 [data-stage-host]，里面直接是藏着的小窗，不包 .peach-react', async () => {
     const r = await load();
     await mountRouter(r);
@@ -249,6 +278,7 @@ describe('常驻组件', () => {
     let finish!: (value: unknown) => void;
     vi.stubGlobal('fetch', vi.fn((url: string) => url === '/api/library-processing'
       ? Promise.resolve({ ok: true, status: 200, json: async () => ({ status: 'idle' }) })
+      : url === '/api/local-players' ? Promise.resolve({ ok: true, status: 200, json: async () => ({ players: [] }) })
       : new Promise(resolve => { finish = resolve })));
     const opening = api.open(request(1));
     const dialog = q<HTMLDialogElement>('#stage')!;

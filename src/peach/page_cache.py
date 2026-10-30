@@ -36,12 +36,15 @@ class Site:
     """
 
     def __init__(self, cache_dir: Path, interval: float, timeout: float, *,
-                 refresh: bool = False, via_proxy: bool = False, transport=None,
+                 refresh: bool = False, via_proxy: bool | None = None, transport=None,
                  cookies: dict[str, str] | None = None, retries: int = 2,
                  backoff: float = 2.0):
         self.cache_dir, self.interval, self.timeout, self.refresh = cache_dir, interval, timeout, refresh
+        from .peach_proxy import http_client
+        options = {"trust_env": False} if via_proxy is False else {}
         self.transport = transport or HttpxTransport(
-            httpx.Client(trust_env=via_proxy, follow_redirects=True, cookies=cookies or {}),
+            (httpx.Client if via_proxy is False else http_client)(
+                **options, follow_redirects=True, cookies=cookies or {}),
             owns_client=True)
         self.retries, self.backoff = max(0, retries), backoff
         self._limiter = RateLimiter(interval)

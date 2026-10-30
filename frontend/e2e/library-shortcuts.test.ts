@@ -47,6 +47,8 @@ describe('我的收藏弹层', () => {
       try {
         await page.locator('#settingsBtn').evaluate((button: HTMLElement) => button.click());
         await page.locator('#settingsPanel:not([hidden])').waitFor();
+        // 光学玻璃的位移贴图在空闲时补画，两边都等它落定再比材质。
+        await page.locator('[data-settings-card] [data-settings-nav][data-optic-glass="true"]').waitFor();
         const setting = await page.evaluate((mobile) => {
           const card = document.querySelector('[data-settings-card]')!, nav = card.querySelector('[data-settings-nav]')!, heading = card.querySelector('h2')!;
           const surface = getComputedStyle(card), glass = getComputedStyle(nav), title = getComputedStyle(heading);

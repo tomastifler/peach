@@ -10,7 +10,7 @@
  * 浮条上的键是透明 `<button>`：尺寸、描边、字号与 17px 字形照 ADR-0031 的迁移前基线，全部写在
  * `batch-dock.css`；BoardUI `Button` 的 medium 档是 20px 字形、8px 内边距，对不上。危险键挂
  * `data-danger`，红色读 `../styles.css` 里全站那一份危险键规则。 */
-import { useSyncExternalStore } from 'react';
+import { useLayoutEffect, useSyncExternalStore } from 'react';
 import { flushSync } from 'react-dom';
 
 import { SelectionDock } from '../components/selection-dock';
@@ -48,6 +48,12 @@ export function BatchDockSurface() {
 }
 
 function BatchDock({ host: at, props: view }: { host: BatchDockHost; props: BatchDockProps }) {
+  /* 浮条在不在由 `<body>` 上的 `data-batch-dock-open` 说给样式表（`batch-dock.css` 给网格与详情底部
+   * 让位）。写成 `body:has(...)` 的话，播放墙平移、卡片插进页面时每批节点都让整棵 body 子树重算样式，
+   * 实测一次 40–60ms。 */
+  const open = view.count > 0;
+  useLayoutEffect(() => { document.body.toggleAttribute('data-batch-dock-open', open) }, [open]);
+  useLayoutEffect(() => () => { document.body.removeAttribute('data-batch-dock-open') }, []);
   return (
     <div className="peach-react" data-batch-scope="" data-context={view.context}>
       <SelectionDock label="Actions for selected items" visible={view.count > 0} count={`${view.count.toLocaleString()} selected`}>

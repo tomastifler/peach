@@ -14,6 +14,7 @@
  * 解码过的路径，名字里的斜杠吃掉剩下全部段，空尾段不算）。 */
 import { overlayMatch } from './overlay';
 import { entityLinkName } from '../core/entity-links';
+import { entityDisplayName } from '../core/entity-names';
 import { PREFERENCE_SECTIONS, CONFIGURATION_SECTIONS } from './settings-route';
 
 export interface RouteMeta {
@@ -40,12 +41,13 @@ export const ROUTE_META: Readonly<Record<string, RouteMeta>> = {
   '/settings/library': { section: 'configuration', title: 'Peach configuration', refresh: 'reopen' },
   '/tasks': { section: 'activity', title: 'Task center', refresh: 'reopen' },
   // 旧直达地址，改写到数据管理页的锚点，没有自己的管理身份。
-  '/resource-sync': { title: 'Data management' },
-  '/performers': { nav: 'performers', title: 'Performers', reload: 'reopen' },
-  '/creators': { title: 'Creators', reload: 'reopen' },
-  '/studios': { nav: 'studios', title: 'Studios', reload: 'reopen' },
-  '/agencies': { title: 'Agencies', reload: 'reopen' },
-  '/tags': { nav: 'tags', title: 'Tags', reload: 'reopen' },
+  '/resource-sync': { title: '数据管理' },
+  '/performers': { nav: 'performers', title: '艺人', reload: 'reopen' },
+  '/creators': { title: '卖家', reload: 'reopen' },
+  '/studios': { nav: 'studios', title: '厂牌', reload: 'reopen' },
+  '/agencies': { title: '事务所', reload: 'reopen' },
+  '/series': { nav: 'studios', title: '系列', reload: 'reopen' },
+  '/tags': { nav: 'tags', title: '标签', reload: 'reopen' },
   '/performers/*': { reload: 'reopen' },
   '/studios/*': { reload: 'reopen' },
   '/creators/*': { reload: 'reopen' },
@@ -82,5 +84,5 @@ export function routeMetaOf(path: string): RouteMeta | null {
   const pattern = `/${segment}/*`;
   const kinds: Record<string, string> = { performers: 'performer', studios: 'studio', creators: 'creator', agencies: 'agency', series: 'series', tags: 'tag' };
   const name = /^\d+$/.test(rest.join('/')) ? entityLinkName(kinds[segment] || '', Number(rest[0])) : rest.join('/');
-  return Object.hasOwn(ROUTE_META, pattern) ? { ...ROUTE_META[pattern], title: name || 'Profile' } : null;
+  return Object.hasOwn(ROUTE_META, pattern) ? { ...ROUTE_META[pattern], title: name ? entityDisplayName(kinds[segment] || '', name) : '资料' } : null;
 }

@@ -199,6 +199,16 @@ class GenerateLibraryTests(unittest.TestCase):
             state = self._run()
         self.assertEqual((state["skipped"], state["made"]), (3, 0))
 
+    def test_existing_image_previews_are_skipped_without_extracting_video_frames(self):
+        from PIL import Image
+        Image.new('RGB', (320, 180), 'red').save(self.media / 'frame.jpg')
+        (self.media / '1.vtt').write_text(
+            'WEBVTT\n\n00:00.000 --> 01:00:00.000\nframe.jpg\n', encoding='utf-8')
+        with patch.object(timeline_sheets, 'build', return_value={'frames': 1}) as build:
+            state = self._run()
+        self.assertEqual((state['skipped'], state['made'], state['failed']), (1, 1, 1))
+        self.assertEqual([call.args[4] for call in build.call_args_list], [2])
+
     def test_a_full_disk_stops_the_run_and_says_so(self):
         """磁盘触线说明整台机器写不下了，立刻停手并把原因带出去，不能跑成「完成」。"""
         guard = MagicMock()

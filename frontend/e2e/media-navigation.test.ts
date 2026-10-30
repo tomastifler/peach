@@ -17,10 +17,10 @@ describe('图片导航固定位置与悬停', () => {
       await mockJavDetail(page);
       await page.route('**/api/jav/detail?*', route => route.fulfill({ json: { ...JAV_DETAIL,
         performer_refs: [], studio_refs: [], series_refs: [], preview_video_url: '', preview_count: 1 } }));
-      await page.route('**/api/jav/image?*', route => {
+      await page.route('**/jav-image?*', route => {
         const vertical = new URL(route.request().url()).searchParams.get('image') === '0';
         const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${vertical ? 400 : 1200}" height="800"><rect width="100%" height="100%" fill="#456"/></svg>`;
-        return route.fulfill({ json: { ok: true, image: 'data:image/svg+xml,' + encodeURIComponent(svg) } });
+        return route.fulfill({ contentType: 'image/svg+xml', body: svg });
       });
       await page.goto(new URL('/works/EXM-001', page.url()).href);
       const frame = page.locator('[data-jav-art]');

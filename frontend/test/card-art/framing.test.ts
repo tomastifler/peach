@@ -204,6 +204,22 @@ describe('upgradeCover：派生档不够清楚就换回原件', () => {
     upgradeCover(sharp);
     expect(sharp.getAttribute('src')).toBe('/cover?code=B&thumb=1');
   });
+
+  it('800 那一档不够清楚先换 1600 那一档，版本号留着；模糊底记第一张派生档', () => {
+    const host = mount('<div class="pic"><img class="poster cover" src="/cover?code=A&thumb=2&v=9"></div>');
+    const img = sized(host.querySelector('img')!, 800, 538);
+    boxOf(img, 1000, 672);
+    upgradeCover(img);
+    expect(new URL(img.src).search).toBe('?code=A&thumb=1&v=9');
+    sized(img, 1600, 1076);
+    upgradeCover(img);
+    expect(new URL(img.src).search).toBe('?code=A&thumb=1&v=9');
+    expect(img.dataset.thumbSrc).toContain('/cover?code=A&thumb=2&v=9');
+    const fits = sized(mount('<img class="poster cover" src="/cover?code=B&thumb=2">').querySelector('img')!, 800, 538);
+    boxOf(fits, 333, 224);
+    upgradeCover(fits);
+    expect(fits.getAttribute('src')).toBe('/cover?code=B&thumb=2');
+  });
 });
 
 describe('fitNativeImage：比框还小的图原尺寸摆', () => {

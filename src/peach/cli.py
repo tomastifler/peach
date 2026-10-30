@@ -192,6 +192,12 @@ def _migrate(args: argparse.Namespace) -> int:
         print(f"PENDING {migration.version} {migration.name}")
     if args.action == "status" or not pending:
         return 0
+    config = settings_file.active()
+    if args.db.resolve() == (config.directory('database') / 'ledger.db').resolve():
+        from .runtime_prepare import configured_ledger_writer
+        writer, reason = configured_ledger_writer(config)
+        if not writer:
+            raise SystemExit(f'本机不能迁移账本：{reason}；请先在写入端迁移并同步')
     if args.db.resolve() == DEFAULT_DB.resolve() and not args.yes:
         raise SystemExit("refusing to modify the real ledger without --yes")
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -314,10 +320,10 @@ def _parse_mounts(
         key = key.strip()
         if not separator or not key:
             raise SystemExit(f"--mount 要写成 来源ID=路径，收到：{chunk}")
-        if known and key not in known:
+        if key not in known:
             raise SystemExit(
-                f"The --mount source ID is not declared in [media.locations]: {key}"
-                f"(known: {', '.join(sorted(known))})"
+                f"--mount 的来源 ID 未在 [media.locations] 声明：{key}"
+                f"（已知：{'、'.join(sorted(known)) or '尚未声明媒体来源'}）"
             )
         mounts.setdefault(key, []).append(value.strip())
     return {key: tuple(item for item in values if item) for key, values in mounts.items()}
@@ -501,11 +507,17 @@ def _process_library(args: argparse.Namespace) -> int:
     from .task_runs import cli_run, declared_rows
     _require_readable_settings()
     config = settings_file.active()
-    with cli_run('library-processing', args.db, label='Metadata processing') as handle:
-        result = process_library(config, args.db, config.directory('generated'),
-                                 config.directory('generated') / 'covers', location=args.location,
-                                 database=LedgerDatabase(args.db),
-                                 report=lambda state: print(f"{state['stage']}: {state['checked']}/{state['total']}", flush=True))
+    with cli_run('library-processing', args.db, label='资料处理') as handle:
+        from .jobs import JobCancelled
+        try:
+            result = process_library(config, args.db, config.directory('generated'),
+                                     config.directory('generated') / 'covers', location=args.location,
+                                     database=LedgerDatabase(args.db),
+                                     report=lambda state: print(f"{state['stage']}：{state['checked']}/{state['total']}", flush=True))
+        except JobCancelled:
+            handle.finish('cancelled', error='用户停止任务')
+            print('任务已停止，已保存结果保留。')
+            return 130
         rows = declared_rows(result.get('followups'))
         queued = handle.store.enqueue_followups(handle.run_id, rows)
         if rows:
@@ -642,10 +654,10 @@ def _report_blanks(config: settings_file.PeachConfig) -> None:
     for dotted, flag, effect in _BLANK_HINTS:
         table, _, name = dotted.partition(".")
         if not getattr(getattr(config, table), name):
-            blanks.append(f"  {dotted} left empty → {effect}; to fill it in, rerun with {flag}")
-    if not config.mounts and os.name != "nt":
+            blanks.append(f"  {dotted} 留空 → {effect}；要填就重跑并加 {flag}")
+    if config.locations and not config.mounts and os.name != "nt":
         # Windows 上盘符本身就是挂载点，空表是正常的，提示它只会让人去填没用的值。
-        known = ", ".join(sorted(config.locations)) or "local"
+        known = "、".join(sorted(config.locations))
         blanks.append(
             f"  [media.mounts] is empty → media source folders cannot be read; "
             f"use --mount <media source ID>=<media folder> to set a folder (known sources: {known})"
@@ -706,6 +718,13 @@ def build_parser() -> argparse.ArgumentParser:
     local_image.add_argument('source', type=Path)
     local_image.add_argument('output', type=Path)
     local_image.set_defaults(handler=lambda args: local_image_main([str(args.source), str(args.output)]))
+
+    from .media_io import main as media_read_main, OPERATIONS
+    media_read = commands.add_parser('media-read', help='限时读取媒体目录与配套文件')
+    media_read.add_argument('operation', choices=OPERATIONS)
+    media_read.add_argument('path')
+    media_read.add_argument('value', nargs='?', default='')
+    media_read.set_defaults(handler=lambda args: media_read_main([args.operation, args.path, args.value]))
 
     init = commands.add_parser(
         "init", help="First run: with no arguments, ask questions in the terminal; with any argument or --no-input, run non-interactively")

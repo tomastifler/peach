@@ -16,6 +16,19 @@ from .fsutil import atomic_path, atomic_write_text
 AVATAR_REFRESH_SECONDS = 90 * 86400
 FAVICON_REFRESH_SECONDS = 365 * 86400
 MEDIA_HEADERS = ("content-type", "content-length", "content-range", "accept-ranges", "content-encoding")
+MEDIA_SECURITY_HEADERS = {
+    'content-security-policy': "sandbox; default-src 'none'; frame-ancestors 'none'",
+    'x-content-type-options': 'nosniff',
+}
+
+
+def passive_media_type(value: str) -> bool:
+    """代理只返回被动媒体；活动文档和未知类型不能在应用域打开。"""
+    kind = value.split(';',1)[0].strip().lower()
+    return (not kind.endswith(('/svg+xml','+xml','/xml'))
+            and (kind.startswith(('image/','video/','audio/'))
+                 or kind in ('application/octet-stream','binary/octet-stream',
+                             'application/vnd.apple.mpegurl','application/x-mpegurl')))
 
 
 class RemoteMediaUnavailable(ValueError):
@@ -44,7 +57,8 @@ class RemoteMediaCache:
             try:
                 metadata = json.loads(slot.with_suffix(".json").read_text(encoding="utf-8"))
                 path = slot.with_suffix(".bin")
-                if path.is_file() and path.stat().st_size == metadata["size"]:
+                if (passive_media_type(metadata['headers'].get('content-type',''))
+                        and path.is_file() and path.stat().st_size == metadata["size"]):
                     return path, metadata
             except (OSError, ValueError, KeyError, TypeError):
                 continue
@@ -55,7 +69,8 @@ class RemoteMediaCache:
         if not found:
             return None
         path, metadata = found
-        response_headers = {**metadata["headers"], "cache-control": "private, max-age=31536000", **(headers or {})}
+        response_headers = {**metadata["headers"], "cache-control": "private, no-cache",
+                            **(headers or {}), **MEDIA_SECURITY_HEADERS}
         if metadata["status"] == 200:
             response_headers.pop("content-length", None)
             return FileResponse(path, media_type=response_headers.pop("content-type", None), headers=response_headers)
@@ -87,12 +102,13 @@ class RemoteMediaCache:
                 close()
                 return hit
             upstream = fetch()
+            if not passive_media_type(upstream.headers.get('content-type','')):
+                close()
+                return Response('媒体响应类型不受支持',status_code=502,media_type='text/plain',
+                                headers={'cache-control':'no-store',**MEDIA_SECURITY_HEADERS})
             forwarded = {name: upstream.headers[name] for name in MEDIA_HEADERS if name in upstream.headers}
-            forwarded.update({"cache-control": "private, max-age=31536000", **(headers or {})})
-            kind = upstream.headers.get("content-type", "").lower()
-            accepted = (upstream.status_code in (200, 206) and
-                        (kind.startswith(("image/", "video/", "audio/")) or
-                         kind.split(";")[0] in ("application/octet-stream", "binary/octet-stream")))
+            forwarded.update({'cache-control':'private, no-cache', **(headers or {}), **MEDIA_SECURITY_HEADERS})
+            accepted = upstream.status_code in (200,206)
             content_range = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+)", forwarded.get("content-range", ""))
             if upstream.status_code == 206 and not content_range:
                 accepted = False

@@ -3,8 +3,6 @@ import { useState, type FormEvent } from 'react';
 
 import { SettingsRow } from '@/components/application/settings/settings-rows';
 import { Button } from '@/components/base/buttons/button';
-import { Input } from '@/components/base/input/input';
-import { Select, SelectItem } from '@/components/base/select/select';
 
 import { apiSend } from '../../api';
 import type { ConfigurationGroupProps, PeachProxyState } from '../bundle';
@@ -12,19 +10,20 @@ import { Note } from '../components/note';
 import { AccessSettings } from './access-settings';
 import { groupRoot } from './configuration-panel';
 import { PortSettings } from './port-settings';
+import { ProxyAddressField, ProxyModeSelect } from './peach-proxy-fields';
 import { TunnelSettings } from './tunnel-settings';
 import { ErrorText, Footer, Rows, Section, Stack } from './section';
 import { busyProps, useAction } from './use-action';
 
-const PROXY_MODES = [['environment', 'System proxy'], ['direct', 'Direct'], ['proxy', 'Custom']] as const;
-
-export function NetworkSettings({ data, receipt, panel }: ConfigurationGroupProps) {
+export function NetworkSettings({ data, receipt, panel, issues }: ConfigurationGroupProps) {
   return (
     <div {...groupRoot(panel)}>
-      {data.editable && data.port_editable !== false ? <PortSettings data={data} receipt={receipt} /> : null}
-      {data.peach_proxy ? <PeachProxy initial={data.peach_proxy} receipt={receipt} /> : null}
+      {issues}
+      {data.network || (data.editable && data.port_editable !== false && !data.section_errors?.media_sources)
+        ? <PortSettings data={data} receipt={receipt} /> : null}
       {data.access ? <AccessSettings initial={data.access} receipt={receipt} /> : null}
       {data.tunnel ? <TunnelSettings revision={data.revision} initial={data.tunnel} receipt={receipt} /> : null}
+      {data.peach_proxy ? <PeachProxy initial={data.peach_proxy} receipt={receipt} /> : null}
     </div>
   );
 }
@@ -44,17 +43,14 @@ export function PeachProxy({ initial, receipt }: { initial: PeachProxyState; rec
   return (
     <Section id="peachProxy" title="Peach proxy" onSubmit={submit}>
       <Rows>
-        <SettingsRow label="Connection method">
-          <Select aria-label="Connection method" selectedKey={mode} onSelectionChange={(key) => { if (key !== null) setMode(String(key)); }}>
-            {PROXY_MODES.map(([key, name]) => <SelectItem key={key} id={key}>{name}</SelectItem>)}
-          </Select>
+        <SettingsRow label="连接方式">
+          <ProxyModeSelect mode={mode} onChange={setMode} />
         </SettingsRow>
       </Rows>
       {mode === 'proxy' || saved.needs_selection || action.error ? (
         <Stack divided>
           {mode === 'proxy'
-            ? <Input id="peachProxyAddress" type="password" label="Proxy address" autoComplete="off" value={address} onChange={setAddress}
-                placeholder={saved.proxy_saved ? 'Saved; leave blank to keep' : 'http://127.0.0.1:7890'} />
+            ? <ProxyAddressField id="peachProxyAddress" value={address} onChange={setAddress} saved={saved.proxy_saved} />
             : null}
           {saved.needs_selection ? <Note tone="warning" title="Choose a connection method">Existing sources use different proxy addresses. Choose a shared connection method.</Note> : null}
           {action.error ? <ErrorText>{action.error}</ErrorText> : null}

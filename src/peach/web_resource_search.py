@@ -18,16 +18,20 @@ def q_resource_search(contract, args) -> dict:
     with contract.database.read_connection() as connection:
         blocked = [row[0] for row in connection.execute(
             "SELECT info_hash FROM download_task WHERE blocked_at IS NOT NULL")]
+    # 浏览器添加换磁力时传入已失败的 infohash：它们和违规拦截一样不再作为候选，
+    # 而且不能在 manko.fun 那一步短路——被跳过的往往正是那条高清结果，短路会让其他来源一条都不查。
+    skip = [str(value) for value in args.get("skip") or () if isinstance(args.get("skip"), (list, tuple))]
+    excluded = set(blocked) | set(skip)
     code = str(args.get("code") or "")
     direct = direct_search(
         contract.follow_secrets_root, code, min_size=filters.min_size,
-        max_size=filters.max_size, goal=filters.goal)
-    direct["items"] = [row for row in direct["items"] if row["info_hash"] not in set(blocked)]
+        max_size=filters.max_size, goal=filters.goal, stop_on_preferred=not skip)
+    direct["items"] = [row for row in direct["items"] if row["info_hash"] not in excluded]
     # manko.fun 给出高清候选时按用户指定的优先级短路，不再消耗后备索引器请求。
-    if direct["items"] and direct["items"][0]["source"] == "manko.fun" \
+    if not skip and direct["items"] and direct["items"][0]["source"] == "manko.fun" \
             and direct["items"][0]["resolution"] >= HIGH_QUALITY:
         return {"ok": True, "state": "ready", **direct}
-    indexed = _SEARCH.run(Indexers(service.credentials).load(), code, filters, blocked)
+    indexed = _SEARCH.run(Indexers(service.credentials).load(), code, filters, sorted(excluded))
     combined = list(direct["items"])
     for row in indexed.get("items", ()):
         combined.append({

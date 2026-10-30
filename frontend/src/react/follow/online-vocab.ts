@@ -33,6 +33,10 @@ export interface OnlineAuthorsPage {
 
 /** 上游 booru 的一枚标签。`cat` 是上游的 tag_type（general／artist／character／copyright／metadata）。 */
 export interface OnlineTag {
+  favorite?: boolean;
+  id?: string;
+  aliases?: string[];
+  hidden?: boolean;
   k: string;
   n: number;
   cat: string;
@@ -41,6 +45,7 @@ export interface OnlineTag {
 export interface OnlineTagsPage {
   items: OnlineTag[];
   has_more: boolean;
+  total?: number;
   categories?: Record<string, number>;
 }
 

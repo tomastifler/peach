@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import {
   createColumnHelper, createPaginatedRowModel, createSortedRowModel, flexRender,
-  rowPaginationFeature, rowSelectionFeature, rowSortingFeature, tableFeatures, useTable,
+  rowPaginationFeature, rowSelectionFeature, rowSortingFeature, columnVisibilityFeature, tableFeatures, useTable,
   type RowData, type RowSelectionState, type SortingState,
 } from '@tanstack/react-table';
 import { Button } from '@/components/base/buttons/button';
@@ -13,9 +13,12 @@ import { DataTableFooter, DataTableSort } from './table-controls';
 import { SelectionDock } from './selection-dock';
 import { cardClass } from './card';
 import { useTableSelection } from './use-table-selection';
+import { useTablePreferences } from './table-column-preferences';
+import { TableColumnControls, TableColumnResizer } from './table-column-controls';
+import { TableSelectionHeader } from './table-selection-header';
 
 const features = tableFeatures({
-  rowSortingFeature, rowSelectionFeature, rowPaginationFeature,
+  rowSortingFeature, rowSelectionFeature, rowPaginationFeature, columnVisibilityFeature,
   sortedRowModel: createSortedRowModel(), paginatedRowModel: createPaginatedRowModel(),
 });
 
@@ -24,6 +27,10 @@ export interface DataColumn<T> {
   label: string;
   value?(item: T): string | number;
   render(item: T): ReactNode;
+  width?: number;
+  min?: number;
+  max?: number;
+  flex?: boolean;
 }
 
 interface DataTableProps<T> {
@@ -47,6 +54,12 @@ interface DataTableProps<T> {
 export function DataTable<T extends RowData>({ label, items, columns, rowId, rowLabel, selected, onSelected, actions,
   title = label, titleId, description, footerActions, panel = true, unit = 'records' }: DataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>([]);
+  const preferenceColumns = useMemo(() => [
+    { id: 'select', label: '选择', width: 48, min: 48, max: 48, required: true },
+    ...columns.map((column, index) => ({ ...column, width: column.width ?? (index === 0 ? 320 : 160),
+      min: column.min ?? (index === 0 ? 320 : 96), flex: column.flex ?? index === 0, required: index === 0 })),
+  ], [columns]);
+  const preferences = useTablePreferences(`data:${label}`, preferenceColumns);
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 20 });
   const activateSelection = useTableSelection(() => onSelected([]));
   const pages = Math.max(1, Math.ceil(items.length / pagination.pageSize));
@@ -56,8 +69,7 @@ export function DataTable<T extends RowData>({ label, items, columns, rowId, row
     const helper = createColumnHelper<typeof features, T>();
     return helper.columns([
       helper.display({ id: 'select', header: ({ table }) => (
-        <Checkbox slot={null} aria-label={`Select all ${label}`} isSelected={table.getIsAllRowsSelected()}
-          isIndeterminate={table.getIsSomeRowsSelected()} onChange={(on) => table.toggleAllRowsSelected(on)} />
+        <TableSelectionHeader table={table} label={`全选${label}`} />
       ), cell: ({ row }) => (
         <Checkbox slot={null} aria-label={`Select ${rowLabel(row.original)}`} isSelected={row.getIsSelected()}
           onChange={(on) => row.toggleSelected(on)} />
@@ -75,7 +87,8 @@ export function DataTable<T extends RowData>({ label, items, columns, rowId, row
   }, [columns, label, rowLabel]);
   const table = useTable({
     features, data: items, columns: definitions, getRowId: rowId,
-    state: { sorting, rowSelection, pagination: { ...pagination, pageIndex } },
+    state: { sorting, rowSelection, pagination: { ...pagination, pageIndex }, columnVisibility: preferences.visibility },
+    onColumnVisibilityChange: preferences.change,
     onSortingChange: (updater) => { setSorting(updater); setPagination((now) => ({ ...now, pageIndex: 0 })); },
     onPaginationChange: setPagination, enableRowSelection: true,
     onRowSelectionChange: (updater) => {
@@ -89,37 +102,44 @@ export function DataTable<T extends RowData>({ label, items, columns, rowId, row
     <div data-data-table-panel={panel || undefined} className={panel
       ? cardClass({ padding: 'none', bordered: 'line', className: 'flex flex-col gap-4 px-6 py-5 max-sm:px-4' })
       : 'flex min-w-0 flex-col gap-4'}>
-      <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label={`${label} toolbar`}>
-        <h3 id={titleId} className="mr-auto text-title-2-medium text-text-primary">{title}</h3>
+      <div data-responsive-toolbar="" role="toolbar" aria-label={`${label}工具栏`}>
+        <div data-toolbar-heading="">
+        <h3 id={titleId} className="text-title-2-medium text-text-primary">{title}</h3>
         <span className="text-body-2-regular tabular-nums text-text-secondary">
           {`${items.length.toLocaleString()} ${unit}`}
         </span>
+        </div>
+        <div data-toolbar-actions="">
+        <TableColumnControls preferences={preferences} label={label} />
         <DataTableSort label={label} options={columns.filter((column) => column.value).map((column) => ({ id: column.id, label: column.label }))}
           sorting={sorting} onChange={(next) => { setSorting(next); setPagination((now) => ({ ...now, pageIndex: 0 })); }} />
+        </div>
       </div>
       {description ? <p className="text-body-2-regular text-text-secondary">{description}</p> : null}
       <SelectionDock label={`${label} bulk actions`} visible={chosen.length > 0} count={`${chosen.length.toLocaleString()} ${unit} selected`}>
         {actions(chosen, () => onSelected([]))}
         <Button variant="ghost" size="small" onClick={() => onSelected([])}>Clear selection</Button>
       </SelectionDock>
-      <DataTableFrame follow onRowClick={(id) => table.getRow(id)?.toggleSelected()}>
+      <DataTableFrame follow preferences={preferences} onRowClick={(id) => table.getRow(id)?.toggleSelected()}>
         <Table aria-label={label} size="sm"
           sortDescriptor={sorting[0] ? { column: sorting[0].id, direction: sorting[0].desc ? 'descending' : 'ascending' } : undefined}
           onSortChange={(sort) => table.getColumn(String(sort.column))?.toggleSorting(sort.direction === 'descending')}>
           <TableHeader>
-            {table.getHeaderGroups()[0]!.headers.map((header, index) => (
-              <TableColumn key={header.id} id={header.id} isRowHeader={index === 1} allowsSorting={header.column.getCanSort()}>
-                {({ sortDirection }) => <span className="flex items-center gap-0.5">
+            {table.getHeaderGroups()[0]!.headers.map((header) => (
+              <TableColumn key={header.id} id={header.id} isRowHeader={header.id === columns[0]!.id} allowsSorting={header.column.getCanSort()} {...preferences.columnProps(header.id)}>
+                {({ sortDirection }) => <><span className="flex items-center gap-0.5">
                   {flexRender(header.column.columnDef.header, header.getContext())}
                   {header.column.getCanSort() ? <span data-sort-indicator data-direction={sortDirection || undefined}><ChevronSortDown /></span> : null}
-                </span>}
+                </span><TableColumnResizer preferences={preferences} id={header.id} /></>}
               </TableColumn>
             ))}
+            <TableColumn id="remaining-space" aria-label="行空白区域" data-table-space="" width={preferences.spaceWidth} minWidth={0} />
           </TableHeader>
           <TableBody renderEmptyState={() => 'No records'}>
             {table.getRowModel().rows.map((row) => (
               <TableRow key={row.id} id={row.id} data-board-selected={row.getIsSelected() || undefined}>
-                {row.getAllCells().map((cell) => <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>)}
+                {row.getVisibleCells().map((cell) => <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>)}
+                <TableCell data-table-space="" />
               </TableRow>
             ))}
           </TableBody>

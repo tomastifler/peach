@@ -4,7 +4,8 @@ from . import folder_rules, media_folders, settings_file
 
 def _index(contract, args):
     config = settings_file.active()
-    scope = (args.get('loc', ''), args.get('library', ''), repr(config.locations), repr(config.library_names))
+    scope = (args.get('loc', ''), args.get('library', ''), repr(config.locations), repr(config.library_names),
+             repr(getattr(config, 'storage_roots', {})), repr(getattr(config, 'library_catalog', {})))
     def read():
         with contract.read_connection() as connection:
             return media_folders.directory_index(connection, config, locations=scope[0], library=scope[1])

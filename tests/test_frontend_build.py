@@ -20,13 +20,16 @@ from __future__ import annotations
 import hashlib
 from html.parser import HTMLParser
 import json
+import os
 from pathlib import Path
 import re
-import shutil
 import subprocess
+import tempfile
 import unittest
 
-from support.conditions import missing_prerequisite
+from peach.diagnostic_browser import BUNDLE_CHUNK_NAME
+from scripts import test_history
+from test_frontend_preflight import frontend_npm
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "frontend"
@@ -35,6 +38,17 @@ BUNDLE = DIST / "peach-app.js"
 APP_STYLES = DIST / "peach-app.css"
 PAGES_BUNDLE = DIST / "peach-pages.js"
 PAGES_STYLES = DIST / "peach-pages.css"
+#: 主包按页拆出的 chunk（ADR-0118），形态由服务端放行规则定义。
+CHUNKS = sorted(path for path in DIST.glob("*.js") if BUNDLE_CHUNK_NAME.fullmatch(path.name))
+#: 主界面的全部 JavaScript：入口加 chunk。文案与写法落在哪一份由构建决定，扫产物时要一起扫。
+APP_SCRIPTS = (BUNDLE, *CHUNKS)
+STATIC_IMPORTS = re.compile(r'(?m)^\s*(?:import\b[^;]*?|export\s*\*\s*)from\s*["\']([^"\']+)["\']'
+                            r'|^\s*import\s*["\']([^"\']+)["\']')
+DYNAMIC_IMPORTS = re.compile(r'\bimport\s*\(\s*["\']([^"\']+)["\']\s*\)')
+
+
+def app_text() -> str:
+    return "\n".join(path.read_text(encoding="utf-8") for path in APP_SCRIPTS)
 
 
 class PageAssets(HTMLParser):
@@ -59,12 +73,23 @@ class MainBundleTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.bundle = BUNDLE.read_text(encoding="utf-8")
+        cls.bundle = app_text()
 
-    def test_bundle_name_carries_no_content_hash(self):
-        """运行时只分发固定名字的主包和独立页面包。"""
+    def test_dist_ships_fixed_entries_and_exactly_the_referenced_chunks(self):
+        """入口与页面包用固定名字；其余只有主包 chunk，并且正好是产物引用到的那几份。
+
+        chunk 名字带内容哈希，每次构建换一批：多出来的是上一次构建留下、还被 Git 跟踪着的旧文件，
+        缺的是新构建出来却没提交的文件，浏览器打开那一页时取不到。
+        """
         names = sorted(path.name for path in DIST.iterdir() if path.is_file())
-        self.assertEqual(names, ["peach-app.css", "peach-app.js", "peach-pages.css", "peach-pages.js"])
+        self.assertEqual([name for name in names if not BUNDLE_CHUNK_NAME.fullmatch(name)],
+                         ["peach-app.css", "peach-app.js", "peach-pages.css", "peach-pages.js"])
+        referenced = set()
+        for path in APP_SCRIPTS:
+            text = path.read_text(encoding="utf-8")
+            imported = [a or b for a, b in STATIC_IMPORTS.findall(text)] + DYNAMIC_IMPORTS.findall(text)
+            referenced |= {name[2:] for name in imported if name.startswith("./") and name != "./peach-app.js"}
+        self.assertEqual(sorted(referenced), [path.name for path in CHUNKS])
 
     def test_the_main_document_loads_one_module_entry(self):
         assets = PageAssets((ROOT / "web" / "index.html").read_text(encoding="utf-8"))
@@ -74,8 +99,9 @@ class MainBundleTests(unittest.TestCase):
     def test_the_startup_switches_and_their_payload_are_in_the_shipped_bundle(self):
         """「开机自启」那三颗开关的标签和它们发出去的键，判据落在产物上。
 
-        `web/dist/peach-app.js` 是提交进 Git 的产物。改了 `frontend/src` 不重建，浏览器拿到
+        `web/dist/` 是提交进 Git 的产物。改了 `frontend/src` 不重建，浏览器拿到
         的仍是旧的那一份，而 tsc 和 vitest 都只看源码，谁都不会红——只有扫产物这一条会。
+        配置页在按页拆出的 chunk 里，入口与 chunk 一起扫。
         """
         for label in ("Start Peach at login", "Start in the tray only, without opening the web page", "Create a desktop shortcut"):
             self.assertIn(label, self.bundle,
@@ -86,7 +112,7 @@ class MainBundleTests(unittest.TestCase):
 
     def test_react_bundle_records_stable_dependency_paths(self):
         """区域注释只能从 `node_modules/` 起，不得把生成它的工作树路径写进产物。"""
-        for bundle in (BUNDLE, PAGES_BUNDLE):
+        for bundle in (*APP_SCRIPTS, PAGES_BUNDLE):
             with self.subTest(bundle.name):
                 captured = [line for line in bundle.read_text(encoding="utf-8").splitlines()
                             if line.startswith("//#region ") and "node_modules/" in line
@@ -153,24 +179,33 @@ class ReactBundleTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.app = BUNDLE.read_text(encoding="utf-8")
+        cls.app = app_text()
         cls.css = APP_STYLES.read_text(encoding="utf-8")
         cls.pages = PAGES_BUNDLE.read_text(encoding="utf-8")
         cls.pages_css = PAGES_STYLES.read_text(encoding="utf-8")
 
     def test_shipped_bundles_do_not_require_node_globals(self):
-        for name, bundle in (("peach-app.js", self.app), ("peach-pages.js", self.pages)):
+        for name, bundle in (("peach-app.js 与 chunk", self.app), ("peach-pages.js", self.pages)):
             self.assertNotIn("process.env", bundle, f"{name}：库模式没替换 NODE_ENV，浏览器里没有 process")
 
     def test_shipped_bundles_have_independent_module_graphs(self):
-        """主包与页面包各自包含运行依赖，开发标注工具由本机开关单独加载。"""
-        for name, bundle, allowed_dynamic in (("peach-app.js", self.app, {"/dev/agentation.js"}),
-                                              ("peach-pages.js", self.pages, set())):
-            static = re.findall(r'(?m)^\s*(?:import\b[^;]*?|export\s*\*\s*)from\s*["\']([^"\']+)["\']'
-                                r'|^\s*import\s*["\']([^"\']+)["\']', bundle)
-            dynamic = set(re.findall(r'\bimport\s*\(\s*["\']([^"\']+)["\']\s*\)', bundle))
-            self.assertEqual(static, [], name)
-            self.assertEqual(dynamic - allowed_dynamic, set(), name)
+        """主包入口与页面包首屏不静态导入任何文件；主包的 chunk 只从入口与别的 chunk 导入，同一模块只有一份。
+        开发标注工具由本机开关单独加载。"""
+        def chunk(name):
+            return name.startswith("./") and BUNDLE_CHUNK_NAME.fullmatch(name[2:]) is not None
+        for path in (*APP_SCRIPTS, PAGES_BUNDLE):
+            with self.subTest(path.name):
+                text = path.read_text(encoding="utf-8")
+                static = [a or b for a, b in STATIC_IMPORTS.findall(text)]
+                dynamic = set(DYNAMIC_IMPORTS.findall(text))
+                if path == PAGES_BUNDLE:
+                    self.assertEqual((static, dynamic), ([], set()))
+                elif path == BUNDLE:
+                    self.assertEqual(static, [])
+                    self.assertEqual({name for name in dynamic if not chunk(name)} - {"/dev/agentation.js"}, set())
+                else:
+                    self.assertEqual([name for name in static if name != "./peach-app.js" and not chunk(name)], [])
+                    self.assertEqual({name for name in dynamic if not chunk(name)}, set())
 
     def test_utilities_stay_outside_cascade_layers(self):
         """旧样式表不分层。工具类放进层里，`button,input,textarea{color:inherit}` 这类标签规则就会压过它。"""
@@ -330,55 +365,28 @@ class SharedStateContractTests(unittest.TestCase):
 
 
 class VitestTests(unittest.TestCase):
-    """vitest、tsc 与 lint 走同一个测试入口，但缺 Node 时跳过而不是红。
-
-    三者互不覆盖：vitest 经 Vite 转译时只剥掉类型、不做检查，类型错误照样跑绿；
-    裸色值、任意值和在 BoardUI 组件上改样式，类型和行为测试都看不见。
-    """
-
-    def _npm(self, tool: str, package: str) -> str:
-        npm = shutil.which("npm")
-        if npm is None:
-            missing_prerequisite(f"跳过 {tool}：本机没有 npm。装 Node 24+ 后 `-Scope web` 会带上它")
-        if not (FRONTEND / "node_modules" / package).is_dir():
-            missing_prerequisite(f"跳过 {tool}：frontend/node_modules 还没装，先 `npm --prefix frontend ci`")
-        return npm
-
-    def test_the_frontend_sources_typecheck(self):
-        npm = self._npm("tsc", "typescript")
-        completed = subprocess.run(
-            [npm, "--prefix", str(FRONTEND), "run", "typecheck", "--silent"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            cwd=str(FRONTEND), check=False)
-        self.assertEqual(completed.returncode, 0, f"{completed.stdout}\n{completed.stderr}")
+    """Vitest 的行为回归与独立的类型、样式检查共同构成前端验收。"""
 
     def test_the_island_suite_has_a_bounded_worker_pool(self):
         config = (FRONTEND / "vitest.config.ts").read_text(encoding="utf-8")
         self.assertIn("maxWorkers: 4", config)
 
-    def test_frontend_sources_and_tests_pass_lint(self):
-        """`@shadcn/lint` 挡住裸色值、任意值、内联样式和在 BoardUI 组件上改样式（ADR-0031）。"""
-        npm = self._npm("lint", "oxlint")
-        completed = subprocess.run(
-            [npm, "--prefix", str(FRONTEND), "run", "lint", "--silent", "--", "--format=json"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            cwd=str(FRONTEND), check=False)
-        output = f"{completed.stdout}\n{completed.stderr}"
-        self.assertEqual(completed.returncode, 0, output)
-        report = json.loads(completed.stdout)
-        self.assertEqual(report["diagnostics"], [], output)
-        # 没有问题时 Oxlint 什么都不打印，路径写错查了 0 个文件也照样退出 0。
-        self.assertGreater(report["number_of_files"], 0, output)
-        copy = subprocess.run([npm, "--prefix", str(FRONTEND), "run", "check:copy"],
-                              capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=FRONTEND)
-        self.assertEqual(copy.returncode, 0, copy.stdout + copy.stderr)
-
     def test_the_island_suite_passes(self):
-        npm = self._npm("vitest", "vitest")
-        completed = subprocess.run(
-            [npm, "--prefix", str(FRONTEND), "test", "--silent"],
-            capture_output=True, text=True, encoding="utf-8", errors="replace",
-            cwd=str(FRONTEND), check=False)
+        npm = frontend_npm("vitest", "vitest")
+        # 定向入口（含全量失败后的单独重跑）只跑指定的几个文件，路径相对 frontend/。
+        selected = json.loads(os.environ.get("PEACH_VITEST_FILES", "[]"))
+        # 另挂一个 JSON 报告器，把逐条结果交给测试结果历史；控制台输出与判据不变。
+        with tempfile.TemporaryDirectory() as folder:
+            report = Path(folder) / "vitest.json"
+            completed = subprocess.run(
+                [npm, "--prefix", str(FRONTEND), "test", "--silent", "--",
+                 "--reporter=default", "--reporter=json", f"--outputFile.json={report}", *selected],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                cwd=str(FRONTEND), check=False)
+            if report.is_file():
+                data = json.loads(report.read_text(encoding="utf-8"))
+                test_history.record_external(test_history.vitest_rows(data, FRONTEND)
+                                             + test_history.vitest_files(data, FRONTEND))
         output = f"{completed.stdout}\n{completed.stderr}"
         # vitest 的着色随宿主终端能力漂移，计数断言只认去码后的纯文本；
         # 退出码与用例数两道判据不受着色影响。
@@ -388,7 +396,7 @@ class VitestTests(unittest.TestCase):
         self.assertNotRegex(plain, r"Tests\s+0 passed", "vitest 一个用例都没跑")
         counted = re.search(r"Tests\s+(\d+) passed", plain)
         assert counted is not None
-        self.assertGreaterEqual(int(counted.group(1)), 10, output)
+        self.assertGreaterEqual(int(counted.group(1)), 1 if selected else 10, output)
 
 
 class BrowserSuiteWorkflowTests(unittest.TestCase):

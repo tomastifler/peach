@@ -8,6 +8,7 @@ import os
 import shutil
 import sqlite3
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -133,6 +134,114 @@ class IndexTests(unittest.TestCase):
     def test_a_chain_that_hits_nothing_is_falsy(self):
         index = gfriends.parse_filetree(json.dumps(FILETREE).encode("utf-8"))
         self.assertFalse(gfriends.candidates(index, ["谁都不是"]))
+
+
+OLD_FILETREE = {"Content": {"7-S1": {"旧人.jpg": "旧人.jpg?t=0"}}}
+
+
+class IndexRefreshTests(unittest.TestCase):
+    """图库索引缺失或过期时由服务在后台补；取不到时旧缓存原样留着，也不反复出网。"""
+
+    def setUp(self):
+        self.cache = Path(tempfile.mkdtemp()).resolve() / avatar_picker.GFRIENDS_CACHE
+        self.addCleanup(shutil.rmtree, self.cache.parent, True)
+        self.calls: list[str] = []
+        self.reply = lambda: HttpResponse(200, {}, json.dumps(FILETREE).encode("utf-8"),
+                                          gfriends.INDEX_URL)
+
+    def transport(self):
+        def send(request, timeout=None, max_bytes=None):
+            self.calls.append(request.url)
+            return self.reply()
+        return send
+
+    def refresher(self):
+        return avatar_picker.IndexRefresher(self.cache, self.transport)
+
+    def seed_old(self, age: float) -> bytes:
+        body = json.dumps(OLD_FILETREE).encode("utf-8")
+        self.cache.mkdir(parents=True, exist_ok=True)
+        path = self.cache / gfriends.INDEX_NAME
+        path.write_bytes(body)
+        stamp = path.stat().st_mtime - age
+        os.utime(path, (stamp, stamp))
+        return body
+
+    def run_queued(self, refresher) -> bool:
+        queued = refresher.request()
+        if queued:
+            refresher._thread.join(10)
+        return queued
+
+    def test_a_missing_index_is_fetched_in_the_background(self):
+        self.assertTrue(self.run_queued(self.refresher()))
+        self.assertEqual(self.calls, [gfriends.INDEX_URL])
+        self.assertIn("葵つかさ", gfriends.load_index(self.cache))
+        self.assertFalse(gfriends.index_stale(self.cache))
+
+    def test_an_automatic_consumer_prepares_the_index_once(self):
+        refresher = self.refresher()
+        self.assertTrue(refresher.ensure())
+        self.assertIn("葵つかさ", gfriends.load_index(self.cache))
+        self.assertTrue(refresher.ensure())
+        self.assertEqual(self.calls, [gfriends.INDEX_URL])
+
+    def test_an_automatic_consumer_honours_the_failure_retry_window(self):
+        self.reply = lambda: HttpResponse(503, {}, b"", gfriends.INDEX_URL)
+        refresher = self.refresher()
+        with self.assertLogs(avatar_picker.LOGGER, "WARNING"):
+            self.assertFalse(refresher.ensure())
+        self.assertFalse(refresher.ensure())
+        self.assertEqual(self.calls, [gfriends.INDEX_URL])
+
+    def test_a_stale_index_is_replaced(self):
+        self.seed_old(gfriends.INDEX_MAX_AGE_SECONDS + 3600)
+        self.assertTrue(self.run_queued(self.refresher()))
+        index = gfriends.load_index(self.cache)
+        self.assertIn("葵つかさ", index)
+        self.assertNotIn("旧人", index)
+
+    def test_a_fresh_index_is_left_alone(self):
+        self.seed_old(60)
+        self.assertFalse(self.run_queued(self.refresher()))
+        self.assertEqual(self.calls, [])
+
+    def test_a_failed_fetch_keeps_the_old_index_and_waits_before_retrying(self):
+        """离线时每开一次头像框都出网一回，只会一次次白等超时。"""
+        old = self.seed_old(gfriends.INDEX_MAX_AGE_SECONDS + 3600)
+        mtime = (self.cache / gfriends.INDEX_NAME).stat().st_mtime
+        failures = [
+            lambda: HttpResponse(503, {}, b"", gfriends.INDEX_URL),
+            lambda: HttpResponse(200, {}, b"<html>", gfriends.INDEX_URL),
+            lambda: (_ for _ in ()).throw(OSError("连接被重置")),
+        ]
+        for reply in failures:
+            with self.subTest(reply=reply):
+                self.reply = reply
+                refresher = self.refresher()
+                with self.assertLogs(avatar_picker.LOGGER, "WARNING"):
+                    self.assertTrue(self.run_queued(refresher))
+                path = self.cache / gfriends.INDEX_NAME
+                self.assertEqual(path.read_bytes(), old)
+                self.assertEqual(path.stat().st_mtime, mtime)
+                self.assertTrue(gfriends.index_stale(self.cache))
+                self.assertIn("旧人", gfriends.load_index(self.cache))
+                calls = len(self.calls)
+                self.assertFalse(self.run_queued(refresher))
+                self.assertEqual(len(self.calls), calls)
+        later = time.monotonic() + avatar_picker.INDEX_RETRY_SECONDS + 1
+        self.reply = lambda: HttpResponse(200, {}, json.dumps(FILETREE).encode("utf-8"),
+                                          gfriends.INDEX_URL)
+        with mock.patch.object(avatar_picker.time, "monotonic", return_value=later):
+            self.assertTrue(self.run_queued(refresher))
+        self.assertIn("葵つかさ", gfriends.load_index(self.cache))
+
+    def test_a_missing_index_that_cannot_be_fetched_stays_missing(self):
+        self.reply = lambda: HttpResponse(404, {}, b"", gfriends.INDEX_URL)
+        with self.assertLogs(avatar_picker.LOGGER, "WARNING"):
+            self.assertFalse(self.refresher().refresh())
+        self.assertFalse((self.cache / gfriends.INDEX_NAME).exists())
+        self.assertEqual(gfriends.load_index(self.cache), {})
 
 
 class SourceBoundaryTests(unittest.TestCase):
@@ -318,8 +427,8 @@ class ChoiceTests(PickerFixture):
         listed = next(one for one in out if one["ref"] == LIBRARY_REF)
         self.assertEqual((listed["width"], listed["height"]), (40, 60))
 
-    def test_a_stale_index_is_reported_rather_than_refreshed(self):
-        """页面不为一次点击同步拉 6 MB；过期就说出来，补索引是批处理的事。"""
+    def test_a_stale_index_is_reported_and_still_read(self):
+        """页面不为一次点击同步拉 6 MB；过期就说出来，补索引交给后台（`IndexRefresher`）。"""
         self.assertFalse(self.listed()["index_stale"])
         old = gfriends.INDEX_MAX_AGE_SECONDS + 3600
         with mock.patch.object(gfriends, "index_age", return_value=old):
@@ -902,6 +1011,26 @@ class AvatarPickerRouteTests(unittest.TestCase):
         self.assertEqual(out["matched_names"], ["葵つかさ"])
         self.assertIn(LIBRARY_REF, [one["ref"] for one in out["choices"]])
 
+    def test_opening_the_picker_on_a_stale_index_queues_a_refresh(self):
+        """这一次照旧按旧缓存列，刷新只排进后台，不挡住这次回应。"""
+        from peach.routes_media import _index_refresher
+        refresher = _index_refresher(self.app)
+        self.assertIs(_index_refresher(self.app), refresher)
+        self.assertEqual(refresher.cache_dir, self.providers / avatar_picker.GFRIENDS_CACHE)
+        # 出网走采集统一出口，Peach 代理设置在那里生效。
+        from peach.scraping_access import SourceTransport
+        transport = refresher._transport()
+        self.addCleanup(transport.close)
+        self.assertIsInstance(transport, SourceTransport)
+        queued = mock.patch.object(refresher, "request").start()
+        old = gfriends.INDEX_MAX_AGE_SECONDS + 3600
+        with mock.patch.object(gfriends, "index_age", return_value=old):
+            out = self.client.get(
+                "/api/avatar-choices?kind=performer&id=7792&t=secret").json()
+        self.assertTrue(out["index_stale"])
+        self.assertIn(LIBRARY_REF, [one["ref"] for one in out["choices"]])
+        queued.assert_called_once_with()
+
     def _online_creator(self):
         from peach.follow_sources import FollowCandidate, SourceFetch
         from peach.follow_store import FollowStore
@@ -1034,14 +1163,61 @@ class AvatarPickerRouteTests(unittest.TestCase):
             content=body, headers={"content-type": "image/jpeg"})
         self.assertEqual(framed.status_code, 200)
         self.assertEqual((framed.json()["width"], framed.json()["height"]), (300, 400))
-        # 只量不存：本机文件确认时浏览器再发一次原字节。
-        self.assertFalse((self.providers / "upload").exists())
+        # 转换预览留在候选缓存；用户确认前不安装头像。
+        self.assertTrue(framed.json()["ref"].startswith("sha256:"))
+        preview = self.client.get("/avatar-choice", params={
+            "kind": "performer", "id": 7792, "ref": framed.json()["ref"], "t": "secret"})
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(preview.content, body)
+        self.assertFalse((self.avatars / "performer-7792.img").exists())
         picked = self.client.post(
             "/api/avatar-pick?id=7792&kind=performer&name=me.jpg&crop=0,0,300,300&t=secret",
             content=body, headers={"content-type": "image/jpeg"})
         self.assertEqual(picked.status_code, 200)
         installed = avatar_picker.accept_image((self.avatars / "performer-7792.img").read_bytes())
         self.assertEqual((installed.width, installed.height), (300, 300))
+
+    def test_a_tiff_upload_uses_one_converted_image_for_preview_crop_and_save(self):
+        stream = io.BytesIO()
+        Image.open(io.BytesIO(picture(120, 160))).save(stream, "TIFF")
+        body = stream.getvalue()
+        framed = self.client.post(
+            "/api/avatar-frame?id=7792&kind=performer&name=portrait.tif&t=secret",
+            content=body, headers={"content-type": "application/octet-stream"})
+        self.assertEqual(framed.status_code, 200)
+        ref = framed.json()["ref"]
+        preview = self.client.get("/avatar-choice", params={"id": 7792, "ref": ref, "t": "secret"})
+        self.assertEqual(preview.status_code, 200)
+        self.assertEqual(preview.headers["content-type"], "image/jpeg")
+        self.assertEqual(inspect_avatar(preview.content).width, framed.json()["width"])
+        saved = self.client.post(
+            "/api/avatar-pick?id=7792&kind=performer&name=portrait.tif&crop=0,0,120,120&t=secret",
+            content=body, headers={"content-type": "image/tiff"})
+        self.assertEqual(saved.status_code, 200)
+        installed = inspect_avatar((self.avatars / "performer-7792.img").read_bytes())
+        self.assertEqual((installed.width, installed.height), (120, 120))
+
+    def test_an_address_with_webp_content_has_a_jpeg_preview_and_can_be_installed(self):
+        buffer = io.BytesIO()
+        Image.open(io.BytesIO(picture(80, 120))).save(buffer, "WEBP")
+        self.app.state.http_transport = transport_of(buffer.getvalue())
+        address = "https://example.com/photo.jpg"
+        with mock.patch.object(peach_http, "host_addresses", return_value=("93.184.216.34",)):
+            framed = self.client.post("/api/avatar-frame?t=secret", json={"id": 7792, "url": address})
+        self.assertEqual(framed.status_code, 200)
+        preview = self.client.get("/avatar-choice", params={"id": 7792, "ref": framed.json()["ref"], "t": "secret"})
+        self.assertEqual(preview.headers["content-type"], "image/jpeg")
+        saved = self.client.post("/api/avatar-pick?t=secret", json={"id": 7792, "ref": framed.json()["ref"]})
+        self.assertEqual(saved.status_code, 200)
+
+    def test_invalid_uploads_have_a_client_error_and_do_not_install_an_avatar(self):
+        for suffix, body in ((".jpg", picture()[:-32]), (".html", b"<html>image required</html>")):
+            for endpoint in ("avatar-frame", "avatar-pick"):
+                with self.subTest(endpoint=endpoint, suffix=suffix):
+                    response = self.client.post(f"/api/{endpoint}?id=7792&name=portrait{suffix}&t=secret", content=body)
+                    self.assertEqual(response.status_code, 400)
+                    self.assertTrue(response.json()["error"])
+        self.assertFalse((self.avatars / "performer-7792.img").exists())
 
     def test_a_typed_address_is_checked_before_peach_goes_and_fetches_it(self):
         refused = self.client.post("/api/avatar-frame?t=secret",

@@ -38,8 +38,8 @@ it('自动查询，展示来源、大小、日期与属性，直接添加到选�
   expect(fetcher.mock.calls[0]?.[0]).toBe('/api/wants/magnets?id=1');
   for (const text of ['4 GB', '2 个文件', '2026-10-01', '字幕', 'JavDB']) expect(host.textContent).toContain(text);
   expect(host.querySelector('[data-resource-facts]')?.textContent).not.toContain('高清');
-  expect([...host.querySelectorAll('[data-resource-actions] button, [data-resource-actions] a')].map(node => node.textContent)).toEqual(['Add download', 'Copy link', 'Link source']);
-  await click(buttonNamed('Add download', host));
+  expect([...host.querySelectorAll('[data-resource-actions] button, [data-resource-actions] a')].map(node => node.textContent)).toEqual(['链接来源', '复制链接', '添加下载']);
+  await click(buttonNamed('添加下载', host));
   await settle();
   const writes = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST');
   expect(JSON.parse(String(writes[0]?.[1]?.body))).toEqual({ magnet: candidate.uri, provider: '115', target: '/下载',
@@ -52,8 +52,9 @@ it('ed2k 与网页链接可复制，不能作为磁链提交', async () => {
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
   const ed2k = { ...candidate, id: 'ed2k:abc:12', protocol: 'ed2k' as const, uri: 'ed2k://|file|demo|12|abc|/' };
   const { host } = await open([ed2k]);
-  expect(buttonNamed('Add download', host)).toBeNull();
-  await click(buttonNamed('Copy link', host));
+  expect(buttonNamed('添加下载', host)).toBeNull();
+  expect(buttonNamed('复制链接', host)?.className).not.toContain('bg-button-primary');
+  await click(buttonNamed('复制链接', host));
   expect(writeText).toHaveBeenCalledWith(ed2k.uri);
 });
 it('提交等待期保持按钮可聚焦并拦截重复点击', async () => {
@@ -140,7 +141,7 @@ it('资源缓存只接受可展示的字段和完整查询结果', () => {
   const saved = Date.now();
   const result = { state: 'ready', items: [candidate], error: '', checked_at: null };
   const { protocol: _protocol, attributes: _attributes, ...incomplete } = candidate;
-  localStorage.setItem('peach.want-resources.v1', JSON.stringify([
+  localStorage.setItem('peach.want-resources.v2', JSON.stringify([
     { code: 'DEMO-001', saved, result: { ...result, items: [{ ...incomplete, size: 1024 }] } },
     { code: 'DEMO-002', saved, result: { ...result, items: [], warnings: ['来源未取得'] } },
     { code: 'DEMO-003', saved, result },
@@ -148,6 +149,14 @@ it('资源缓存只接受可展示的字段和完整查询结果', () => {
   expect(cachedResources('DEMO-001', null)).toBeUndefined();
   expect(cachedResources('DEMO-002', null)).toBeUndefined();
   expect(cachedResources('DEMO-003', null)?.result.items).toEqual([candidate]);
+});
+
+it('资源查询不复用其他规则版本的持久缓存', () => {
+  const result = { state: 'ready' as const, items: [candidate], error: '', checked_at: null };
+  localStorage.setItem('peach.want-resources.v1', JSON.stringify([{ code: 'DEMO-001', saved: Date.now(), result }]));
+  expect(cachedResources('DEMO-001', null)).toBeUndefined();
+  rememberResources('DEMO-001', result);
+  expect(cachedResources('DEMO-001', null)?.result.items).toEqual([candidate]);
 });
 
 it('页面与查询客户端重建后复用持久缓存，手动查询强制更新来源', async () => {

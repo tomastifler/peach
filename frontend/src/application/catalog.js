@@ -1,5 +1,6 @@
 import { initialCatalogFilters, resetCatalogFilters, homeCatalogState, homePath as pathForCatalog, onlineDefaultLoc as defaultLocations, resolveSort } from '../react/catalog-grid/catalog-state';
 import { CatalogController } from '../react/catalog-grid/catalog-controller';
+import { nextRating, ratingStars } from '../react/components/rating-values';
 /* catalog 域控制器：本域状态与动作，启动由 Application 的生命周期统一安装。 */
 import { censorOn, preferencesState, refreshAll, replaceCatalogAddress, sidebarFacets, wireDrag } from './preferences.js';
 import { nextSortState } from './../sort-preferences';
@@ -14,11 +15,13 @@ import { buildManageBar, cardLayout, homeLayoutActive, javActive, layoutState, s
 import { selectionState, setSelectMode, toggleSelection } from './selection.js';
 import { javDisplayName, javTitleHtml } from '../core/jav-title';
 import { tagLabel } from '../core/tags';
+import { entityDisplayName } from '../core/entity-names';
 import { loadStage, stageApi } from '../react/application-residents';
 import { currentBarsContext, entityState, openEntity, pushEntityPage, routeEntityPage, sortKeys } from './entity.js';
 import { applicationEffects } from './effects';
 import { managedEntry, managedTaken, openManagedRoute, releaseManagedRoute, updateManagedRoute } from './../history/managed';
 import { catalogFilterSkeletonHtml } from './../catalog-filter-skeleton';
+import { catalogContentSkeletonHtml } from '../catalog-content-skeleton';
 import { JAV_LAYOUTS, cardRatio, gridLayout, javLayout } from './../appearance/layout';
 import { entityFaceImg, facePos, logoUrl } from './../card-art/markup';
 import { sidebarHasCatalogContent } from './../sidebar';
@@ -31,7 +34,7 @@ import { pageSkeletonHtml } from './../management-placeholder';
 import { catalogEmptyHtml } from './../catalog-onboarding';
 import { junkRoute } from './../junk-queue';
 import { wallAddress } from '../react/video-wall/wall-route';
-export const catalogState = { homeHasFeed: undefined, barsRequestSeq: undefined, barsRendered: undefined, catalogFilterProps: undefined, catalogFilterMounting: undefined, catalogTagRows: undefined, catalogTopsPages: undefined, initialParams: undefined, resolveSort: undefined, initialCatalogUrl: undefined, initialParam: undefined, HOME_QUERY_KEYS: undefined, searchValueSnapshot: undefined, cancelSearchDissolve: undefined, rememberSearchValue: undefined, clearSearchField: undefined, mixRelatedCache: undefined, reduceMotion: undefined, tagList: undefined, tagPressed: undefined, withTagToggled: undefined, gridHelpers: undefined, gridActions: undefined, topsQueryParams: undefined, facetCountsSeq: undefined, VIEW_PILLS: undefined, catalogViews: undefined, TAGS_FIRST: undefined, catalogOnScreen: undefined, COMBO_LABELS: undefined, hideCatalogCombo: undefined, junkQueueHelpers: undefined, junkQueueActions: undefined };
+export const catalogState = { homeHasFeed: undefined, barsRequestSeq: undefined, barsPendingSeq: undefined, barsRendered: undefined, catalogFilterProps: undefined, catalogFilterMounting: undefined, catalogTagRows: undefined, catalogTopsPages: undefined, initialParams: undefined, resolveSort: undefined, initialCatalogUrl: undefined, initialParam: undefined, HOME_QUERY_KEYS: undefined, searchValueSnapshot: undefined, cancelSearchDissolve: undefined, rememberSearchValue: undefined, clearSearchField: undefined, mixRelatedCache: undefined, reduceMotion: undefined, tagList: undefined, tagPressed: undefined, withTagToggled: undefined, gridHelpers: undefined, gridActions: undefined, topsQueryParams: undefined, facetCountsSeq: undefined, VIEW_PILLS: undefined, catalogViews: undefined, TAGS_FIRST: undefined, catalogOnScreen: undefined, COMBO_LABELS: undefined, hideCatalogCombo: undefined, junkQueueHelpers: undefined, junkQueueActions: undefined };
 
 export function dropOfflineFromDefaultLoc(){
   if(catalogState.initialParams.has('loc'))return;
@@ -107,6 +110,18 @@ export async function runResourceOperation(it,operation){
   }catch(error){receiptsState.actionFailure('Action',error);throw error}
 }
 
+export async function rateCatalogItem(it,star,onChange,signal){
+  const before=Number(it.rating)||0,value=nextRating(before,star);
+  const save=async(value,signal)=>{
+    const result=await api('/api/feedback',{method:'POST',body:JSON.stringify({id:it.id,kind:'rate',value}),signal});
+    const rating=result.rating??null;onChange(rating);return rating;
+  };
+  try{
+    const rating=await save(value,signal);
+    receiptsState.actionReceipt(rating?`已评 ${ratingStars(rating)} 星`:'已取消评分',{undo:()=>save(before)});
+  }catch(error){if(!signal?.aborted)receiptsState.actionFailure('评分',error);throw error}
+}
+
 export async function getBarsData(context){
   // JAV 模式的顶部三层与筛选面板要跟着收窄，否则会列出只出现在创作者作品里的
   // 女优和厂牌，点进去却是空的。口径进键，换了口径就是另一份。
@@ -120,7 +135,7 @@ export async function getBarsData(context){
   if(context.type==='home'&&state.state)facetParams.set('state',state.state);
   if(context.type!=='item'){
     const filters=entityState.activeFilterState();
-    ['loc','creator','studio','tag','tag_match','len','dur_min','dur_max','orient','region','q','thumb','folder','folder_recursive'].forEach(key=>{
+    ['loc','creator','studio','tag','tag_match','len','dur_min','dur_max','orient','region','year','q','thumb','folder','folder_recursive'].forEach(key=>{
       if(filters[key])facetParams.set(key,filters[key]);
     });
   }
@@ -183,7 +198,7 @@ export function commitContextFilter(mutate){
 }
 
 export function catalogFilterBase(){
-  return {tiers:null,empty:false,tags:[],tagFirst:catalogState.TAGS_FIRST,views:catalogState.catalogViews(),state:'',count:null,
+  return {tiers:null,tiersPending:false,empty:false,tags:[],tagFirst:catalogState.TAGS_FIRST,views:catalogState.catalogViews(),state:'',count:null,
     trash:false,sorts:[],layout:null,refreshing:false,offscreen:false,combo:[],comboHidden:true,comboHost:$('#combo'),
     actions:catalogFilterActions(),
     helpers:{wireDrag,wireScroller:row=>{if(row)wireHorizontalScroller(row)}}};
@@ -259,7 +274,7 @@ export function catalogTags(filters){
 }
 
 export function tierPerformer(x){
-  return {name:x.k,ringHtml:`<span data-tier-initial>${esc(firstGrapheme(x.k))}</span>${entityFaceImg(
+  return {name:x.k,ringHtml:`<span data-tier-initial>${esc(firstGrapheme(entityDisplayName('performer',x.k,x.id)))}</span>${entityFaceImg(
     {id:x.id,hasImage:x.has_image,version:x.image_version,rep:x.has_avatar?x.rep:null,style:facePos(x.avatar_focus),focus:x.avatar_focus,
       standIn:x.avatar_stand_in})}`};
 }
@@ -269,10 +284,19 @@ export function tierStudio(x){
     logo:x.has_logo?logoUrl(x.k,'icon',x.logo_version):''};
 }
 
-export function renderBarsLoading(filterState){
+export function renderBarsLoading(filterState,requestSeq){
   if(catalogState.catalogFilterProps?.tiers)return;
   catalogState.barsRendered='';
-  paintCatalogFilter({tiers:null,state:filterState.state||''});
+  catalogState.barsPendingSeq=requestSeq;
+  paintCatalogFilter({tiers:null,tiersPending:true,state:filterState.state||''});
+}
+
+/* 两排头像只在真有一趟取数在路上时挂忙态：这一趟作废（换页把序号推走了）或失败，而后来的那一趟
+   没有接着取，忙态就由它撤掉；不取头像的页面（视频墙、作品页）从不挂。 */
+function releaseBarsPending(requestSeq){
+  if(catalogState.barsPendingSeq!==requestSeq)return;
+  catalogState.barsPendingSeq=0;
+  paintCatalogFilter({tiersPending:false});
 }
 
 export async function buildBars(){
@@ -286,11 +310,13 @@ export async function buildBars(){
   if(barsContext.type==='item')return;
   const context=currentBarsContext(),filterState=entityState.activeFilterState();
   const signature=JSON.stringify([context,filterState,state.state||'',state.seed||'',javActive()]);
-  renderBarsLoading(filterState);
+  renderBarsLoading(filterState,requestSeq);
   // 两个聚合查询互不依赖。冷启动各需约 1 秒，串行会让手机首屏白等；
   // 并行取回后再一次性绘制顶部与抽屉。
-  const [facetData,tops]=await getBarsData(context);
-  if(requestSeq!==catalogState.barsRequestSeq)return;
+  let bars;
+  try{bars=await getBarsData(context)}catch(error){releaseBarsPending(requestSeq);throw error}
+  const [facetData,tops]=bars;
+  if(requestSeq!==catalogState.barsRequestSeq){releaseBarsPending(requestSeq);return}
   /* 口径和数据都和上一次一样时，画出来的是同一串 HTML。照样赋一次 innerHTML 只换来
      整排头像连 `<img>` 一起重建、重解一遍码，屏幕上就是白闪一下——这一排每一个都是
      一张图。比数据不比时间：详情看上十分钟再回来，取回的多半还是同一份。 */
@@ -326,8 +352,10 @@ export async function buildBars(){
   const pickedKeys=new Set(pickedTags.map(row=>row.k));
   catalogState.catalogTagRows=appliedTags.concat(pickedTags,tagPool.filter(row=>!pickedKeys.has(row.k)))
     .map(row=>({k:row.k,label:tagLabel(row.k),n:row.n??null}));
+  catalogState.barsPendingSeq=0;
   paintCatalogFilter({
     tiers:{key:String(catalogState.barsRequestSeq),performers:tops.performers.map(tierPerformer),studios:tops.studios.map(tierStudio)},
+    tiersPending:false,
     empty:emptyHome,tags:catalogTags(filterState),tagFirst:appliedTags.length+pickedTags.length,
     views:catalogState.catalogViews(),state:filterState.state||'',
   });
@@ -364,7 +392,8 @@ export function comboItems(filters){
   const items=[];
   if(filters.creator)items.push({kind:'clear',key:'creator',label:`${catalogState.COMBO_LABELS.creator} ${filters.creator}`});
   if(filters.studio)items.push({kind:'clear',key:'studio',label:`${catalogState.COMBO_LABELS.studio} ${filters.studio}`});
-  if(filters.owner==='none')items.push({kind:'clear',key:'owner',label:`${catalogState.COMBO_LABELS.owner}: unassigned`});
+  if(filters.owner==='none')items.push({kind:'clear',key:'owner',label:`${catalogState.COMBO_LABELS.owner} 未归属`});
+  if(filters.year)items.push({kind:'clear',key:'year',label:`发行年份 ${filters.year.split(',').map(year=>year==='none'?'未知年份':year).join('、')}`});
   catalogState.tagList(filters.tag).forEach(t=>items.push({kind:'untag',key:t,label:tagLabel(t)}));
   return items;
 }
@@ -433,8 +462,8 @@ export function catalogGridLayout(){
   return gridLayout({active:javActive()||home,home,portrait:state.orient==='竖屏'});
 }
 
-export function catalogSkeletonHtml(label='Loading works'){
-  return pageSkeletonHtml(label,{cards:true,className:'catalog-skeleton postercard-skeleton',cardRatio:catalogCardRatio()});
+export function catalogSkeletonHtml(label='正在读取作品'){
+  return catalogContentSkeletonHtml(label,catalogCardRatio());
 }
 
 export function catalogCardRatio(){
@@ -569,6 +598,7 @@ catalogState.gridActions = {
   },
   toggleSelection:(id,range)=>toggleSelection(id,range),
   watchLater:(it,onChange)=>toggleWatchLater(it,onChange),
+  rate:(it,star,onChange,signal)=>rateCatalogItem(it,star,onChange,signal),
   resourceOperation:(it,operation)=>runResourceOperation(it,operation),
   mixRelated:seedId=>mixRelated(seedId),
   canFlip:()=>!selectMode&&!censorOn()&&!window.__scrolling&&!catalogState.reduceMotion(),

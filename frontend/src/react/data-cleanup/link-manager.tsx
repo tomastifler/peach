@@ -11,19 +11,26 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { RiExternalLinkLine } from '@remixicon/react';
 import { useQuery } from '@tanstack/react-query';
 import { confirmModal } from '@peach/legacy/ui';
+import { entityPath, esc, firstGrapheme } from '@peach/legacy/core';
+import { entityFaceImg } from '@peach/card-art';
 
 import { Button } from '@/components/base/buttons/button';
+import { Chip } from '@/components/base/badges/chip';
+import { StatusLabel } from '../components/status-label';
 
 import { errorMessage } from '../../api';
 import { ErrorExcerpt } from '../activity/error-excerpt';
 import { useBackgroundJob } from '../background-job';
 import { DataTable, type DataColumn } from '../components/data-table';
 import {
-  Fieldset, FieldsetTitle, PanelFooter, RESULT_PANEL, RESULT_SECTION,
+  Fieldset, FieldsetTitle, RESULT_PANEL, RESULT_SECTION,
 } from '../components/fieldset';
 import { Note } from '../components/note';
+import { SiteMark } from '../components/site-mark';
 import { TaskProgress } from '../components/task-progress';
 import { spriteGlyph } from '../components/sprite-glyph';
+import { LEGACY_AVATAR_IMG } from '../components/legacy-avatar';
+import { LinkCheckIcon } from './link-check-icon';
 import { queryClient } from '../query';
 import { busyProps } from '../settings/use-action';
 import {
@@ -32,7 +39,6 @@ import {
   type LinkCheckState, type LinkPruneState, type LinkRow,
 } from './links';
 
-const UNLINK = spriteGlyph('unlink');
 const RETRY = spriteGlyph('rotate-cw');
 
 const GONE_HINT = 'The site returned 404 or 410; this address is confirmed not to exist.';
@@ -56,31 +62,47 @@ function Stat({ label, value, note }: { label: string; value: string; note?: str
 }
 
 function LinkTable(
-  { title, items, hint, picked, onPick, children, footer }:
+  { title, items, hint, picked, onPick, children, footer, confirmed = false }:
   {
     title: string; items: LinkRow[]; hint: string;
-    picked: readonly number[]; onPick(next: number[]): void; children?: ReactNode; footer?: ReactNode;
+    picked: readonly number[]; onPick(next: number[]): void; children?: ReactNode; footer?: ReactNode; confirmed?: boolean;
   },
 ) {
   if (!items.length) return null;
   const columns: DataColumn<LinkRow>[] = [
-    { id: 'entity', label: 'Owner', value: (item) => item.entity,
-      render: (item) => <span className="block min-w-24 wrap-anywhere">{item.entity}</span> },
-    { id: 'kind', label: 'Type', value: (item) => LINK_KINDS[item.link_kind] || item.link_kind,
+    { id: 'entity', label: 'Peach 资料', width: 180, min: 128, value: (item) => item.entity,
+      render: (item) => <a className="flex min-w-24 items-center gap-2 text-text-secondary hover:text-text-primary hover:underline"
+        href={item.entity_id && item.entity_kind ? entityPath(item.entity_kind, item.entity, item.entity_id) : undefined} data-link-identity="">
+        <span data-link-avatar="" className={`relative flex size-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-background-quaternary-default text-caption-1-medium text-text-primary ${LEGACY_AVATAR_IMG}`}
+          aria-hidden dangerouslySetInnerHTML={{ __html: `<span>${esc(firstGrapheme(item.entity))}</span>` + entityFaceImg({
+            kind: item.entity_kind, id: item.entity_id, hasImage: item.face?.has_image,
+            version: item.face?.image_version, focus: item.face?.avatar_focus, thumb: true,
+            mark: item.entity_kind === 'studio' || item.entity_kind === 'agency' ? item.id : null,
+          }) }} />
+        <span className="min-w-0 wrap-anywhere">{item.entity}</span>
+      </a> },
+    { id: 'kind', label: '类型', width: 128, value: (item) => LINK_KINDS[item.link_kind] || item.link_kind,
       render: (item) => LINK_KINDS[item.link_kind] || item.link_kind },
-    { id: 'label', label: 'Label', value: (item) => item.label || '',
-      render: (item) => <span className="block min-w-24 wrap-anywhere">{item.label || ''}</span> },
-    { id: 'note', label: 'Result', value: (item) => item.note,
-      render: (item) => <div className="min-w-40 max-w-80"><ErrorExcerpt text={item.note} className="tabular-nums text-text-error-primary" /></div> },
-    { id: 'url', label: 'URL', value: (item) => item.url,
-      render: (item) => <a href={item.url} target="_blank" rel="noreferrer" title={item.url}
-        className="flex max-w-90 min-w-0 items-center gap-1 text-text-secondary hover:text-text-primary">
+    { id: 'label', label: '链接名称', min: 128, value: (item) => item.label || '',
+      render: (item) => <span className="flex min-w-24 items-center gap-2" data-link-name="">
+        <span className="min-w-0 wrap-anywhere">{item.label || new URL(item.url).hostname}</span></span> },
+    { id: 'note', label: '结果', width: 320, min: 192, value: (item) => item.note,
+      render: (item) => <div className="min-w-0 w-full" data-link-result={confirmed ? 'gone' : 'unclear'}>
+        {/^(?:HTTP\s+)?[1-5]\d{2}$/.test(item.note.trim())
+          ? <StatusLabel tone={confirmed || /^(?:HTTP\s+)?5\d{2}$/.test(item.note.trim()) ? 'error' : 'warning'} data-link-code="">{item.note.trim()}</StatusLabel>
+          : <div className="flex flex-col items-start gap-1"><StatusLabel tone={confirmed ? 'error' : 'warning'}>{confirmed ? '地址已失效' : '未取得结论'}</StatusLabel>
+              <ErrorExcerpt text={item.note} className="tabular-nums text-text-secondary" /></div>}
+      </div> },
+    { id: 'url', label: '地址', width: 360, min: 180, value: (item) => item.url,
+      render: (item) => <a href={item.url} target="_blank" rel="noopener noreferrer" title={item.url} data-link-address=""
+        className="flex min-w-0 items-center gap-1 text-text-secondary hover:text-text-primary">
+        <SiteMark linkId={item.id} />
         <span data-middle-truncate className="min-w-0 truncate">{item.url}</span>
-        <RiExternalLinkLine aria-hidden className="size-3.5 shrink-0" />
+        <RiExternalLinkLine aria-hidden className="size-(--icon-inline) shrink-0" />
       </a> },
   ];
   return (
-    <div className={RESULT_SECTION}>
+    <div className={RESULT_SECTION} data-link-results={confirmed ? 'gone' : 'unclear'}>
       <DataTable label={title} items={items} columns={columns} rowId={(item) => String(item.id)}
         description={hint} unit="links" panel={false} footerActions={footer}
         rowLabel={(item) => `${item.entity}: ${item.label || item.url}`}
@@ -125,7 +147,7 @@ export function LinkManager() {
   const selectedGone = gone.filter((item) => gonePicked.includes(item.id)).map((item) => item.id);
   const selectedRetryable = retryable.filter((item) => picked.includes(item.id)).map((item) => item.id);
   const info = stats.data;
-  const hosts = (info?.top_hosts ?? []).slice(0, 3).map(([host, n]) => `${host} ${count(n)}`).join(' · ');
+  const hosts = (info?.top_hosts ?? []).slice(0, 3);
 
   const run = (retry?: readonly number[]) => {
     if (running || (retry && !retry.length)) return;
@@ -163,15 +185,21 @@ export function LinkManager() {
         ? <TaskProgress embedded label={checkLine(state)} value={Math.min(state.checked || 0, state.total || 0)} total={state.total} />
         : null}
       {removing
-        ? <TaskProgress embedded label={prune.job?.message || 'Re-checking and deleting dead links…'}
+        ? <TaskProgress embedded label={prune.job?.message || '正在重验并删除失效链接'}
             value={Math.min(prune.job?.checked || 0, prune.job?.total || 0)} total={prune.job?.total} />
         : null}
     </>;
-    const pickedLabel = selectedRetryable.length ? `Retry ${selectedRetryable.length} selected` : 'Retry selected links';
+    const pickedLabel = `立即重试所选（${selectedRetryable.length}）`;
     result = done || gone.length || unclear.length ? (
       <div className={RESULT_PANEL}>
-        {pruned?.status === 'complete' ? <Note tone="success" title="Done">{pruneText(pruned)}</Note> : null}
-        <LinkTable title="Dead addresses" items={gone} hint={GONE_HINT} picked={gonePicked} onPick={setGonePicked}>
+        {pruned?.status === 'complete' ? <Note tone="success" title="完成">{pruneText(pruned)}</Note> : null}
+        <LinkTable title="地址已失效" items={gone} hint={GONE_HINT} picked={gonePicked} onPick={setGonePicked} confirmed
+          footer={done && gone.length ? <>
+            <p className="mr-auto min-w-0 text-caption-1-regular text-text-secondary">{PRUNE_HINT}</p>
+            <Button variant="danger" {...busyProps(removing)} onClick={() => removeGone()}>
+              {`删除 ${gone.length} 条失效链接`}
+            </Button>
+          </> : null}>
           <Button variant="danger" size="small" disabled={!done || !selectedGone.length}
             {...busyProps(removing)} onClick={() => removeGone(selectedGone)}>
             {`Delete selected (${selectedGone.length})`}
@@ -179,23 +207,16 @@ export function LinkManager() {
         </LinkTable>
         <LinkTable title="Could not be reached this time" items={unclear} hint={UNCLEAR_HINT}
           picked={picked} onPick={setPicked} footer={retryable.length
-            ? <Button leadingIcon={RETRY} {...busyProps(running)}
-                onClick={() => run(retryable.map((item) => item.id))}>{`Retry all (${retryable.length})`}</Button>
+            ? <Button variant="primary" leadingIcon={RETRY} {...busyProps(running)}
+                onClick={() => run(retryable.map((item) => item.id))}>{`立即重试全部（${retryable.length}）`}</Button>
             : null}>
           {retryable.length
             ? <>
-                  <Button leadingIcon={RETRY} disabled={!selectedRetryable.length} {...busyProps(running)}
+                  <Button variant="secondary" leadingIcon={RETRY} disabled={!selectedRetryable.length} {...busyProps(running)}
                     onClick={() => run(selectedRetryable)}>{pickedLabel}</Button>
               </>
             : null}
         </LinkTable>
-        {done && gone.length
-          ? <PanelFooter tone="error" status={PRUNE_HINT}>
-              <Button variant="danger" {...busyProps(removing)} onClick={() => removeGone()}>
-                {`Delete ${gone.length} dead links`}
-              </Button>
-            </PanelFooter>
-          : null}
         {done && !gone.length && !unclear.length
           ? <p className={`${RESULT_SECTION} text-body-regular text-notification-success-foreground`}>All links are reachable.</p>
           : null}
@@ -206,8 +227,8 @@ export function LinkManager() {
   return (
     <section id="link-manager" aria-labelledby="link-manager-title" className="flex scroll-mt-20 flex-col gap-4">
       <Fieldset layout="stack" labelledBy="link-manager-title" footer={
-        <Button leadingIcon={UNLINK} {...busyProps(running)} onClick={() => run()}>
-          {running ? 'Checking' : done ? 'Check again' : 'Check dead links'}
+        <Button data-link-check="" leadingIcon={LinkCheckIcon} {...busyProps(running)} onClick={() => run()}>
+          {running ? '检查中' : done ? '重新检查' : '检查死链'}
         </Button>
       }>
         <FieldsetTitle id="link-manager-title" gap="small">Link management</FieldsetTitle>
@@ -222,10 +243,19 @@ export function LinkManager() {
                     <Stat key={kind} label={LINK_KINDS[kind] || kind} value={count(value)} />
                   ))}
                 </div>
-                {hosts
+                {hosts.length
                   ? <div className="mt-4 flex min-w-0 flex-col gap-0.5">
-                      <span className="text-caption-1-regular text-text-secondary">Top sites</span>
-                      <b className="text-body-2-medium break-words text-text-primary">{hosts}</b>
+                      <span className="text-caption-1-regular text-text-secondary">主要站点</span>
+                      <div className="flex min-w-0 flex-wrap gap-x-5 gap-y-2">
+                        {hosts.map(([host, n]) => <span key={host} data-top-host="" className="inline-flex min-w-0 max-w-full items-center gap-1.5">
+                          <a href={`https://${host}`} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex min-w-0 items-center gap-1.5 text-body-2-medium text-text-primary">
+                            <SiteMark linkId={info.top_host_link_ids?.[host]} /><span className="min-w-0 wrap-anywhere">{host}</span>
+                            <RiExternalLinkLine aria-hidden className="size-(--icon-inline) shrink-0" />
+                          </a>
+                          <Chip variant="caption" color="neutral"><span className="tabular-nums">{count(n)}</span></Chip>
+                        </span>)}
+                      </div>
                     </div>
                   : null}
               </>

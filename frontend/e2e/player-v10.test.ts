@@ -27,6 +27,45 @@ describe('Video.js 10 播放链', () => {
   });
   after(async () => { await browser?.close(); if (fixture) rmSync(fixture, { recursive: true, force: true }) });
 
+  it('详情自动播放请求读取 MP4 并解码', { timeout: 60_000 }, async () => {
+    const opened = await visit(browser, `/assets/${requiredEnv('PEACH_E2E_ITEM')}`, VIEWPORTS[0]!);
+    const { page, problems } = opened;
+    try {
+      await page.addInitScript(() => {
+        localStorage.setItem('peach.settings.v1', JSON.stringify({ detailAutoplay: true }));
+        const play = HTMLMediaElement.prototype.play;
+        HTMLMediaElement.prototype.play = function () { this.muted = true; return play.call(this) };
+      });
+      const stream = page.waitForResponse(reply => new URL(reply.url()).pathname === '/stream');
+      await page.reload();
+      await page.waitForFunction(() => {
+        const video = document.querySelector<HTMLVideoElement>('#stage video.vjs-tech');
+        return !!video && video.currentTime > .15 && video.videoWidth > 0;
+      }, undefined, { timeout: 15_000 });
+      assert.ok([200, 206].includes((await stream).status()));
+      assert.deepEqual(problems, []);
+    } finally { await opened.close() }
+  });
+
+  it('媒体解码失败保存本机浏览器上下文与原生错误', { timeout: 60_000 }, async () => {
+    const opened = await visit(browser, `/assets/${requiredEnv('PEACH_E2E_ITEM')}`, VIEWPORTS[0]!);
+    const { page } = opened;
+    try {
+      await page.route('**/stream?**', route => route.fulfill({ body: 'invalid video', contentType: 'video/mp4' }));
+      const recorded = page.waitForResponse(reply => new URL(reply.url()).pathname === '/api/diagnostics/client-error'
+        && reply.request().postDataJSON()?.kind === 'media');
+      await page.reload();
+      const response = await recorded;
+      assert.equal(response.status(), 200);
+      const evidence = response.request().postDataJSON();
+      assert.ok([3, 4].includes(evidence.playback.code));
+      assert.equal(evidence.playback.source_route, '/stream');
+      assert.ok('h264' in evidence.browser.native_codecs);
+      assert.match(evidence.browser.user_agent, /Chrome/);
+      assert.equal(JSON.stringify(evidence).includes('session='), false);
+    } finally { await opened.close() }
+  });
+
   it('关注片源的 DASH MIME 挂载官方引擎并解码', { timeout: 60_000 }, async () => {
     const opened = await openFollowFeed(browser, `/posts/${DETAIL.collection}`, VIEWPORTS[0]!, { ready: '#stage [data-follow-detail-side]' });
     const { page, problems } = opened;

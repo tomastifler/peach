@@ -63,6 +63,18 @@ it('从页面点进详情：push 带上打开那一刻的地址与查询串', ()
   expect(length()).toBe(before + 1);
 });
 
+it('从数据管理页进入详情与重放条目都保留查询串和页内锚点', () => {
+  shellNavigate('/data-cleanup?view=issues#libraryProcessing');
+  open('/assets/11');
+  const state = usr();
+  expect(state).toEqual({ backgroundLocation: {
+    pathname: '/data-cleanup', search: '?view=issues', hash: '#libraryProcessing',
+  }, overlay: 'item' });
+  clearOverlayBackground();
+  adoptOverlayState(state);
+  expect(takeOverlayReturn()).toBe('/data-cleanup?view=issues#libraryProcessing');
+});
+
 it('队列地址取完数才推：背景是决定那一刻的地址，不是推的那一刻', () => {
   shellNavigate('/?tag=a');
   holdOverlayBackground();

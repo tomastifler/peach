@@ -31,6 +31,7 @@ if str(SRC_DIR) not in sys.path:
 from peach.config import COVER_DIR
 from peach.cover_artwork import FACE_ALGORITHM_VERSION, face_record
 from peach.face_detect import FaceDetector, FaceModelUnavailable
+from peach.fsutil import atomic_write_text
 from peach.jav_poster_crop import read_sidecar
 
 
@@ -79,8 +80,8 @@ def run(args: argparse.Namespace) -> int:
             print(f"[{index}/{len(todo)}] 读图失败 {path.name}", flush=True)
             continue
         stats["face" if result["face"] else "none"] += 1
-        path.with_suffix(".face.json").write_text(
-            json.dumps(result, ensure_ascii=False), encoding="utf-8")
+        # 换名写入：服务的封面索引只认目录修改时间，原地覆写不会让它重读。
+        atomic_write_text(path.with_suffix(".face.json"), json.dumps(result, ensure_ascii=False))
     print(f"\n检出 {stats['face']}，未检出 {stats['none']}，读图失败 {stats['unreadable']}")
     print("未检出的会退回固定取景，不影响显示。")
     return 0

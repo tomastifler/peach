@@ -4,6 +4,7 @@ import { after, before, describe, it } from 'node:test';
 import { join } from 'node:path';
 import type { Browser } from 'playwright-core';
 import { launch, requiredEnv, visit, VIEWPORTS } from './harness.ts';
+import { mockSubtitleMemory } from './subtitle-fixture.ts';
 
 describe('播放器皮肤', () => {
   let browser: Browser;
@@ -29,6 +30,70 @@ describe('播放器皮肤', () => {
   });
 
   for (const viewport of VIEWPORTS) {
+    it(`${viewport.name}：刷新后恢复同一视频的旋转、倍速和字幕外观`, { timeout: 60_000 }, async () => {
+      const opened = await visit(browser, `/assets/${requiredEnv('PEACH_E2E_ITEM')}`, viewport, async page => {
+        await mockSubtitleMemory(page);
+        await page.addInitScript(() => localStorage.setItem('peach.settings.v1', JSON.stringify({ detailAutoplay: false })));
+      });
+      const { page } = opened;
+      try {
+        await page.locator('#stage .vjs-peach-settings-toggle').click();
+        await page.locator('#stage [data-player-rotation]').click();
+        await page.locator('#stage [data-player-rotation-option="90"]').click();
+        await page.locator('#stage [data-player-speed]').click();
+        await page.locator('#stage [data-player-speed-option="1.5"]').click();
+        await page.locator('#stage [data-player-menu-back]').click();
+        await page.locator('#stage [data-player-subtitles]').click();
+        await page.locator('#stage [data-subtitle-options]').click();
+        await page.locator('#stage [data-subtitle-style="size"]').click();
+        const saved = page.waitForResponse(response => response.url().includes('/api/player/memory')
+          && response.request().method() === 'PUT' && response.request().postDataJSON().caption_style?.size === '150');
+        await page.locator('#stage [data-subtitle-value="150"]').click();
+        assert.equal((await saved).status(), 200);
+        await page.reload();
+        await page.waitForFunction(() => {
+          const video = document.querySelector<HTMLVideoElement>('#stage video.vjs-tech');
+          return video?.style.transform.includes('rotate(90deg)') && video.playbackRate === 1.5
+            && video.closest<HTMLElement>('.video-js')?.style.getPropertyValue('--peach-caption-scale') === '1.5';
+        });
+        await page.locator('#stage .vjs-peach-settings-toggle').click();
+        assert.equal(await page.locator('#stage [data-player-rotation] b').textContent(), '90°');
+        assert.equal(await page.locator('#stage [data-player-speed] b').textContent(), '1.5×');
+        assert.deepEqual(opened.problems, []);
+      } finally { await opened.close() }
+    });
+
+    it(`${viewport.name}：旋转画面适配播放器并恢复原始方向`, { timeout: 60_000 }, async () => {
+      const opened = await visit(browser, `/assets/${requiredEnv('PEACH_E2E_ITEM')}`, viewport, async page => {
+        await page.addInitScript(() => localStorage.setItem('peach.settings.v1', JSON.stringify({ detailAutoplay: false })));
+      });
+      const { page } = opened;
+      try {
+        await page.locator('#stage .vjs-peach-settings-toggle').click();
+        const rotationIcon = await page.locator('#stage [data-player-rotation]>svg').first().evaluate(icon => ({
+          fill: getComputedStyle(icon).fill, stroke: getComputedStyle(icon).stroke,
+        }));
+        assert.equal(rotationIcon.fill, 'none');
+        assert.notEqual(rotationIcon.stroke, 'none');
+        for (const angle of [90, 180, 270, 0]) {
+          await page.locator('#stage [data-player-rotation]').click();
+          await page.locator(`#stage [data-player-rotation-option="${angle}"]`).click();
+          const state = await page.locator('#stage video.vjs-tech').evaluate(video => {
+            const bounds = video.getBoundingClientRect();
+            const container = video.closest('media-container')!.getBoundingClientRect();
+            return { transform: (video as HTMLElement).style.transform,
+              fit: getComputedStyle(video).objectFit, width: bounds.width, height: bounds.height,
+              containerWidth: container.width, containerHeight: container.height };
+          });
+          assert.equal(state.transform.includes(`rotate(${angle}deg)`), angle !== 0);
+          assert.ok(Math.abs(state.width - state.containerWidth) < 1);
+          assert.ok(Math.abs(state.height - state.containerHeight) < 1);
+          if (angle) assert.equal(state.fit, 'contain');
+        }
+        assert.deepEqual(opened.problems, []);
+      } finally { await opened.close() }
+    });
+
     it(`${viewport.name}：控制组贴右、进度圆点唯一、全屏保留控件`, { timeout: 60_000 }, async () => {
       const opened = await visit(browser, `/assets/${requiredEnv('PEACH_E2E_ITEM')}`, viewport, async page => {
         await page.addInitScript(theme => localStorage.setItem('peach.settings.v1',
@@ -79,10 +144,12 @@ describe('播放器皮肤', () => {
           const play = container.querySelector('media-play-button')!.getBoundingClientRect();
           const full = container.querySelector('media-fullscreen-button')!.getBoundingClientRect();
           return { frame: [frame.width, frame.height], viewport: [innerWidth, innerHeight],
+            fit: getComputedStyle(container.querySelector('video')!).objectFit,
             controlsInside: play.y >= 0 && full.right <= innerWidth && play.bottom <= innerHeight };
         });
         assert.deepEqual(fullscreen.frame, fullscreen.viewport);
         assert.equal(fullscreen.controlsInside, true);
+        assert.equal(fullscreen.fit, 'contain', '全屏保留完整视频画面');
         await page.locator('#stage media-fullscreen-button').click();
         await page.waitForFunction(() => !document.fullscreenElement);
         assert.deepEqual(problems, []);

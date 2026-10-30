@@ -1,3 +1,5 @@
+import { registerNameWriting, registerNameWritings } from './entity-names';
+
 const links = new Map<string, number>();
 const aliases = new Map<string, Set<number>>();
 const names = new Map<string, string>();
@@ -34,10 +36,12 @@ export function registerResponseEntities(path: string, payload: unknown): void {
   if (!payload || typeof payload !== 'object') return;
   const data = payload as Record<string, any>;
   const url = new URL(path, 'https://peach.invalid');
+  if (url.pathname === '/api/entity/shapes' && Array.isArray(data.name_variants)) registerNameWritings(data.name_variants, data.name_glyphs);
   if (!['/api/entity', '/api/index', '/api/entity/shapes', '/api/tops', '/api/facets', '/api/suggest'].includes(url.pathname)) return;
   const requested = url.searchParams.get('kind') || url.pathname.slice(5);
   const kind = kinds[requested] || requested;
   if (data.canonical_name && data.id) {
+    if (data.name_display?.current) registerNameWriting({ ...data.name_display.current, id: data.id, kind: data.kind || kind });
     for (const name of Array.isArray(data.aliases) ? data.aliases : []) registerAlias(data.kind || kind, name, data.id);
     registerEntityLink(data.kind || kind, data.canonical_name, data.id);
   }

@@ -3,6 +3,7 @@
 这里守的是编码契约本身。它此前在 46 个读写点各写一遍，而两条要求都属于「写的时候
 一切正常、几天后有人用 Excel 打开才发现坏了」那一类，靠人眼复查是拦不住的。
 """
+import csv
 import os
 import tempfile
 import unittest
@@ -18,7 +19,7 @@ class ReviewCsvTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
 
     def test_written_file_carries_the_bom_excel_needs(self):
         """没有 BOM，一份中文复核表在 Excel 里就是一屏问号。"""
@@ -57,6 +58,25 @@ class ReviewCsvTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             read_rows(missing)
         self.assertEqual(read_rows(missing, missing_ok=True), [])
+
+    def test_large_multiline_evidence_round_trips_without_losing_following_rows(self):
+        target = self.root / 'library-metadata-field-candidates.csv'
+        rows = [{'code': 'A', 'name': '来源,"证据"\n' * 30000},
+                {'code': 'B', 'name': '下一条'}]
+        write_rows(target, FIELDS, rows, atomic=True)
+        original = target.read_bytes()
+        self.assertEqual(read_rows(target), rows)
+        self.assertEqual(target.read_bytes(), original)
+
+    def test_incomplete_quoted_evidence_reports_the_file_and_preserves_it(self):
+        target = self.root / 'library-metadata-field-candidates.csv'
+        original = 'code,name\r\nA,"未写完\r\nB,下一条\r\n'
+        target.write_text(original, encoding=ENCODING, newline='')
+        with self.assertRaises(csv.Error) as caught:
+            read_rows(target)
+        self.assertIn(target.name, str(caught.exception))
+        self.assertIn('，第 3 行：', str(caught.exception))
+        self.assertEqual(target.read_text(encoding=ENCODING, newline=''), original)
 
     def test_an_unexpected_field_is_an_error_by_default(self):
         """多余的键几乎总是字段名写错了。

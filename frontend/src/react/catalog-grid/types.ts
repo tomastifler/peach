@@ -8,6 +8,8 @@ export interface MediaEntityRef extends FaceRef { id: number }
 /** `/api/items` 的一条。只列卡片读到的字段，其余原样带着，壳的缓存要的是整条。 */
 export interface MediaItem {
   id: number;
+  root_id?: string;
+  library_id?: string;
   name?: string;
   code?: string;
   is_jav?: boolean;
@@ -16,6 +18,14 @@ export interface MediaItem {
   cost?: string;
   size?: number | null;
   duration?: number | null;
+  width?: number | null;
+  height?: number | null;
+  rating?: number | null;
+  o_count?: number | null;
+  /** 当前档案点过「喜欢」：列表接口给 1，详情页写回的同一条是 `true`。 */
+  liked?: boolean | number | null;
+  first_seen?: string | null;
+  last_played?: string | number | null;
   release_date?: string | null;
   play_seconds?: number | null;
   play_count?: number | null;
@@ -94,6 +104,8 @@ export interface MediaCardActions {
   toggleSelection(id: number, range: boolean): void;
   /** 切换稍后看。写 ledger；成功与撤销都把新值回给 `onChange`，失败由壳报。 */
   watchLater(item: MediaItem, onChange: (on: boolean) => void): Promise<void>;
+  /** 设置星级；成功与撤销回传服务端评分，忙态和原位错误由调用方呈现。 */
+  rate(item: MediaItem, star: number, onChange: (rating: number | null) => void, signal?: AbortSignal): Promise<void>;
   /** 回收站卡上那枚键：还原或移入回收站。写 ledger，做完重读目录并给撤销；失败由壳报，再抛出。 */
   resourceOperation(item: MediaItem, operation: 'restore' | 'dispose'): Promise<void>;
   /** Mix 翻页要的相关作品，每个种子只取一次，和点开后的队列共用。 */

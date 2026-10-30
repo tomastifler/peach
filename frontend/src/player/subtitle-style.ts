@@ -1,4 +1,5 @@
 /* 字幕外观持久化与 TextTrack 时间轴显示。 */
+import type { playerMemory } from './memory';
 export const CAPTION_OPTIONS = {
   font: { label: 'Font', values: [['sans', 'Sans-serif'], ['mono', 'Monospace sans-serif'], ['serif', 'Serif'], ['mono-serif', 'Monospace serif'], ['casual', 'Casual'], ['cursive', 'Handwriting'], ['small-caps', 'Small caps']] },
   size: { label: 'Font size', values: ['50', '75', '100', '150', '200', '300', '400'].map(value => [value, `${value}%`]) },
@@ -25,8 +26,10 @@ export function readCaptionStyle(): CaptionStyle {
     CAPTION_OPTIONS[key as CaptionKey].values.some(([value]) => value === saved[key as CaptionKey]) ? saved[key as CaptionKey] : fallback])) as CaptionStyle;
 }
 
-export function mountCaptionStyle(root: HTMLElement, video: HTMLVideoElement, signal: AbortSignal) {
+export function mountCaptionStyle(root: HTMLElement, video: HTMLVideoElement, signal: AbortSignal,
+  memory?: ReturnType<typeof playerMemory>) {
   let style = readCaptionStyle();
+  const touched = new Set<CaptionKey>();
   const overlay = document.createElement('div'); overlay.className = 'vjs-peach-captions'; overlay.setAttribute('aria-hidden', 'true');
   const window = document.createElement('div'); window.className = 'vjs-peach-caption-window'; overlay.append(window);
   root.querySelector('media-container')!.append(overlay); root.dataset.peachCaptions = '';
@@ -61,13 +64,26 @@ export function mountCaptionStyle(root: HTMLElement, video: HTMLVideoElement, si
   video.textTracks.addEventListener('removetrack', bind, { signal });
   video.textTracks.addEventListener('change', render, { signal });
   paintStyle(); bind();
+  if (memory) memory.restore(saved => {
+    if (signal.aborted) return;
+    if (saved.caption_style) {
+      const restored = { ...DEFAULTS, ...saved.caption_style };
+      for (const key of Object.keys(DEFAULTS) as CaptionKey[]) if (!touched.has(key)) style[key] = restored[key];
+      paintStyle();
+    } else {
+      // 浏览器里保存的外观作为这部视频的初始值，服务端清单承载持久记忆。
+      let legacy = false;
+      try { legacy = !!localStorage.getItem(KEY) } catch { /* 使用默认外观 */ }
+      if (legacy && !touched.size) void memory.save({ caption_style: style }).catch(() => {});
+    }
+  });
   return {
     current: () => style,
     set(key: CaptionKey, value: string) {
       if (!CAPTION_OPTIONS[key].values.some(([option]) => option === value)) return;
-      style = { ...style, [key]: value }; paintStyle();
-      try { localStorage.setItem(KEY, JSON.stringify(style)) } catch { /* 当前会话保留外观 */ }
+      touched.add(key); style = { ...style, [key]: value }; paintStyle();
+      void memory?.save({ caption_style: { [key]: value } }).catch(() => {});
     },
-    reset() { style = { ...DEFAULTS }; paintStyle(); try { localStorage.removeItem(KEY) } catch { /* 当前会话保留外观 */ } },
+    reset() { (Object.keys(DEFAULTS) as CaptionKey[]).forEach(key => touched.add(key)); style = { ...DEFAULTS }; paintStyle(); void memory?.save({ caption_style: style }).catch(() => {}) },
   };
 }

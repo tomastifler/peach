@@ -10,7 +10,7 @@ import { after, before, describe, it } from 'node:test';
 import type { Browser, Page } from 'playwright-core';
 
 import { layout, launch, VIEWPORTS } from './harness.ts';
-import { CATALOG, EDITIONS, ITEM, NAMES, PLAYLIST, RELATED, openItemPage } from './item-fixture.ts';
+import { CATALOG, EDITIONS, ITEM, NAMES, PARTS, PLAYLIST, RELATED, card as itemCard, openItemPage } from './item-fixture.ts';
 
 const DESKTOP = VIEWPORTS.find((viewport) => !viewport.mobile)!;
 const MOBILE = VIEWPORTS.find((viewport) => viewport.mobile)!;
@@ -59,15 +59,83 @@ describe('作品详情岛', () => {
     await browser.close();
   });
 
-  for (const count of [1, 2, 3]) {
-    it(`${count} 张版本卡按内容分配空间，推荐卡与版本卡等宽对齐`, { timeout: 60_000 }, async () => {
+  it('推荐加载保持详情高度稳定，理由与悬停圆角适配默认视口', { timeout: 60_000 }, async () => {
+    const opened = await openItemPage(browser, `/assets/${ITEM.plain}`, DESKTOP);
+    let release = () => {};
+    try {
+      const page = opened.page;
+      let requested!: () => void;
+      const received = new Promise<void>(resolve => { requested = resolve });
+      const waiting = new Promise<void>(resolve => { release = resolve });
+      await page.route(url => url.pathname === '/api/related', async route => {
+        requested();
+        await waiting;
+        await route.fulfill({ json: { items: RELATED.map(id => ({ ...itemCard(id), why: '标签接近' })) } });
+      });
+      await page.reload();
+      await received;
+      const initialHeight = await page.locator('#stage [data-stage-media]').evaluate(node => node.getBoundingClientRect().height);
+      release();
+      const reasons = '#stage [data-item-related] [aria-label^="查看推荐理由"]';
+      await page.locator(reasons).first().waitFor();
+      const visible = () => page.waitForFunction(selector => {
+        const scroll = document.querySelector('#stage [data-stage-scroll]')!;
+        const bottom = scroll.getBoundingClientRect().bottom;
+        return scroll.scrollTop === 0 && [...document.querySelectorAll(selector)]
+          .every(reason => reason.getBoundingClientRect().bottom <= bottom + 1);
+      }, reasons);
+      await visible();
+      const finalHeight = await page.locator('#stage [data-stage-media]').evaluate(node => node.getBoundingClientRect().height);
+      assert.ok(Math.abs(initialHeight - finalHeight) <= 1, `${initialHeight} → ${finalHeight}`);
+      const card = page.locator('#stage [data-item-related] [data-media-card]').first();
+      await card.hover();
+      const shape = await card.evaluate(node => ({
+        shadow:getComputedStyle(node).boxShadow,
+        outer:parseFloat(getComputedStyle(node,'::before').borderTopLeftRadius),
+        inner:parseFloat(getComputedStyle(node).getPropertyValue('--surface-radius')),
+        height:node.getBoundingClientRect().height,
+      }));
+      assert.equal(shape.shadow, 'none');
+      assert.equal(shape.outer, shape.inner + 8);
+      assert.ok(shape.height < 220, JSON.stringify(shape));
+      await page.locator('#stage [data-item-related] h3').evaluate(node => {
+        node.textContent = '接着看 '.repeat(60);
+      });
+      await visible();
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await visible();
+      assert.deepEqual((await layout(page)).offenders, []);
+    } finally { release(); await opened.close() }
+  });
+
+  for (const viewport of VIEWPORTS) it(`本地标签选择器复用覆盖式滚动条（${viewport.name}）`, async () => {
+    const opened = await openItemPage(browser, `/assets/${ITEM.plain}`, viewport);
+    try {
+      const { page } = opened;
+      await page.locator('#stage [data-tag-plus]').evaluate(node => node.scrollIntoView({ block:'center', behavior:'instant' }));
+      await page.locator('#stage [data-tag-plus]').click();
+      const menu = page.locator('#stage [data-tag-picker]');
+      await menu.waitFor({ state:'visible' });
+      const scrollbar = await menu.locator('[data-tag-body]').evaluate(node => ({
+        hidden:getComputedStyle(node).scrollbarWidth,
+        track:!!node.parentElement?.querySelector('.ovtrack.ov-y'),
+        positioned:getComputedStyle(node.parentElement!).position,
+      }));
+      assert.deepEqual(scrollbar, { hidden:'none', track:true, positioned:'relative' });
+    } finally { await opened.close(); }
+  });
+
+  for (const kind of ['parts', 'editions'] as const) for (const count of [1, 2, 3]) {
+    it(`${kind} 队列的 ${count} 张卡按内容分配空间，推荐卡等宽对齐`, { timeout: 60_000 }, async () => {
       const opened = await openItemPage(browser, '/', DESKTOP, { ready: '#grid [data-media-card]' });
       try {
         const page = opened.page;
-        await page.route(url => url.pathname === '/api/editions', route => route.fulfill({ json: {
-          ...EDITIONS, items: Array.from({ length: count }, (_, index) => ({ ...EDITIONS.items[index % 2], id: 31 + index })),
+        const seed = kind === 'parts' ? ITEM.part : ITEM.edition;
+        const group = kind === 'parts' ? PARTS : EDITIONS;
+        await page.route(url => url.pathname === `/api/${kind}`, route => route.fulfill({ json: {
+          ...group, items: Array.from({ length: count }, (_, index) => ({ ...group.items[index % group.items.length], id: seed + index })),
         } }));
-        await page.goto(new URL(`/assets/${ITEM.edition}?editions=${ITEM.edition}`, page.url()).toString());
+        await page.goto(new URL(`/assets/${seed}?${kind}=${seed}`, page.url()).toString());
         await page.locator('#stage [data-queue-row]').first().waitFor();
         await page.locator('#stage [data-item-related] [data-media-card]').first().waitFor();
         const measured = await page.locator('[data-detail-continuation]').evaluate(node => {
@@ -80,7 +148,7 @@ describe('作品详情岛', () => {
         if (count < 3) assert.ok(Math.abs(measured.width - (count * width + (count - 1) * 10 + 28)) < 1, JSON.stringify(measured));
         else assert.ok(Math.abs(measured.width - measured.full / 2) < 1, JSON.stringify(measured));
         assert.ok(measured.cards.every(card => Math.abs(card.width - measured.related.width) < 1 && Math.abs(card.y - measured.related.y) < 1), JSON.stringify(measured));
-        if (count === 2) await page.screenshot({ path: '../build/detail-two-versions.png' });
+        if (count === 2) await page.screenshot({ path: `../build/detail-two-${kind}.png` });
         assert.deepEqual(withoutPlayer(opened.problems), []);
       } finally { await opened.close() }
     });
@@ -771,6 +839,35 @@ describe('作品详情岛', () => {
     } finally {
       await opened.close();
     }
+  });
+
+  it('桩片源的连续解码错误不消耗真实诊断预算，其他错误继续下传', { timeout: 60_000 }, async () => {
+    const opened = await openItemPage(browser, `/assets/${ITEM.plain}`, DESKTOP);
+    try {
+      const forwarded: unknown[] = [];
+      await opened.page.context().route((url) => url.pathname === '/api/diagnostics/client-error', (route) => {
+        forwarded.push(route.request().postDataJSON());
+        return route.fulfill({ json: { recorded: false } });
+      });
+      const replies = await opened.page.evaluate(async () => {
+        const send = async (kind: string, source_route: string, message = '夹具错误') => (await fetch('/api/diagnostics/client-error', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ kind, message, playback: { source_route } }),
+        })).json();
+        const ambient = await send('media', '/stream', '并发播放器错误');
+        const media = await Promise.all(Array.from({ length: 21 }, () => send('media', '/stream')));
+        return { ambient, media, other: await send('error', '/stream'), external: await send('media', '/external') };
+      });
+      assert.deepEqual(replies.ambient, { recorded: true });
+      assert.deepEqual(replies.media, Array.from({ length: 21 }, () => ({ recorded: true })));
+      assert.equal(opened.stub.mediaErrors.filter((sent) => sent.message === '夹具错误').length, 21);
+      assert.deepEqual(replies.other, { recorded: false });
+      assert.deepEqual(replies.external, { recorded: false });
+      assert.deepEqual(forwarded, [
+        { kind: 'error', message: '夹具错误', playback: { source_route: '/stream' } },
+        { kind: 'media', message: '夹具错误', playback: { source_route: '/external' } },
+      ]);
+    } finally { await opened.close() }
   });
 
   it('手机 390：详情不横向溢出，侧栏排在播放区下面', { timeout: 60_000 }, async () => {

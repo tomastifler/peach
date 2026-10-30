@@ -3,7 +3,10 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
+from collections import OrderedDict
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -467,6 +470,28 @@ class TunnelManagerTests(unittest.TestCase):
         self.assertTrue(self.processes[0].terminated)
         self.assertTrue(self.processes[0].killed)
 
+    def test_stop_during_the_edge_wait_ends_start_without_an_error_state(self):
+        def silent(command, **kwargs):
+            process = _Process(_Stream())
+            self.processes.append(process)
+            return process
+
+        manager = tunnel.TunnelManager(
+            self.root / "state", self.root / "logs", popen=silent, wait_timeout=30,
+        )
+        result = {}
+        starter = threading.Thread(target=lambda: result.update(snapshot=manager.start(self.plan())))
+        starter.start()
+        deadline = time.monotonic() + 5
+        while manager.snapshot().state != "starting" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        manager.stop()
+        starter.join(timeout=5)
+        self.assertFalse(starter.is_alive())
+        self.assertEqual(result["snapshot"].state, "stopped")
+        self.assertTrue(self.processes[0].terminated)
+        self.assertFalse((self.root / "state" / tunnel.STATE_FILENAME).exists())
+
     def test_snapshot_accepts_a_process_without_a_pid_attribute(self):
         process = SimpleNamespace(poll=lambda: None, stdout=_Stream())
         manager = tunnel.TunnelManager(self.root / "state", self.root / "logs")
@@ -899,6 +924,45 @@ class TunnelStartupTests(unittest.TestCase):
             client.get("/healthz")
         manager.start.assert_not_called()
 
+    def test_an_unreachable_edge_does_not_hold_back_local_readiness(self):
+        processes = []
+
+        def silent(command, **kwargs):
+            # 断网时的 cloudflared：进程活着，既不吐入口也不写 pidfile。
+            process = _Process(_Stream())
+            processes.append(process)
+            return process
+
+        manager = tunnel.TunnelManager(
+            self.root / "state", self.root / "logs", popen=silent, wait_timeout=30,
+        )
+        plan = tunnel.TunnelPlan(
+            binary=self.root / "cloudflared.exe",
+            origin=tunnel.TunnelOrigin("http://127.0.0.1:8900"),
+            command=("cloudflared", "tunnel", "--url", "http://127.0.0.1:8900"),
+        )
+        settings = PeachSettings(
+            db_path=self.root / "peach.db", configured=True, token="", tunnel_enabled=True,
+            tunnel_state_root=self.root / "state", tunnel_log_root=self.root / "logs",
+        )
+        began = time.monotonic()
+        with mock.patch.object(api.tunnel, "plan_for_settings", return_value=plan), \
+                TestClient(api.create_app(settings, tunnel_manager=manager)) as client:
+            ready = client.get("/healthz")
+            self.assertLess(time.monotonic() - began, 10)
+            self.assertEqual(ready.status_code, 200)
+            deadline = time.monotonic() + 5
+            state = ready.json()["tunnel"]["state"]
+            while state != "starting" and time.monotonic() < deadline:
+                time.sleep(0.01)
+                state = client.get("/healthz").json()["tunnel"]["state"]
+            self.assertEqual(state, "starting")
+            closing = time.monotonic()
+        # 关服务时 stop 打断还在等边缘的握手，不等满 `wait_timeout`，也不留 error 状态。
+        self.assertLess(time.monotonic() - closing, 10)
+        self.assertTrue(processes[0].terminated)
+        self.assertFalse((self.root / "state" / tunnel.STATE_FILENAME).exists())
+
 
 class LocalClientTests(unittest.TestCase):
     """隧道转发进来的请求不算本机，配置页对它一律关门。"""
@@ -944,6 +1008,32 @@ class LocalClientTests(unittest.TestCase):
     def test_the_login_rate_limit_uses_the_peer_without_a_tunnel(self):
         request = self.request("stopped", {"cf-connecting-ip": "198.51.100.7"})
         self.assertEqual(routes_auth._attempt_key(request), "127.0.0.1")
+
+    def test_the_login_rate_limit_separates_edge_clients_on_the_service_address(self):
+        request = self.request("running", {"cf-connecting-ip": "198.51.100.7"})
+        request.client.host = "192.0.2.5"
+        request.scope["server"] = ("192.0.2.5", 443)
+        self.assertEqual(routes_auth._attempt_key(request), "cf:198.51.100.7")
+
+    def test_a_lan_client_cannot_reset_the_login_rate_limit_with_forwarded_headers(self):
+        request = self.request("running", {})
+        request.client.host = "192.0.2.8"
+        request.scope["server"] = ("192.0.2.5", 443)
+        with mock.patch.object(routes_auth, "_ATTEMPTS", OrderedDict()):
+            for number in range(10):
+                request.headers = {"cf-connecting-ip": f"198.51.100.{number + 1}"}
+                routes_auth._login_attempt(request)
+            request.headers = {"cf-connecting-ip": "198.51.100.99"}
+            with self.assertRaises(HTTPException) as caught:
+                routes_auth._login_attempt(request)
+        self.assertEqual(caught.exception.status_code, 429)
+
+    def test_a_tunnel_peer_uses_only_a_valid_normalized_forwarded_address(self):
+        for value, expected in (("not-an-ip", "127.0.0.1"),
+                                ("2001:0db8:0:0:0:0:0:1", "cf:2001:db8::1")):
+            with self.subTest(value=value):
+                request = self.request("running", {"cf-connecting-ip": value})
+                self.assertEqual(routes_auth._attempt_key(request), expected)
 
 
 class AccessTunnelInterlockTests(unittest.TestCase):

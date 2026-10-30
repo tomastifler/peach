@@ -65,12 +65,19 @@ def _ingest_name_id(connection: Connection, kind: str, name: str) -> int | None:
         return int(exact[0])
     if kind == 'studio':
         matches = studio_identity_ids(connection, name)
-    elif kind in PERSON_ENTITY_KINDS:
+    elif kind in PERSON_ENTITY_KINDS or kind == 'tag':
         matches = {int(row[0]) for row in connection.execute(
             "SELECT DISTINCT e.id FROM entity e JOIN entity_alias a ON a.entity_id=e.id "
             "WHERE e.kind=? AND a.normalized_alias=? ORDER BY e.id LIMIT 2", (kind, normalized))}
     else:
         return None
+    if kind == 'tag' and not matches:
+        from .catalog_rules import canonical_tag_name
+        matches = {int(row[0]) for row in connection.execute("SELECT id,canonical_name FROM entity WHERE kind='tag' UNION ALL "
+                   "SELECT a.entity_id,a.alias FROM entity_alias a JOIN entity e ON e.id=a.entity_id WHERE e.kind='tag'")
+                   if normalize_entity_name(canonical_tag_name(row[1])) == normalized}
+    if kind == 'tag' and len(matches) > 1:
+        raise ValueError('标签别名存在冲突，请先合并重复标签')
     return next(iter(matches)) if len(matches) == 1 else None
 
 
@@ -276,6 +283,9 @@ def is_identity_alias(kind: str, name: str | None) -> bool:
 
 def canonicalize_entity_name(kind: str, name: str | None) -> str:
     canonical = strip_zero_width(name).strip()
+    if kind == 'tag':
+        from .catalog_rules import canonical_tag_name
+        return canonical_tag_name(canonical)
     if kind == 'creator':
         from .classification import is_structural_creator, is_repost_creator
         from .studio_sites import is_platform
@@ -322,6 +332,52 @@ def rewrite_flat_projection(connection: Connection, kind: str, entity_id: int,
         if connection.execute("SELECT changes()").fetchone()[0]:
             rewritten += 1
     return rewritten
+
+
+def prefer_entity_name(connection: Connection, entity_id: int, chosen: str, *,
+                       source: str = "user:preferred-name") -> dict:
+    """把实体已有别名设为统一名称，并同步作品署名。"""
+    row = connection.execute("SELECT kind,canonical_name,metadata_json FROM entity WHERE id=?", (entity_id,)).fetchone()
+    if row is None:
+        raise ValueError("entity not found")
+    kind, current = str(row["kind"]), str(row["canonical_name"])
+    try:
+        metadata = json.loads(row["metadata_json"] or "{}")
+    except (TypeError, ValueError):
+        metadata = {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    chosen_key = normalize_entity_name(chosen)
+    if chosen_key == normalize_entity_name(current):
+        if source.startswith("user:"):
+            metadata["name_preference"] = {"name": current, "source": source}
+            connection.execute("UPDATE entity SET metadata_json=? WHERE id=?",
+                               (json.dumps(metadata, ensure_ascii=False), entity_id))
+        return {"ok": True, "canonical_name": current, "changed": False}
+    known = {normalize_entity_name(str(item[0])): str(item[0]) for item in connection.execute(
+        "SELECT alias FROM entity_alias WHERE entity_id=?", (entity_id,))}
+    if chosen_key not in known:
+        raise ValueError("canonical must be one of this entity's existing names")
+    taken = connection.execute(
+        "SELECT canonical_name FROM entity WHERE kind=? AND normalized_name=? AND id<>?",
+        (kind, chosen_key, entity_id)).fetchone()
+    if taken:
+        raise ValueError(f"another {kind} is already named {taken[0]}")
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    connection.execute("UPDATE entity SET canonical_name=?,normalized_name=?,updated_at=? WHERE id=?",
+                       (known[chosen_key], chosen_key, stamp, entity_id))
+    connection.execute(
+        "INSERT OR IGNORE INTO entity_alias(entity_id,alias,normalized_alias,source,confidence) VALUES(?,?,?,?,1.0)",
+        (entity_id, current, normalize_entity_name(current), source))
+    previous_preference = metadata.get("name_preference")
+    metadata["name_preference"] = {"name": known[chosen_key], "previous_name": current,
+                                   "previous_preference": previous_preference,
+                                   "source": source, "at": stamp}
+    connection.execute("UPDATE entity SET metadata_json=? WHERE id=?",
+                       (json.dumps(metadata, ensure_ascii=False), entity_id))
+    flat = rewrite_flat_projection(connection, kind, entity_id, current, known[chosen_key])
+    return {"ok": True, "canonical_name": known[chosen_key], "changed": True,
+            "previous_name": current, "flat_rewritten": flat}
 
 
 def _transfer_favorites(connection: Connection, source_id: int, target_id: int, stamp: str) -> None:
@@ -649,6 +705,19 @@ def _creator_ingest_identity(connection, name, asset_id):
     return name
 
 
+def _entity_metadata_payload(connection, entity_id: int, kind: str, payload: str) -> str:
+    """来源资料更新保留用户标签决定与公司档案。"""
+    if kind not in {'tag', 'studio', 'agency'}:
+        return payload
+    held = connection.execute('SELECT metadata_json FROM entity WHERE id=?', (entity_id,)).fetchone()
+    previous, incoming = json.loads(held[0] or '{}'), json.loads(payload)
+    if kind == 'tag':
+        incoming.update({key: value for key, value in previous.items() if key.startswith('user_tag_')})
+    elif 'company_profile' in previous:
+        incoming['company_profile'] = previous['company_profile']
+    return json.dumps(incoming, ensure_ascii=False)
+
+
 def upsert_asset_entity(
     connection: Connection, *, kind: str, name: str | None, asset_id: int,
     role: str, source: str, confidence: float = 1.0,
@@ -699,13 +768,7 @@ def upsert_asset_entity(
         )
         entity_id = int(connection.execute("SELECT last_insert_rowid()").fetchone()[0])
     elif update_entity_metadata:
-        if kind in {'studio', 'agency'}:
-            held = connection.execute('SELECT metadata_json FROM entity WHERE id=?', (entity_id,)).fetchone()
-            previous = json.loads(held[0] or '{}')
-            incoming = json.loads(payload)
-            if 'company_profile' in previous:
-                incoming['company_profile'] = previous['company_profile']
-            payload = json.dumps(incoming, ensure_ascii=False)
+        payload = _entity_metadata_payload(connection, entity_id, kind, payload)
         connection.execute(
             "UPDATE entity SET metadata_json=?,updated_at=? WHERE id=?",
             (payload, stamp, entity_id),
@@ -732,6 +795,14 @@ def upsert_asset_entity(
                  last_synced_at=excluded.last_synced_at""",
             (entity_id, external_provider, kind, str(external_id), payload, stamp),
         )
+    if kind == 'tag':
+        from .tag_management import rewrite_tag_projection
+        chosen = connection.execute('SELECT canonical_name FROM entity WHERE id=?', (entity_id,)).fetchone()[0]
+        for spelling in dict.fromkeys([str(name or ''), canonical]):
+            if spelling != chosen:
+                connection.execute('INSERT OR IGNORE INTO entity_alias(entity_id,alias,normalized_alias,source,confidence) '
+                    'VALUES(?,?,?,?,?)', (entity_id, spelling, normalize_entity_name(spelling), 'tag-spelling:' + source, confidence))
+                rewrite_tag_projection(connection, spelling, chosen, asset_id=asset_id)
     return int(entity_id)
 
 

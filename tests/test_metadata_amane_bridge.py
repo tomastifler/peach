@@ -5,8 +5,12 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import subprocess
 import sys
+import tempfile
 import unittest
+from unittest import mock
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "tools" / "amane-bridge" / "bridge.py"
@@ -69,6 +73,50 @@ def run_main(argv, runtime):
 
 
 class BridgeContractTests(unittest.TestCase):
+    def test_cli_outputs_utf8_even_when_redirected_streams_start_as_gbk(self):
+        wrapper = (
+            "import runpy, sys; "
+            "sys.stdout.reconfigure(encoding='gbk'); "
+            "sys.stderr.reconfigure(encoding='gbk'); "
+            "sys.argv = sys.argv[1:]; "
+            "runpy.run_path(sys.argv[0], run_name='__main__')"
+        )
+        for arguments in ([], ['--未知参数']):
+            with self.subTest(arguments=arguments):
+                result = subprocess.run([sys.executable, '-I', '-c', wrapper, str(SCRIPT), *arguments],
+                                        capture_output=True, check=False, timeout=30)
+                self.assertEqual(result.returncode, bridge.EXIT_USAGE)
+                if not arguments:
+                    self.assertEqual(json.loads(result.stdout.decode('utf-8')),
+                                     {'error': '番号与站名都不能为空'})
+                else:
+                    self.assertIn('--未知参数', result.stderr.decode('utf-8'))
+
+    def test_self_check_loads_every_site_without_creating_a_client(self):
+        runtime = make_runtime({})
+        factory = mock.Mock(side_effect=AssertionError("离线自检不能创建 HTTP 客户端"))
+        crawler = mock.Mock(side_effect=runtime.crawler)
+        runtime = bridge.Runtime(crawler=crawler, make_client=factory, query=runtime.query,
+                                 options=runtime.options, source_error=runtime.source_error,
+                                 version="0.20.0")
+        code, lines = run_main(["--self-check"], runtime)
+        self.assertEqual(code, 0)
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(json.loads(lines[0]), {
+            "ok": True, "amane": {"version": "0.20.0"}, "sites": list(bridge.SITES)})
+        self.assertEqual(crawler.call_args_list, [mock.call(site) for site in bridge.SITES])
+        factory.assert_not_called()
+
+    def test_self_check_reports_missing_site_dependencies(self):
+        runtime = make_runtime({})
+        runtime = bridge.Runtime(crawler=mock.Mock(side_effect=ImportError("missing parser")),
+                                 make_client=runtime.make_client, query=runtime.query,
+                                 options=runtime.options, source_error=runtime.source_error)
+        code, lines = run_main(["--self-check"], runtime)
+        self.assertEqual(code, bridge.EXIT_FAILED)
+        self.assertFalse(json.loads(lines[0])["ok"])
+        self.assertIn("ImportError: missing parser", json.loads(lines[0])["error"])
+
     def test_mixed_site_networks_use_the_requested_client(self):
         seen = {}
         class Crawler:
@@ -87,9 +135,18 @@ class BridgeContractTests(unittest.TestCase):
         self.assertEqual(code, bridge.EXIT_NOT_FOUND)
         self.assertEqual(seen, {"airav": None, "freejavbt": "http://127.0.0.1:7890"})
 
-    def test_the_failure_reasons_are_the_upstream_sixteen(self):
-        self.assertEqual(len(bridge.FAILURE_REASONS), 17)
-        self.assertEqual(len(set(bridge.FAILURE_REASONS)), 17)
+    def test_failure_reasons_have_unique_values(self):
+        self.assertEqual(len(bridge.FAILURE_REASONS), 18)
+        self.assertEqual(len(set(bridge.FAILURE_REASONS)), 18)
+
+    def test_a_login_requirement_keeps_its_failure_reason(self):
+        runtime = make_runtime({"airav": FakeSourceError("login_required", detail="login page")})
+        code, lines = run_main(["--number", "ABW-032", "--sites", "airav"], runtime)
+        self.assertEqual(code, bridge.EXIT_FAILED)
+        record = json.loads(lines[0])["sites"]["airav"]
+        self.assertEqual(record["status"], "failed")
+        self.assertEqual(record["reason"], "login_required")
+        self.assertEqual(record["detail"], "login page")
 
     def test_a_hit_prints_one_json_line_and_exits_zero(self):
         runtime = make_runtime({
@@ -198,6 +255,154 @@ class OfficialSiteTests(unittest.TestCase):
         runtime = make_runtime({"prestige": FakeSourceError("http_error", http_status=403)})
         code, _ = run_main(["--number", "ABW-032", "--sites", "prestige"], runtime)
         self.assertEqual(code, bridge.EXIT_FAILED)
+
+
+class RuntimePackagingTests(unittest.TestCase):
+    def setUp(self):
+        spec = importlib.util.spec_from_file_location(
+            "amane_runtime_builder_under_test", ROOT / "scripts/build_amane_runtime.py")
+        self.builder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.builder)
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name).resolve()
+
+    def manifest(self, kind):
+        facts = {**self.builder.locked_amane(), "kind": kind,
+                 "executable": "runtime.exe" if kind == "executable" else ".venv/bin/python"}
+        (self.root / "manifest.json").write_text(json.dumps(facts), encoding="utf-8")
+        return facts
+
+    def test_locked_runtime_uses_the_existing_revision_and_build_toolchain(self):
+        facts = self.builder.locked_amane()
+        self.assertEqual(facts, {"revision": "fd9294fbe5b4aa88ce1df84d534f6816ad9460d5",
+                                 "version": "0.22.1"})
+        requirements = self.builder.build_requirements()
+        self.assertIn("pyinstaller==6.22.3", requirements)
+        self.assertTrue(all("==" in item for item in requirements))
+        self.assertNotIn("packaging", [item.split("==")[0] for item in requirements])
+
+    def test_runtime_self_check_dispatches_both_packaging_kinds(self):
+        for kind in ("python", "executable"):
+            facts = self.manifest(kind)
+            report = {"ok": True, "amane": {"version": facts["version"]}, "sites": list(bridge.SITES)}
+            with mock.patch.object(self.builder.subprocess, "run", return_value=mock.Mock(
+                    stdout=json.dumps(report))) as run:
+                self.assertEqual(self.builder.verify(self.root), report)
+            command = run.call_args.args[0]
+            self.assertEqual(command[0], str(self.root / facts["executable"]))
+            self.assertEqual(command[-1], "--self-check")
+            self.assertEqual("-X" in command, kind == "python")
+            self.assertNotIn("PYTHONPATH", run.call_args.kwargs["env"])
+            self.assertEqual(run.call_args.kwargs["env"]["PATH"], "")
+            self.assertEqual(run.call_args.kwargs["env"]["PYINSTALLER_RESET_ENVIRONMENT"], "1")
+
+    def test_desktop_smoke_requires_the_service_to_use_the_bundled_runtime(self):
+        from scripts import smoke_desktop
+        manifest = self.manifest('executable')
+        facts = {'installed': True, 'problem': '', 'revision': manifest['revision'],
+                 'installed_version': manifest['version'], 'python': str(self.root / manifest['executable'])}
+        opener = mock.Mock()
+        with mock.patch.dict(sys.modules, {'build_amane_runtime': self.builder}), \
+                mock.patch.object(self.builder, 'verify') as verify:
+            opener.open.return_value = io.StringIO(json.dumps(facts))
+            smoke_desktop.assert_amane_runtime(opener, 'http://127.0.0.1:8900', self.root)
+            verify.assert_called_once_with(self.root)
+            opener.open.assert_called_once_with('http://127.0.0.1:8900/api/scraping/amane-bridge', timeout=15)
+            for change in ({'installed': False}, {'revision': 'foreign'}, {'installed_version': 'unknown'},
+                           {'python': str(self.root / 'user-python')}, {'problem': '缺少运行环境'}):
+                with self.subTest(change=change):
+                    opener.open.return_value = io.StringIO(json.dumps({**facts, **change}))
+                    with self.assertRaises(AssertionError):
+                        smoke_desktop.assert_amane_runtime(opener, 'http://127.0.0.1:8900', self.root)
+
+    def test_runtime_self_check_rejects_wrong_versions_and_process_failures(self):
+        self.manifest("executable")
+        with mock.patch.object(self.builder.subprocess, "run", return_value=mock.Mock(
+                stdout=json.dumps({"ok": True, "amane": {"version": "unknown"}}))):
+            with self.assertRaises(ValueError):
+                self.builder.verify(self.root)
+        with mock.patch.object(self.builder.subprocess, "run", side_effect=
+                subprocess.CalledProcessError(3, ["runtime.exe"])):
+            with self.assertRaises(subprocess.CalledProcessError):
+                self.builder.verify(self.root)
+
+    def test_runtime_self_check_rejects_foreign_revision_and_path_escape(self):
+        for change in ({"revision": "0" * 40}, {"executable": "../outside.exe"}, {"kind": "shell"}):
+            facts = {**self.manifest("executable"), **change}
+            (self.root / "manifest.json").write_text(json.dumps(facts), encoding="utf-8")
+            with mock.patch.object(self.builder.subprocess, "run") as run:
+                with self.assertRaises(ValueError):
+                    self.builder.verify(self.root)
+            run.assert_not_called()
+
+    def test_build_rejects_work_inside_the_distribution(self):
+        with mock.patch.object(self.builder.subprocess, "run") as run:
+            with self.assertRaises(ValueError):
+                self.builder.build(self.root, work=self.root / "work")
+        run.assert_not_called()
+
+    def test_build_preserves_an_unowned_nonempty_destination(self):
+        private_file = self.root / "keep.txt"
+        private_file.write_text("keep", encoding="utf-8")
+        with mock.patch.object(self.builder.subprocess, "run") as run:
+            with self.assertRaises(ValueError):
+                self.builder.build(self.root, work=self.root.parent / "work")
+        run.assert_not_called()
+        self.assertEqual(private_file.read_text(encoding="utf-8"), "keep")
+
+    def test_docker_smoke_checks_the_bundled_runtime_and_matching_api_facts(self):
+        from scripts import smoke_docker
+        manifest = {**self.builder.locked_amane(), "kind": "python", "executable": ".venv/bin/python"}
+        report = {"ok": True, "amane": {"version": manifest["version"]}, "sites": list(bridge.SITES)}
+        description = {"python": "/app/amane-runtime/.venv/bin/python", "installed": True,
+                       "revision": manifest["revision"]}
+        with mock.patch.object(smoke_docker, "docker", side_effect=[json.dumps(manifest), json.dumps(report)]) as docker, \
+                mock.patch.object(smoke_docker, "request", return_value=json.dumps(description)):
+            smoke_docker.amane_checks("fixture")
+        self.assertEqual(docker.call_args_list[1], mock.call(
+            "exec", "fixture", "/app/amane-runtime/.venv/bin/python", "-X", "utf8",
+            "/app/tools/amane-bridge/bridge.py", "--self-check"))
+
+    def test_windows_application_and_lite_payloads_keep_the_complete_bridge(self):
+        from peach.update_packages import TOOL_PATHS
+        from scripts.package_windows_release import package, build_lite_installer
+        payload = self.root / "Peach"
+        (payload / "_internal").mkdir(parents=True)
+        (payload / "Peach.exe").write_bytes(b"application")
+        (payload / "_internal/standalone.txt").touch()
+        runtime_files = {"amane-bridge.exe", "manifest.json", "LICENSE-amane.txt",
+                         "amane-corresponding-source.zip", "_internal/python314.dll"}
+        runtime = payload / "_internal/tools/amane-runtime"
+        for name in runtime_files:
+            target = runtime / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(name.encode())
+        for prefix, required in TOOL_PATHS.values():
+            for name in required:
+                target = payload / prefix / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(b"tool")
+        release = self.root / "release"
+        package(payload, release, "1.0.0")
+        expected = {"Peach/_internal/tools/amane-runtime/" + name for name in runtime_files}
+        for suffix in (".zip", "-update.zip"):
+            with zipfile.ZipFile(release / f"Peach-1.0.0-windows-x64{suffix}") as archive:
+                self.assertTrue(expected <= set(archive.namelist()))
+        for tool in TOOL_PATHS:
+            with zipfile.ZipFile(release / f"Peach-1.0.0-windows-x64-tools-{tool}.zip") as archive:
+                self.assertFalse(expected & set(archive.namelist()))
+
+        def compile_installer(command, **kwargs):
+            source = Path(next(arg.removeprefix("/DSourceDir=") for arg in command
+                               if arg.startswith("/DSourceDir=")))
+            for name in runtime_files:
+                self.assertEqual((source / "_internal/tools/amane-runtime" / name).read_bytes(), name.encode())
+            self.assertIn("/DLiteInstaller=1", command)
+            (release / "Peach-1.0.0-windows-x64-lite-setup.exe").write_bytes(b"installer")
+
+        with mock.patch("scripts.package_windows_release.subprocess.run", side_effect=compile_installer):
+            self.assertTrue(build_lite_installer(release, "1.0.0", self.root / "ISCC.exe").is_file())
 
 
 if __name__ == "__main__":

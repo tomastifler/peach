@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from . import images
+from .fsutil import atomic_write_text
 from .catalog_rules import (
     is_jav_code,
     is_korean_mib_code,
@@ -613,9 +614,8 @@ def read_sidecar(image_path: Path | str) -> dict | None:
 
 
 def write_sidecar(image_path: Path | str, record: dict) -> Path:
-    path = sidecar_path(image_path)
-    path.write_text(json.dumps(record, ensure_ascii=False), encoding="utf-8")
-    return path
+    """先写临时文件再换名：服务的封面索引只认目录修改时间，原地覆写不会让它重读。"""
+    return atomic_write_text(sidecar_path(image_path), json.dumps(record, ensure_ascii=False))
 
 
 def is_current(record: dict | None, width: int, height: int) -> bool:

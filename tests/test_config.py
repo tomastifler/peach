@@ -138,7 +138,8 @@ class DefaultsAreGenericTests(unittest.TestCase):
         self.assertEqual(loaded.server.mdns_name, "peach")
         self.assertEqual(loaded.server.review_writer_origin, "")
         self.assertEqual(loaded.server.review_writer_proxy, "")
-        # 一台新机器什么都没挂：所有来源按脱盘处理，不报错也不猜路径。
+        # 一台新机器只使用用户主动添加的目录。
+        self.assertEqual(loaded.locations, {})
         self.assertEqual(loaded.mounts, {})
         self.assertEqual(loaded.replication.smb_host, "")
         self.assertEqual(loaded.replication.smb_user, "")
@@ -261,7 +262,7 @@ class BadFileTests(unittest.TestCase):
 
     def test_mounts_are_keyed_by_location_id(self):
         with TempTree() as tree:
-            tree.write("[media.mounts]\nlocal = '/mnt/res/media'\n")
+            tree.write("[media.locations]\nlocal = 'D:\\Videos'\n[media.mounts]\nlocal = '/mnt/res/media'\n")
             loaded = tree.load()
         self.assertEqual(loaded.mounts, {"local": ("/mnt/res/media",)})
 
@@ -313,11 +314,16 @@ class BadFileTests(unittest.TestCase):
                 tree.load()
         self.assertIn("no directory prefix configured", str(caught.exception))
 
-    def test_without_a_locations_table_the_builtin_defaults_apply(self):
+    def test_without_a_locations_table_no_media_roots_are_declared(self):
         with TempTree() as tree:
             tree.write("[server]\nport = 9100\n")
             loaded = tree.load()
-        self.assertEqual(loaded.locations, settings_file.DEFAULT_LOCATION_ROOTS)
+        self.assertEqual(loaded.locations, {})
+
+    def test_empty_media_roots_survive_config_roundtrip(self):
+        with TempTree() as tree:
+            tree.write(settings_file.render(tree.load()))
+            self.assertEqual(tree.load().locations, {})
 
     def test_lenient_load_falls_back_to_builtin_defaults(self):
         """坏文件不能让进程连 Peach 数据目录都不知道——发现顺序不看文件内容。"""
@@ -368,6 +374,7 @@ class ConfiguredStateTests(unittest.TestCase):
 class SerialisationTests(unittest.TestCase):
     def test_render_then_load_returns_the_same_values(self):
         with TempTree() as tree:
+            tree.write("[media.locations]\nlocal = 'D:\\media'\n'115' = 'Q:\\Cloud'\n")
             captured = settings_file.capture_existing(
                 tree.load(),
                 overrides={
@@ -379,7 +386,7 @@ class SerialisationTests(unittest.TestCase):
                 # 当转义处理，挂载点就会变成另一个目录。
                 mounts={"local": (r"D:\media",), "115": ("/mnt/115",)},
             )
-            settings_file.write(captured)
+            settings_file.write(captured, force=True)
             reloaded = tree.load()
         self.assertEqual(reloaded.server, captured.server)
         self.assertEqual(reloaded.replication, captured.replication)
@@ -440,11 +447,19 @@ class ModuleConstantTests(unittest.TestCase):
 
     def test_location_declarations_stay_in_ledger_shape(self):
         # `asset.path` 与配置中的路径前缀均使用 Windows 格式，供目录访问权限检查匹配。
-        self.assertEqual(set(config.LOCATION_ROOT_DECLARATIONS), {"local", "115", "pikpak"})
-        self.assertEqual(
-            tuple(root for roots in config.LOCATION_ROOT_DECLARATIONS.values() for root in roots),
-            config.MEDIA_ROOT_DECLARATIONS,
-        )
+        with TempTree() as tree:
+            tree.write("[media.locations]\nlocal = ['P:\\Library']\npikpak = ['Q:\\Cloud']\n")
+            try:
+                with patch.dict(os.environ, {"PEACH_DATA_ROOT": str(tree.data_root)}):
+                    settings_file.reset_cache()
+                    reloaded = importlib.reload(config)
+                    self.assertEqual(reloaded.LOCATION_ROOT_DECLARATIONS,
+                                     {"local": (r"P:\Library",), "pikpak": (r"Q:\Cloud",)})
+                    self.assertEqual(reloaded.MEDIA_ROOT_DECLARATIONS,
+                                     (r"P:\Library", r"Q:\Cloud"))
+            finally:
+                settings_file.reset_cache()
+                importlib.reload(config)
 
     def test_settings_dataclass_reports_the_configured_state(self):
         from peach.config import PeachSettings

@@ -10,12 +10,16 @@ describe('馆藏与口味分享', () => {
   before(async () => { browser = await launch() });
   after(async () => { await browser?.close() });
   for (const viewport of VIEWPORTS) {
-    it(`${viewport.name}：离线圆点与文字均为错误色，浅色和暗色可辨识`, async () => {
+    it(`${viewport.name}：连接圆点和文字使用对应语义色，浅色和暗色可辨识`, async () => {
       const opened = await visit(browser, '/settings/library', viewport, async page => {
         await page.route('**/api/configuration', async route => {
           const response = await route.fetch();
           await route.fulfill({ json: { ...await response.json(), editable: false,
-            media_sources: [{ location: 'local', root: 'R:\\Media', path: 'R:\\Media', online: false }] } });
+            media_sources: [
+              { location: 'local', root: 'R:\\Media', path: 'R:\\Media', online: false },
+              { location: '115', root: 'B:\\', path: 'B:\\', online: true },
+              { location: 'pikpak', root: 'A:\\', path: 'A:\\' },
+            ] } });
         });
       });
       try {
@@ -26,20 +30,28 @@ describe('馆藏与口味分享', () => {
             document.documentElement.dataset.theme = value;
             document.documentElement.classList.toggle('dark', value === 'dark');
           }, theme);
-          const colors = await status.evaluate(element => {
+          for (const [state, textToken, dotToken] of [
+            ['offline', '--color-status-yellow-text', '--color-yellow-500'],
+            ['online', theme === 'dark' ? '--color-green-400' : '--color-green-700', '--color-green-500'],
+            ['unknown', '--color-text-secondary', '--color-text-tertiary'],
+          ]) {
+            const colors = await opened.page.locator(`[data-mount="${state}"]`).first().evaluate((element, tokens) => {
             const halo = element.firstElementChild!;
             const dot = halo.firstElementChild!;
             const probe = document.createElement('span');
-            probe.style.color = 'var(--color-text-error-primary)';
             element.append(probe);
-            const expected = getComputedStyle(probe).color;
+            probe.style.color = `var(${tokens[0]})`;
+            const expectedText = getComputedStyle(probe).color;
+            probe.style.color = `var(${tokens[1]})`;
+            const expectedDot = getComputedStyle(probe).color;
             probe.remove();
             return { text: getComputedStyle(element).color, dot: getComputedStyle(dot).backgroundColor,
-              halo: getComputedStyle(halo).backgroundColor, expected };
-          });
-          assert.equal(colors.dot, colors.expected, JSON.stringify(colors));
-          assert.equal(colors.text, colors.expected, JSON.stringify(colors));
-          assert.notEqual(colors.halo, 'rgba(0, 0, 0, 0)');
+              halo: getComputedStyle(halo).backgroundColor, expectedText, expectedDot };
+          }, [textToken, dotToken]);
+            assert.equal(colors.dot, colors.expectedDot, JSON.stringify(colors));
+            assert.equal(colors.text, colors.expectedText, JSON.stringify(colors));
+            assert.notEqual(colors.halo, 'rgba(0, 0, 0, 0)');
+          }
         }
         assert.deepEqual(opened.problems, []);
       } finally { await opened.close() }

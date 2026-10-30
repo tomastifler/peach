@@ -38,7 +38,7 @@ const groups = [
 ];
 const data: DuplicatesData = { total: 2, files: 4, reclaimable: 2 * GB, groups };
 const sources: MediaSourcesData = {
-  sources: [{ location: 'local', online: true, roots: ['R:\\'] }, { location: '115', online: false, roots: ['B:\\'] },
+  sources: [{ location: 'local', online: true, roots: [{ online: true }] }, { location: '115', online: false, roots: [{ online: false }] },
     { location: 'pikpak', online: true, roots: [] }],
 };
 

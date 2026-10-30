@@ -25,10 +25,13 @@ def inventory(package: zipfile.ZipFile) -> dict[str, str]:
     return result
 
 
-def verify(root: Path, version: str, destination: Path, *, prepare_with_app: bool = False) -> dict:
+def verify(root: Path, version: str, destination: Path, *, prepare_with_app: bool = False,
+           online: bool = False) -> dict:
     prefix = f"Peach-{version}-windows-x64"
     if destination.exists():
         raise ValueError("制品验收目录须不存在")
+    if online and not prepare_with_app:
+        raise ValueError("联网验收需要使用实际应用准备工具")
     with zipfile.ZipFile(root / f"{prefix}-update.zip") as thin, zipfile.ZipFile(root / f"{prefix}.zip") as full:
         expected = inventory(full)
         actual = inventory(thin)
@@ -56,8 +59,9 @@ def verify(root: Path, version: str, destination: Path, *, prepare_with_app: boo
         thin.extractall(destination)
     if prepare_with_app:
         error = destination / 'tools-error.txt'
+        cache = destination / 'empty-cache' if online else root
         process = subprocess.run([str(destination / 'Peach/Peach.exe'), '--data-root', str(destination / 'setup-data'), '--installer-tools',
-                                  str(destination / 'empty-install'), str(root), str(error)],
+                                  str(destination / 'empty-install'), str(cache), str(error)],
                                  capture_output=True, timeout=120)
         if process.returncode:
             raise ValueError(error.read_text(encoding='utf-8') if error.exists() else '轻量安装工具准备失败')
@@ -78,6 +82,7 @@ if __name__ == "__main__":
     parser.add_argument("--version", required=True)
     parser.add_argument("--destination", type=Path, required=True)
     parser.add_argument("--prepare-with-app", action="store_true", help="由实际应用准备轻量安装所需工具")
+    parser.add_argument("--online", action="store_true", help="使用空缓存从公开下载入口验收工具准备")
     args = parser.parse_args()
     print(json.dumps(verify(args.root.resolve(), args.version, args.destination.resolve(),
-                            prepare_with_app=args.prepare_with_app), ensure_ascii=False))
+                            prepare_with_app=args.prepare_with_app, online=args.online), ensure_ascii=False))

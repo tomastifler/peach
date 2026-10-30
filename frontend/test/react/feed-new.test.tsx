@@ -6,6 +6,7 @@ import { act, useState } from 'react';
 import { notifyManager, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { appSettingsStore } from '@peach/appearance';
 import { feedNewKey, prefetchFeedNew, type FeedDiscoveries, type FeedNewProps } from '../../src/react/feed-new/feed-new';
 import { FeedNewPage } from '../../src/react/feed-new/feed-new-page';
 import { queryClient } from '../../src/react/query';
@@ -36,9 +37,9 @@ function serve(...rounds: number[][]) {
 const reads = (fetcher: ReturnType<typeof serve>) =>
   fetcher.mock.calls.map(([url]) => String(url)).filter((url) => url.startsWith('/api/feeds/discoveries'));
 
-it('新作来源共演头像经详情同一查询加载并在忽略后可卸载', async () => {
+it('新作来源共演头像直接按来源图片地址加载并在忽略后可卸载', async () => {
   vi.stubGlobal('IntersectionObserver', undefined);
-  const fetcher = vi.fn(async (_url: string) => ({ ok: true, status: 200, json: async () => ({ ok: true, image: 'data:image/jpeg;base64,cGl4ZWxz' }) }));
+  const fetcher = vi.fn(async (_url: string) => ({ ok: true, status: 200, json: async () => ({ ok: true }) }));
   vi.stubGlobal('fetch', fetcher);
   const host = document.createElement('section');
   document.body.append(host);
@@ -48,9 +49,9 @@ it('新作来源共演头像经详情同一查询加载并在忽略后可卸载'
   const mounted = await mountRoot(<QueryClientProvider client={queryClient}><FeedNewRow host={host} feedNew={{ items: [{ id: 1 }], html }}
     wire={() => {}} act={async () => {}} /></QueryClientProvider>);
   await settle();
-  expect(mounted.host.querySelectorAll('.mav img')).toHaveLength(2);
-  expect(fetcher.mock.calls.map(([url]) => url).sort()).toEqual([
-    '/api/jav/image?code=EXM-001&image=actor%3AA', '/api/jav/image?code=EXM-001&image=actor%3AB']);
+  const avatars = [...mounted.host.querySelectorAll<HTMLImageElement>('.mav img')].map((img) => img.getAttribute('src')).sort();
+  expect(avatars).toEqual(['/jav-image?code=EXM-001&image=actor%3AA', '/jav-image?code=EXM-001&image=actor%3AB']);
+  expect(fetcher).not.toHaveBeenCalled();
   await click(mounted.host.querySelector('[data-feed-action]'));
   await settle();
   expect(mounted.host.querySelector('[data-feed-id]')).toBeNull();
@@ -79,6 +80,17 @@ describe('取数', () => {
     expect(reads(fetcher)).toEqual(['/api/feeds/discoveries?limit=12']);
     expect(feedNewKey(null)).toEqual(['feed-new', 'home']);
     expect(feedNewKey(7)).toEqual(['feed-new', 7]);
+  });
+
+  it('条数跟着设置弹窗的「新作显示数量」走', async () => {
+    const store = appSettingsStore();
+    const before = store.value.feedLimit;
+    store.value.feedLimit = 30;
+    try {
+      const fetcher = serve([1]);
+      await open(props());
+      expect(reads(fetcher)).toEqual(['/api/feeds/discoveries?limit=30']);
+    } finally { store.value.feedLimit = before }
   });
 
   it('每次挂上都是新的一趟，不读上一次留下的缓存', async () => {

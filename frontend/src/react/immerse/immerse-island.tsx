@@ -256,7 +256,7 @@ async function show(direction = 0): Promise<void> {
   /* 当前这一条交给壳写进地址栏：竖划十条之后刷新页面，落回来的该是同一条片子，而不是重新抽一批。 */
   immerseHost().route(item.id);
   switching = true;
-  setLoading(direction ? 'Switching…' : 'Loading…', item);
+  setLoading(direction ? '切换中' : '加载中', item);
   let incoming: Slide | null = null;
   try {
     // 这一条刚被删掉（详情回 `{error}`）照样放：作者与动作键只是没有可画的。
@@ -301,7 +301,7 @@ async function step(direction: number): Promise<void> {
   if (switching || !view.open) return;
   const mine = generation;
   index += direction;
-  setLoading('Switching…', list[index] ?? null);
+  setLoading('切换中', list[index] ?? null);
   // 滚到尾部就续取下一批：无限流。每次都是新的随机抽样，按 id 去重接在后面。
   if (index >= list.length - 3 && !extending) {
     extending = true;
@@ -330,7 +330,7 @@ async function open(startId: number | null): Promise<void> {
   queryClient.removeQueries({ queryKey: ['immerse-list'] });
   view = { ...view, open: true, idle: true, shown: null };
   document.body.setAttribute('data-immerse-open', '');
-  setLoading('Loading content…');
+  setLoading('加载内容');
   try {
     let next = await fetchDraw();
     if (startId && !next.some((item) => item.id === startId)) {

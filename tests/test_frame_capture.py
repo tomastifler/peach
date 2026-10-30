@@ -23,6 +23,25 @@ class _Completed:
 
 
 class CaptureFrameTests(unittest.TestCase):
+    def test_hardware_decode_failure_retries_software_and_keeps_both_receipts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            destination = root / 'frame.jpg'
+            calls = []
+            def run(command, **kwargs):
+                calls.append(command)
+                if '-hwaccel' in command:
+                    return subprocess.CompletedProcess(command, 1, stderr=b'unsupported hardware decoder')
+                Image.new('RGB', (480, 270)).save(command[-1], format='JPEG')
+                return subprocess.CompletedProcess(command, 0, stderr=b'')
+            detail = {}
+            with patch('peach.hardware_transcode.frame_decode_options', return_value=('-hwaccel', 'videotoolbox')), \
+                    patch.object(frame_capture.subprocess, 'run', side_effect=run):
+                self.assertTrue(frame_capture.capture_with_retry('ffmpeg', 'sample.mp4', 1, destination, diagnostics=detail))
+            self.assertEqual(len(calls), 2)
+            self.assertNotIn('-hwaccel', calls[1])
+            self.assertEqual([attempt['hardware_decode'] for attempt in detail['attempts']], [True, False])
+
     def setUp(self):
         self.root = Path(tempfile.mkdtemp(prefix="frame-capture-")).resolve()
         self.addCleanup(lambda: shutil.rmtree(self.root, ignore_errors=True))

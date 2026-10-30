@@ -257,6 +257,12 @@ def generate_library(db_path: Path | str, root: Path, interval: int, *, ffmpeg: 
             state["failed"] += 1
             report(**state)
             continue
+        from .timeline_sources import discover
+        if discover(source, float(duration or 0)) is not None:
+            state['skipped'] += 1
+            save(asset_id)
+            report(**state)
+            continue
         if build(ffmpeg, str(source), float(duration or 0), root, int(asset_id),
                  interval, active=active):
             state["made"] += 1

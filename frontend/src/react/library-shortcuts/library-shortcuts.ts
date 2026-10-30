@@ -3,7 +3,7 @@ import { apiGet, apiSend } from '../../api';
 import { queryClient } from '../query';
 import { entityPath } from '@peach/legacy/core';
 
-export interface Favorite { key?: string; entity_id?: number; kind: string; name: string; favorite?: boolean; image_url?: string; image_label?: string; image_fallbacks?: string[] }
+export interface Favorite { key?: string; entity_id?: number; scope?: 'local' | 'online'; tag_id?: string; kind: string; name: string; favorite?: boolean; image_url?: string; image_label?: string; image_fallbacks?: string[] }
 export interface SavedFilter { id: string; name: string; href: string }
 export interface Shortcuts { favorites: Favorite[]; filters: SavedFilter[] }
 export const SHORTCUTS_KEY = ['library-shortcuts'] as const;
@@ -16,12 +16,21 @@ export function useShortcuts(enabled = true) {
 export function useShortcutWrite() {
   return useMutation({ mutationKey: SHORTCUTS_KEY,
     mutationFn: (body: Record<string, unknown>) => apiSend<Shortcuts>(URL, body),
-    onSuccess: (data) => { queryClient.setQueryData(SHORTCUTS_KEY, data) },
+    onSuccess: (data, body) => {
+      queryClient.setQueryData(SHORTCUTS_KEY, data);
+      if (body.action === 'favorite' && body.scope === 'online') {
+        void queryClient.invalidateQueries({ queryKey: ['follow', 'tags'] });
+        void queryClient.invalidateQueries({ queryKey: ['tag-management'] });
+      }
+    },
   });
 }
 export function isFavorite(rows: Favorite[], item: Favorite): boolean {
-  return rows.some((row) => item.entity_id ? row.entity_id === item.entity_id : row.kind === item.kind && row.name === item.name);
+  return rows.some((row) => item.scope === 'online'
+    ? row.scope === 'online' && row.tag_id === item.tag_id
+    : row.scope !== 'online' && (item.entity_id ? row.entity_id === item.entity_id : row.kind === item.kind && row.name === item.name));
 }
 export function favoriteHref(item: Favorite): string {
+  if (item.scope === 'online') return `/follow?${new URLSearchParams({ tag: item.name })}`;
   return entityPath(item.kind, item.name, item.entity_id);
 }

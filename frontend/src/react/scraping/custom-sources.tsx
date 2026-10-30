@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/base/buttons/button';
+import { StatusLabel } from '../components/status-label';
 import { Checkbox } from '@/components/base/checkbox/checkbox';
 import { Input } from '@/components/base/input/input';
 import { confirmModal, spinnerHtml } from '@peach/legacy/ui';
@@ -32,14 +33,15 @@ export function CustomSources({ receipt }: { receipt(message: string): void }) {
       {query.isPending ? <div aria-busy="true" data-skeleton="" aria-label="Loading custom sources" /> : null}
       {query.error ? <ErrorText>{errorMessage(query.error)}</ErrorText> : null}
       {query.data?.items.map((source) => <div key={source.id} className="flex flex-wrap items-center gap-3">
-        <span className="min-w-0 flex-1">{source.name} · {source.enabled ? 'Enabled' : 'Disabled'}</span>
-        <Button variant="secondary" onClick={() => setEditing(source)}>Edit</Button>
+        <span className="min-w-0 flex-1">{source.name}</span>
+        <StatusLabel tone={source.enabled ? 'success' : 'neutral'}>{source.enabled ? '已启用' : '已停用'}</StatusLabel>
+        <Button variant="secondary" onClick={() => setEditing(source)}>编辑</Button>
         <Button variant="secondary" {...busyProps(action.busy === source.id)} onClick={() => void action.run(source.id!,
           (signal) => apiSend<{ items: Source[] }>(URL, { ...source, enabled: !source.enabled }, 'POST', signal),
-          (result) => { changed(result); receipt(source.enabled ? 'Source disabled' : 'Source enabled') })}>
-          {source.enabled ? 'Disable' : 'Enable'}</Button>
-        <Button variant="danger" onClick={() => confirmModal({ title: 'Delete custom source',
-          body: `After "${esc(source.name)}" is deleted, collection will no longer query this source.`, confirmLabel: 'Delete source',
+          (result) => { changed(result); receipt(source.enabled ? '已停用来源' : '已启用来源') })}>
+          {source.enabled ? '停用' : '启用'}</Button>
+        <Button variant="danger" onClick={() => confirmModal({ title: '删除自定义来源',
+          body: `删除「${esc(source.name)}」后，采集将不再查询这个来源。`, confirmLabel: '删除来源', danger: true,
           onConfirm: async () => { changed(await apiSend<{ items: Source[] }>(URL, { action: 'delete', id: source.id }));
             setEditing(null); receipt('Source deleted') } })}>Delete</Button>
       </div>)}
@@ -98,8 +100,8 @@ function SourceForm({ initial, cancel, saved }: {
             if (current === revision.current) setPreview(JSON.stringify(result.record, null, 2));
           }, (cause) => { if (current === revision.current) action.setError(errorMessage(cause)) });
       }} />
-      {action.busy === 'preview' ? <Help role="status"><span dangerouslySetInnerHTML={{ __html: spinnerHtml('Testing source') }} />Testing source…</Help> : null}
-      {preview ? <CodeBlock code={preview} language="json" label="Metadata endpoint response" /> : null}
+      {action.busy === 'preview' ? <Help role="status"><span dangerouslySetInnerHTML={{ __html: spinnerHtml('正在试查来源') }} />正在试查来源</Help> : null}
+      {preview ? <CodeBlock code={preview} language="json" label="元数据接口返回" /> : null}
       {action.error ? <ErrorText>{action.error}</ErrorText> : null}
     </Stack>
     <Footer><Button variant="secondary" type="button" onClick={cancel}>Cancel</Button>

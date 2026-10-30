@@ -1,11 +1,11 @@
 ---
 name: peach-ledger-write
-description: 在用户说迁移、migrate、--apply、合并实体、merge_entity、改真相字段、批量删除、清空回收站，或任何要写真实 ledger 的动作之前使用。
+description: 执行真实 ledger 迁移、真相字段写入、实体合并或不可逆删除前使用；临时测试库不属于真实写入。
 ---
 
 # 真实 ledger 写入流程
 
-最后复核：2026-10-17
+最后复核：2026-10-26
 证据来源：[开发约定](../../../AGENTS.md)、ADR-0005、ADR-0015、ADR-0017、ADR-0052、ADR-0091、ADR-0106。
 
 真实库：当前写入者本机 `PEACH_DATA_ROOT/database/ledger.db`（WAL）。绝不能把共享传输副本或
@@ -18,9 +18,7 @@ description: 在用户说迁移、migrate、--apply、合并实体、merge_entit
 3. `PRAGMA integrity_check`。
 4. `peach migrate status` 核对版本。
 5. 应用后重复计数并做服务 smoke test，前后差异逐条解释。
-6. 复核通过后清退旧备份：`scripts/prune_ledger_backups.py --apply`（缺省只列计划）。规则在
-   `peach.ledger_backups`：最近 5 份、24 小时内、比 `ledger.db` 更新的都留，其余连同 `-wal`／`-shm`
-   删；账本 `integrity_check` 不是 ok 一份都不删。Windows 托盘每次启动按同一规则自动跑。
+6. 复核通过后清退旧备份：`scripts/prune_ledger_backups.py --apply`（缺省只列计划）。保留与清退条件以 `peach.ledger_backups` 为准；账本完整性检查不是 ok 时拒绝清退。Windows 托盘启动复用同一规则。
 
 Windows 写者的托盘在启动与「重启服务」时、子服务停着的间隙自动跑 `migrate upgrade`，
 备份、失败通知与 reader 不迁移见 ADR-0091。上面六步用于手工迁移与托盘之外的账本。
@@ -50,8 +48,7 @@ Windows 写者的托盘在启动与「重启服务」时、子服务停着的间
 
 - `entity(kind, normalized_name)` 唯一约束冲突通常不是 bug，而是同一人的新旧艺名信号。
 - 合并走 `peach.entities.merge_entity`：保留作品多的一侧，迁移关系、别名、外部引用、链接和
-  搜索词，旧称全部留作别名。`entity_external_ref` 每个 provider 只保留一条，同源第二条丢弃
-  并报告，不静默覆盖。
+  搜索词，旧称全部留作别名。`entity_external_ref` 保留同一 provider 的多个独立页面；仅实际约束冲突无法迁移的引用计入 `dropped_refs` 并报告，见 `tests/test_entity_merge.py`。
 - 合并不可逆：先取得用户授权并备份。唯一的自动路径是补别名后继（ADR-0064）：minnano-av 或
   av_neme 名字栏把两条女优实体列成同一个人时，后继自己备份到数据库目录再合；别的判据不得照搬。
 - 两条实现陷阱：sqlite 连接默认 `foreign_keys=OFF`，子表行必须在函数内显式 DELETE，否则留下

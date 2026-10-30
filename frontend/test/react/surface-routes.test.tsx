@@ -41,7 +41,7 @@ function shellActions(): ShellActions {
     openItem: vi.fn(), openEntity: vi.fn(), openTag: vi.fn(), openTasteSignal: vi.fn(), navigate: vi.fn(),
     openManage: vi.fn(), managePath: vi.fn(() => ''), openFollow: vi.fn(), receipt: vi.fn(), toast: vi.fn(),
     failure: vi.fn(), revealSource: vi.fn(async () => ''), reopenTutorial: vi.fn(async () => {}),
-    requestConfigurationSection: vi.fn(), routeReview: vi.fn(),
+    routeReview: vi.fn(),
     routeFollowManage: vi.fn(), saveFollowPreference: vi.fn(), srcBadge: () => '', routeIndex: vi.fn(),
     savePeopleLayout: vi.fn(), exitSelectMode: vi.fn(), personAvatar: vi.fn(() => ({ html: '', face: '' })),
     authorAvatar: vi.fn(() => ''), showIndexTags: vi.fn(), openFollowAuthor: vi.fn(), openFollowTag: vi.fn(),
@@ -131,7 +131,7 @@ it('处理横幅取齐首屏才换掉骨架；首屏在途时容器已归路由�
   await act(async () => { await opening });
   expect(el.querySelector('[data-skeleton]')).toBeNull();
   // token、Preflight 与焦点规则都作用在 `.peach-react` 上，页面不画在它里面就没有样式。
-  expect(el.querySelector('.peach-react')?.textContent).toContain('Sync library');
+  expect(el.querySelector('.peach-react')?.textContent).toContain('同步新增文件');
 });
 
 it('取数期间壳已换页就不画，骨架留给下一页', async () => {

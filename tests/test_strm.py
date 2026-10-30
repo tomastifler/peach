@@ -7,13 +7,14 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from dataclasses import replace
 from pathlib import Path
-from contextlib import closing
+from contextlib import closing, contextmanager
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import httpx
+from fastapi.testclient import TestClient
 
-from peach import media_processing_policy as policy, settings_file, strm
+from peach import access, media_processing_policy as policy, settings_file, strm
 from peach.api import create_app
 from peach.config import PeachSettings
 from peach.media_probe import probe_unmeasured
@@ -21,6 +22,16 @@ from peach.scan import medium_of, scan_location
 from peach.strm_stream import StrmResources, rewrite_playlist
 from support.ledger import fresh_ledger
 from support.web import route_client
+
+
+@contextmanager
+def addressed_client(app, address):
+    """按客户端地址发请求。本机配置接口按 IP 判来源，默认客户端名 `testclient` 不是 IP，判为非本机。"""
+    client = TestClient(app, client=(address, 12345))
+    try:
+        yield client
+    finally:
+        client.close()
 
 
 class StrmTextTests(unittest.TestCase):
@@ -271,7 +282,7 @@ class StrmPlaybackTests(unittest.TestCase):
         self.assertEqual(self.requests, [])
 
     def test_policy_endpoint_stops_timeline_without_touching_ledger(self):
-        with route_client(self.app) as client:
+        with addressed_client(self.app, '127.0.0.1') as client:
             response = client.post('/api/media-processing', json={'metadata_only': True})
             self.assertEqual(response.status_code, 200)
             self.assertTrue(client.get('/api/media-processing').json()['metadata_only'])
@@ -279,6 +290,41 @@ class StrmPlaybackTests(unittest.TestCase):
             self.assertEqual(client.post('/api/media-processing', json={'metadata_only': 'yes'}).status_code, 400)
             self.assertFalse(client.post('/api/media-processing', json={'metadata_only': False}).json()['metadata_only'])
         self.assertEqual(json.loads((self.root / 'state' / 'timeline-thumbnails.json').read_text())['mode'], 'off')
+
+    def test_machine_media_settings_only_answer_the_machine_running_peach(self):
+        refused = '请在运行 Peach 的电脑上打开配置'
+        for path in ('/api/media-processing', '/api/thumbnail-jobs'):
+            with self.subTest(path=path), addressed_client(self.app, '192.0.2.50') as client:
+                for response in (client.get(path), client.post(path, json={'playback_acceleration': 'software', 'mode': 'off'})):
+                    self.assertEqual((response.status_code, response.json()['error']), (403, refused))
+        self.assertEqual(policy.acceleration(self.root / 'state'), 'auto')
+        with addressed_client(self.app, '127.0.0.1') as client:
+            self.assertEqual(client.get('/api/thumbnail-jobs').status_code, 200)
+            self.assertEqual(client.post('/api/media-processing', json={'playback_acceleration': 'software'}).status_code, 200)
+        self.assertEqual(policy.acceleration(self.root / 'state'), 'software')
+
+    def test_open_access_still_keeps_machine_media_settings_local(self):
+        self.app.state.settings = replace(self.app.state.settings, token='password', access_path=self.root / 'access.json')
+        access.save(self.root / 'access.json', '')
+        with addressed_client(self.app, '192.0.2.50') as client:
+            # 开放访问下这台远程设备已经算登录了：同一个客户端读别的接口照常 200。
+            self.assertEqual(client.get('/api/settings').status_code, 200)
+            response = client.post('/api/media-processing', json={'playback_acceleration': 'software'})
+            self.assertEqual((response.status_code, response.json()['error']), (403, '请在运行 Peach 的电脑上打开配置'))
+        self.assertEqual(policy.acceleration(self.root / 'state'), 'auto')
+
+    def test_media_acceleration_is_a_live_device_preference_and_preserves_preview_policy(self):
+        with addressed_client(self.app, '127.0.0.1') as client:
+            self.assertEqual(client.get('/api/media-processing').json()['playback_acceleration'], 'auto')
+            self.assertEqual(client.post('/api/media-processing', json={'playback_acceleration': 'software'}).status_code, 200)
+            self.assertEqual(client.get('/api/media-processing').json()['playback_acceleration'], 'software')
+            saved = client.post('/api/media-processing', json={'metadata_only': True}).json()
+            self.assertEqual(saved, {'metadata_only': True, 'preview_acceleration': 'auto', 'playback_acceleration': 'software'})
+            self.assertEqual(client.post('/api/media-processing', json={'playback_acceleration': 'invalid'}).status_code, 400)
+            self.assertEqual(client.post('/api/media-processing', json={'preview_acceleration': 'software'}).json(),
+                             {'metadata_only': True, 'preview_acceleration': 'software', 'playback_acceleration': 'software'})
+            self.assertEqual(client.post('/api/media-processing', json={'playback_acceleration': 'auto'}).json(),
+                             {'metadata_only': True, 'preview_acceleration': 'software', 'playback_acceleration': 'auto'})
 
 
 class StrmPlaylistTests(unittest.TestCase):

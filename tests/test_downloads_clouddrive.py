@@ -35,6 +35,7 @@ class FakeCloudDrive:
         self.quota = pb.OfflineQuotaInfo(total=1500, used=3, left=1497)
         self.add_error = ""
         self.files: set[str] = set()
+        self.can_manage = True
 
     def _auth(self, name, request, context):
         header = dict(context.invocation_metadata()).get("authorization", "")
@@ -52,6 +53,23 @@ class FakeCloudDrive:
         return pb.TokenInfo(token=request.value, rootDir="/", permissions=pb.TokenPermissions(
             allow_add_offline_download=True, allow_list_offline_downloads=True))
 
+    def GetAllCloudApis(self, request, context):
+        self._auth('GetAllCloudApis', request, context)
+        return pb.CloudAPIList()
+
+    def GetCloudAPIConfig(self, request, context):
+        self._auth('GetCloudAPIConfig', request, context)
+        return pb.CloudAPIConfig()
+
+    def SetCloudAPIConfig(self, request, context):
+        self._auth('SetCloudAPIConfig', request, context)
+        from google.protobuf.empty_pb2 import Empty
+        return Empty()
+
+    def GetMountPoints(self, request, context):
+        self._auth('GetMountPoints', request, context)
+        return pb.GetMountPointsResult()
+
     def FindFileByPath(self, request, context):
         self._auth("FindFileByPath", request, context)
         full = f"{request.parentPath.rstrip('/')}/{request.path}"
@@ -60,6 +78,7 @@ class FakeCloudDrive:
                        key=len, default="/115")
             return pb.CloudDriveFile(name=request.path, fullPathName=full, isDirectory=True,
                                      isCloudRoot=full == root, canOfflineDownload=self.folders[full],
+                                     supportOfflineDownloadManagement=self.can_manage,
                                      CloudAPI=pb.CloudAPI(name=self.clouds.get(root, "115open"),
                                                           userName="u1", path=root))
         if full in self.files:
@@ -132,6 +151,19 @@ class _Server(unittest.TestCase):
 
 
 class SubmitTests(_Server):
+    def test_cloud_without_task_management_submits_and_waits_for_the_file(self):
+        self.fake.can_manage = False
+        self.assertEqual(self.provider.submit(MAGNET, TARGET).state, dl.RUNNING)
+        self.assertNotIn("ListOfflineFilesByPath", self.methods())
+        self.assertNotIn("GetOfflineQuotaInfo", self.methods())
+        task = dl.DownloadTask(1, HASH, "clouddrive:guangya:test", MAGNET.uri, "ABC-123", TARGET, dl.SUBMITTED)
+        self.assertEqual(self.provider.status(task).state, dl.RUNNING)
+        self.fake.files.add(f"{TARGET}/ABC-123")
+        self.assertEqual(self.provider.status(task).state, dl.DONE)
+        with self.assertRaisesRegex(dl.DownloadError, "到网盘中处理"):
+            self.provider.cancel(task)
+        self.assertNotIn("RemoveOfflineFiles", self.methods())
+
     def test_a_submission_checks_the_folder_and_quota_then_adds(self):
         status = self.provider.submit(MAGNET, TARGET)
         self.assertEqual((status.state, status.adopted), (dl.RUNNING, False))
@@ -265,6 +297,19 @@ class CheckTests(_Server):
     def test_addresses_turn_into_grpc_targets(self):
         self.assertEqual(cd.channel_target("http://127.0.0.1"), ("127.0.0.1:19798", False))
         self.assertEqual(cd.channel_target("https://192.0.2.10:8443"), ("192.0.2.10:8443", True))
+        self.assertEqual(cd.channel_target("http://[::1]:19798"), ("[::1]:19798", False))
+        for address in ("http://localhost:bad-port", "http://localhost:0", "http://localhost:65536"):
+            with self.subTest(address=address), self.assertRaises(dl.DownloadError) as raised:
+                cd.channel_target(address)
+            self.assertEqual(raised.exception.failure, "config")
+
+    def test_discovery_returns_only_validated_service_addresses(self):
+        from unittest.mock import patch
+        with patch.object(cd, "answers", return_value=True) as answers:
+            address = cd.discover(("http://localhost:bad-port", "127.0.0.1:19798"))
+        self.assertEqual(address, "http://127.0.0.1:19798")
+        answers.assert_called_once_with(address)
+        self.assertTrue(all(dl.clean_address(address) == address for address in cd.LOCAL_ADDRESSES))
         self.assertEqual(cd.split_remote("/115/云下载/"), ("/115", "云下载"))
 
 

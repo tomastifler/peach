@@ -45,7 +45,7 @@ from .field_owners import (
 )
 from .genre_decisions import load_genre_decisions
 from .genre_taxonomy import UNMAPPED, genres_in_warning, resolve_genre
-from .metadata import identifies_code
+from .metadata import candidate_text_is_valid, identifies_code
 from .metadata_alias_resolve import (
     is_planning_alias as _is_planning_alias,
     register_planning_alias,
@@ -57,6 +57,7 @@ from .metadata_policy import (
     blacklisted, chain_rank, preferred_tag_source, source_tier,
 )
 from .review_csv import read_candidates
+from .javdb_identity import current_candidate as current_javdb_candidate
 from .sources import fc2
 
 #: 一个写事务里最多落多少条。整批一个事务在本机实测是几千条候选压着写锁不放，
@@ -684,7 +685,7 @@ def _row_candidates(row: dict, decided) -> list[dict]:
     code = str(row.get("code") or "").strip()
     return [_fc2_seller_as_label(field, code, _fold_genre_decisions(field, candidate, decided))
             for candidate in _parsed_candidates(row)
-            if _candidate_identifies_code(code, candidate)]
+            if _candidate_identifies_code(code, candidate) and candidate_text_is_valid(candidate)]
 
 
 def _auto_apply_rule(candidate: dict, agreed: int) -> str:
@@ -724,6 +725,31 @@ def _auto_apply_rule(candidate: dict, agreed: int) -> str:
     return f"adr-0018-empty-field-single-{kind}-source"
 
 
+def _original_title_candidate(field: str, candidate: dict, code: str = '') -> bool:
+    """r18 拉丁字母标题须能在快照的原文侧精确复核，适用于持久候选重放。"""
+    if field not in {'title', 'original_title'} or candidate.get('source') != 'r18dev':
+        return True
+    value = ' '.join(str(candidate.get('value') or '').split())
+    if not re.search(r'[A-Za-z]', value) or re.search(r'[\u3040-\u30ff\u3400-\u9fff]', value):
+        return True
+    snapshot = candidate.get('raw_snapshot')
+    if not snapshot:
+        return False
+    try:
+        payload = json.loads(Path(snapshot).read_text(encoding='utf-8'))
+        if isinstance(payload, dict) and isinstance(payload.get('result'), dict):
+            payload = payload['result']
+        if not isinstance(payload, dict):
+            return False
+        from .metadata import extract_peach_fields, identifies_code
+        if code and not identifies_code(code, payload):
+            return False
+        original = extract_peach_fields(payload).get(field, {}).get('value')
+        return bool(original) and ' '.join(str(original).split()) == value
+    except (OSError, ValueError, TypeError):
+        return False
+
+
 def _evidence_candidates(row: dict, field: str = "") -> list[dict]:
     """能当补空证据的候选：已登记来源与本地 NFO，去掉这个字段上被拉黑的来源。
 
@@ -736,7 +762,10 @@ def _evidence_candidates(row: dict, field: str = "") -> list[dict]:
     return [c for c in row.get("candidates") or []
             if (str(c.get("source") or "").strip() in SOURCE_SPECS
                 or str(c.get("source") or "").strip() == LOCAL_NFO_SOURCE)
-            and not blacklisted(field, str(c.get("source") or "").strip())]
+            and not blacklisted(field, str(c.get("source") or "").strip())
+            and (str(c.get('source') or '').strip() != 'javdb' or current_javdb_candidate(c))
+            and candidate_text_is_valid(c)
+            and _original_title_candidate(field, c, str(row.get('code') or ''))]
 
 
 def _unmasked_titles(field: str, candidates: list[dict], current: str = "") -> list[dict]:
@@ -1029,6 +1058,8 @@ def metadata_auto_apply_candidate(connection, row: dict, *,
 def _approved_entity_name(value: object, kind: str) -> str:
     name = str(value or "").strip()
     cleaned = canonicalize_entity_name(kind, name)
+    if kind == 'tag' and name and cleaned and collapse_repeated_entity_name(name) == name:
+        return cleaned
     if kind not in {"creator", "performer"}:
         cleaned = collapse_repeated_entity_name(cleaned)
     if not name or not cleaned or cleaned != name:
@@ -1188,6 +1219,8 @@ def _landing_scope(connection, group: dict, candidate: dict,
     整套落库（`_apply_metadata_candidate`）与只补新增标签（`_extend_approved_tags`）
     共用这一份：范围、并发凭据和番号身份不能只在其中一条路上核。
     """
+    if not candidate_text_is_valid(candidate):
+        raise ValueError('来源文字含无法解码的字符，请重新采集资料')
     code = str(group.get("code") or "").strip()
     query = str(group.get("query") or code).strip()
     if group.get('asset_path'):
@@ -1261,6 +1294,8 @@ def _apply_metadata_candidate(
     marks = ",".join("?" * len(asset_ids))
 
     if field in {"title", "original_title"}:
+        if not _original_title_candidate(field, candidate, code):
+            raise ValueError('r18 标题原文证据未取得，请重新采集资料')
         raw_value = str(candidate.get("value") or "")
         value = " ".join(raw_value.split())
         if (not value or len(value) > 1000
@@ -1483,6 +1518,9 @@ def auto_apply_metadata(database, candidate_root, *, batch_size=AUTO_APPLY_BATCH
                 if str(row.get("status") or "").strip() != "candidate":
                     continue
                 row["candidates"] = _row_candidates(row, genres)
+                row['candidates'] = [candidate for candidate in row['candidates']
+                                     if str(candidate.get('source') or '').strip() != 'javdb'
+                                     or current_javdb_candidate(candidate)]
                 prior = decided.get(item_key)
                 if overwrite_requires_review(connection, row):
                     skipped += 1

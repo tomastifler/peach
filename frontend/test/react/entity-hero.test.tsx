@@ -7,6 +7,7 @@ import { notifyManager, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EntityHeroPage } from '../../src/react/entity-hero/entity-hero-page';
+import { registerNameWritings, setNameLanguage } from '../../src/core/entity-names';
 import {
   factRows, heroLinks, nameChoices, nameLine, shownTags,
   type EntityHeroActions, type EntityHeroData, type EntityHeroHelpers, type EntityHeroProps,
@@ -15,6 +16,7 @@ import { queryClient } from '../../src/react/query';
 import { click, mount, settle } from './render';
 
 afterEach(() => { queryClient.clear() });
+beforeEach(() => { registerNameWritings([]); setNameLanguage('zh-CN') });
 notifyManager.setScheduler((notify) => notify());
 
 const performer = (extra: Partial<EntityHeroData> = {}): EntityHeroData => ({
@@ -54,6 +56,27 @@ async function open(initial: EntityHeroProps) {
 }
 
 describe('排版用的纯函数', () => {
+  it('语言切换保留所选艺名，名称菜单使用原始值提交统一名称', async () => {
+    registerNameWritings([{ id: 7792, kind: 'performer', canonical_name: '枫花恋', zh_cn: '枫花恋', ja: '楓カレン' }]);
+    const given = props({ name: '枫花恋', helpers: helpers({ portraitImg: () => '<img src="/avatar" alt="枫花恋">' }),
+      entity: performer({ canonical_name: '枫花恋', aliases: ['楓カレン', '田中柠檬'],
+      name_display: { choices: {
+        'zh-CN': [{ value: '枫花恋', label: '枫花恋' }, { value: '田中柠檬', label: '田中柠檬' }],
+        ja: [{ value: '枫花恋', label: '楓カレン' }, { value: '田中柠檬', label: '田中レモン' }],
+      }, groups: { 'zh-CN': { shown: [], total: 0, groups: [] }, ja: { shown: [], total: 0, groups: [] } } },
+    }) });
+    const host = await open(given);
+    expect(host.querySelector('h2')?.textContent).toBe('枫花恋');
+    await act(async () => setNameLanguage('ja'));
+    expect(host.querySelector('h2')?.textContent).toBe('楓カレン');
+    expect(host.querySelector('[data-entity-portrait] img')?.getAttribute('alt')).toBe('楓カレン');
+    expect(given.actions.chooseName).not.toHaveBeenCalled();
+    await click(host.querySelector('[data-namepick-toggle]'));
+    expect(document.querySelector('[data-namepick-name="枫花恋"]')?.textContent).toContain('楓カレン');
+    await click(document.querySelector('[data-namepick-name="田中柠檬"]'));
+    expect(given.actions.chooseName).toHaveBeenCalledWith('田中柠檬');
+    expect(given.entity.canonical_name).toBe('枫花恋');
+  });
   it('厂牌与事务所显示独立的公司资料，不显示来源悬浮说明', async () => {
     const host = await open(props({ kind: 'studio', name: 'Brand', entity: {
       id: 1, canonical_name: 'Brand', asset_count: 3,
@@ -176,9 +199,9 @@ describe('排版用的纯函数', () => {
     expect(site).toEqual({ type: 'url', url: 'https://www.s1s1s1.com/', title: 'S1', text: '官方网站', mark: { site: '/link-mark?id=9' } });
   });
 
-  it('换统称的候选取完整的 aliases（罗马字也是她用过的写法），统称排第一，去重去空', () => {
+  it('没有语言投影时保留已有别名与原始值，统称排第一并去重去空', () => {
     expect(nameChoices({ id: 1, canonical_name: '葵つかさ', asset_count: 0, aliases: ['葵司', 'Tsukasa Aoi', '葵司', ''] }))
-      .toEqual(['葵つかさ', '葵司', 'Tsukasa Aoi']);
+      .toEqual(['葵つかさ', '葵司', 'Tsukasa Aoi'].map(value => ({ value, label: value })));
   });
 });
 
@@ -273,7 +296,7 @@ describe('画出什么', () => {
       { id: 1, k: '三上悠亜', has_image: true, image_version: '1727800000' }, { id: 2, k: '河北彩花' },
     ] }) }));
     expect(host.querySelector('[data-related-performer="三上悠亜"] img')?.getAttribute('src'))
-      .toBe('/entity-image?kind=performer&id=1&v=1727800000');
+      .toBe('/entity-image?kind=performer&id=1&thumb=1&v=1727800000');
     expect(host.querySelector('[data-related-performer="河北彩花"] img')).toBeNull();
   });
 });

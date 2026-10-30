@@ -11,7 +11,6 @@ import { $, entityPath } from '../core';
 import { navigationState, openRoutedPage, requestOverlay } from './navigation.js';
 import { entityState, syncPhotoWalls } from './entity.js';
 import { followDetailReturnPath, followDiscoverySeed, followRevision, followSelected, pageOpens, selectMode, writeShell } from './../shell/index';
-import { followManageEntry } from './index.js';
 import { censorOn, preferencesState, wireDrag } from './preferences.js';
 import { revealSkeleton, wireHorizontalScroller } from '../ui-kit';
 import { followJobProgress } from './../jobs';
@@ -116,7 +115,6 @@ followState.followFeedActions = {
   loaded:drawer=>renderFollowDrawer(drawer),
   openDetail:id=>openFollowDetail(id),
   openAuthor:name=>navigationState.navigatePath(entityPath('creator',name)),
-  openManage:()=>navigationState.navigatePath(followManageEntry()),
   toggleSelection:(id,range)=>toggleFollowSelection(id,range),
   setImagesOnly:on=>{preferencesState.appSettings.followImagesOnly=!!on;preferencesState.saveSettings();syncPhotoWalls()},
   setPhotoLayout:layout=>{storePhotoLayout(layout);syncPhotoWalls()},

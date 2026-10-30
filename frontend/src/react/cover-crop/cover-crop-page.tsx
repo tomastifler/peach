@@ -8,10 +8,9 @@
  * 默认框满高贴右缘、按正封宽高比取宽：封套是「背面 | 书脊 | 正面」，人要改的多半
  * 只是折痕落在哪一列。比例可以解锁，因为版式不规整的封套确实存在。
  */
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { RiCloseLine } from '@remixicon/react';
 import { useMutation } from '@tanstack/react-query';
-import { UNSAFE_PortalProvider } from 'react-aria';
 import { Heading } from 'react-aria-components';
 
 import { Button } from '@/components/base/buttons/button';
@@ -26,7 +25,6 @@ import { PANEL_ASPECT } from '../../jav-artwork';
 import type { CoverCropProps } from '../bundle';
 import { ModalFrame, ModalGlyph } from '../components/modal-frame';
 import { Note } from '../components/note';
-import { overlayHost } from '../components/overlay-host';
 import { useOverlayScrollbar } from '../components/overlay-scrollbar';
 import { CropFrame } from '../crop/crop-frame';
 import { busyProps } from '../settings/use-action';
@@ -45,22 +43,19 @@ function CropIcon({ className }: { className: string }) {
 
 export function CoverCrop({ code, coverUrl, box, onSaved }: CoverCropProps) {
   const [open, setOpen] = useState(false);
-  const anchor = useRef<HTMLButtonElement>(null);
   return (
     <>
-      <button ref={anchor} type="button" aria-haspopup="dialog" data-cover-crop
-        aria-label={`Crop cover of ${code}`} title="Crop cover: frame the front cover area"
+      <button type="button" aria-haspopup="dialog" data-cover-crop
+        aria-label={`裁剪 ${code} 的封面`} title="裁剪封面：框出正封那一块"
         onClick={() => setOpen(true)}
         className="flex size-7 cursor-pointer items-center justify-center rounded-lg text-foreground-icon-secondary outline-none transition-colors hover:bg-background-primary-hover hover:text-foreground-icon-primary focus-visible:ring-2 focus-visible:ring-border-focus-ring">
         <CropIcon className="size-3.75" />
       </button>
-      {/* 详情页是 `showModal()` 开的原生 dialog，弹层要挂进同一层才盖得住它。 */}
-      <UNSAFE_PortalProvider getContainer={() => overlayHost(anchor.current)}>
-        <ModalFrame isOpen={open} onOpenChange={setOpen} width="cover-crop" label="Crop cover">
-          <CropBody code={code} coverUrl={coverUrl} box={box} onSaved={onSaved}
-            close={() => setOpen(false)} />
-        </ModalFrame>
-      </UNSAFE_PortalProvider>
+      {/* 详情浮窗是顶层的原生 dialog，弹层由舞台统一挂进同一层（`stage.tsx`）。 */}
+      <ModalFrame isOpen={open} onOpenChange={setOpen} width="cover-crop" label="裁剪封面">
+        <CropBody code={code} coverUrl={coverUrl} box={box} onSaved={onSaved}
+          close={() => setOpen(false)} />
+      </ModalFrame>
     </>
   );
 }

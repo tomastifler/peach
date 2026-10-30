@@ -71,6 +71,7 @@ from peach.catalog_rules import (
     normalise_code_key,
 )
 from peach.metadata_policy import SOURCE_SPECS
+from peach import upgrade_rules
 
 AWS_LEGACY_DIGITAL = (
     "https://awsimgsrc.dmm.co.jp/pics_dig/digital/video/{cid}/{cid}pl.jpg"
@@ -191,17 +192,21 @@ class CoverConnectError(Unavailable):
 
 
 class HostLimitedTransport:
-    """把请求间隔按主机分别计算；不同官方站点互不阻塞。"""
+    """把请求间隔按主机分别计算；不同官方站点互不阻塞。
+
+    给了 `limiter` 就按它等：几个传输共用一份间隔，同时跑的任务问同一主机也不会叠在一起。
+    """
 
     def __init__(self, inner: HttpxTransport, interval: float, *,
                  intervals: dict[str, float] | None = None,
-                 clock=time.monotonic, sleeper=time.sleep) -> None:
+                 clock=time.monotonic, sleeper=time.sleep,
+                 limiter: HostLimiter | None = None) -> None:
         self.inner = inner
         self.interval = max(0.0, interval)
         self.clock = clock
         self.sleeper = sleeper
-        self.limiter = HostLimiter(dict(intervals or {}), default_interval=self.interval,
-                                   clock=clock, sleeper=sleeper)
+        self.limiter = limiter or HostLimiter(dict(intervals or {}), default_interval=self.interval,
+                                              clock=clock, sleeper=sleeper)
 
     def __call__(self, request: HttpRequest, timeout: float, limit: int):
         self.limiter.wait(request.url)
@@ -426,6 +431,21 @@ def official_image_candidates(url: str) -> list[Candidate]:
     if urlparse(clean).netloc.lower().endswith("mgstage.com"):
         return [candidate_for(clean)]
     return []
+
+
+#: 库外卡片经 `/cover-image` 取图时放行的主机后缀，与 `official_image_candidates` 认的两家一致；
+#: 代理跟重定向的每一跳也按它核对。
+COVER_PROXY_HOSTS = ("dmm.co.jp", "dmm.com", "mgstage.com")
+
+
+def proxyable_cover_url(url: str) -> bool:
+    """能经 Peach 代理显示的封面地址：https、官方图片主机、官方图路径。"""
+    clean = str(url or "").strip()
+    parsed = urlparse(clean)
+    host = (parsed.hostname or "").casefold()
+    return (parsed.scheme == "https" and not parsed.username and not parsed.password
+            and any(host == suffix or host.endswith("." + suffix) for suffix in COVER_PROXY_HOSTS)
+            and bool(official_image_candidates(clean)))
 
 
 def content_id_images(content_id: str) -> list[Candidate]:
@@ -766,7 +786,7 @@ def _site_candidates(transport: HttpTransport, code: str, evidence: MetadataEvid
         try:
             live_evidence = dmm_evidence(transport, code, deadline=deadline)
             candidates += list(live_evidence.candidates)
-        except (Unavailable, SourcePaused):
+        except (Unavailable, SourcePaused, httpx.TransportError):
             record('source_unanswered')
     # 有成功快照时不重复打 r18；失败快照不算证据，仍允许联网刷新。
     if ('r18dev' not in evidence.sources and not live_evidence.candidates
@@ -838,11 +858,16 @@ def best_cover(transport: HttpTransport, code: str, delay: float, *,
     if not measured:
         # 每张候选都回过话（404、太小、占位图、解不开）就是来源的确定答复，下次再问还是这几张：
         # 交 `NotFound`，采集任务记下一周不问。有一张断在连接、5xx 或拒绝访问上才可能是这趟没问成。
-        kind = Unavailable if diagnostics.get("unanswered") else NotFound
+        kind = Unavailable if diagnostics.get("unanswered") or diagnostics.get('source_unanswered') else NotFound
         raise kind(_no_usable_official(diagnostics))
-    return _download_best(transport, measured, record, minimum_width=minimum_width,
-                          minimum_quality=minimum_quality, minimum_pixels=minimum_pixels,
-                          deadline=deadline)
+    try:
+        return _download_best(transport, measured, record, minimum_width=minimum_width,
+                              minimum_quality=minimum_quality, minimum_pixels=minimum_pixels,
+                              deadline=deadline)
+    except NotFound as error:
+        if diagnostics.get('source_unanswered') or diagnostics.get('unanswered'):
+            raise Unavailable(str(error)) from error
+        raise
 
 
 def _measure(transport: HttpTransport, candidates, record, *, minimum_width: int,
@@ -933,7 +958,7 @@ def _download_best(transport: HttpTransport, measured, record, *, minimum_width:
     raise Unavailable("Every usable candidate failed a full download")
 
 
-FIELDS = ("code", "result", "source", "width", "height", "kb", "url", "note")
+FIELDS = ("code", "result", "source", "width", "height", "kb", "url", "note", "outcome", "catalog_rules")
 
 
 #: 判定为「所有渠道都没有」的落空，续跑时不必重来；连接类失败必须重试。
@@ -948,8 +973,20 @@ def settled_misses(log: Path) -> set[str]:
     150 条落空，重探一遍就是好几个小时，而结论不会变。
     """
     rows = logged_rows(log)
+
+    def confirmed(row):
+        outcome = str(row.get('outcome') or '')
+        if outcome not in ('', 'not_found'):
+            return False
+        if str(row.get('code') or '').strip().upper().startswith('FC2-PPV-'):
+            note = str(row.get('note') or '')
+            return not note.startswith(('Unavailable:', 'SourcePaused:', 'DeadlineExceeded:'))
+        return (outcome == 'not_found'
+                and str(row.get('catalog_rules')) == str(upgrade_rules.OFFICIAL_COVER_CATALOG_MISSES))
+
     return {str(row.get("code") or "").strip() for row in rows
             if row.get("result") == "未取得"
+            and confirmed(row)
             and not TRANSIENT.search(str(row.get("note") or ""))
             and str(row.get("code") or "").strip()}
 
@@ -1162,6 +1199,14 @@ def _replace_log_row(rows: list[dict], code: str, replacement: dict) -> None:
     rows.append({field: replacement.get(field, "") for field in FIELDS})
 
 
+def failure_log_row(code: str, error: Exception) -> dict:
+    """批量封面的未取得记录，区分确定无图与本次未作答。"""
+    return {"code": code, "result": "未取得", "source": "", "width": "", "height": "",
+            "kb": "", "url": "", "note": f"{type(error).__name__}: {error}"[:80],
+            "outcome": 'not_found' if isinstance(error, NotFound) else 'unavailable',
+            "catalog_rules": upgrade_rules.OFFICIAL_COVER_CATALOG_MISSES}
+
+
 def run(args: argparse.Namespace, handle: TaskRunHandle | None = None) -> int:
     """跑一趟封面抓取。`handle` 是任务中心的句柄，缺省时这一趟不登记。"""
     handle = handle or inert_handle()
@@ -1288,10 +1333,8 @@ def run(args: argparse.Namespace, handle: TaskRunHandle | None = None) -> int:
                     print(f"[{index}/{len(todo)}] kept {code}: re-probe failed "
                           f"{type(exc).__name__} {exc}", flush=True)
                 else:
-                    rows.append({"code": code, "result": "未取得", "source": "",
-                                 "width": "", "height": "", "kb": "", "url": "",
-                                 "note": f"{type(exc).__name__}: {exc}"[:80]})
-                    print(f"[{index}/{len(todo)}] not retrieved {code}: "
+                    rows.append(failure_log_row(code, exc))
+                    print(f"[{index}/{len(todo)}] 未取得 {code}："
                           f"{type(exc).__name__} {exc}", flush=True)
             else:
                 if args.upgrade_existing and not candidate_improves(

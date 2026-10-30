@@ -22,7 +22,7 @@ import { hasResourceRoots, RESOURCE_SCAN_KEY, type ResourceScanState } from '../
 import { IDLE_REPAIR } from '../../src/react/media-repair/media-repair';
 import type { MediaSourcesData } from '../../src/react/media-sources';
 import { queryClient } from '../../src/react/query';
-import { buttonNamed, click, mount, settle, type } from './render';
+import { actionOrder, buttonNamed, choose, click, mount, settle, type } from './render';
 
 afterEach(() => {
   queryClient.clear();
@@ -45,6 +45,10 @@ function serve(routes: Record<string, Route>) {
     const method = init?.method ?? 'GET';
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ path, method, body });
+    if (path.startsWith('/api/organize/example?')) {
+      const params = new URL(path, 'http://localhost').searchParams;
+      return { ok: true, status: 200, json: async () => ({ ok: true, example: `${params.get('dir_template')}/${params.get('file_template')}.mp4` }) };
+    }
     if (!(path in routes)) {
       unknown.push(path);
       return { ok: false, status: 404, json: async () => ({}) };
@@ -79,7 +83,7 @@ function confirmWith(answer: boolean) {
 const wrap = (element: ReactElement) => mount(<QueryClientProvider client={queryClient}>{element}</QueryClientProvider>);
 
 const withRoots: MediaSourcesData = {
-  sources: [{ location: 'local', online: true, roots: ['R:\\media'] }, { location: '115', online: false, roots: ['B:\\'] },
+  sources: [{ location: 'local', online: true, roots: [{ online: true }] }, { location: '115', online: false, roots: [{ online: false }] },
     { location: 'online', online: true }],
 };
 const withoutRoots: MediaSourcesData = {
@@ -88,9 +92,9 @@ const withoutRoots: MediaSourcesData = {
 
 const organizeIdle: OrganizeData = {
   status: 'idle', locations: [{ location: 'local', roots: ['R:\\media'] }],
-  templates: { local: { file: '{number}', dir: '' } },
-  presets: [{ label: '番号 + 标题', file: '{number}[ {title}]', dir: '{studio}' }],
-  placeholders: [{ key: 'number', label: '番号' }, { key: 'title', label: '标题' }],
+  templates: { local: { file: '{code}', dir: '' } },
+  presets: [{ label: '番号 + 标题', file: '{code}[ {title}]', dir: '{studio}' }],
+  placeholders: [{ key: 'code', label: '番号' }, { key: 'title', label: '标题' }],
   last_batch: '',
 };
 
@@ -106,7 +110,7 @@ const pageRoutes = (sources: MediaSourcesData): Record<string, Route> => ({
   '/api/media-repair': IDLE_REPAIR,
   '/api/libraries': { libraries: [] },
   '/api/organize': organizeIdle,
-  '/api/links': { total: 0, entities: 0, by_kind: {}, top_hosts: [] },
+  '/api/links': { total: 0, entities: 0, by_kind: {}, top_hosts: [], top_host_link_ids: {} },
   '/api/links/check': { status: 'idle', check_id: '', checked: 0, total: 0, gone: [], unclear: [], scope: '' },
   '/api/links/prune': { status: 'idle' },
   '/api/orphan-records': { total: 0, items: [] },
@@ -224,11 +228,12 @@ describe('资源同步', () => {
     const host = await wrap(<ResourceSyncCard toast={toast} />);
     await settle();
     expect(host.textContent).toContain('本地磁盘');
-    expect(host.textContent).toContain('Offline, skipped');
-    expect(host.textContent).toContain('30 items in the library');
-    expect(host.textContent).toContain('3 empty folders');
-    expect(host.textContent).toContain('To delete permanently');
-    expect(host.textContent).toContain('Source root folders are kept');
+    expect(host.querySelector('[data-connection-tone="warning"]')?.textContent).toBe('离线');
+    expect(host.textContent).toContain('本次已跳过');
+    expect(host.textContent).toContain('馆藏中有 30 项');
+    expect(host.textContent).toContain('空文件夹 3 个');
+    expect(host.textContent).toContain('待永久删除');
+    expect(host.textContent).toContain('保留来源根目录');
     expect(server.posts('/api/resource-sync/apply')).toEqual([]);
     await click(buttonNamed('Clean up dead entries', host));
     await settle();
@@ -282,11 +287,11 @@ describe('资源同步', () => {
     await click(buttonNamed('Clean up dead entries', host));
     await settle();
     expect(seen[0]!.body).toBe(
-      '3 records whose files are no longer on disk (including those in trash) and 3 empty folders will be deleted permanently, and 2 idle caches will be cleaned. Source root folders are kept. These cannot be undone. '
-      + '2 entries with personal records will be marked as gone; the records are kept and can be attached to a new file or deleted permanently under Orphan records.');
+      '将永久删除文件已不在盘上的 3 条记录（含回收站里的）、3 个空文件夹，并清理 2 个闲置缓存。来源根目录保留。'
+      + '这几样不可撤销。2 条作品记录的文件已丢失，个人记录保留，可在「文件已丢失的记录」中转移个人记录或删除记录。');
     await settle();
     expect(host.textContent).toContain(
-      '1 entries with personal records were marked as gone and can be handled under Orphan records. 1 entries had their records attached to another version in the library.');
+      '1 条作品记录已标为文件丢失，可在「文件已丢失的记录」中处理。1 条的记录已接到库里的另一个版本。');
   });
 
   it('复核时发现文件还在、目录删不掉的几样留在原地：报警告档，结果条写部分完成', async () => {
@@ -343,6 +348,22 @@ describe('资源同步', () => {
 });
 
 describe('链接管理', () => {
+  it('主要站点分别链接到主页并通过本站读取 favicon，图标失败时保留链接', async () => {
+    const { host } = await openPage(withRoots, {
+      '/api/links': { total: 8, entities: 3, by_kind: {}, top_hosts: [['example.com', 5], ['example.org', 3]], top_host_link_ids: { 'example.com': 8, 'example.org': 9 } },
+    });
+    const link = host.querySelector<HTMLAnchorElement>('#link-manager a[href="https://example.com"]')!;
+    expect(link.textContent).toBe('example.com');
+    expect(link.parentElement?.textContent).toBe('example.com5');
+    expect(link.querySelector('svg')).not.toBeNull();
+    expect(link.rel).toContain('noopener');
+    const image = link.querySelector('img')!;
+    expect(image.getAttribute('src')).toBe('/link-mark?id=8');
+    await act(async () => { image.dispatchEvent(new Event('error')) });
+    expect(link.querySelector('img')).toBeNull();
+    expect(link.querySelector('svg')).not.toBeNull();
+    expect(link.href).toBe('https://example.com/');
+  });
   const row = (id: number, patch: Partial<LinkCheckState['gone'][number]> = {}) => ({
     id, entity: `女优 ${id}`, link_kind: 'official', label: '官网', url: `https://example.com/talent/${id}`, note: '404', ...patch,
   });
@@ -353,7 +374,27 @@ describe('链接管理', () => {
   const stats = {
     total: 719, entities: 210, by_kind: { official: 224, social: 373, catalog: 100, source_reference: 22 },
     top_hosts: [['x.com', 300], ['instagram.com', 70], ['linktr.ee', 3], ['tiktok.com', 1]],
+    top_host_link_ids: { 'x.com': 1, 'instagram.com': 2, 'linktr.ee': 3, 'tiktok.com': 4 },
   };
+
+  it('结果表用所属头像和链接站标识别对象，链接名称保留可读回退', async () => {
+    serve({ '/api/links': stats, '/api/links/check': { ...checked,
+      gone: [row(1, { entity_id: 31, entity_kind: 'performer', face: { id: 31, name: '女优 1', has_image: true, image_version: 'v1' } })],
+      unclear: [row(2, { label: '' })],
+    }, '/api/links/prune': { status: 'idle' } });
+    const host = await wrap(<LinkManager />);
+    await settle();
+    const gone = host.querySelector('[aria-label="地址已失效"]')!;
+    expect(gone.textContent).toContain('链接名称');
+    expect(gone.textContent).toContain('Peach 资料');
+    expect(gone.querySelector('[data-link-identity]')?.getAttribute('href')).toBe('/performers/31');
+    expect(gone.querySelector('[data-link-identity] img')?.getAttribute('src')).toContain('/entity-image?kind=performer&id=31');
+    expect(gone.querySelector('[data-link-address] img')?.getAttribute('src')).toBe('/link-mark?id=1');
+    expect(gone.querySelector('[data-link-name] img')).toBeNull();
+    const unclear = host.querySelector('[aria-label="本次未访问成功"]')!;
+    expect(unclear.querySelector('[data-link-name]')?.textContent).toBe('example.com');
+    expect(unclear.querySelector('[data-link-identity]')?.textContent).toContain('女优 2');
+  });
 
   it('每一类链接各占一格，类型用界面上的名字，主要站点只列前三', async () => {
     serve({ '/api/links': stats, '/api/links/check': { ...checked, status: 'idle' }, '/api/links/prune': { status: 'idle' } });
@@ -363,7 +404,8 @@ describe('链接管理', () => {
     expect(cells).toEqual([
       'Total links719Across 210 performers, studios and series', 'Official site / agency224', 'Social account373', 'Work catalog site100', 'Source reference22',
     ]);
-    expect(host.textContent).toContain('x.com 300 · instagram.com 70 · linktr.ee 3');
+    expect([...host.querySelectorAll('#link-manager a')].map((link) => link.textContent))
+      .toEqual(['x.com', 'instagram.com', 'linktr.ee']);
     expect(host.textContent).not.toContain('tiktok.com');
   });
 
@@ -399,7 +441,7 @@ describe('链接管理', () => {
     expect(server.posts('/api/links/prune')).toEqual([]);
   });
 
-  it('「全部重试」只重验未访问成功的那几条，带上这一趟的检查号', async () => {
+  it('「立即重试全部」只重验未访问成功的那几条，带上这一趟的检查号', async () => {
     const server = serve({
       '/api/links': stats,
       '/api/links/check': (body: { status_only?: boolean }) => (body.status_only
@@ -409,7 +451,7 @@ describe('链接管理', () => {
     });
     const host = await wrap(<LinkManager />);
     await settle();
-    await click(buttonNamed('Retry all (2)', host));
+    await click(buttonNamed('立即重试全部（2）', host));
     await settle();
     expect(server.posts('/api/links/check').filter((body) => !(body as { status_only?: boolean }).status_only))
       .toEqual([{ retry: [2, 3], check_id: 'check-3' }]);
@@ -456,7 +498,7 @@ describe('孤儿记录', () => {
     expect(server.calls.map((call) => call.path)).toContain('/api/orphan-records');
   });
 
-  it('每条列出带的记录与候选文件；没有候选的只给彻底删除', async () => {
+  it('每条列出个人记录与候选文件；没有候选的只给删除记录', async () => {
     serve({ '/api/orphan-records': orphans });
     const host = await wrap(<OrphanRecordsCard toast={vi.fn()} />);
     await settle();
@@ -465,38 +507,49 @@ describe('孤儿记录', () => {
     expect(rows[0]!.textContent).toContain('Likes and reasons 1 · Watch history 3 · Rating 4 · Played 2 times');
     expect(rows[0]!.textContent).toContain('ABC-123.mkv · 60 min');
     expect(rows[0]!.querySelector('img')?.getAttribute('src')).toBe('/thumb?id=7&c=4');
-    expect(rows[1]!.textContent).toContain('Watch later 1 · Played');
-    expect(rows[1]!.textContent).toContain('No file matches by code or file name');
-    expect(buttonNamed('Attach to this file', rows[1]!)).toBeFalsy();
-    expect(buttonNamed('Delete permanently', rows[1]!)).toBeTruthy();
+    expect(rows[1]!.textContent).toContain('稍后看 1 · 播放过');
+    expect(rows[1]!.querySelector('[role="combobox"]')).toBeNull();
+    expect(buttonNamed('转移记录', rows[1]!)).toBeFalsy();
+    expect(buttonNamed('删除记录', rows[1]!)).toBeTruthy();
   });
 
-  it('接到这个文件直接发，目标默认是时长最接近的那个', async () => {
+  it('删除记录在最左，转移记录是这一行的主动作、排在最右', async () => {
+    serve({ '/api/orphan-records': orphans });
+    const host = await wrap(<OrphanRecordsCard toast={vi.fn()} />);
+    await settle();
+    const row = host.querySelector('[aria-label="文件已消失的作品"] tbody tr')!;
+    const order = actionOrder(buttonNamed('删除记录', row)!.parentElement);
+    expect(order[0]).toBe('删除记录');
+    expect(order.at(-1)).toBe('转移记录');
+    expect(buttonNamed('转移记录', row)!.className).toContain('bg-button-primary');
+  });
+
+  it('转移记录直接发，目标默认是时长最接近的那个', async () => {
     const server = serve({ '/api/orphan-records': orphans, '/api/orphan-records/attach': { ok: true, batch: 'user:reattach@1' } });
     const toast = vi.fn();
     const host = await wrap(<OrphanRecordsCard toast={toast} />);
     await settle();
-    await click(buttonNamed('Attach to this file', host));
+    await click(buttonNamed('转移记录', host));
     await settle();
     expect(server.posts('/api/orphan-records/attach')).toEqual([{ id: 7, target: 9 }]);
-    expect(toast).toHaveBeenCalledWith('Records attached to the new file, batch user:reattach@1');
+    expect(toast).toHaveBeenCalledWith('已将「ABC-123.mp4」的个人记录转移到「ABC-123.mkv」');
   });
 
-  /** 点第二条的「彻底删除」，交回弹层上写的与发出去的批量请求。 */
+  /** 点第二条的「删除记录」，交回弹层上写的与发出去的批量请求。 */
   async function purgeSecond(answer: boolean) {
     const seen = confirmWith(answer);
     const server = serve({ '/api/orphan-records': orphans, '/api/batch': { ok: true, purged: 1, blocked: [] } });
     const host = await wrap(<OrphanRecordsCard toast={vi.fn()} />);
     await settle();
-    await click(buttonNamed('Delete permanently', host.querySelectorAll('[aria-label="Works whose files are gone"] tbody tr')[1]!));
+    await click(buttonNamed('删除记录', host.querySelectorAll('[aria-label="文件已消失的作品"] tbody tr')[1]!));
     await settle();
     return { seen, posts: server.posts('/api/batch') };
   }
 
-  it('彻底删除是危险确认，正文写明不可撤销，确认了才发批量删除', async () => {
+  it('删除记录需危险确认，正文写明不可撤销，确认了才发批量删除', async () => {
     const { seen, posts } = await purgeSecond(true);
     expect(seen[0]!.danger).toBe(true);
-    expect(seen[0]!.body).toBe('"海边.mp4" and its records (Watch later 1 · Played) will be deleted. This cannot be undone.');
+    expect(seen[0]!.body).toBe('将删除「海边.mp4」的作品记录及其个人记录（稍后看 1 · 播放过）。此操作不可撤销。');
     expect(posts).toEqual([{ ids: [12], operation: 'delete' }]);
   });
 
@@ -515,18 +568,62 @@ describe('孤儿记录', () => {
     await click(buttonNamed('Next', host));
     await click(host.querySelector('input[aria-label="Select 作品 20"]'));
     confirmWith(false);
-    await click(buttonNamed('Delete selected permanently (2)', host));
+    await click(buttonNamed('删除所选记录（2）', host));
     expect(server.posts('/api/batch')).toEqual([]);
     const seen = confirmWith(true);
-    await click(buttonNamed('Delete selected permanently (2)', host));
+    await click(buttonNamed('删除所选记录（2）', host));
     await settle();
     expect(seen[0]!.items).toEqual(['作品 0', '作品 20']);
     expect(server.posts('/api/batch')).toEqual([{ ids: [30, 50], operation: 'delete' }]);
-    expect(toast).toHaveBeenCalledWith('Permanently deleted 1 records; 1 files were restored and not deleted');
+    expect(toast).toHaveBeenCalledWith('已删除 1 条作品记录及其个人记录；1 条文件已恢复，记录未删除');
   });
 });
 
 describe('整理', () => {
+  it('每个参数都能插入模板，默认追加到文件名并把光标留在参数后', async () => {
+    serve({ '/api/organize': organizeIdle });
+    queryClient.setQueryData(['organize'], organizeIdle);
+    const host = await wrap(<OrganizeCard toast={vi.fn()} failure={vi.fn()} />);
+    const file = host.querySelector<HTMLInputElement>('input[placeholder="{code}[ {title}]"]')!;
+    for (const { key, label } of organizeIdle.placeholders) {
+      const before = file.value;
+      await click(host.querySelector(`button[aria-label="${label} {${key}}"]`));
+      expect(file.value).toBe(`${before}{${key}}`);
+      expect(document.activeElement).toBe(file);
+      expect(file.selectionStart).toBe(file.value.length);
+    }
+  });
+
+  it('参数替换目录模板的选区，连续插入沿用光标，不改变文件名', async () => {
+    serve({ '/api/organize': organizeIdle });
+    queryClient.setQueryData(['organize'], organizeIdle);
+    const host = await wrap(<OrganizeCard toast={vi.fn()} failure={vi.fn()} />);
+    const dir = host.querySelector<HTMLInputElement>('input[placeholder="留空表示原地改名"]')!;
+    await type(dir, '厂牌/作品');
+    await act(async () => { dir.focus(); dir.setSelectionRange(3, 5) });
+    await click(host.querySelector('button[aria-label="番号 {code}"]'));
+    expect(dir.value).toBe('厂牌/{code}');
+    await click(host.querySelector('button[aria-label="标题 {title}"]'));
+    expect(dir.value).toBe('厂牌/{code}{title}');
+    expect(document.activeElement).toBe(dir);
+    expect(host.querySelector<HTMLInputElement>('input[placeholder="{code}[ {title}]"]')!.value).toBe('{code}');
+  });
+
+  it('套用模板替换两个输入框，编辑参数后需要重新预览', async () => {
+    const server = organizeServer();
+    queryClient.setQueryData(['organize'], organizeIdle);
+    const host = await wrap(<OrganizeCard toast={vi.fn()} failure={vi.fn()} />);
+    await click(buttonNamed('预览', host));
+    await settle();
+    expect(buttonNamed('执行整理', host)).not.toBeNull();
+    await click(buttonNamed('番号 + 标题', host));
+    expect(buttonNamed('执行整理', host)).toBeNull();
+    expect(host.querySelector<HTMLInputElement>('input[placeholder="{code}[ {title}]"]')!.value).toBe('{code}[ {title}]');
+    expect(host.querySelector<HTMLInputElement>('input[placeholder="留空表示原地改名"]')!.value).toBe('{studio}');
+    await click(host.querySelector('button[aria-label="标题 {title}"]'));
+    expect(host.querySelector<HTMLInputElement>('input[placeholder="{code}[ {title}]"]')!.value).toBe('{code}[ {title}]{title}');
+    expect(server.posts('/api/organize/apply')).toEqual([]);
+  });
   const plan = {
     counts: { change: 2, unchanged: 5 }, reasons: { 缺番号: 1 }, truncated: false,
     rows: [
@@ -549,13 +646,13 @@ describe('整理', () => {
     const server = organizeServer();
     queryClient.setQueryData(['organize'], organizeIdle);
     const host = await wrap(<OrganizeCard toast={vi.fn()} failure={vi.fn()} />);
-    const file = host.querySelector<HTMLInputElement>('input[placeholder="{number}[ {title}]"]');
-    expect(file?.value).toBe('{number}');
-    await type(file, ' {number} {title} ');
-    await click(buttonNamed('Preview', host));
+    const file = host.querySelector<HTMLInputElement>('input[placeholder="{code}[ {title}]"]');
+    expect(file?.value).toBe('{code}');
+    await type(file, ' {code} {title} ');
+    await click(buttonNamed('预览', host));
     await settle();
     expect(server.posts('/api/organize/preview')).toEqual([
-      { location: 'local', file_template: '{number} {title}', dir_template: '' },
+      { location: 'local', path: '', file_template: '{code} {title}', dir_template: '' },
     ]);
     expect(server.posts('/api/settings')).toEqual([]);
     expect(host.textContent).toContain('2 files will be renamed or moved, 5 already have the target name; skipped 缺番号 1.');
@@ -572,14 +669,74 @@ describe('整理', () => {
     await settle();
     await click(buttonNamed('Organize', host));
     await settle();
-    expect(seen.map((options) => options.title)).toEqual(['Organize files by template']);
-    expect(seen[0]!.body).toContain('File names and folders of "Local"');
+    expect(seen.map((options) => options.title)).toEqual(['整理文件']);
+    expect(seen[0]!.body).toContain('「本地」上的文件名与目录');
     expect(server.posts('/api/organize/apply')).toEqual([
-      { location: 'local', file_template: '{number}', dir_template: '', confirm: true },
+      { location: 'local', path: '', file_template: '{code}', dir_template: '', confirm: true },
     ]);
     expect(server.posts('/api/settings')).toEqual([
-      { organizeTemplates: { local: { file: '{number}', dir: '' } } },
+      { organizeTemplates: { local: { file: '{code}', dir: '' } } },
     ]);
+  });
+
+  it('路径选择与输入共用预览范围；编辑路径后须重新预览', async () => {
+    const seen = confirmWith(true);
+    const server = serve({
+      '/api/organize': { ...organizeIdle, status: 'running' },
+      '/api/organize/preview': plan,
+      '/api/organize/apply': { status: 'running', job_id: 'scoped-1' },
+      '/api/pick-folder': { path: 'R:\\media\\合集' },
+      '/api/settings': { ok: true },
+    });
+    queryClient.setQueryData(['organize'], organizeIdle);
+    const host = await wrap(<OrganizeCard toast={vi.fn()} failure={vi.fn()} />);
+    const path = host.querySelector<HTMLInputElement>('input[name="organize-path"]');
+    await click(host.querySelector('[aria-label="选择整理路径"]'));
+    await settle();
+    expect(server.posts('/api/pick-folder')).toEqual([{ initial: 'R:\\media' }]);
+    expect(path?.value).toBe('R:\\media\\合集');
+    await click(buttonNamed('预览', host));
+    await settle();
+    expect(server.posts('/api/organize/preview')[0]).toMatchObject({ path: 'R:\\media\\合集' });
+    await type(path, 'R:\\media\\其他');
+    expect(buttonNamed('执行整理', host)).toBeNull();
+    await click(buttonNamed('预览', host));
+    await settle();
+    await click(buttonNamed('执行整理', host));
+    await settle();
+    expect(seen[0]?.body).toContain('R:\\media\\其他');
+    expect(server.posts('/api/organize/apply')[0]).toMatchObject({ path: 'R:\\media\\其他', confirm: true });
+  });
+
+  it('取消目录选择保留输入；切换来源清空路径和预览', async () => {
+    const data = { ...organizeIdle, locations: [...organizeIdle.locations, { location: '115', roots: ['B:\\'] }] };
+    serve({ '/api/organize': data, '/api/organize/preview': plan, '/api/pick-folder': { path: null } });
+    queryClient.setQueryData(['organize'], data);
+    const host = await wrap(<OrganizeCard toast={vi.fn()} failure={vi.fn()} />);
+    const path = host.querySelector<HTMLInputElement>('input[name="organize-path"]');
+    await type(path, 'R:\\media\\合集');
+    await click(host.querySelector('[aria-label="选择整理路径"]'));
+    await settle();
+    expect(path?.value).toBe('R:\\media\\合集');
+    await click(buttonNamed('预览', host));
+    await settle();
+    await choose(host.querySelector('[aria-label="整理哪个来源"]'), '115');
+    expect(path?.value).toBe('');
+    expect(buttonNamed('执行整理', host)).toBeNull();
+  });
+
+  it('底栏回滚在左、预览居中、执行整理在最右；只有执行整理在场时预览才退成次级', async () => {
+    organizeServer({ ...organizeIdle, last_batch: 'batch-9' });
+    queryClient.setQueryData(['organize'], { ...organizeIdle, last_batch: 'batch-9' });
+    const host = await wrap(<OrganizeCard toast={vi.fn()} failure={vi.fn()} />);
+    const footer = () => host.querySelector('[data-cleanup-organize] footer');
+    expect(actionOrder(footer())).toEqual(['回滚上一批', '预览']);
+    expect(buttonNamed('预览', host)!.className).toContain('bg-button-primary');
+    await click(buttonNamed('预览', host));
+    await settle();
+    expect(actionOrder(footer())).toEqual(['回滚上一批', '预览', '执行整理']);
+    expect(buttonNamed('预览', host)!.className).not.toContain('bg-button-primary');
+    expect(buttonNamed('执行整理', host)!.className).toContain('bg-button-primary');
   });
 
   it('有上一批才给回滚；回滚也先确认，取消就不发', async () => {

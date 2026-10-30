@@ -11,13 +11,15 @@ import unittest
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 from peach.follow import FollowHistoryEnd, FollowSourceError, FollowSourceRateLimited
 from peach.follow_check import plan_check, run_check
 from peach.follow_stream import FollowMediaResolver
 from peach.follow_secrets import CredentialError
-from peach.follow_sources import FollowCandidate, SourceFetch, _BaseConnector
+from peach.follow_sources import FanboxConnector, FollowCandidate, SourceFetch, _BaseConnector
 from peach.follow_store import FollowStore
+from peach.http import HttpResponse
 from support.ledger import fresh_ledger
 
 
@@ -566,6 +568,66 @@ class InitialHistoryTests(_CheckCase):
         self.assertEqual(row['backfill_page'], 2)
         self.assertEqual(json.loads(row['metadata_json'])['initial_history_after'],
                          (start - timedelta(days=40 + 11)).isoformat())
+
+    def test_fanbox_initial_history_archives_identical_posts_from_distinct_urls(self):
+        source = self._register()
+        history_url = 'https://api.fanbox.cc/post.listCreator?creatorId=ffxivinitiala&firstId=2'
+        body = json.dumps({'body': {'posts': [
+            {'id': str(index), 'title': f'作品 {index}', 'feeRequired': 0,
+             'publishedDatetime': '2026-09-02T00:00:00Z'} for index in (2, 1)
+        ]}}).encode()
+        seen = []
+
+        def transport(request, timeout, max_bytes):
+            seen.append(request.url)
+            if 'paginateCreator' in request.url:
+                return HttpResponse(200, {}, json.dumps(
+                    {'body': {'pageUrls': [history_url]}}).encode())
+            return HttpResponse(200, {}, body)
+
+        connector = FanboxConnector(transport=transport, enrich_budget=0)
+        result = self._run(source, connector, initial_days=30)
+        self.assertTrue(result.ok)
+        self.assertEqual(result.outcome.added, 2)
+        self.assertEqual(len(self.store.items(source_id=source)), 2)
+        row = self._row(source)
+        self.assertEqual(row['last_status'], 'ok')
+        self.assertEqual(row['backfill_page'], 1)
+        self.assertEqual(json.loads(row['metadata_json'])['initial_history_floor'], 0)
+        snapshots = list((self.root / 'sources').rglob('*.raw'))
+        self.assertEqual(len(snapshots), 2)
+        self.assertTrue(all(path.read_bytes() == body for path in snapshots))
+        urls = {json.loads(path.with_suffix('.json').read_text(encoding='utf-8'))['request_url']
+                for path in snapshots}
+        self.assertEqual(urls, {seen[0], history_url})
+        again = self._run(source, connector, initial_days=30)
+        self.assertTrue(again.ok)
+        self.assertEqual(again.outcome.added, 0)
+        self.assertEqual(len(self.store.items(source_id=source)), 2)
+        self.assertEqual(len(list((self.root / 'sources').rglob('*.raw'))), 2)
+
+    def test_a_history_evidence_conflict_records_a_source_failure_and_keeps_saved_items(self):
+        source = self._register()
+        pages = {page: _fetch(request_url=f'https://api.fanbox.cc/page/{page}',
+                              raw_body=f'page {page}'.encode(),
+                              candidates=_dated(f'p{page}', 2, MOMENT, provider='fanbox'))
+                 for page in (0, 1)}
+        persist = self.store._persist_evidence
+
+        def evidence(fetch, moment):
+            if fetch.request_url.endswith('/1'):
+                raise FollowSourceError('immutable follow snapshot collision')
+            return persist(fetch, moment)
+
+        with mock.patch.object(self.store, '_persist_evidence', evidence):
+            result = self._run(source, _PagedConnector(pages), initial_days=30)
+        self.assertFalse(result.ok)
+        self.assertEqual(result.status, 'error')
+        self.assertIn('immutable follow snapshot collision', result.error)
+        self.assertEqual({item.external_id for item in self.store.items(source_id=source)},
+                         {'p0-0', 'p0-1'})
+        self.assertEqual(self._row(source)['last_status'], 'error')
+        self.assertEqual(self._row(source)['backfill_page'], 0)
 
     def test_the_top_up_stops_quietly_at_the_end_of_history(self):
         source = self._register(provider='kemono', ref='fanbox/1', url='https://kemono.cr/fanbox/user/1')

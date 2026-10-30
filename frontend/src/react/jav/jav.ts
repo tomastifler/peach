@@ -2,7 +2,7 @@ import { apiGet } from '../../api';
 import { queryClient } from '../query';
 import { fetchWants, WANTS_KEY } from '../wants/wants';
 import type { FaceRef, CoverItem } from '@peach/card-art';
-import { coverImage, javArtwork } from '@peach/card-art';
+import { coverImage, javArtwork, remoteCoverUrl } from '@peach/card-art';
 import { esc } from '@peach/legacy/core';
 import type { DiscoveryDirection, DiscoverySort } from './discovery-sorts';
 
@@ -39,9 +39,11 @@ export function fetchDiscoveries(scope: DiscoveryScope, signal: AbortSignal, opt
 
 export function discoveryArtwork(item: Discovery, layout: 'big' | 'small', javImage: unknown): string {
   const local = javArtwork({ ...item, is_jav: true }, layout, false, javImage);
-  if (local.html || !item.cover_url) return local.html;
+  if (local.html || !item.cover_url || !item.code) return local.html;
+  const remote = esc(remoteCoverUrl(item));
   return coverImage(item, layout).replace(/ src="[^"]*"/,
-    ` src="${esc(item.cover_url)}" referrerpolicy="no-referrer" data-jav-image="${item.id}" data-jav-cover="${esc(item.cover_url)}" data-jav-thumb="" data-jav-image-layout="${layout}"${layout === 'big' ? ' data-panel-prior="1"' : ''}`);
+    ` src="${remote}" data-jav-image="${item.id}" data-jav-cover="${remote}" data-jav-thumb="" data-jav-image-layout="${layout}"${layout === 'big' ? ' data-panel-prior="1"' : ''}`)
+    .replace('data-drop="self"', 'data-drop="initial" data-initial="封面未取得" data-drop-class="media-nopic"');
 }
 
 export async function prefetchJav(tab: string, signal: AbortSignal) {

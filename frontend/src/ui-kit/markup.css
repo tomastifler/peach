@@ -71,7 +71,7 @@ input[type=checkbox]:not([data-toggle]):not(.ui-pcheck input):not(.peach-react i
    butt 端点会把它渲染成看不见的薄片，横幅上只剩上半截竖杠，警告读成了半个符号。
    只认直接子元素：带进度时横幅里那一枚是 `.ui-geist-gauge` 的圆环，它的端点是弧的
    两头而不是字形笔画，跟着一起圆掉就成了另一种控件的长相。 */
-.ui-project-banner>div>svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:2;
+.ui-project-banner>div>svg{width:var(--icon-inline);height:var(--icon-inline);flex:none;fill:none;stroke:currentColor;stroke-width:2;
   stroke-linecap:round;stroke-linejoin:round}
 .ui-project-banner>a{color:inherit;text-decoration:underline;text-underline-offset:5px;font-weight:500;flex:none}
 .ui-project-banner-error{--feedback-color:var(--drop)}

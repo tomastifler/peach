@@ -54,8 +54,27 @@ def assert_av1_decoder(ffmpeg: Path, root: Path) -> None:
 
 
 def assert_public_resources(application: Path) -> None:
-    """发行资源不包含本机实体导出。"""
-    assert not (application / "_internal/resources/seed").exists(), "发行包包含私有实体导出"
+    """发行资源包含完整的公共实体种子包。"""
+    path = application / "_internal/resources/seed/entities.json"
+    assert path.is_file(), "发行包缺少公共实体种子"
+    pack = json.loads(path.read_text(encoding="utf-8"))
+    assert pack.get("format") == 2 and pack.get("source") == "auto:seed", "公共实体种子格式无效"
+    expected = pack.pop("content_sha256", None)
+    content = json.dumps(pack, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False)
+    assert expected == hashlib.sha256(content.encode('utf-8')).hexdigest(), "公共实体种子摘要不一致"
+
+
+def assert_amane_runtime(opener, base: str, runtime: Path) -> None:
+    """空数据目录使用随包采集工具，实际服务返回相同的固定版本与程序路径。"""
+    from build_amane_runtime import verify
+    verify(runtime)
+    manifest = json.loads((runtime / 'manifest.json').read_text(encoding='utf-8'))
+    with opener.open(base + '/api/scraping/amane-bridge', timeout=15) as response:
+        facts = json.load(response)
+    assert facts['installed'] and not facts['problem'], facts
+    assert facts['revision'] == manifest['revision'], facts
+    assert facts['installed_version'] == manifest['version'], facts
+    assert Path(facts['python']).resolve() == (runtime / manifest['executable']).resolve(), facts
 
 
 def assert_bundled_media_tools(application: Path) -> None:
@@ -436,6 +455,7 @@ def main() -> int:
                     headers={"Origin": base})
                 with opener.open(login, timeout=10) as response:
                     assert response.status == 200
+                assert_amane_runtime(opener, base, executable.parent / '_internal/tools/amane-runtime')
                 for path in ("/", "/app.css", "/dist/peach-app.js", "/dist/peach-app.css", "/api/items"):
                     with opener.open(base + path, timeout=10) as response:
                         assert response.status == 200, path
@@ -459,7 +479,7 @@ def main() -> int:
                 assert (data / "config.previous.toml").is_file()
                 assert (data / "state" / "configuration-reload.request").is_file()
                 print(json.dumps({"ok": True, "version": health.get("version"),
-                                  "checks": ["oobe", "migrations", "lan-bind", "mdns", "password-login", "unauthenticated-api", "pages", "island", "items", "clouddrive-configuration", "cloudflared-sidecar", "bundled-media-tools", "public-resources"]}))
+                                  "checks": ["oobe", "migrations", "lan-bind", "mdns", "password-login", "unauthenticated-api", "pages", "island", "items", "clouddrive-configuration", "cloudflared-sidecar", "bundled-media-tools", "bundled-amane-runtime", "public-resources"]}))
             finally:
                 process.terminate()
                 process.wait(timeout=15)

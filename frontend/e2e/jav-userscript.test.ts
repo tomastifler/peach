@@ -11,15 +11,20 @@ interface Site {
 const MANIFEST: { version: number; sites: Site[] } = JSON.parse(readFileSync(
   new URL('../../web/integrations/jav-sites.json', import.meta.url), 'utf8'));
 const SCRIPT = readFileSync(new URL('../../web/integrations/peach-jav.user.js', import.meta.url), 'utf8');
+const VERSION: string = JSON.parse(readFileSync(
+  new URL('../../web/integrations/jav-userscript-release.json', import.meta.url), 'utf8')).version;
+const RELEASE_META = 'https://update.sleazyfork.org/scripts/600821/Peach%20%C2%B7%20JAV%20%E5%85%A5%E5%BA%93.meta.js';
 const TOKEN = 'test-only-peach-jav-secret-8b4d';
 const BASE = 'https://peach.example.invalid';
 const ROOT = '#peach-jav-action';
 type State = 'idle' | 'queued' | 'searching' | 'submitted' | 'ingested' | 'owned' | 'failed' | 'no_match';
 type Body = { ok: boolean; code: string; state: State; message: string };
 type Call = { method: string; url: string; headers: Record<string, string>; anonymous: boolean; data?: string };
-type MockRequest = Call & { onload(value: unknown): void; ontimeout(): void; onerror(): void };
+type MockRequest = Call & { onload(value: unknown): void; ontimeout(): void; onerror(): void; onabort?(): void };
 type Mock = {
   calls: Call[];
+  reports: MockRequest[];
+  updates: Call[];
   pending: MockRequest[];
   values: Record<string, string>;
   menu?: () => void;
@@ -34,7 +39,7 @@ function body(state: State, code = 'SSIS-057'): Body {
 }
 
 async function open(browser: Browser, options: {
-  url?: string; title?: string; html?: string; configured?: boolean; viewport?: typeof VIEWPORTS[number]; initial?: State; script?: string;
+  url?: string; title?: string; html?: string; configured?: boolean; viewport?: typeof VIEWPORTS[number]; initial?: State; script?: string; resolved?: string;
 } = {}) {
   const viewport = options.viewport || VIEWPORTS[0]!;
   const context = await browser.newContext({ viewport: { width: viewport.width, height: viewport.height } });
@@ -45,9 +50,9 @@ async function open(browser: Browser, options: {
   await context.route('**/*', route => route.fulfill({
     contentType: 'text/html; charset=utf-8', body: `<!doctype html><html><head><meta charset="utf-8"><title>${options.title || 'SSIS-057 作品详情'}</title></head><body>${options.html ?? '<h1>SSIS-057 作品详情</h1>'}</body></html>`,
   }));
-  await page.addInitScript(({ configured, token, base, initial }) => {
+  await page.addInitScript(({ configured, token, base, initial, resolved, version, releaseMeta }) => {
     const mock: Mock = {
-      calls: [], pending: [], automatic: true, menus: {},
+      calls: [], reports: [], updates: [], pending: [], automatic: true, menus: {},
       values: configured ? { 'peach.jav.base': base, 'peach.jav.token': token } : {},
       reply(index, value, status = 200) {
         mock.pending[index]!.onload({ status, responseText: JSON.stringify(value) });
@@ -57,31 +62,88 @@ async function open(browser: Browser, options: {
     Object.assign(window, {
       GM_getValue: (key: string, fallback: string) => mock.values[key] ?? fallback,
       GM_setValue: (key: string, value: string) => { mock.values[key] = value; },
+      GM_info: { script: { version } },
       GM_registerMenuCommand: (label: string, callback: () => void) => { mock.menu = callback; mock.menus[label] = callback; },
       GM_xmlhttpRequest: (request: MockRequest) => {
-        mock.calls.push({ method: request.method, url: request.url, headers: request.headers,
-          anonymous: request.anonymous, ...(request.data ? { data: request.data } : {}) });
+        if (new URL(request.url).pathname === '/api/jav-browser/people') {
+          setTimeout(() => request.onload({ status: 200, responseText: JSON.stringify({
+            ok: true, source: 'local-cache', items: Object.fromEntries(
+              new URL(request.url).searchParams.get('codes')!.split(',').map(code => [code, []])),
+          }) }), 0);
+          return { abort: () => request.onabort?.() };
+        }
+        if (request.url.endsWith('/api/jav-browser/errors')) { mock.reports.push(request); return; }
+        const call = { method: request.method, url: request.url, headers: request.headers,
+          anonymous: request.anonymous, ...(request.data ? { data: request.data } : {}) };
+        // 更新读取使用独立响应契约，不占用影片查询与提交的编号。
+        if (request.url === releaseMeta || request.url.endsWith('/api/jav-browser/updates')) {
+          mock.updates.push(call);
+          const timer = setTimeout(() => request.onload({ status: 200, finalUrl: request.url,
+            responseText: request.url === releaseMeta
+              ? `// ==UserScript==\n// @name Peach Userscript\n// @namespace https://github.com/peach-mitao/peach-userscript\n// @version ${version}\n// ==/UserScript==`
+              : JSON.stringify({ runtime: { version: '1.0.0', build_id: 'fixture' }, release: { state: 'current' },
+                userscript: { version, minimum_version: '0.5.1', install_url: '/integrations/peach-jav.user.js' } }) }), 0);
+          return { abort: () => { clearTimeout(timer); request.onabort?.(); } };
+        }
+        mock.calls.push(call);
         mock.pending.push(request);
         if (mock.automatic) setTimeout(() => {
-          const code = new URL(request.url).searchParams.get('code') || 'SSIS-057';
+          const code = new URL(request.url).searchParams.get('code') || resolved || 'SSIS-057';
           request.onload({ status: 200, responseText: JSON.stringify({ ok: true, code, state: initial, message: initial }) });
         }, 0);
       },
     });
-  }, { configured: options.configured !== false, token: TOKEN, base: BASE, initial: options.initial || 'idle' });
+  }, { configured: options.configured !== false, token: TOKEN, base: BASE, initial: options.initial || 'idle', resolved: options.resolved,
+    version: VERSION, releaseMeta: RELEASE_META });
   await page.goto(options.url || 'https://missav.ws/en/ssis-057?private=value#player');
   await page.clock.install();
   await page.addScriptTag({ content: options.script ?? SCRIPT });
-  return { page, problems, close: () => context.close() };
+  return { page, problems, close: async () => {
+    try {
+      const { updates, values } = await page.evaluate(() => ({ updates: window.javMock.updates, values: window.javMock.values }));
+      for (const call of updates) {
+        assert.equal(call.method, 'GET');
+        assert.equal(call.anonymous, true);
+        assert.equal(call.data, undefined);
+        if (call.url === RELEASE_META) {
+          assert.deepEqual(call.headers, { Accept: 'text/plain' });
+        } else {
+          assert.equal(call.url, `${values['peach.jav.base']}/api/jav-browser/updates`);
+          assert.deepEqual(call.headers, { Accept: 'application/json', Authorization: `Bearer ${values['peach.jav.token']}` });
+        }
+        assert.equal(call.url.includes(TOKEN), false);
+      }
+    } finally { await context.close(); }
+  } };
 }
 
-const button = (page: Page) => page.locator(ROOT).getByRole('button');
-async function ready(page: Page, name = '加入 Peach') {
+const button = (page: Page) => page.locator(ROOT).locator('[data-action="add"]');
+const settingsDialog = (page: Page) => page.locator('#peach-jav-settings').getByRole('dialog');
+async function unpairedStorage(page: Page) {
+  const values = await page.evaluate(() => window.javMock.values);
+  const {
+    'peach.jav.installed-version': installed,
+    'peach.jav.update-attempted-at': attempted,
+    'peach.jav.updates': updates,
+    ...pairing
+  } = values;
+  assert.equal(installed, VERSION);
+  if (attempted !== undefined) assert.match(attempted, /^\d+$/);
+  if (updates !== undefined) assert.deepEqual(JSON.parse(updates), { script: { version: VERSION } });
+  return pairing;
+}
+async function fillSettings(page: Page, base: string, token: string) {
+  const dialog = settingsDialog(page);
+  await dialog.getByLabel('Peach 地址', { exact: true }).fill(base);
+  await dialog.getByLabel('专用令牌', { exact: true }).fill(token);
+  await dialog.getByRole('button', { name: '保存设置', exact: true }).click();
+}
+async function ready(page: Page, name = '加入 Peach 馆藏') {
   await page.waitForFunction(({ root, label }) => {
-    const button = document.querySelector(root)?.shadowRoot?.querySelector('button');
+    const button = document.querySelector(root)?.shadowRoot?.querySelector('[data-action="add"]');
     return button?.textContent === label && button.getAttribute('aria-busy') === 'false';
   }, { root: ROOT, label: name }, { timeout: 15_000 }).catch(async error => {
-    const panel = await page.locator(ROOT).evaluate(root => ({ button: root.shadowRoot?.querySelector('button')?.textContent,
+    const panel = await page.locator(ROOT).evaluate(root => ({ button: root.shadowRoot?.querySelector('[data-action="add"]')?.textContent,
       status: root.shadowRoot?.querySelector('p')?.textContent,
       fields: [...document.querySelectorAll('dt, dd')].map(field => ({ name: field.tagName, text: field.textContent })) })).catch(() => '未取得');
     throw new Error(`${(error as Error).message}\n${JSON.stringify(panel)}`);
@@ -101,11 +163,13 @@ async function selectCode(page: Page) {
     const selection = window.getSelection()!;
     selection.removeAllRanges();
     selection.addRange(range);
-    window.javMock.menus['选中番号加入 Peach']!();
+    window.javMock.menus['开启']!();
   });
 }
 
-const AUTOMATIC: Record<string, { path: string; title: string; html: string; source?: string }> = {
+const AUTOMATIC: Record<string, { path: string; title: string; html: string; source?: string; code?: string }> = {
+  dmm: { path: '/av/content/?id=ssis00519&private=secret#player', source: '/av/content/?id=ssis00519', code: 'SSIS-519', title: '作品详情', html: '<h1>作品详情</h1>' },
+  mgs: { path: '/product/product_detail/300MIUM-1239/', code: '300MIUM-1239', title: '作品详情', html: '<h1>作品详情</h1>' },
   missav: { path: '/en/ssis-057', title: 'SSIS-057', html: '<h1>SSIS-057 作品</h1>' },
   jable: { path: '/videos/ssis-057/', title: 'Jable', html: '<div class="video-info"><h4>SSIS-057 作品</h4></div>' },
   'jav-guru': { path: '/12345/ssis-057-detail/', title: 'JAV.guru', html: '<h1 class="entry-title">[SSIS-057] 作品</h1>' },
@@ -143,7 +207,7 @@ describe('JAV 用户脚本', () => {
       const submitted = await page.evaluate(() => JSON.parse(window.javMock.calls[1]!.data!));
       assert.deepEqual(submitted, { code: 'SSIS-057', source_url: 'https://javdb.com/v/ABP123' });
       await reply(page, 1, body('owned'));
-      await ready(page, '馆藏已有');
+      await ready(page, '已有该影片');
       assert.deepEqual(opened.problems, []);
     } finally { await opened.close(); }
   });
@@ -153,20 +217,24 @@ describe('JAV 用户脚本', () => {
       it(`${site.label} 自动识别 ${domain} 的明确作品身份`, async () => {
         const fixture = AUTOMATIC[site.id];
         assert.ok(fixture, `${site.id} 需要作品详情夹具`);
+        const code = fixture.code || 'SSIS-057';
         const opened = await open(browser, { url: `https://${domain}${fixture.path}`,
-          title: fixture.title, html: fixture.html + '<aside><h2>推荐 ABW-123</h2><a href="/ABW-123">ABW-123</a></aside>' });
+          title: fixture.title, resolved: code, html: fixture.html + '<aside><h2>推荐 ABW-123</h2><a href="/ABW-123">ABW-123</a></aside>' });
         const { page } = opened;
         try {
           await ready(page);
           const lookup = await page.evaluate(() => window.javMock.calls[0]!);
-          assert.equal(new URL(lookup.url).searchParams.get('code'), 'SSIS-057');
+          if (fixture.code) {
+            assert.equal(new URL(lookup.url).pathname, '/api/jav-browser/identify');
+            assert.equal(new URL(lookup.url).searchParams.get('source_url'), `https://${domain}${fixture.source || fixture.path}`);
+          } else assert.equal(new URL(lookup.url).searchParams.get('code'), code);
           await page.evaluate(() => { window.javMock.automatic = false; });
           await button(page).click();
           await pending(page, 2);
           const submitted = await page.evaluate(() => JSON.parse(window.javMock.calls[1]!.data!));
-          assert.deepEqual(submitted, { code: 'SSIS-057', source_url: `https://${domain}${fixture.source || fixture.path}` });
-          await reply(page, 1, body('owned'));
-          await ready(page, '馆藏已有');
+          assert.deepEqual(submitted, { code, source_url: `https://${domain}${fixture.source || fixture.path}` });
+          await reply(page, 1, body('owned', code));
+          await ready(page, '已有该影片');
           assert.deepEqual(opened.problems, []);
         } finally { await opened.close(); }
       });
@@ -194,7 +262,7 @@ describe('JAV 用户脚本', () => {
           assert.deepEqual(submitted, { code: 'SSIS-057', source_url: site.id === 'dmm'
             ? `https://${domain}/av/content/?id=opaque_cid` : `https://${domain}/products/opaque` });
           await reply(page, 1, body('owned'));
-          await ready(page, '馆藏已有');
+          await ready(page, '已有该影片');
           assert.deepEqual(opened.problems, []);
         } finally { await opened.close(); }
       });
@@ -202,17 +270,21 @@ describe('JAV 用户脚本', () => {
   }
 
   it('选中菜单拒绝完整标题、多番号、编解码器和超长内容', async () => {
-    const opened = await open(browser, { url: 'https://dmm.co.jp/av/content/?id=ssis00057',
+    const opened = await open(browser, { url: 'https://duga.jp/products/ssis00057',
       title: '商品详情', html: '<span id="selected-code"></span>' });
     const { page } = opened;
     let alerts = 0;
     page.on('dialog', dialog => { alerts++; void dialog.dismiss(); });
     try {
-      for (const value of ['', 'SSIS-057 作品标题', 'SSIS-057 ABW-123', 'H264', 'X1234', 'SSIS-057'.repeat(30)]) {
+      await selectCode(page);
+      await page.locator('#peach-jav-batch').getByRole('button', { name: '返回 Peach 主界面', exact: true }).click();
+      await page.locator('#peach-jav-batch').waitFor({ state: 'detached' });
+      for (const value of ['SSIS-057 作品标题', 'SSIS-057 ABW-123', 'H264', 'X1234', 'SSIS-057'.repeat(30)]) {
         await page.locator('#selected-code').evaluate((element, value) => { element.textContent = value; }, value);
         await selectCode(page);
       }
-      assert.equal(alerts, 6);
+      assert.equal(alerts, 0);
+      assert.match(await page.locator('#peach-jav-notice').getByRole('status').innerText(), /只选中一个完整/);
       assert.equal(await page.locator(ROOT).count(), 0);
       assert.equal(await page.evaluate(() => window.javMock.calls.length), 0);
     } finally { await opened.close(); }
@@ -232,7 +304,7 @@ describe('JAV 用户脚本', () => {
         await pending(page, 2);
         assert.equal(JSON.parse(await page.evaluate(() => window.javMock.calls[1]!.data!)).code, raw.toLowerCase());
         await reply(page, 1, body('owned', raw.toLowerCase()));
-        await ready(page, '馆藏已有');
+        await ready(page, '已有该影片');
       } finally { await opened.close(); }
     });
   }
@@ -257,7 +329,7 @@ describe('JAV 用户脚本', () => {
       await selectCode(page);
       await ready(page);
       assert.deepEqual(await page.evaluate(() => window.javMock.calls.map(call => call.method)), ['GET']);
-      assert.match(await page.locator(ROOT).getByRole('status').innerText(), /SSIS-057/);
+      assert.equal(await page.locator(ROOT).locator('header strong').innerText(), 'SSIS-057');
       await page.evaluate(() => { window.javMock.automatic = false; });
       await button(page).click();
       await pending(page, 2);
@@ -270,7 +342,7 @@ describe('JAV 用户脚本', () => {
       await reply(page, 1, body('owned'));
       await reply(page, 2, body('idle', 'ABW-123'));
       await ready(page);
-      assert.match(await page.locator(ROOT).getByRole('status').innerText(), /ABW-123/);
+      assert.equal(await page.locator(ROOT).locator('header strong').innerText(), 'ABW-123');
       assert.equal(await button(page).isDisabled(), false);
       assert.deepEqual(opened.problems, []);
     } finally { await opened.close(); }
@@ -312,22 +384,25 @@ describe('JAV 用户脚本', () => {
     const { page } = opened;
     try {
       await ready(page, '配置 Peach');
-      const dialogs = [BASE, TOKEN];
-      page.on('dialog', dialog => { void dialog.accept(dialogs.shift()); });
       await button(page).click();
+      await fillSettings(page, BASE, TOKEN);
       await ready(page);
       assert.equal(await page.evaluate(() => window.javMock.calls.length), 1);
+      await page.locator(ROOT).getByRole('button', { name: '展开 Peach 面板', exact: true }).click();
+      await ready(page);
+      assert.equal(await page.evaluate(() => window.javMock.calls.length), 2);
       await page.evaluate(() => { window.javMock.automatic = false; });
       await button(page).click();
       await page.locator(ROOT).evaluate(root => {
-        root.shadowRoot!.querySelector('button')!.click();
-        root.shadowRoot!.querySelector('button')!.click();
+        root.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="add"]')!.click();
+        root.shadowRoot!.querySelector<HTMLButtonElement>('[data-action="add"]')!.click();
       });
-      await pending(page, 2);
+      await pending(page, 3);
       const calls = await page.evaluate(() => window.javMock.calls);
       assert.equal(calls[0]!.method, 'GET');
-      assert.equal(calls[1]!.method, 'POST');
-      assert.deepEqual(JSON.parse(calls[1]!.data!), { code: 'SSIS-057', source_url: 'https://missav.ws/en/ssis-057' });
+      assert.equal(calls[1]!.method, 'GET');
+      assert.equal(calls[2]!.method, 'POST');
+      assert.deepEqual(JSON.parse(calls[2]!.data!), { code: 'SSIS-057', source_url: 'https://missav.ws/en/ssis-057' });
       for (const call of calls) {
         assert.equal(new URL(call.url).origin, BASE);
         assert.equal(call.anonymous, true);
@@ -342,17 +417,17 @@ describe('JAV 用户脚本', () => {
         storage: JSON.stringify(localStorage), cookies: document.cookie, url: location.href,
       }));
       assert.equal(JSON.stringify(surface).includes(TOKEN), false);
-      await reply(page, 1, body('queued'));
-      await page.clock.fastForward(2100);
-      await pending(page, 3);
-      await reply(page, 2, body('searching'));
+      await reply(page, 2, body('queued'));
       await page.clock.fastForward(2100);
       await pending(page, 4);
-      await reply(page, 3, body('submitted'));
+      await reply(page, 3, body('searching'));
       await page.clock.fastForward(2100);
       await pending(page, 5);
-      await reply(page, 4, body('ingested'));
-      await ready(page, '已入库');
+      await reply(page, 4, body('submitted'));
+      await page.clock.fastForward(2100);
+      await pending(page, 6);
+      await reply(page, 5, body('ingested'));
+      await ready(page, '已有该影片');
       assert.equal(await button(page).isDisabled(), true);
       assert.deepEqual(opened.problems, []);
     } finally { await opened.close(); }
@@ -392,7 +467,7 @@ describe('JAV 用户脚本', () => {
         const submitted = await page.evaluate(() => JSON.parse(window.javMock.calls[1]!.data!));
         assert.equal(submitted.code, example.extracted);
         await reply(page, 1, body('owned', example.canonical));
-        await ready(page, '馆藏已有');
+        await ready(page, '已有该影片');
         assert.equal(await button(page).isDisabled(), true);
         assert.deepEqual(opened.problems, []);
       } finally { await opened.close(); }
@@ -427,13 +502,12 @@ describe('JAV 用户脚本', () => {
       const { page } = opened;
       try {
         await ready(page, '配置 Peach');
-        const dialogs = [invalid.base, invalid.token];
-        page.on('dialog', dialog => { void dialog.accept(dialogs.shift()); });
         await button(page).click();
+        await fillSettings(page, invalid.base, invalid.token);
         await ready(page, '配置 Peach');
-        assert.deepEqual(await page.evaluate(() => window.javMock.values), {});
+        assert.deepEqual(await unpairedStorage(page), {});
         assert.equal(await page.evaluate(() => window.javMock.calls.length), 0);
-        assert.match(await page.locator(ROOT).getByRole('status').innerText(), /地址或令牌无效/);
+        assert.match(await settingsDialog(page).getByRole('alert').innerText(), /请输入/);
       } finally { await opened.close(); }
     });
   }
@@ -444,9 +518,8 @@ describe('JAV 用户脚本', () => {
       const { page } = opened;
       try {
         await ready(page, '配置 Peach');
-        const dialogs = [base, TOKEN];
-        page.on('dialog', dialog => { void dialog.accept(dialogs.shift()); });
         await button(page).click();
+        await fillSettings(page, base, TOKEN);
         await ready(page);
         const stored = await page.evaluate(() => window.javMock.values);
         assert.equal(stored['peach.jav.base'], base);
@@ -494,6 +567,7 @@ describe('JAV 用户脚本', () => {
       await ready(page, '查询 Peach 状态');
       await page.clock.fastForward(30_000);
       assert.equal(await page.evaluate(() => window.javMock.calls.length), 2);
+      assert.equal(await page.evaluate(() => window.javMock.reports.length), 1);
       await button(page).click();
       await pending(page, 3);
       await page.evaluate(() => window.javMock.pending[2]!.onerror());
@@ -501,12 +575,12 @@ describe('JAV 用户脚本', () => {
       await button(page).click();
       await pending(page, 4);
       await reply(page, 3, body('failed'));
-      await ready(page, '重试加入 Peach');
+      await ready(page, '重试加入 Peach 馆藏');
       await button(page).click();
       await pending(page, 5);
       assert.deepEqual(await page.evaluate(() => window.javMock.calls.map(call => call.method)), ['GET', 'POST', 'GET', 'GET', 'POST']);
       await reply(page, 4, body('no_match'));
-      await ready(page, '重试加入 Peach');
+      await ready(page, '重试加入 Peach 馆藏');
       assert.deepEqual(opened.problems, []);
     } finally { await opened.close(); }
   });
@@ -521,12 +595,12 @@ describe('JAV 用户脚本', () => {
       await pending(page, 2);
       await reply(page, 1, body('owned', 'ABW-123'));
       await ready(page, '查询 Peach 状态');
-      assert.match(await page.locator(ROOT).getByRole('status').innerText(), /状态无效/);
+      assert.match(await page.locator(ROOT).getByRole('status', { name: 'Peach 任务状态', exact: true }).innerText(), /状态无效/);
       await button(page).click();
       await pending(page, 3);
       await page.evaluate(() => window.javMock.reply(2, {}, 401));
       await ready(page, '查询 Peach 状态');
-      assert.match(await page.locator(ROOT).getByRole('status').innerText(), /令牌无效/);
+      assert.match(await page.locator(ROOT).getByRole('status', { name: 'Peach 任务状态', exact: true }).innerText(), /令牌无效/);
     } finally { await opened.close(); }
   });
 
@@ -547,7 +621,7 @@ describe('JAV 用户脚本', () => {
       await reply(page, 1, body('owned'));
       await reply(page, 2, body('idle', 'ABW-123'));
       await ready(page);
-      assert.match(await page.locator(ROOT).getByRole('status').innerText(), /ABW-123/);
+      assert.equal(await page.locator(ROOT).locator('header strong').innerText(), 'ABW-123');
       await page.addScriptTag({ content: SCRIPT });
       await page.clock.fastForward(1000);
       assert.equal(await page.locator(ROOT).count(), 1);
@@ -570,7 +644,7 @@ describe('JAV 用户脚本', () => {
     } finally { await opened.close(); }
   });
 
-  it('后台状态轮询有次数上限且不创建 POST，馆藏已有时不可加入', async () => {
+  it('后台状态轮询先 2 秒后 15 秒、满一小时停止且不创建 POST，馆藏已有时不可加入', async () => {
     const opened = await open(browser, { initial: 'queued' });
     try {
       await pending(opened.page, 1);
@@ -579,17 +653,24 @@ describe('JAV 用户脚本', () => {
         await opened.page.clock.fastForward(2100);
         await pending(opened.page, index + 2);
       }
-      await opened.page.clock.fastForward(10);
+      // 前 30 次之后改为 15 秒一次：2 秒时不再请求，满 15 秒才发下一次。
+      await opened.page.clock.fastForward(2100);
+      await opened.page.waitForTimeout(300);
+      assert.equal(await opened.page.evaluate(() => window.javMock.calls.length), 31);
+      await opened.page.clock.fastForward(13_000);
+      await pending(opened.page, 32);
+      // 跳过一小时期限：到点的那次等待结束后再查一次，随后停止并允许手动查询。
+      await opened.page.clock.fastForward(60 * 60_000);
+      await pending(opened.page, 33);
       await ready(opened.page, '查询 Peach 状态');
       const calls = await opened.page.evaluate(() => window.javMock.calls);
-      assert.equal(calls.length, 31);
       assert.ok(calls.every(call => call.method === 'GET'));
       await opened.page.clock.fastForward(60_000);
-      assert.equal(await opened.page.evaluate(() => window.javMock.calls.length), 31);
+      assert.equal(await opened.page.evaluate(() => window.javMock.calls.length), 33);
     } finally { await opened.close(); }
     const owned = await open(browser, { initial: 'owned' });
     try {
-      await ready(owned.page, '馆藏已有');
+      await ready(owned.page, '已有该影片');
       assert.equal(await button(owned.page).isDisabled(), true);
     } finally { await owned.close(); }
   });

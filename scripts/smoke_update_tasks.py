@@ -8,6 +8,7 @@ import http.cookiejar
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import socket
 import sqlite3
@@ -18,7 +19,14 @@ from smoke_desktop import complete_first_run, smoke_directory, smoke_environment
 
 
 def validate_installer_host():
-    assert os.environ.get('GITHUB_ACTIONS') == 'true', '安装包验收只允许在干净的 Actions runner 上运行'
+    gitlab_release = (os.environ.get('GITLAB_CI') == 'true'
+        and os.environ.get('CI_JOB_NAME') == 'smoke-windows'
+        and os.environ.get('CI_COMMIT_REF_PROTECTED') == 'true'
+        # 版本标签，或受保护 master 上版本提交的发布演练（ADR-0121）。
+        and (re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', os.environ.get('CI_COMMIT_TAG', ''))
+             or os.environ.get('PEACH_RELEASE_REHEARSAL') == '1'))
+    assert os.environ.get('GITHUB_ACTIONS') == 'true' or gitlab_release, (
+        '安装包验收仅允许 GitHub Actions 或受保护版本标签的 GitLab Windows 验收作业')
     import winreg
     key = r'Software\Microsoft\Windows\CurrentVersion\Uninstall\{02D9748A-78F6-4866-AC75-918177194DAB}_is1'
     try:

@@ -7,10 +7,9 @@
  *
  * 四枚视图由 state 决定，这一趟取数不改它们，所以现在就画成最终样子：`href` 是真地址，壳在宿主上
  * 委托接住点击。头像与标签只画占位，读数是一条宽度定死的微光。 */
-import type { CatalogView } from './react/catalog-filter/catalog-filter';
+import { rememberedTiers, type CatalogFilterProps, type CatalogView } from './react/catalog-filter/catalog-filter';
 import { islandShortcutsEntry } from './island-skeleton';
 import { filterControlsSkeletonHtml } from './filter-controls-skeleton';
-import type { CatalogFilterProps } from './react/catalog-filter/catalog-filter';
 
 /** 每排摆多少格，同岛里空馆藏占位的 `EMPTY_SLOTS`，由容器裁到可用宽度。 */
 const EMPTY_SLOTS = 64;
@@ -23,14 +22,18 @@ const slots = (html: string): string => html.repeat(EMPTY_SLOTS);
 export function catalogFilterSkeletonHtml(views: readonly CatalogView[], state: string, head?: Pick<CatalogFilterProps, 'sorts' | 'layout'>): string {
   const viewHtml = views.map((view) => `<a href="${esc(view.href)}" data-catalog-view="${esc(view.k)}"`
     + ` data-entity-press="" aria-pressed="${state === view.k}">${esc(view.label)}</a>`).join('');
+  /* 两排照本机上次画好时的结构：上次没人的那排取回后也是收起的。 */
+  const shape = rememberedTiers();
   return `<div class="peach-react"><div class="contents" data-catalog-root="" data-loading="">`
-    + `<div data-catalog-tiers="" aria-busy="true">`
-    + `<div data-catalog-tier="performers" data-skeleton="tiers">`
-    + slots('<span data-catalog-placeholder="performer" aria-hidden="true"><span></span><span>&nbsp;</span></span>')
-    + `</div><div data-catalog-tier="studios">`
-    + slots('<span data-catalog-placeholder="studio" aria-hidden="true"><span></span><span>&nbsp;</span></span>')
-    + `</div></div>`
-    + `<div role="group" aria-label="Filter and sort" data-filter-glass="" data-glass-pane="" data-filter-frame=""`
+    + `<div data-catalog-tiers="" aria-busy="true"${shape.performers || shape.studios ? '' : ' hidden'}>`
+    + (shape.performers ? `<div data-catalog-tier="performers" data-skeleton="tiers">`
+      + slots('<span data-catalog-placeholder="performer" aria-hidden="true"><span></span><span>&nbsp;</span></span>')
+      + `</div>` : '')
+    + (shape.studios ? `<div data-catalog-tier="studios">`
+      + slots('<span data-catalog-placeholder="studio" aria-hidden="true"><span></span><span>&nbsp;</span></span>')
+      + `</div>` : '')
+    + `</div>`
+    + `<div role="group" aria-label="筛选与排序" data-filter-glass="" data-glass-pane="" data-filter-frame=""`
     + ` data-catalog-frame="" class="sticky top-topbar z-10 mb-5.5 flex flex-col mx-4">`
     + `<div role="group" aria-label="Views and tags" data-filter-row="top"`
     + ` class="flex h-12 min-w-0 items-center overscroll-x-contain px-3 py-2 gap-1.5 overflow-visible">`

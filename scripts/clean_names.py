@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-文件名净化 —— 去掉盗版站塞进文件名的推广域名与残留噪声。
+文件名净化：清除推广域名、装饰符号、乱码字形与残留噪声。
 
 只做可逆、无歧义的改写。番号使用 Peach 的统一规范：大写、标准连字符、片商番号
 至少三位数字；FC2 统一为 ``FC2-PPV-<数字>``。
@@ -35,6 +35,7 @@ from peach.review_csv import write_rows
 from peach.catalog_rules import is_jav_code, normalise_code_key
 from peach.config import DATABASE_PATH, GENERATED_DIR, LOG_DIR
 from peach.media_sources import SCANNABLE_LOCATIONS
+from peach.organize_templates import clean_filename
 from peach.scripting import (
     add_ledger_write_args, open_for_write, open_readonly, verify_after_write,
 )
@@ -130,7 +131,7 @@ def propose(name: str, code: str | None = None,
     if not dot or not stem:           # 没有扩展名、或形如 ".mp4" 的空主干，都不碰
         return name
 
-    new = RE_PREFIX.sub("", name, count=1)
+    new = RE_PREFIX.sub("", clean_filename(name), count=1)
     new, bracket_domains = RE_BRACKET_DOMAIN.subn("", new)
     new = RE_SUFFIX.sub("", new)
     new = RE_ADCOPY.sub("", new)

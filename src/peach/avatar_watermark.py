@@ -25,7 +25,8 @@ r"""头像上的站点水印：检出、裁掉或修掉。
 from __future__ import annotations
 
 import hashlib
-import urllib.request
+import httpx
+from .peach_proxy import read_url
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -111,9 +112,8 @@ def ensure_model(path: Path | None = None, *, allow_download: bool = True) -> Pa
     target.parent.mkdir(parents=True, exist_ok=True)
     partial = target.with_suffix(target.suffix + ".part")
     try:
-        with urllib.request.urlopen(MODEL_URL, timeout=60) as response:
-            partial.write_bytes(response.read())
-    except OSError as error:
+        partial.write_bytes(read_url(MODEL_URL, timeout=60))
+    except (OSError, httpx.HTTPError) as error:
         partial.unlink(missing_ok=True)
         raise WatermarkModelUnavailable(f"Failed to fetch the text detection model: {error}") from error
     digest = _digest(partial)

@@ -8,7 +8,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { queryClient } from '../../src/react/query';
 import { WANT_PAGE_SIZE, WantList } from '../../src/react/wants/want-list';
 import type { Want, WantsData } from '../../src/react/wants/wants';
-import { buttonNamed, click, mount, settle, type } from './render';
+import { actionOrder, buttonNamed, click, mount, settle, type } from './render';
 
 afterEach(() => { queryClient.clear(); localStorage.clear() });
 notifyManager.setScheduler((notify) => notify());
@@ -72,8 +72,10 @@ it('按待找、未发售、暂时放弃、已入库分段，段名带条数；�
   expect([note(2), note(5), note(4), note(3), note(1)]).toEqual([
     undefined, undefined, 'Releases 2026-12-01', undefined, 'Added to library 2026-09-30',
   ]);
-  expect(buttonNamed('Search again', host.querySelector('[data-want-id="3"]')!)).not.toBeNull();
-  expect(buttonNamed('Search again', host.querySelector('[data-want-id="2"]')!)).toBeNull();
+  expect(buttonNamed('重新查找', host.querySelector('[data-want-id="3"]')!)).not.toBeNull();
+  expect(buttonNamed('重新查找', host.querySelector('[data-want-id="2"]')!)).toBeNull();
+  expect(actionOrder(buttonNamed('重新查找', host.querySelector('[data-want-id="3"]')!)!.parentElement))
+    .toEqual(['来源页', '移除', '重新查找', '查找资源']);
 });
 
 it('待找与暂时放弃两段每行有查找资源，原地打开带番号与标题的云下载弹层；未发售与已入库没有', async () => {

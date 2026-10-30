@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from .downloads import (
-    CLOUDDRIVE_CREDENTIAL, MAX_WAIT_HOURS, PIKPAK_CREDENTIAL, PROVIDER_LABELS, DownloadError,
+    CLOUDDRIVE_CREDENTIAL, MAX_WAIT_HOURS, PIKPAK_CREDENTIAL, DownloadError,
     DownloadService, Landing, OfflineProvider, clean_address, normalise_target,
     submit_offline_download,
 )
@@ -39,7 +39,7 @@ def build_download_service(*, database: LedgerDatabase, state_root: Path,
     holder: dict[str, DownloadService] = {}
 
     def providers(key: str) -> OfflineProvider:
-        if key == "115":
+        if key == "115" or key.startswith("clouddrive:"):
             token = _values(credentials, CLOUDDRIVE_CREDENTIAL).get("token", "")
             return CloudDriveProvider(holder["service"].config.clouddrive_address, token)
         if key == "pikpak":
@@ -51,6 +51,10 @@ def build_download_service(*, database: LedgerDatabase, state_root: Path,
                               providers=providers, landing=Landing(push_discovery),
                               available=available, after_ingest=after_ingest)
     holder["service"] = service
+    from .downloads_channels import LibraryChannels
+    from .settings_file import active
+    service.channel_catalog = LibraryChannels(service, lambda: active().library_names)
+    service.landing.channel_catalog = service.channel_snapshot
     service.pikpak_browser = BrowserLogin(
         profile_dir(Path(credentials.root).parent),
         persist=lambda values: credentials.save(PIKPAK_CREDENTIAL, values), on_done=service.wake)
@@ -72,7 +76,38 @@ def q_downloads(contract, args) -> dict:
         limit = int(args.get("limit") or 100)
     except (TypeError, ValueError):
         limit = 100
-    return _service(contract).snapshot(limit)
+    before = args.get("before_id")
+    try:
+        before_id = int(before) if before is not None else None
+    except (TypeError, ValueError):
+        raise ValueError("下载任务分页位置无效") from None
+    if before_id is not None and before_id < 1:
+        raise ValueError("下载任务分页位置无效")
+    snapshot = _service(contract).snapshot(limit, before_id=before_id)
+    _attach_library_artwork(contract, snapshot["tasks"])
+    return snapshot
+
+
+def _attach_library_artwork(contract, tasks: list[dict]) -> None:
+    """已入库任务复用本机馆藏封面与人物资料；不发起远端取图。"""
+    from .catalog_rules import same_release_code
+    from .web_catalog import attach_artwork_fields, attach_card_performers
+
+    ids = sorted({task["asset_id"] for task in tasks if task["state"] == "ingested" and task["asset_id"]})
+    assets = {}
+    if ids:
+        with contract.read_connection() as connection:
+            rows = connection.execute(
+                f"SELECT id,code FROM asset WHERE id IN ({','.join('?' for _ in ids)})", ids).fetchall()
+        assets = {row["id"]: dict(row) for row in rows}
+        attach_card_performers(contract, list(assets.values()))
+        for asset in assets.values():
+            attach_artwork_fields(contract, asset)
+    for task in tasks:
+        asset = assets.get(task["asset_id"]) if task["state"] == "ingested" else None
+        if asset and task["display_code"] and asset["code"] and not same_release_code(task["display_code"], asset["code"]):
+            asset = None
+        task["artwork"] = asset
 
 
 def w_download_submit(contract, body) -> dict:
@@ -105,20 +140,30 @@ def settings_payload(service: DownloadService, declared_roots) -> dict:
     """设置页那一块的形状。读接口和每条写接口都回这一份，页面整块替换本地状态。"""
     from .downloads_pikpak import account
     credentials = service.credentials
+    problems = list(getattr(service.config, "problems", ()))
     try:
         pikpak = account(_values(credentials, PIKPAK_CREDENTIAL))
     except DownloadError:
         pikpak = account(None)
+        problems.append("PikPak 登录信息无法读取，请重新登录。")
+    try:
+        token_set = "token" in credentials.describe(CLOUDDRIVE_CREDENTIAL)["fields"]
+    except CredentialError:
+        token_set = False
+        problems.append("CloudDrive2 令牌无法读取，请重新填写。")
     login = _browser_login(service)
+    channels = service.channel_snapshot()
     return {
         "available": service.available,
+        "media_sources": [key for key, roots in declared_roots.items() if roots],
         "config": service.config.payload(),
-        "token_set": "token" in credentials.describe(CLOUDDRIVE_CREDENTIAL)["fields"],
+        "token_set": token_set,
         "pikpak": pikpak,
         "pikpak_browser": {"available": login is not None and login.available(),
                            **(login.status() if login is not None else {"state": "idle", "message": ""})},
         "pikpak_roots": list(declared_roots.get("pikpak", ())),
-        "providers": [{"key": key, "label": label} for key, label in PROVIDER_LABELS.items()],
+        "providers": channels["providers"],
+        "problems": list(dict.fromkeys((*problems, *channels.get("problems", ())))),
         "max_wait_hours": MAX_WAIT_HOURS,
     }
 
@@ -181,7 +226,9 @@ def _hints(service: DownloadService, body: dict):
         logged_in = False
     return Hints(prefixes=prefixes, declared_roots=dict(landing.declared_roots or {}),
                  pikpak_root=pikpak_root.strip(),
-                 pikpak_account=body.get("pikpak_account") is True or logged_in)
+                 target_enabled=bool(landing.declared_roots.get("115")),
+                 pikpak_account=bool(landing.declared_roots.get("pikpak")) and (
+                     body.get("pikpak_account") is True or logged_in))
 
 
 def check_clouddrive(service: DownloadService, body: dict) -> dict:

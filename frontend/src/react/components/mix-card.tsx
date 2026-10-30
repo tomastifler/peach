@@ -147,8 +147,8 @@ export function MixCard({
             className="absolute inset-0 z-1 cursor-pointer rounded-surface outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-focus-ring disabled:cursor-default" />
           <span data-mix-badge=""
             className="absolute right-2.25 bottom-2.25 z-6 flex min-h-7 items-center gap-1.5 rounded-2lg px-2.25 py-1 text-caption-1-semibold text-text-white">
-            <PLAY aria-hidden className="size-3.75" />
-            {badge ?? `${count.toLocaleString()} videos`}
+            <PLAY aria-hidden className="size-(--icon-inline)" />
+            {badge ?? `${count.toLocaleString()} 个视频`}
           </span>
         </div>
       </div>

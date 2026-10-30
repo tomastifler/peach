@@ -81,7 +81,9 @@ PROFILE = {"kana": "あまかわそら", "birth_date": "1998-10-10", "height_cm"
 
 class SeedPackCase(unittest.TestCase):
     def setUp(self):
-        self.root = Path(tempfile.mkdtemp(prefix="peach-seed-"))
+        # 目录先登记回收：清理按后进先出执行，两个连接关掉之后才删目录。
+        self.root = Path(self.enterContext(
+            tempfile.TemporaryDirectory(prefix="peach-seed-", ignore_cleanup_errors=True)))
         self.source = connect(fresh_ledger(self.root, "source.db"))
         self.target = connect(fresh_ledger(self.root, "target.db"))
         self.addCleanup(self.source.close)
@@ -119,6 +121,77 @@ class SeedPackCase(unittest.TestCase):
             alias(con, studio, "S1", "javbus:studio-localization")
             link(con, studio, "official", "https://s1s1s1.com/")
         return seed_pack.export_pack(con, version=VERSION)
+
+
+class SeedPerformerNameTests(SeedPackCase):
+    def name_pack(self, *, revision=None):
+        with self.source:
+            person = entity(self.source, "performer", "天使萌")
+            alias(self.source, person, "天使もえ", "avdb-actor-mapping@test")
+        return seed_pack.export_pack(self.source, version=VERSION, revision=revision)
+
+    def test_verified_chinese_name_updates_the_entity_and_work_projection(self):
+        pack = self.name_pack()
+        with self.target:
+            person = entity(self.target, "performer", "天使もえ")
+            self.target.execute("INSERT INTO asset(id,location,path,name,medium) VALUES(1,'local','R:\\a.mp4','a','video')")
+            self.target.execute("INSERT INTO asset_entity(asset_id,entity_id,role,source) VALUES(1,?,'performer','test')", (person,))
+            self.target.execute("INSERT INTO asset_tag(asset_id,tag,source) VALUES(1,'演员:天使もえ','test')")
+            report = seed_pack.land(self.target, pack)
+        self.assertEqual(self.target.execute("SELECT canonical_name FROM entity WHERE id=?", (person,)).fetchone()[0], "天使萌")
+        self.assertEqual(self.target.execute("SELECT tag FROM asset_tag WHERE asset_id=1").fetchone()[0], "演员:天使萌")
+        self.assertEqual(report["names"], 1)
+        self.assertIn("天使もえ", {r[0] for r in self.target.execute("SELECT alias FROM entity_alias WHERE entity_id=?", (person,))})
+        with self.target:
+            self.assertEqual(seed_pack.written(seed_pack.land(self.target, pack)), 0)
+        target_path = self.target.execute("PRAGMA database_list").fetchone()[2]
+        revert = load_script("revert_auto_landing")
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(revert.main(["--db", target_path, "--source", "auto:seed", "--apply",
+                "--backup", str(self.root / "pre-revert.db"), "--logo-root", str(self.root / "logos")]), 0)
+        self.assertEqual(self.target.execute("SELECT canonical_name FROM entity WHERE id=?", (person,)).fetchone()[0], "天使もえ")
+        self.assertEqual(self.target.execute("SELECT tag FROM asset_tag WHERE asset_id=1").fetchone()[0], "演员:天使もえ")
+
+    def test_a_user_preferred_name_is_preserved(self):
+        from peach.entities import prefer_entity_name
+        pack = self.name_pack()
+        with self.target:
+            person = entity(self.target, "performer", "天使萌")
+            alias(self.target, person, "天使もえ", "user:manual")
+            prefer_entity_name(self.target, person, "天使もえ")
+            seed_pack.land(self.target, pack)
+        self.assertEqual(self.target.execute("SELECT canonical_name FROM entity WHERE id=?", (person,)).fetchone()[0], "天使もえ")
+        self.assertEqual(seed_pack.planned_names(self.target, "auto:seed"), [])
+
+    def test_confirming_the_current_name_protects_it_from_localization(self):
+        from peach.entities import prefer_entity_name
+        pack = self.name_pack()
+        with self.target:
+            person = entity(self.target, "performer", "天使もえ")
+            prefer_entity_name(self.target, person, "天使もえ")
+            seed_pack.land(self.target, pack)
+        self.assertEqual(self.target.execute("SELECT canonical_name FROM entity WHERE id=?", (person,)).fetchone()[0], "天使もえ")
+
+    def test_revision_identity_and_aliases_must_resolve_to_one_person(self):
+        pack = self.name_pack(revision=1)
+        with self.target:
+            person = entity(self.target, "performer", "天使もえ")
+            report = seed_pack.land(self.target, pack)
+        self.assertEqual(report["names"], 1)
+        self.assertEqual(self.target.execute("SELECT canonical_name FROM entity WHERE id=?", (person,)).fetchone()[0], "天使萌")
+
+    def test_custom_names_and_ambiguous_identities_are_preserved(self):
+        pack = self.name_pack()
+        with self.target:
+            person = entity(self.target, "performer", "我选的名字")
+            alias(self.target, person, "天使もえ", "user:manual")
+            seed_pack.land(self.target, pack)
+        self.assertEqual(self.target.execute("SELECT canonical_name FROM entity WHERE id=?", (person,)).fetchone()[0], "我选的名字")
+        with self.target:
+            entity(self.target, "performer", "天使萌")
+            report = seed_pack.land(self.target, pack)
+        self.assertEqual(len(report["duplicates"]), 1)
+        self.assertEqual(report.get("names", 0), 0)
 
 
 class ExportTests(SeedPackCase):
@@ -329,11 +402,33 @@ class ImportTests(SeedPackCase):
 
 
 class ScriptTests(SeedPackCase):
-    def test_default_pack_and_export_destination_stay_outside_the_repository(self):
+    def test_default_pack_is_a_valid_bundled_public_resource(self):
         script = load_script("seed_pack")
         export = script.build_parser().parse_args(["export"])
         self.assertEqual(export.out, seed_pack.DEFAULT_PACK)
-        self.assertNotIn(ROOT, export.out.resolve().parents)
+        self.assertEqual(export.out, ROOT / "resources/seed/entities.json")
+        pack = seed_pack.load(export.out)
+        self.assertEqual(pack["format"], 2)
+        self.assertGreater(pack["counts"]["entities"], 0)
+        self.assertGreater(pack["revision"], 0)
+
+    def test_pack_is_required_in_each_packaging_layout(self):
+        from peach.bundle_resources import data_files
+        with self.assertRaises(FileNotFoundError):
+            data_files(self.root)
+        for name in ("web", "migrations", "resources", "tools/amane-bridge"):
+            (self.root / name).mkdir(parents=True, exist_ok=True)
+        for name in ("bridge.py", "pyproject.toml", "uv.lock"):
+            (self.root / "tools/amane-bridge" / name).touch()
+        seed = self.root / "resources/seed/entities.json"
+        seed.parent.mkdir()
+        seed.write_text(seed_pack.dump(self.seeded_source()), encoding="utf-8")
+        entries = data_files(self.root)
+        # data_files 给的是解析过链接的真实路径；macOS 的临时目录 /var 指向 /private/var。
+        self.assertIn((self.root.resolve() / "resources", "resources"), entries)
+        seed.unlink()
+        with self.assertRaises(FileNotFoundError):
+            data_files(self.root)
 
     def test_validate_checks_package_without_opening_a_database(self):
         pack = self.root / "package.json"

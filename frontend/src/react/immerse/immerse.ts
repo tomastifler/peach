@@ -12,6 +12,7 @@ export interface ImmerseItem {
   name?: string;
   title?: string;
   location?: string;
+  root_id?: string;
   cost?: string;
   duration?: number | null;
   width?: number | null;
@@ -43,7 +44,7 @@ export function immerseQuery(filters: Record<string, string | number | null | un
 /** 能直接进片单的：不按流量计费、有时长、来源没脱盘。脱盘来源的片子拉不到流，进了片单就是
  *  一条黑屏加载中；详情页有门挡着，这里只能在入口筛掉。 */
 export const playable = (item: ImmerseItem, offline: (location: string) => boolean): boolean =>
-  item.cost !== 'metered' && !!item.duration && !offline(String(item.location ?? ''));
+  item.cost !== 'metered' && !!item.duration && !offline(String(item.root_id || item.location || ''));
 
 export function shuffle<T>(list: T[], random: () => number = Math.random): T[] {
   for (let i = list.length - 1; i > 0; i--) {

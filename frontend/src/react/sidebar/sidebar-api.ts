@@ -28,6 +28,7 @@ export interface SidebarChip {
 
 /** 目录与资料页那一份聚合，按组排好。 */
 export interface SidebarFacets {
+  years?: SidebarChip[];
   locations: SidebarChip[];
   regions: SidebarChip[];
   orientations: SidebarChip[];

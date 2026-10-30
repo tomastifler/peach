@@ -10,9 +10,12 @@ const CATALOG = ['catalog-grid', 'catalog-folders', 'item', 'item-related', 'ite
   'quality-goals', 'duplicates', 'orphan-records', 'trash-summary', 'junk-summary', 'immerse-list'];
 const FOLLOW = ['follow-feed', 'follow-item', 'follow-manage', 'follow', 'entity', 'index'];
 const DISCOVERIES = ['feed-new', 'jav-discoveries', 'jav-detail', 'wants', 'index'];
+/* 每个版本键刷新的页面，要覆盖服务端按表缓存的那几页实际读到的表：统计页读关注条目与来源
+   算在线播放，口味页读关注来源推账号，所以它们也跟着 `follow` 刷新。对照见
+   `tests/test_ledger_revision.py` 的 `ResultVersionTablesTests`。 */
 const READINGS: Record<string, string[]> = {
   catalog: [...CATALOG, ...FOLLOW, 'review', 'taste'],
-  follow: FOLLOW,
+  follow: [...FOLLOW, 'stats', 'taste'],
   discoveries: DISCOVERIES,
   review: ['review'],
   artwork: [...CATALOG, ...FOLLOW, ...DISCOVERIES, 'avatar-choices'],

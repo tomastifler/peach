@@ -16,7 +16,7 @@ export interface MediaSourceStatus {
   online: boolean | null;
   state?: string;
   message?: string;
-  roots?: unknown[];
+  roots?: { root_id?: string; library_id?: string; online: boolean | null; message?: string }[];
 }
 
 export interface MediaSourcesData {

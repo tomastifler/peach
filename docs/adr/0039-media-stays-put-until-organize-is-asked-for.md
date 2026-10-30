@@ -26,7 +26,7 @@ README 的「数据边界」一直承诺媒体保留在原目录：Peach 只读�
 
 **二、模板挂在来源根上。** 用户对每个来源（`local` / `115` / `pikpak`）配置一份文件名模板和
 一份目录模板，存在 `profile.settings_json` 的 `organizeTemplates` 里，跟着账本走。占位符
-`{number}` `{title}` `{studio}` `{year}` `{actors}` `{series}` `{cd}` `{mosaic}` `{definition}`
+`{code}` `{title}` `{studio}` `{year}` `{actors}` `{series}` `{cd}` `{mosaic}` `{definition}`
 只从 approved 真相字段取值，候选一律不参与，因为按未复核的猜测改文件名，等于把猜测写进了
 文件系统，而那一层没有 `source` 和 `confidence` 可言。`[...]` 分组里的占位符为空时整段省略。
 

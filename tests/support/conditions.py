@@ -13,7 +13,7 @@ def missing_prerequisite(reason: str) -> NoReturn:
     本机没装时显式跳过，免得整个测试域红掉让人绕过入口。CI 的 runner 由工作流负责
     装齐，缺了就是工作流写错：跳过会让用例在 CI 里永远不执行，所以那里判失败。
     """
-    if os.environ.get("GITHUB_ACTIONS") == "true":
+    if any(os.environ.get(name) == "true" for name in ("GITHUB_ACTIONS", "GITLAB_CI")):
         raise AssertionError(f"CI 缺少前置条件，工作流应当装好：{reason}")
     raise unittest.SkipTest(reason)
 

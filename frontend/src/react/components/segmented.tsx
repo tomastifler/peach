@@ -47,6 +47,6 @@ export const SEGMENT_ICON = 'flex size-7 flex-none cursor-pointer items-center j
  * 六成，选中那一格换成浮层选中态那块玻璃（`../styles.css` 的 `[data-glass-segment]`）。 */
 export const SEGMENTED_GLASS_TRACK = 'inline-flex w-max max-w-full flex-none items-center gap-0.5 rounded-lg';
 
-export const SEGMENT_GLASS = 'relative flex size-7.5 flex-none cursor-pointer items-center justify-center rounded-lg'
+export const SEGMENT_GLASS = 'relative flex size-8 flex-none cursor-pointer items-center justify-center rounded-lg'
   + ' text-(--glass-text)/62 outline-none transition-colors hover:text-(--glass-text)'
   + ' focus-visible:ring-2 focus-visible:ring-border-focus-ring data-selected:text-(--glass-text)';

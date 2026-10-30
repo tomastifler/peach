@@ -1,0 +1,5 @@
+@keyframes peach-link-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .25; }
+}
+.peach-react [data-link-check][aria-busy="true"] [data-link-check-rays] { animation: peach-link-blink 1.2s ease-in-out infinite; }

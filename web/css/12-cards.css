@@ -13,7 +13,7 @@ h2[data-page-title]{margin:0;font:var(--board-title);letter-spacing:0}
    回收站这类页面直接贴着顶栏吸。manage-static（垃圾复核）不吸顶，要压过这条。 */
 .count.no-tagbar{top:var(--topH)}
 .count.manage-static{position:relative;top:auto;z-index:1}
-.resourcesyncbox{overflow:clip;border:1px solid var(--field-ring);border-radius:var(--floating-radius);background:var(--ground)}.resourcesyncbody{padding:20px}.resourcesyncbody p{max-width:760px;margin:0;color:var(--muted);font-size:var(--fs-sm);line-height:1.55}.resourcesyncfooter{box-sizing:border-box;min-height:var(--fieldset-bar-h);display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 20px;border-top:1px solid var(--line-soft);background:var(--overlay-5)}.resourcesyncfooter p{margin:0;color:var(--muted);font-size:var(--fs-xs);line-height:1.5}.resourceaction{box-sizing:border-box;height:36px;padding:0 12px;border:0;border-radius:var(--control-radius);box-shadow:0 0 0 1px var(--line-soft);background:var(--ground);color:var(--ink-2);display:inline-flex;align-items:center;justify-content:center;gap:8px;flex:none;font:inherit;font-size:var(--fs-sm);font-weight:500;cursor:pointer;transition:background-color .12s,color .12s}.resourceaction:hover:not(:disabled){background:color-mix(in srgb,var(--ink) 8%,var(--ground));color:var(--ink)}.resourceaction:focus-visible{outline:2px solid var(--tungsten);outline-offset:2px}.resourceaction:disabled{background:var(--sunk);color:var(--muted);cursor:not-allowed}.resourceaction svg{width:16px;height:16px;stroke:currentColor;fill:none}
+.resourcesyncbox{overflow:clip;border:1px solid var(--field-ring);border-radius:var(--floating-radius);background:var(--ground)}
 .tagbar,.count{transition:background-color .16s ease,border-color .16s ease}
 /* 吸顶那条是底色的半透明版，配方跟着 --ground 走：写死深色底会在浅色主题下
    变成一条黑带压在白底内容上。 */
@@ -67,7 +67,7 @@ h2[data-page-title]{margin:0;font:var(--board-title);letter-spacing:0}
 .gridstack{display:flex;flex-direction:column;gap:16px}
 /* 列距 16px 是给悬停面留的：卡片悬停时底色往盒外多铺 8px（见下方 `:hover`），列距再窄，
    两张卡的悬停面就顶到邻卡上。 */
-.grid{gap:24px 16px}
+.grid{gap:24px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,var(--tile)),1fr))}
 .card{cursor:pointer;display:flex;flex-direction:column;gap:8px;min-width:0;border-radius:var(--surface-radius);
   position:relative;transition:transform .18s ease,filter .18s ease,background-color .15s ease,box-shadow .15s ease;transform-origin:center}
@@ -105,21 +105,11 @@ h2[data-page-title]{margin:0;font:var(--board-title);letter-spacing:0}
    整张卡压低 7px 并加高 7px，同一行里 Mix 卡的封面和下面的文字就比邻居矮一截；
    往上堆之后卡片盒和普通卡完全同高，下沿自然平齐。
    纸边与封面是同一种表面，圆角同一档：容器取封面那一档，纸边继承容器。 */
-.mixstack{position:relative;isolation:isolate;border-radius:var(--badge-radius)}
-.mixstack::before,.mixstack::after{content:"";position:absolute;border-radius:inherit;
-  border:1px solid var(--border-15);background:color-mix(in srgb,var(--surface) 84%,var(--video-glow,#15202a));z-index:0}
-.mixstack::before{inset:0 12px 8px;transform:translateY(-7px);opacity:.54}
-.mixstack::after{inset:0 6px 4px;transform:translateY(-4px);opacity:.78}
-.mixstack .pic{z-index:1}
-.playlistcard .mixmeta{display:flex;min-width:0;gap:9px;align-items:flex-start}
-.playlistcard .mixcopy{flex:1}
-.mixcopy{min-width:0}.mixcopy b,.mixcopy span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.mixcopy b{font-size:var(--fs-md);line-height:1.45}.mixcopy span{font-size:var(--fs-xs);color:var(--muted);margin-top:2px}
-/* 圆角只在最外面裁一次：`clip-path` 配一层满格的矩形蒙版，格子里的黑底、封面、悬停层与模糊衬底
+/* 圆角只在最外面裁一次：`clip-path` 配一层满格的矩形蒙版，格子里的底色、封面、悬停层与模糊衬底
    先合成一张再按 `--pic-radius` 切。格子本身不写 `border-radius`，`overflow` 就只是矩形裁切：按圆角
    裁的话每一层各切一次，抗锯齿那一圈里底下的黑会透上来，浅色封面四角就是一圈灰黑边。光有
    `clip-path` 不够，没有蒙版时 Chrome 照样逐层切。 */
-.pic{--pic-radius:var(--badge-radius);position:relative;aspect-ratio:var(--card-ratio,16/9);background:#000;
+.pic{--pic-radius:var(--badge-radius);position:relative;aspect-ratio:var(--card-ratio,16/9);background:var(--color-background-quaternary-default);
   clip-path:inset(0 round var(--pic-radius));mask-image:linear-gradient(#000 0 0);
   overflow:hidden;display:flex;align-items:center;justify-content:center}
 /* 传统正封的比例留白使用同图补底，圆角由最外层统一裁切。 */
@@ -150,7 +140,7 @@ body .card:focus-within{background:var(--hover);box-shadow:0 0 0 8px var(--hover
 .hovertools button svg{width:25px;height:25px;stroke:currentColor;fill:none;stroke-width:2;
   stroke-linecap:round;stroke-linejoin:round}
 .hovertools button:hover{transform:scale(1.12);background:rgba(0,0,0,.34)}
-.nopic{font-size:var(--fs-xs);letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
+.nopic{font-size:var(--fs-xs);letter-spacing:.12em;color:var(--ink-2);text-transform:uppercase}
 .junkcount{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px}
 /* 复核那条分类切换在 10 个互不相同的候选数据集之间切（真 tablist）。
    几何取 Geist Tabs 的 secondary 变体（vercel.com/geist/tabs 实测 2026-09-03）：高 32px、
@@ -220,16 +210,6 @@ body .card:focus-within{background:var(--hover);box-shadow:0 0 0 8px var(--hover
 /* 归属渲染成 `<span>` 就是不可点的那一种（队列行整行本身是按钮，里面嵌不了按钮）。
    染成强调色会让人以为能点，点下去却落到卡片本身、打开的是视频详情。 */
 .meta span.who{color:var(--ink-2);cursor:default}
-/* 标签语义分级 */
-/* 卡片上那一行标签归 React 卡片（`media-card.css` 的 `[data-media-tags]`）。
-   .tg 只留 max-width:100% 这一层兜底：一颗标签自己就比整张卡还宽时，横着溢出会
-   压到卡片外面，这时候省略号是唯一的出路。 */
-.tg{padding:var(--tag-pad-y) var(--tag-pad-x);border-radius:var(--tag-radius);font:inherit;font-size:var(--fs-xs);border:1px solid var(--line);
-  line-height:1.45;white-space:nowrap;cursor:pointer;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;max-width:100%;
-  background:var(--tag-fill)}
-.tg.meta,.tg.position{color:var(--ink-2);border-color:var(--line)}
-.tg:hover{color:var(--ink);background:var(--hover)}
-.tg:disabled{cursor:not-allowed}
 /* 顶栏的密集模式固定为标题、身份、标签三行。缺少标签时第三行仍保留，
    同一网格不会再被大小、观看次数或长身份撑成四行。分卷卡已有 7px 叠层空间，
    密集网格的普通卡也保留同一高度，避免每行是否出现分卷卡决定整行高度。

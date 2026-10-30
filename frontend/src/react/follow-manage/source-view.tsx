@@ -4,32 +4,21 @@
  * 同一条来源在两种视图里的状态写法一旦分开写，就会出现同一行在卡片里说「未检查」、
  * 在表格里说「正常」。 */
 import { useLayoutEffect, useRef, useState } from 'react';
-import { VisuallyHidden } from 'react-aria-components';
+import { RiExternalLinkLine } from '@remixicon/react';
 
 import { Chip } from '@/components/base/badges/chip';
 import { Button } from '@/components/base/buttons/button';
+
+import { MarkImage } from '../components/site-mark';
 
 import {
   authorAvatar, authorInitial, errorHeadline, isBroken, sourceIconUrl, statusText,
   type FollowSource,
 } from './follow-manage';
 
-/** 站点圆标。
- *
- * 给了 `label` 就是「画得出图标就只画图标」：图标在时名字交给读屏，没登记图标或者那一枚
- * 取不下来时名字显出来——一个站在屏幕上总要认得出是哪个站，不能两种情况都指望同一枚图。 */
-export function SourceIcon({ provider, label }: { provider: string; label?: string }) {
-  const src = sourceIconUrl(provider);
-  const [broken, setBroken] = useState(false);
-  if (!src || broken) return label ? <>{label}</> : null;
-  return (
-    <>
-      <img src={src} alt="" width={14} height={14} loading="lazy"
-        onError={() => setBroken(true)}
-        className="size-3.5 shrink-0 rounded-sm object-contain" />
-      {label ? <VisuallyHidden>{label}</VisuallyHidden> : null}
-    </>
-  );
+/** 关注来源的站标，尺寸与回退和采集来源站标同一枚；站名由旁边的文字或外层的读屏文字说。 */
+export function SourceIcon({ provider }: { provider: string }) {
+  return <MarkImage src={sourceIconUrl(provider)} />;
 }
 
 /** 创作者圆标：官方来源的头像优先，归档来源回退，都取不到就用首字母。
@@ -57,18 +46,19 @@ export function AuthorAvatar({ group, name }: { group: FollowSource[]; name: str
 
 /** 状态徽章。三档颜色对应三件事：要处理的、正常的、还没有结论的。 */
 export function StatusBadge({ source }: { source: FollowSource }) {
-  const color = isBroken(source) ? 'rose'
+  const color = !source.enabled || source.history_exhausted ? 'gray' : isBroken(source) ? 'rose'
     : source.enabled && source.last_status === 'ok' ? 'lime'
-    : source.enabled ? 'yellow' : 'neutral';
+    : source.enabled ? 'yellow' : 'gray';
   return <Chip variant="caption" color={color}>{statusText(source)}</Chip>;
 }
 
-/** 来源名连到站上的原页面。新标签页不继承这一页的会话，来源地址也不带走 Peach 自己的地址。 */
+/** 来源名连到站上的原页面，名字后跟外链字形。新标签页不继承这一页的会话，来源地址也不带走 Peach 自己的地址。 */
 export function SourceLink({ source }: { source: FollowSource }) {
   return (
-    <a href={source.url} target="_blank" rel="noreferrer noopener" title="Open original source"
-      className="min-w-0 text-body-medium wrap-anywhere text-text-primary underline-offset-2 hover:underline">
+    <a href={source.url} target="_blank" rel="noopener noreferrer" title="打开原来源"
+      className="max-w-full min-w-0 self-start text-body-medium wrap-anywhere text-text-primary underline-offset-2 hover:underline">
       {source.label}
+      <RiExternalLinkLine aria-hidden className="size-(--icon-inline) shrink-0" />
     </a>
   );
 }
@@ -97,7 +87,7 @@ export function ErrorLine({ text, prefix = '', tone = 'error' }: { text: string;
         {prefix}{open ? text : head}
       </small>
       {more ? (
-        <Button variant="ghost" size="xs" data-error-line-toggle="" aria-expanded={open} className="-ml-2"
+        <Button variant="ghost" size="small" data-error-line-toggle="" data-error-details-toggle="" aria-expanded={open} className="-ml-2"
           onClick={() => setOpen(!open)}>
           {open ? 'Hide details' : 'Show details'}
         </Button>

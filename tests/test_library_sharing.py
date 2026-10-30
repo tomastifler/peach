@@ -3,6 +3,7 @@ import gzip
 import json
 import os
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -36,6 +37,22 @@ class LibrarySharingTests(unittest.TestCase):
         preview = self.service.preview()
         return self.service.save({'enabled': True, 'schema': sharing.SCHEMA,
                                   'consent': True, 'preview_token': preview['token']})
+
+    def add_work(self):
+        with self.database.write_transaction() as connection:
+            connection.execute("INSERT INTO asset(location,path,name,code) VALUES('local','work','title','EXM-001')")
+
+    def attempt_state(self):
+        return sharing.remote_reporting._read(sharing._state_path(self.config))
+
+    def envelope(self, data=None):
+        from sentry_sdk.envelope import Envelope
+        from sentry_sdk.attachments import Attachment
+        envelope = Envelope()
+        envelope.add_event({'message': 'Peach research'})
+        wire = sharing.compressed(sharing.collect(self.contract)[1]) if data is None else data
+        envelope.add_item(Attachment(bytes=wire, filename=sharing.FILENAME).to_envelope_item())
+        return envelope
 
     def test_disabled_and_missing_endpoint_do_not_read_library_or_construct_sdk(self):
         with mock.patch.object(sharing, 'collect') as collect, \
@@ -192,6 +209,7 @@ class LibrarySharingTests(unittest.TestCase):
 
     def test_real_sdk_sends_only_research_event_and_reviewed_attachment_once_per_week(self):
         from sentry_sdk.transport import HttpTransport
+        self.add_work()
         self.enable()
         sent = []
         with mock.patch.object(HttpTransport, '_send_envelope', side_effect=lambda envelope: sent.append(envelope)):
@@ -204,7 +222,9 @@ class LibrarySharingTests(unittest.TestCase):
         self.assertNotIn('extra', event)
         self.assertNotIn('server_name', event)
         self.assertNotIn('user', event)
-        self.assertNotIn('release', event)
+        self.assertEqual(event['release'], sharing.remote_reporting.event_metadata('research')['release'])
+        self.assertEqual(event['environment'], sharing.remote_reporting.event_metadata('research')['environment'])
+        self.assertEqual(event['tags']['runtime'], sharing.remote_reporting.event_metadata('research')['tags']['runtime'])
         self.assertEqual(event['tags']['purpose'], 'population-research')
         attachment = json.loads(gzip.decompress(envelope.items[1].payload.get_bytes()))
         self.assertEqual(attachment['schema'], sharing.SCHEMA)
@@ -215,6 +235,7 @@ class LibrarySharingTests(unittest.TestCase):
     def test_disable_invalidates_queued_attachment(self):
         from sentry_sdk.envelope import Envelope
         from sentry_sdk.attachments import Attachment
+        self.add_work()
         self.enable()
         previous = sharing.consent(self.config)['revision']
         envelope = Envelope()
@@ -258,11 +279,252 @@ class LibrarySharingTests(unittest.TestCase):
         with mock.patch.object(sharing, 'MAX_RAW_BYTES', 1), self.assertRaises(ValueError):
             self.service.preview()
         self.assertFalse(sharing.snapshot(self.config)['enabled'])
+        self.add_work()
         self.enable()
         with mock.patch.object(sharing, 'MAX_BYTES', 1), mock.patch('peach.remote_reporting._new_client') as client:
-            with self.assertRaises(ValueError):
-                self.service.attempt()
+            self.service.attempt()
             client.assert_not_called()
+        self.assertEqual(self.attempt_state()['status'], 'failed')
+        self.assertEqual(self.attempt_state()['reason'], 'compression')
+        self.assertFalse(self.attempt_state()['attempted'])
+
+    def test_empty_and_uncoded_without_preferences_wait_for_data(self):
+        self.enable()
+        with mock.patch('peach.remote_reporting._new_client') as client:
+            self.service.attempt()
+            with self.database.write_transaction() as connection:
+                connection.execute("INSERT INTO asset(location,path,name) VALUES('local','uncoded','title')")
+            self.service.attempt()
+            client.assert_not_called()
+        self.assertEqual(self.attempt_state()['status'], 'waiting-data')
+        self.assertFalse(self.attempt_state()['attempted'])
+        self.assertFalse(self.service._gate(sharing.consent(self.config)['revision'], self.envelope()))
+
+    def test_uncoded_preference_group_can_be_sent(self):
+        with self.database.write_transaction() as connection:
+            connection.execute("INSERT INTO asset(location,path,name) VALUES('local','uncoded','title')")
+            connection.execute("INSERT INTO asset_tag(asset_id,tag,source) VALUES(1,'手动标签','web-user')")
+        self.enable()
+        with mock.patch('peach.remote_reporting._new_client') as client:
+            self.service.attempt()
+            client.assert_called_once()
+
+    def test_collection_failure_does_not_spend_weekly_network_attempt(self):
+        self.enable()
+        with mock.patch.object(sharing, 'collect', side_effect=OSError('private path')):
+            self.service.attempt()
+        self.assertEqual(self.attempt_state()['status'], 'failed')
+        self.assertEqual(self.attempt_state()['reason'], 'collection')
+        self.assertFalse(self.attempt_state()['attempted'])
+        self.assertNotIn('private path', json.dumps(self.attempt_state()))
+        self.add_work()
+        with mock.patch('peach.remote_reporting._new_client') as client:
+            self.service.attempt()
+            client.assert_called_once()
+
+    def test_disable_during_collection_prevents_queueing(self):
+        self.add_work()
+        self.enable()
+        collect = sharing.collect
+        def disable_then_collect(contract):
+            sharing.save_choice(self.config, False)
+            return collect(contract)
+        with mock.patch.object(sharing, 'collect', side_effect=disable_then_collect), \
+                mock.patch('peach.remote_reporting._new_client') as client:
+            self.service.attempt()
+            client.assert_not_called()
+        self.assertFalse(sharing.snapshot(self.config)['enabled'])
+
+    def test_queue_failure_does_not_spend_network_attempt(self):
+        self.add_work()
+        self.enable()
+        def make_client(*_args, envelope_gate, delivery_callback):
+            def capture(*_args, **_kwargs):
+                delivery_callback({'status': 'failed', 'reason': 'queue_full'})
+            return SimpleNamespace(capture_event=capture, flush=lambda **_kw: None, close=lambda **_kw: None)
+        with mock.patch('peach.remote_reporting._new_client', side_effect=make_client) as client:
+            self.service.attempt()
+            self.service.attempt()
+            self.assertEqual(client.call_count, 2)
+        self.assertEqual(self.attempt_state()['status'], 'failed')
+        self.assertEqual(self.attempt_state()['reason'], 'queue_full')
+        self.assertFalse(self.attempt_state()['attempted'])
+
+    def test_delivery_receipts_record_only_status_and_safe_details(self):
+        self.add_work()
+        self.enable()
+        for result in ({'status': 'accepted', 'status_code': 200},
+                       {'status': 'failed', 'status_code': 403, 'reason': 'http_status'},
+                       {'status': 'unknown', 'reason': 'network'}):
+            sharing._state_path(self.config).unlink(missing_ok=True)
+            def make_client(*_args, envelope_gate, delivery_callback, result=result):
+                def capture(*_args, **_kwargs):
+                    self.assertTrue(envelope_gate(self.envelope()))
+                    delivery_callback({**result, 'url': 'private-url', 'detail': 'private-content'})
+                return SimpleNamespace(capture_event=capture, flush=lambda **_kw: None, close=lambda **_kw: None)
+            with mock.patch('peach.remote_reporting._new_client', side_effect=make_client):
+                self.service.attempt()
+                self.enable()
+                self.service.attempt()
+            state = self.attempt_state()
+            self.assertEqual(state['status'], result['status'])
+            self.assertTrue(state['attempted'])
+            if 'reason' in result:
+                self.assertEqual(state['reason'], result['reason'])
+            self.assertNotIn('private', json.dumps(state))
+
+    def test_missing_receipt_is_unknown_and_does_not_retry_network(self):
+        self.add_work()
+        self.enable()
+        callbacks = []
+        def make_client(*_args, envelope_gate, delivery_callback):
+            callbacks.append(delivery_callback)
+            def capture(*_args, **_kwargs):
+                self.assertTrue(envelope_gate(self.envelope()))
+                self.assertEqual(self.attempt_state()['status'], 'queued')
+            return SimpleNamespace(capture_event=capture, flush=lambda **_kw: None, close=lambda **_kw: None)
+        with mock.patch('peach.remote_reporting._new_client', side_effect=make_client) as client:
+            self.service.attempt()
+            self.assertEqual(self.attempt_state()['status'], 'unknown')
+            self.service.attempt()
+            client.assert_called_once()
+        callbacks[0]({'status': 'accepted', 'status_code': 200})
+        self.assertEqual(self.attempt_state()['status'], 'accepted')
+        self.assertNotIn('reason', self.attempt_state())
+
+    def test_real_sdk_http_receipt_controls_local_research_status(self):
+        self.add_work()
+        self.enable()
+        for status, headers, expected in ((200, {}, 'accepted'), (413, {}, 'failed'), (429, {}, 'failed'),
+                (200, {'x-sentry-rate-limits': '60:error:organization'}, 'unknown'), (None, {}, 'unknown')):
+            with self.subTest(status=status, headers=headers):
+                sharing._state_path(self.config).unlink(missing_ok=True)
+                response = SimpleNamespace(status_code=status, headers=headers, close=mock.Mock(), content=b'private')
+                with mock.patch.dict(os.environ, {'PEACH_REPORTING_TEST_MODE': '0'}), \
+                        mock.patch('peach.reporting_transport.http_client') as factory:
+                    request = factory.return_value.__enter__.return_value.request
+                    request.return_value = response
+                    request.side_effect = OSError('private proxy') if status is None else None
+                    self.service.attempt()
+                    self.service.attempt()
+                    request.assert_called_once()
+                state = self.attempt_state()
+                self.assertEqual(state['status'], expected)
+                self.assertTrue(state['attempted'])
+                if status is not None:
+                    self.assertEqual(state['status_code'], status)
+                self.assertNotIn('private', json.dumps(state))
+
+    def test_cross_week_receipt_cannot_overwrite_new_attempt(self):
+        self.add_work()
+        self.enable()
+        callbacks = []
+        def make_client(*_args, envelope_gate, delivery_callback):
+            callbacks.append(delivery_callback)
+            return mock.Mock()
+        with mock.patch('peach.remote_reporting._new_client', side_effect=make_client):
+            self.service.attempt()
+            with mock.patch.object(sharing, '_period', return_value='2099-W01'):
+                self.service.attempt()
+            state = self.attempt_state()
+            callbacks[0]({'status': 'accepted', 'status_code': 200})
+            self.assertEqual(self.attempt_state(), state)
+
+    def test_legacy_attempt_is_unknown_and_conserves_weekly_budget(self):
+        self.enable()
+        sharing._state_path(self.config).write_text(json.dumps(
+            {'schema': sharing.SCHEMA, 'period': sharing._period(), 'status': 'attempted'}))
+        self.assertEqual(sharing.snapshot(self.config)['last_attempt']['status'], 'unknown')
+        with mock.patch.object(sharing, 'collect') as collect:
+            self.service.attempt()
+            collect.assert_not_called()
+
+    def test_settings_snapshot_only_exposes_the_current_week_without_changing_receipts(self):
+        self.enable()
+        for status in ('failed', 'unknown', 'waiting-data', 'accepted'):
+            with self.subTest(status=status):
+                state = {'schema': sharing.SCHEMA, 'period': sharing._period(),
+                         'status': status, 'attempted': True}
+                sharing._state_path(self.config).write_text(json.dumps(state))
+                self.assertEqual(sharing.snapshot(self.config)['last_attempt'], state)
+                with mock.patch.object(sharing, '_period', return_value='2099-W01'):
+                    self.assertEqual(sharing.snapshot(self.config)['last_attempt'], {})
+                self.assertEqual(self.attempt_state(), state)
+
+    def test_concurrent_services_allow_only_one_network_reservation(self):
+        self.add_work()
+        self.enable()
+        sent, errors = [], []
+        def make_client(*_args, envelope_gate, delivery_callback):
+            def capture(*_args, **_kwargs):
+                if envelope_gate(self.envelope()):
+                    sent.append(True)
+                    delivery_callback({'status': 'accepted', 'status_code': 200})
+            return SimpleNamespace(capture_event=capture, flush=lambda **_kw: None, close=lambda **_kw: None)
+        def run():
+            try:
+                sharing.Service(self.config, self.contract).attempt()
+            except Exception as error:
+                errors.append(error)
+        with mock.patch('peach.remote_reporting._new_client', side_effect=make_client):
+            threads = [threading.Thread(target=run) for _ in range(5)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=10)
+            self.assertFalse(any(thread.is_alive() for thread in threads))
+        self.assertEqual(errors, [])
+        self.assertEqual(len(sent), 1)
+
+    def test_obsolete_delivery_cannot_overwrite_current_attempt(self):
+        self.add_work()
+        self.enable()
+        callbacks = []
+        def make_client(*_args, envelope_gate, delivery_callback):
+            callbacks.append(delivery_callback)
+            return mock.Mock()
+        with mock.patch('peach.remote_reporting._new_client', side_effect=make_client):
+            self.service.attempt()
+            first = self.attempt_state()
+            self.service.attempt()
+            second = self.attempt_state()
+            self.assertNotEqual(first['attempt_id'], second['attempt_id'])
+            callbacks[0]({'status': 'accepted', 'status_code': 200})
+            self.assertEqual(self.attempt_state(), second)
+            self.enable()
+            callbacks[1]({'status': 'accepted', 'status_code': 200})
+            self.assertEqual(self.attempt_state(), second)
+
+    def test_queued_gate_rechecks_consent_and_version(self):
+        self.add_work()
+        self.enable()
+        gates = []
+        def make_client(*_args, envelope_gate, delivery_callback):
+            gates.append(envelope_gate)
+            self.service.save({'enabled': False})
+            return mock.Mock()
+        with mock.patch('peach.remote_reporting._new_client', side_effect=make_client):
+            self.service.attempt()
+        self.assertFalse(gates[0](self.envelope()))
+        self.assertEqual(self.attempt_state()['status'], 'blocked')
+        self.assertFalse(self.attempt_state()['attempted'])
+
+    def test_queued_gate_rejects_expired_schema_and_period(self):
+        self.add_work()
+        self.enable()
+        def make_client(*_args, envelope_gate, delivery_callback):
+            def capture(*_args, **_kwargs):
+                envelope = self.envelope()
+                with mock.patch.object(sharing, 'SCHEMA', sharing.SCHEMA + 1):
+                    self.assertFalse(envelope_gate(envelope))
+                with mock.patch.object(sharing, '_period', return_value='2099-W01'):
+                    self.assertFalse(envelope_gate(envelope))
+                delivery_callback({'status': 'blocked', 'reason': 'consent'})
+            return SimpleNamespace(capture_event=capture, flush=lambda **_kw: None, close=lambda **_kw: None)
+        with mock.patch('peach.remote_reporting._new_client', side_effect=make_client):
+            self.service.attempt()
+        self.assertEqual(self.attempt_state()['status'], 'blocked')
+        self.assertFalse(self.attempt_state()['attempted'])
 
     def test_preview_and_consent_api_are_local_authenticated_and_same_origin(self):
         import asyncio

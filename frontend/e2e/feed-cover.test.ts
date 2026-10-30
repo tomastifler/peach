@@ -20,8 +20,8 @@ describe('新作封面显示时机',()=>{
      {width:1800,height:1000,front:850,wide:true},
      {width:2184,height:1638,front:2184,layout:'still'},
     ];
-    await page.route('https://covers.example.test/fit/*',route=>{
-     const one=cases[Number(route.request().url().split('/').pop())]!;
+    await page.route(/\/cover-image\?code=EXM-00\d+$/,route=>{
+     const one=cases[Number(new URL(route.request().url()).searchParams.get('code')!.slice(-1))-1]!;
      return route.fulfill({contentType:'image/svg+xml',body:`<svg xmlns="http://www.w3.org/2000/svg" width="${one.width}" height="${one.height}"><rect width="${one.width}" height="${one.height}" fill="#f00"/><rect x="${one.width-one.front}" width="${one.front}" height="${one.height}" fill="#0f0"/></svg>`});
     });
     await page.route(/\/api\/entity\/shapes/,route=>route.fulfill({json:{home:{feed:true},entities:[]}}));
@@ -106,14 +106,14 @@ describe('新作封面显示时机',()=>{
      requestAnimationFrame(sample);
     });
     const page=await context.newPage();
-    const remote='https://covers.example.test/framing.svg';
+    const remote='https://covers.example.test/framing.svg',proxied=requiredEnv('PEACH_E2E_ORIGIN')+'/cover-image?code=EXM-001';
     const audits=await context.newCDPSession(page), lazyIssues:string[]=[];
     audits.on('Audits.issueAdded',({issue})=>{
-     if(issue.code==='LazyLoadImageIssue'&&issue.details.lazyLoadImageIssueDetails?.url===remote)
+     if(issue.code==='LazyLoadImageIssue'&&issue.details.lazyLoadImageIssueDetails?.url===proxied)
       lazyIssues.push(issue.details.lazyLoadImageIssueDetails.url);
     });
     await audits.send('Audits.enable');
-    await page.route(remote,async route=>{
+    await page.route(/\/cover-image\?code=EXM-001$/,async route=>{
      if(delay)await new Promise(resolve=>setTimeout(resolve,delay));
      await route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1000"><rect width="796" height="1000" fill="#f00"/><rect x="796" width="704" height="1000" fill="#0f0"/></svg>'});
     });
@@ -171,7 +171,7 @@ describe('新作封面显示时机',()=>{
    const context=await browser.newContext({viewport:{width:viewport.width,height:viewport.height}});
    try{
     const page=await context.newPage(),remote='https://covers.example.test/front.svg';
-    await page.route(remote,route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="632" height="900"><rect width="632" height="900" fill="#0f0"/></svg>'}));
+    await page.route(/\/cover-image\?code=EXM-001$/,route=>route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="632" height="900"><rect width="632" height="900" fill="#0f0"/></svg>'}));
     await page.route(/\/api\/feeds\/discoveries\?/,route=>route.fulfill({json:{ok:true,items:[{id:1,code:'EXM-001',title:'示例新作',has_cover:false,cover_url:remote}]}}));
     await page.goto(requiredEnv('PEACH_E2E_ORIGIN')+'/');
     const image=page.locator('#feedNew img.cover[data-frame="front"]');await image.waitFor({state:'visible'});

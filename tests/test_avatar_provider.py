@@ -9,8 +9,10 @@ from PIL import Image
 
 from peach.avatar_provider import (
     AvatarCandidateCache,
+    AvatarImageError,
     inspect_avatar,
     mark_duplicate_candidates,
+    prepare_avatar,
     provenance_now,
 )
 
@@ -22,6 +24,46 @@ def image_bytes(image_format: str = "JPEG", size: tuple[int, int] = (600, 800)) 
 
 
 class AvatarProviderTests(unittest.TestCase):
+    def test_common_rasters_have_a_static_browser_preview(self):
+        for image_format in ("JPEG", "PNG", "WEBP", "AVIF", "GIF", "BMP", "TIFF", "ICO", "JPEG2000"):
+            with self.subTest(image_format=image_format):
+                body = image_bytes(image_format, (64, 64))
+                prepared = prepare_avatar(body)
+                inspected = inspect_avatar(prepared)
+                self.assertIsNotNone(inspected)
+                self.assertEqual((inspected.width, inspected.height), (64, 64))
+                self.assertIn(inspected.mime_type, ("image/jpeg", "image/png"))
+                if image_format in ("JPEG", "PNG"):
+                    self.assertEqual(prepared, body)
+
+    def test_transparency_and_first_animation_frame_are_preserved(self):
+        buffer = io.BytesIO()
+        Image.new("RGBA", (32, 32), (20, 40, 60, 0)).save(buffer, "WEBP", lossless=True)
+        with Image.open(io.BytesIO(prepare_avatar(buffer.getvalue()))) as image:
+            self.assertEqual(image.format, "PNG")
+            self.assertEqual(image.getpixel((0, 0))[3], 0)
+        buffer = io.BytesIO()
+        first = Image.new("RGB", (32, 32), "red")
+        first.save(buffer, "GIF", save_all=True, append_images=[Image.new("RGB", (32, 32), "blue")], duration=100)
+        with Image.open(io.BytesIO(prepare_avatar(buffer.getvalue()))) as image:
+            self.assertEqual(getattr(image, "n_frames", 1), 1)
+            red, _, blue = image.convert("RGB").getpixel((0, 0))
+            self.assertGreater(red, blue)
+
+    def test_incomplete_jpeg_and_bad_png_checksum_are_rejected(self):
+        jpeg = image_bytes()[:-32]
+        png = bytearray(image_bytes("PNG"))
+        png[png.index(b"IDAT") + 4] ^= 1
+        for body in (jpeg, bytes(png)):
+            with self.subTest(signature=body[:8]):
+                self.assertIsNone(inspect_avatar(body))
+                with self.assertRaisesRegex(AvatarImageError, "数据不完整或无法解码"):
+                    prepare_avatar(body)
+
+    def test_unknown_content_has_an_image_error(self):
+        with self.assertRaisesRegex(AvatarImageError, "无法识别图片内容"):
+            prepare_avatar(b"<html>not an image</html>")
+
     def test_cache_is_content_addressed_and_provenance_is_stable(self):
         with tempfile.TemporaryDirectory() as tmp:
             cache = AvatarCandidateCache(Path(tmp))

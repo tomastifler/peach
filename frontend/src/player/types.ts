@@ -16,6 +16,7 @@ export interface PlayerSource { src: string; type: string }
 export interface VjsPlayer {
   /** 挂载时记下的条目：右键菜单复制网址按它取 id。 */
   peachItem?: PlayerItem;
+  peachPlaybackKey?: string;
   on(events: PlayerEvents, handler: (...args: unknown[]) => void): void;
   off(events: PlayerEvents, handler: (...args: unknown[]) => void): void;
   one(events: PlayerEvents, handler: (...args: unknown[]) => void): void;
@@ -55,6 +56,8 @@ export type VideojsFactory = (video: HTMLVideoElement, options: Record<string, u
 /** 作品与关注条目共有的那几样。作品来自 `/api/item`，关注来自 `/api/follow/item`。 */
 export interface PlayerItem {
   id: number;
+  root_id?: string;
+  library_id?: string;
   name?: string;
   title?: string;
   location?: string;

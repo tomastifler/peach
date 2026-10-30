@@ -57,6 +57,8 @@ def source_health(request: Request, args: dict[str, str] = Depends(require_auth)
         "ok": True,
         "sources": rows,
         "offline": [row["location"] for row in rows if row["online"] is False],
+        "offline_roots": [root["root_id"] for row in rows for root in row.get("roots", [])
+                          if root.get("root_id") and root["online"] is False],
     }
 
 
@@ -66,6 +68,8 @@ def media_library_list(request: Request, args: dict[str, str] = Depends(require_
     from .media_sources import cost_for
     config = settings_file.active()
     return {"libraries": [{"id": row["id"], "name": row["name"], "icon": row["icon"], "folders": len(row["roots"]),
+                           "color": row["color"], "policy": row["policy"], "stages": row["stages"],
+                           "roots": [{"root_id": root["root_id"], "location": root["location"]} for root in row["roots"]],
                            "metered": any(cost_for(root['location'], root['root'], config) == 'metered'
                                           for root in row['roots'])}
                           for row in media_libraries.libraries(config)]}
@@ -275,6 +279,21 @@ def clouddrive_inbox(request: Request, body: dict[str, Any] = Body(default_facto
     return Response(status_code=204)
 
 
+@router.get("/api/background-issues")
+def background_issues(request: Request, _args: dict[str, str] = Depends(require_auth)):
+    """任务中心「需要处理」：各后台服务此刻存在的问题。只读，不出网，不启动任何服务。"""
+    from . import settings_file
+    state = request.app.state
+    try:
+        config = settings_file.load_config()
+    except settings_file.SettingsFileError:
+        # 设置文件本身坏了由配置页报；依赖它的几项这一次读不出来，其余照常。
+        config = None
+    if config is not None and not config.present:
+        config = None
+    return {"issues": state.background_issues.collect(state, state.web_contract, config)}
+
+
 def _conflict(error: TaskRunConflict) -> JSONResponse:
     """手动触发撞上在跑的那一轮：409，并带上挡路那一轮的 id。
 
@@ -291,8 +310,16 @@ def _conflict(error: TaskRunConflict) -> JSONResponse:
         status_code=409)
 
 
+#: 走通用契约入口、却是运行 Peach 那台电脑的配置：生成预览与编解码方式、时间轴缩略图档位。
+#: 只有配置页读写它们，读写都按 `/api/configuration/*` 的本机判据放行，非本机一律 403。
+#: 判据由组装点 `api.create_app` 挂在 `app.state.local_only`：路由模块之间只许依赖 `routes_auth`。
+LOCAL_ONLY_ROUTES = frozenset({"/api/media-processing", "/api/thumbnail-jobs"})
+
+
 @router.get("/api/{route:path}")
 def api_get(request: Request, route: str, args: dict[str, str] = Depends(require_auth)):
+    if f"/api/{route}" in LOCAL_ONLY_ROUTES:
+        request.app.state.local_only(request)
     state = request.app.state
     sync = state.sync
     try:
@@ -325,6 +352,8 @@ def api_post(
 ):
     sync = request.app.state.sync
     route_path = f"/api/{route}"
+    if route_path in LOCAL_ONLY_ROUTES:
+        request.app.state.local_only(request)
     if (sync is not None and sync.read_only
             and route_path not in web_contract.READ_ONLY_POST_ROUTES):
         # 非写入端或冲突状态都只读；继续写只会产生无法自动合并的分叉。
@@ -360,6 +389,9 @@ def api_post(
             status_code=409,
         )
     except (TypeError, ValueError) as exc:
+        # 拒收原因只落本机错误日志，诊断包据此解释页面上的 400；4xx 不远程上报。
+        from .error_reporting import event
+        event('http-request', exc, method='POST', route=route_path.lstrip('/'), status_code=400)
         return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=400)
     except Exception:
         LOGGER.exception("unhandled POST contract error for /api/%s", route)

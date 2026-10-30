@@ -20,7 +20,7 @@
 字幕 sidecar 顺带在这里登记：遍历时每个目录的文件名已经在手上，配对判据只看同目录，
 `subtitles.py` 负责判定，本模块只负责把结论落进 `asset_subtitle`。
 
-刮削器与播放器写在正片旁边的附属文件不登记（`is_sidecar`）：NFO、Kodi 命名的海报与背景图、
+刮削器与播放器写在正片旁边的附属文件不登记（`is_sidecar`）：本地预告片、花絮、主题媒体、NFO、海报与背景图、
 `extrafanart/` 里的剧照、截图工具拼出的缩略图。它们描述一部片，本身不是作品，登记进来就会在
 馆藏里冒出成百张「图片」，把真正的图集淹掉。
 
@@ -31,6 +31,7 @@
 from __future__ import annotations
 
 import os
+import ntpath
 import hashlib
 import json
 import re
@@ -38,18 +39,19 @@ import sqlite3
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
+from itertools import chain
 from pathlib import Path, PureWindowsPath
 from filelock import FileLock
 
-from . import folder_rules, record_rehome, subtitles, wants
-from .platform import is_windows_path, resolve_location, resolve_root
+from . import folder_rules, junk, record_rehome, subtitles, wants
+from .platform import is_windows_path, is_unmapped, resolve_location, resolve_root
 from .processing_control import checkpoint
 from .fsutil import atomic_write_text
+from .catalog_rules import AUDIO_EXTENSIONS, VIDEO_EXTENSIONS, is_local_extra
 
-VIDEO = {".mp4", ".m4v", ".mkv", ".avi", ".wmv", ".mov", ".ts", ".flv", ".rmvb", ".mpg",
-         ".m2ts", ".strm", ".iso"}
+VIDEO = VIDEO_EXTENSIONS
 IMAGE = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
-AUDIO = {".mp3", ".flac", ".wav", ".m4a", ".ogg", ".opus"}
+AUDIO = AUDIO_EXTENSIONS
 ARCHIVE = {".zip", ".rar", ".7z", ".tar", ".gz"}
 
 #: 每攒够这么多行落一次盘，并报一行进度。
@@ -83,6 +85,57 @@ class ScanTargetError(ValueError):
     """来源与扫描根对不上，或者来源在本机没有落点。消息可以直接给人看。"""
 
 
+class ScanPathConflict(ScanTargetError):
+    """同一规范路径的既有记录须由用户复核，摄取不选择或合并身份。"""
+
+    def __init__(self, entries):
+        self.asset_ids = tuple(entry[0] for entry in entries)
+        self.paths = tuple(entry[1] for entry in entries)
+        ids = '、'.join(str(value) for value in self.asset_ids)
+        super().__init__(f'同一规范路径有多条文件记录（记录 {ids}）：{self.paths[0]}；'
+                         '已保留全部记录，请复核；其他文件继续处理')
+
+
+def _registered_paths(connection, location, root):
+    """既有路径按 Windows 语义分组，歧义记录单列供复核。"""
+    declared = PureWindowsPath(root)
+    groups = {}
+    for asset_id, path in connection.execute(
+            "SELECT id,path FROM asset WHERE location=? AND path IS NOT NULL ORDER BY id", (location,)):
+        target = PureWindowsPath(path)
+        if not target.is_relative_to(declared):
+            continue
+        key = str(target).casefold()
+        groups.setdefault(key, []).append((asset_id, path))
+    return ({key: entries[0][1] for key, entries in groups.items() if len(entries) == 1},
+            {key: ScanPathConflict(entries) for key, entries in groups.items() if len(entries) > 1})
+
+
+def _upsert_records(connection, batch, registered, conflicts):
+    rows = []
+    inserted = {}
+    for location, path, *values in batch:
+        key = str(PureWindowsPath(path)).casefold()
+        if key in conflicts:
+            # 枚举确认文件仍在，只刷新观测时间；身份、处置与个人资料保持各自原值。
+            connection.executemany('UPDATE asset SET last_seen=? WHERE id=?',
+                                   [(values[-1], asset_id) for asset_id in conflicts[key].asset_ids])
+            continue
+        if key not in registered:
+            inserted.setdefault(location, []).append(path)
+        stored = registered.setdefault(key, path)
+        rows.append((location, stored, *values))
+    connection.executemany(_UPSERT, rows)
+    ids = []
+    for location, paths in inserted.items():
+        for offset in range(0, len(paths), 900):
+            portion = paths[offset:offset+900]
+            ids.extend(row[0] for row in connection.execute(
+                'SELECT id FROM asset WHERE location=? AND path IN ('
+                + ','.join('?'*len(portion))+')', (location, *portion)))
+    return ids
+
+
 def medium_of(name: str) -> str:
     suffix = os.path.splitext(name)[1].lower()
     if suffix in VIDEO:
@@ -99,10 +152,11 @@ def medium_of(name: str) -> str:
 def video_stems(names) -> frozenset[str]:
     """一个目录里视频文件的片名（casefold），`is_sidecar` 拿它判同目录有没有正片。"""
     return frozenset(os.path.splitext(name)[0].casefold() for name in names
-                     if medium_of(name) == "video")
+                     if medium_of(name) == "video" and not is_local_extra(name))
 
 
-def is_sidecar(name: str, videos: frozenset[str], *, artwork_dir: bool = False) -> bool:
+def is_sidecar(name: str, videos: frozenset[str], *, artwork_dir: bool = False,
+               path: str | None = None, library_roots: tuple[str, ...] = ()) -> bool:
     """`name` 是否为不登记的附属文件或工具隔离文件。
 
     `videos` 是同目录的 `video_stems`；`artwork_dir` 表示这个目录叫 `extrafanart` 之类、
@@ -112,6 +166,8 @@ def is_sidecar(name: str, videos: frozenset[str], *, artwork_dir: bool = False) 
         return True
     stem, suffix = os.path.splitext(name)
     if suffix.lower() == ".nfo":
+        return True
+    if is_local_extra(name, path, library_roots=library_roots):
         return True
     if medium_of(name) != "image":
         return False
@@ -156,16 +212,29 @@ def ledger_root_for(
     """
     windows = os.name == "nt" if windows is None else windows
     text = os.fspath(root)
-    if windows:
-        return text if is_windows_path(text) else str(Path(text).resolve())
     declared = declared_roots.get(location, ())
     location_mounts = tuple(mounts.get(location, ()))
     for declared_root, mount in zip(declared, location_mounts):
+        from .smb_media import is_address, canonical
+        if is_address(str(mount)):
+            if text == declared_root or PureWindowsPath(text).is_relative_to(PureWindowsPath(declared_root)):
+                return text
+            if is_address(text) and canonical(text).startswith(canonical(str(mount)).rstrip('/') + '/'):
+                from urllib.parse import unquote
+                tail = tuple(unquote(part) for part in canonical(text)[len(canonical(str(mount))) + 1:].split('/'))
+                return str(PureWindowsPath(declared_root, *tail))
+            if is_address(text) and canonical(text) == canonical(str(mount)):
+                return declared_root
+            continue
+        if not str(mount):
+            continue
         try:
             tail = Path(text).resolve().relative_to(Path(mount).resolve()).parts
         except ValueError:
             continue
         return str(PureWindowsPath(declared_root, *tail))
+    if windows:
+        return text if is_windows_path(text) else str(Path(text).resolve())
     if is_windows_path(text):
         return text
     if not location_mounts:
@@ -182,11 +251,17 @@ def walk_root_for(
 ) -> Path:
     """取得数据库路径在本机对应的扫描目录。调用前先过 `check_scan_target`。"""
     windows = os.name == "nt" if windows is None else windows
-    if windows:
-        return Path(root)
     _location, index, tail = resolve_root(root, declared_roots)
     location_mounts = tuple(mounts.get(location, ()))
-    if index >= len(location_mounts):
+    from .smb_media import is_address, resolve
+    if index < len(location_mounts) and is_address(str(location_mounts[index])):
+        resource = resolve(root)
+        if resource is None:
+            raise ScanTargetError('SMB 目录尚未保存到媒体库配置')
+        return resource
+    if index >= len(location_mounts) or str(location_mounts[index]) in ("", ".") or is_unmapped(Path(location_mounts[index])):
+        if windows:
+            return Path(root)
         raise ScanTargetError(
             f"✗ Database path prefix #{index + 1} of media source {location!r} has no matching local directory; "
             f"configure media directories in [media.mounts] in the same order first")
@@ -232,9 +307,10 @@ def _directory_stats(directory: Path) -> dict[str, tuple[int, str]]:
     return stats
 
 
-def _sidecar_on_disk(name: str, directory: Path) -> bool:
+def _sidecar_on_disk(name: str, directory: Path, *, ledger_path: str | None = None,
+                     library_roots: tuple[str, ...] = ()) -> bool:
     """单条登记时的 `is_sidecar`：只在名字本身判不完时才列目录。"""
-    if is_sidecar(name, frozenset()):
+    if is_sidecar(name, frozenset(), path=ledger_path, library_roots=library_roots):
         return True
     if medium_of(name) != "image":
         return False
@@ -251,7 +327,7 @@ def ingest_path(
     db_path: str | os.PathLike[str], location: str, path: str, *,
     declared_roots: Mapping[str, Sequence[str]],
     mounts: Mapping[str, Sequence[str | Path]] | None = None,
-    windows: bool | None = None,
+    windows: bool | None = None, move_from: str | None = None,
 ) -> IngestResult:
     """按扫描的同一口径登记一个文件。
 
@@ -277,7 +353,8 @@ def ingest_path(
         stat = (directory / name).stat()
     except OSError:
         return IngestResult(location, str(ledger_path), False)
-    if _sidecar_on_disk(name, directory):
+    library_roots = tuple(chain.from_iterable(declared_roots.values()))
+    if _sidecar_on_disk(name, directory, ledger_path=str(ledger_path), library_roots=library_roots):
         return IngestResult(location, str(ledger_path), True, stat.st_size, sidecar=True)
     now = time.strftime("%Y-%m-%d %H:%M:%S")
     mtime = time.strftime("%Y-%m-%d", time.localtime(stat.st_mtime))
@@ -285,29 +362,50 @@ def ingest_path(
     tracks = 0
     # 列目录在开连接之前做完：写事务从 upsert 开始一直持有写锁，网盘挂载卡住的那几十秒
     # 不能落在锁里，否则同一账本的其他写入者全部跟着超时。
-    pairing = None
+    here = None
     if medium == "video" or subtitles.subtitle_format(name):
         here = _directory_stats(directory)
-        pairing = subtitles.directory_sidecars(
-            ledger_dir, here, [entry for entry in here if medium_of(entry) == "video"])
     # 忙等时长与 `LedgerDatabase.connect` 一致。
     connection = sqlite3.connect(db_path, timeout=30)
     try:
         connection.execute("PRAGMA journal_mode=WAL")
-        connection.execute(_UPSERT, (location, str(ledger_path), name, medium,
-                                     stat.st_size, mtime, now, now))
-        if pairing is not None:
-            tracks = subtitles.record(connection, location, pairing, now)[0]
-        asset_id, first_seen = connection.execute(
-            "SELECT id,first_seen FROM asset WHERE location=? AND path=?",
-            (location, str(ledger_path))).fetchone()
-        new = first_seen == now
+        registered, conflicts = _registered_paths(connection, location, str(ledger_dir))
+        if str(ledger_path).casefold() in conflicts:
+            raise conflicts[str(ledger_path).casefold()]
+        from .file_identity import FileIdentityIndex
+        from .smb_media import SmbResource
+        identities = FileIdentityIndex(db_path) if location == 'local' and not isinstance(directory, SmbResource) else None
+        if identities is not None:
+            previous = None
+            if move_from:
+                old = PureWindowsPath(move_from)
+                check_scan_target(location, str(old.parent), declared_roots=declared_roots)
+                old_directory = walk_root_for(location, str(old.parent), declared_roots=declared_roots,
+                                              mounts=mounts or {}, windows=windows)
+                previous = (location, move_from, old_directory / old.name)
+            if identities.relocate(connection, location, str(ledger_path), directory / name, stat, previous=previous):
+                registered[str(ledger_path).casefold()] = str(ledger_path)
+        inserted_ids = _upsert_records(connection, [(location, str(ledger_path), name, medium,
+                                     stat.st_size, mtime, now, now)], registered, conflicts)
+        stored_path = registered[str(ledger_path).casefold()]
+        if here is not None:
+            tracks = _record_directory_subtitles(connection, location, ledger_dir, here, conflicts, now)[0]
+        asset_id = connection.execute("SELECT id FROM asset WHERE location=? AND path=?",
+                                     (location, stored_path)).fetchone()[0]
+        new = asset_id in inserted_ids
         reattached = len(record_rehome.reattach(connection, [asset_id] if new else [], now=now))
         acquired = len(wants.reconcile(connection, [asset_id] if new else []))
         folder_rules.apply_new(connection, [asset_id] if new else [])
+        if identities is not None:
+            identities.observe(connection, location, stored_path, directory / name, stat)
         connection.commit()
+        if identities is not None:
+            identities.save()
     finally:
         connection.close()
+    junk.isolate(db_path, asset_ids=[asset_id])
+    from .library_new_assets import remember
+    remember(db_path, inserted_ids)
     return IngestResult(location, str(ledger_path), True, stat.st_size, tracks,
                         asset_id=asset_id, new=new, reattached=reattached, acquired=acquired)
 
@@ -332,29 +430,42 @@ class ScanResult:
     reattached: int = 0
     #: 本次让几条「想要」标了已入库。
     acquired: int = 0
+    junk_isolated: int = 0
+    junk_review: int = 0
+    path_conflicts: int = 0
 
     def summary(self) -> str:
-        return (f"✓ {self.location}: {self.files:,} files / "
-                f"{self.total_bytes / 1024 ** 4:.2f} TB / took {self.seconds:.0f}s; "
-                f"unregistered sidecar files {self.sidecars:,}; gone from the manifest {self.gone:,}; "
-                f"subtitles {self.subtitles:,} (orphaned {self.orphan_subtitles:,})")
+        return (f"✓ {self.location}: {self.files:,} 文件 / "
+                f"{self.total_bytes / 1024 ** 4:.2f} TB / 耗时 {self.seconds:.0f}s；"
+                f"附属文件未登记 {self.sidecars:,} 个；清单中已消失 {self.gone:,} 个；"
+                f"字幕 {self.subtitles:,} 条（孤立 {self.orphan_subtitles:,} 条）；"
+                f"垃圾移入回收站 {self.junk_isolated:,} 个，待复核 {self.junk_review:,} 个；"
+                f"路径重复待复核 {self.path_conflicts:,} 组")
 
 
-def _walk(top: Path, pending: list[str] | None = None):
+def _walk(top: Path, pending: list[str] | None = None, *, onerror=lambda error: None, read_directory=None):
     """自顶向下遍历，每个目录给出它里面的非目录条目（`os.DirEntry`）。
 
     与 `os.walk` 的差别只在一处：条目的大小与时间从 `DirEntry.stat()` 拿。Windows 的目录
     列表自带这两项，不必再对每个文件发一次 `os.stat`——网盘挂载上那一次就是一趟往返，
     几万个文件就是几万趟。读不了的目录跳过；符号链接指向的目录列出但不进入。
     """
+    from .smb_media import SmbResource
+    if isinstance(top, SmbResource):
+        yield from _walk_smb(top, pending, onerror)
+        return
     stack = pending if pending is not None else [os.fspath(top)]
     while stack:
         checkpoint('scan')
         directory = stack.pop()
         try:
-            with os.scandir(directory) as scanner:
-                entries = list(scanner)
-        except OSError:
+            if read_directory is not None:
+                entries = read_directory(directory)
+            else:
+                with os.scandir(directory) as scanner:
+                    entries = list(scanner)
+        except OSError as error:
+            onerror(error)
             continue
         files = []
         subdirectories = []
@@ -377,6 +488,39 @@ def _walk(top: Path, pending: list[str] | None = None):
         yield directory, sorted(files, key=lambda entry: entry.name)
 
 
+def _relative_directory(directory, top):
+    from .smb_media import SmbResource
+    return (PureWindowsPath(str(directory)).relative_to(PureWindowsPath(str(top))).parts
+            if isinstance(top, SmbResource) else Path(directory).relative_to(top).parts)
+
+
+def _walk_smb(top, pending, onerror):
+    from types import SimpleNamespace
+    stack = pending if pending is not None else [str(top)]
+    while stack:
+        checkpoint('scan')
+        directory = stack.pop()
+        resource = top.joinpath(*_relative_directory(directory, top))
+        try:
+            entries = resource.scandir()
+        except OSError as error:
+            onerror(error)
+            continue
+        files, children = [], []
+        for entry in entries:
+            if entry.is_symlink:
+                continue
+            path = str(resource / entry.name)
+            if entry.is_dir:
+                if not entry.name.startswith('@') and entry.name.casefold() != '#recycle':
+                    children.append(path)
+            else:
+                stat = SimpleNamespace(st_size=entry.size, st_mtime=entry.mtime, st_mtime_ns=entry.mtime_ns)
+                files.append(SimpleNamespace(name=entry.name, path=path, stat=lambda value=stat: value))
+        stack.extend(path for path in sorted(children, reverse=True) if path not in stack)
+        yield directory, sorted(files, key=lambda entry: entry.name)
+
+
 class _ScanProgress:
     """结构化扫描进度按时间节流，首项与最终汇总始终报告。"""
     def __init__(self, callback):
@@ -395,7 +539,9 @@ def scan_location(db_path, location, root, **kwargs) -> ScanResult:
     if 'save_checkpoint' in kwargs or 'resume_state' in kwargs:
         return _scan_location(db_path, location, root, **kwargs)
     from .update_tasks import state_for
-    key = hashlib.sha256(f'{location}:{root}'.encode()).hexdigest()
+    mapped = walk_root_for(location, root, declared_roots=kwargs['declared_roots'],
+                           mounts=kwargs.get('mounts') or {}, windows=kwargs.get('windows'))
+    key = hashlib.sha256(f'{location}:{PureWindowsPath(root)}:{mapped}'.casefold().encode()).hexdigest()
     path = state_for(Path(db_path)).parent / 'scan-checkpoints' / f'{key}.json'
     path.parent.mkdir(parents=True, exist_ok=True)
     with FileLock(str(path) + '.lock', timeout=0):
@@ -408,12 +554,66 @@ def scan_location(db_path, location, root, **kwargs) -> ScanResult:
 
 def _pending_directories(previous, walk_root):
     """恢复目录栈，并核对本机挂载仍属于当前扫描根。"""
-    pending = list(previous.get('pending', [os.fspath(walk_root)]))
+    pending = list(previous.get('pending', [str(walk_root)]))
     if previous.get('current_directory'):
         pending.append(previous['current_directory'])
+    from .smb_media import SmbResource
+    if isinstance(walk_root, SmbResource):
+        for value in pending:
+            _relative_directory(value, walk_root)
+        return pending
     if any(not Path(value).is_relative_to(walk_root) for value in pending):
         raise ScanTargetError('The scan directory does not match the saved checkpoint; check the mount settings')
     return pending
+
+
+def _scan_resume_state(walk_root, resume_state):
+    """只接受来源身份匹配的断点，并还原已完成的扫描结果。"""
+    from .smb_media import SmbResource
+    mapping = f'{walk_root.uri}|{walk_root}' if isinstance(walk_root, SmbResource) else str(walk_root)
+    previous = resume_state or {}
+    if previous.get('mapping') != mapping:
+        previous = {}
+    result = previous.get('result')
+    completed = ScanResult(**{**result, 'new_ids': tuple(result['new_ids'])}) if result else None
+    return mapping, previous, completed
+
+
+def _record_directory_subtitles(connection, location, directory, here, conflicts, now):
+    """只给身份唯一的文件配对字幕，断点中的目录资料遵守相同判据。"""
+    sidecars = subtitles.directory_sidecars(
+        directory, here, [name for name in here if medium_of(name) == 'video'])
+    unambiguous = [sidecar for sidecar in sidecars if sidecar.path.casefold() not in conflicts
+                   and (not sidecar.video or sidecar.video.casefold() not in conflicts)]
+    return subtitles.record(connection, location, unambiguous, now)
+
+
+def _scan_file_stat(connection, identities, registered, observations, location, ledger_path, directory, entry, *, direct):
+    """读取本次文件快照，接回已移动的身份，并积累提交后的身份观测。"""
+    stat = entry.stat()
+    if identities is not None:
+        native = Path(directory) / entry.name
+        if direct and not stat.st_ino:
+            stat = native.stat()
+        if identities.relocate(connection, location, ledger_path, native, stat):
+            registered[ledger_path.casefold()] = ledger_path
+        observations.append((location, ledger_path, native, stat))
+    return stat
+
+
+def _commit_scan_records(connection, db, batch, registered, conflicts, identities, observations):
+    inserted = _upsert_records(connection, batch, registered, conflicts)
+    if identities is not None:
+        for location, path, native, stat in observations:
+            identities.observe(connection, location, registered.get(path.casefold(), path), native, stat)
+    connection.commit()
+    if identities is not None:
+        identities.save()
+    from .library_new_assets import remember
+    remember(db, inserted)
+    batch.clear()
+    observations.clear()
+    return inserted
 
 
 def _scan_location(
@@ -423,6 +623,7 @@ def _scan_location(
     progress: Callable[[int, int], None] = lambda files, total_bytes: None,
     resume_state: dict | None = None,
     save_checkpoint: Callable[[dict], None] = lambda state: None,
+    read_directory=None, onerror=lambda error: None, new_only=False,
 ) -> ScanResult:
     """遍历 `root`（数据库中的路径格式）对应的本机目录，把文件元数据 upsert 进 `asset`。
 
@@ -432,10 +633,14 @@ def _scan_location(
     check_scan_target(location, root, declared_roots=declared_roots)
     walk_root = walk_root_for(
         location, root, declared_roots=declared_roots, mounts=mounts or {}, windows=windows)
-    previous = resume_state or {}
-    if previous.get('result'):
-        return ScanResult(**{**previous['result'], 'new_ids': tuple(previous['result']['new_ids'])})
+    from .smb_media import SmbResource
+    remote = isinstance(walk_root, SmbResource)
+    path_module = ntpath if remote else os.path
+    mapping, previous, completed = _scan_resume_state(walk_root, resume_state)
+    if completed is not None:
+        return completed
     ledger_root = PureWindowsPath(root)
+    library_roots = tuple(chain.from_iterable(declared_roots.values()))
     now = previous.get('scan_time') or time.strftime("%Y-%m-%d %H:%M:%S")
     started = time.time()
     progress = _ScanProgress(progress)
@@ -444,26 +649,35 @@ def _scan_location(
     skipped = previous.get('sidecars', 0)
     tracks = previous.get('subtitles', 0)
     orphans = previous.get('orphan_subtitles', 0)
+    discovered = set(previous.get('new_ids', []))
     video_dirs = set(previous.get('video_dirs', []))
     pending = _pending_directories(previous, walk_root)
     batch: list[tuple] = []
+    from .library_new_assets import remember
     # 文件批次提交后保存文件名游标；同目录的配对资料随断点保留。
     def save_directory(directory=None, cursor=None, here=None):
-        artwork_parents = {os.path.dirname(value) for value in [*pending, *([directory] if directory else [])]
-                           if os.path.basename(value).casefold() in ARTWORK_DIRS}
+        artwork_parents = {path_module.dirname(value) for value in [*pending, *([directory] if directory else [])]
+                           if path_module.basename(value).casefold() in ARTWORK_DIRS}
         video_dirs.intersection_update(artwork_parents)
-        save_checkpoint(dict(scan_time=now, pending=list(pending), files=files,
+        save_checkpoint(dict(mapping=mapping, scan_time=now, pending=list(pending), files=files,
                              total_bytes=total, sidecars=skipped, subtitles=tracks,
-                             orphan_subtitles=orphans, video_dirs=sorted(video_dirs),
+                             orphan_subtitles=orphans, new_ids=sorted(discovered), video_dirs=sorted(video_dirs),
                              current_directory=directory, cursor=cursor, here=dict(here or {})))
     # 写事务只在每批 upsert 到 commit 之间打开，遍历与 stat 都在两次 commit 之间，不持锁。
     # 忙等时长与 `LedgerDatabase.connect` 一致。
     connection = sqlite3.connect(db_path, timeout=30)
     try:
         connection.execute("PRAGMA journal_mode=WAL")
-        for directory, entries in _walk(walk_root, pending):
+        registered, conflicts = _registered_paths(connection, location, root)
+        from .file_identity import FileIdentityIndex
+        identities = FileIdentityIndex(db_path) if location == 'local' and not remote else None
+        observations = []
+        for conflict in conflicts.values():
+            onerror(conflict)
+            report(str(conflict))
+        for directory, entries in _walk(walk_root, pending, read_directory=read_directory, onerror=onerror):
             checkpoint('scan')
-            relative = Path(directory).relative_to(walk_root).parts
+            relative = _relative_directory(directory, walk_root)
             continuing = directory == previous.get('current_directory')
             here = dict(previous.get('here') or {}) if continuing else {}
             cursor = previous.get('cursor') if continuing else None
@@ -471,21 +685,27 @@ def _scan_location(
             if videos:
                 video_dirs.add(directory)
             # 自顶向下遍历，上一层总是先于这一层出来，这时已经知道它有没有视频。
-            artwork_dir = (os.path.basename(directory).casefold() in ARTWORK_DIRS
-                           and os.path.dirname(directory) in video_dirs)
+            artwork_dir = (path_module.basename(directory).casefold() in ARTWORK_DIRS
+                           and path_module.dirname(directory) in video_dirs)
             for entry in entries:
                 checkpoint('scan')
                 name = entry.name
                 if cursor is not None and name <= cursor:
                     continue
-                if is_sidecar(name, videos, artwork_dir=artwork_dir):
+                ledger_path = str(ledger_root.joinpath(*relative, name))
+                if is_sidecar(name, videos, artwork_dir=artwork_dir,
+                              path=ledger_path, library_roots=library_roots):
                     skipped += 1
                     continue
-                try:
-                    stat = entry.stat()
-                except OSError:
+                if new_only and ledger_path.casefold() in registered:
+                    here[name] = (None, None)
                     continue
-                ledger_path = str(ledger_root.joinpath(*relative, name))
+                try:
+                    stat = _scan_file_stat(connection, identities, registered, observations, location,
+                                           ledger_path, directory, entry, direct=read_directory is None)
+                except OSError as error:
+                    onerror(error)
+                    continue
                 mtime = time.strftime("%Y-%m-%d", time.localtime(stat.st_mtime))
                 here[name] = (stat.st_size, mtime)
                 batch.append((location, ledger_path, name, medium_of(name),
@@ -494,41 +714,43 @@ def _scan_location(
                 total += stat.st_size
                 progress(files, total)
                 if len(batch) >= BATCH_SIZE:
-                    connection.executemany(_UPSERT, batch)
-                    connection.commit()
-                    batch.clear()
+                    inserted_ids = _commit_scan_records(connection, db_path, batch, registered, conflicts,
+                                                       identities, observations)
+                    discovered.update(inserted_ids)
                     save_directory(directory, name, here)
                     report(f"  {time.time() - started:5.0f}s  {files:,} files  "
                            f"{total / 1024 ** 4:.2f} TB")
-            sidecars = subtitles.directory_sidecars(
-                ledger_root.joinpath(*relative), here,
-                [name for name in here if medium_of(name) == "video"])
-            if batch:
-                connection.executemany(_UPSERT, batch)
-                batch.clear()
-            directory_tracks, directory_orphans = subtitles.record(connection, location, sidecars, now)
+            inserted_ids = _commit_scan_records(connection, db_path, batch, registered, conflicts,
+                                               identities, observations)
+            directory_tracks, directory_orphans = _record_directory_subtitles(
+                connection, location, ledger_root.joinpath(*relative), here, conflicts, now)
             connection.commit()
+            discovered.update(inserted_ids)
+            remember(db_path, inserted_ids)
             tracks += directory_tracks
             orphans += directory_orphans
             save_directory()
-        if batch:
-            connection.executemany(_UPSERT, batch)
-        connection.commit()
-        # 只有 INSERT 那一支写 `first_seen`，等于本次时刻的就是这一轮新建的行。
-        new_ids = tuple(row[0] for row in connection.execute(
-            "SELECT id FROM asset WHERE location=? AND first_seen=? ORDER BY id", (location, now)))
+        inserted_ids = _commit_scan_records(connection, db_path, batch, registered, conflicts,
+                                           identities, observations)
+        discovered.update(inserted_ids)
+        remember(db_path, inserted_ids)
+        from .media_folders import path_predicate
+        scope, parameters = path_predicate(location, root)
+        new_ids = tuple(sorted(discovered))
         reattached = len(record_rehome.reattach(connection, new_ids, now=now))
         acquired = len(wants.reconcile(connection, new_ids))
         folder_rules.apply_new(connection, new_ids)
         connection.commit()
-        gone =connection.execute(
-            "SELECT COUNT(*) FROM asset WHERE location=? AND last_seen<?",
-            (location, now)).fetchone()[0]
+        gone = 0 if new_only else connection.execute(
+            "SELECT COUNT(*) FROM asset a WHERE " + scope + " AND a.last_seen<?",
+            (*parameters, now)).fetchone()[0]
     finally:
         connection.close()
+    checked = junk.isolate(db_path, roots=[(location, root)], asset_ids=list(new_ids) if new_only else None)
     result = ScanResult(location, root, files, total, time.time() - started, gone,
-                        tracks, orphans, skipped, new_ids, reattached, acquired)
-    save_checkpoint({'result': asdict(result)})
+                        tracks, orphans, skipped, new_ids, reattached, acquired,
+                        checked['isolated'], checked['review'], len(conflicts))
+    save_checkpoint({'mapping': mapping, 'result': asdict(result)})
     progress(files, total, force=True)
     report(result.summary())
     return result

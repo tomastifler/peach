@@ -16,16 +16,19 @@ import shutil
 import threading
 import json
 import time
+import uuid
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from filelock import FileLock, Timeout
 
-from . import (access, distribution, entry_links, folder_picker, media_libraries, onboarding,
+from . import (access, data_storage, distribution, entry_links, error_reporting, folder_picker, media_libraries, onboarding,
                push_discovery, settings_file, media_configuration, tunnel, web_downloads)
 from .routes_auth import require_auth, require_authenticated_client, same_origin
 from .web_entry import runtime_fact_entries
+from .web_local_access import local_client, managed_configuration
 from . import release_updates, standalone_update, peach_proxy, desktop_startup, desktop_uninstall
 
 router = APIRouter()
@@ -33,12 +36,6 @@ _SAVE_LOCK = threading.Lock()
 RELOAD_NAME = onboarding.RELOAD_NAME
 #: 直接由 CLI 管理的服务使用设置文件。
 FILE_MANAGED_NOTICE = "This deployment's service is managed by a configuration file; edit the settings file below on this machine."
-
-
-def managed_configuration() -> bool:
-    """托盘或无桌面入口负责消费配置保存后的重载标记。"""
-    return (distribution.standalone() or os.environ.get("PEACH_TRAY_MANAGED") == "1"
-            or os.environ.get("PEACH_HEADLESS_MANAGED") == "1")
 
 
 def dev_environment() -> bool:
@@ -53,49 +50,6 @@ def dev_environment() -> bool:
 
 def revision(config) -> str:
     return hashlib.sha256(config.path.read_bytes()).hexdigest()
-
-
-def tunnel_forwarded(request: Request) -> bool:
-    """隧道在跑时，带 Cloudflare 转发头的请求一律按公网来源处理。
-
-    cloudflared 从本机回环连进来，源 IP 与本机浏览器完全一样；转发头是唯一能把
-    两者分开的证据，宁可把伪造了这些头的本机请求挡在配置页外面。
-    """
-    return tunnel.from_edge(getattr(request.app.state, "tunnel", None), request.headers)
-
-
-def local_client(request: Request) -> bool:
-    """按 IP 检查管理请求；桌面限本机，Docker 允许本机与私有网络，拒绝代理转发。"""
-    if not request.client or tunnel_forwarded(request):
-        return False
-    server = request.scope.get("server")
-    try:
-        peer = ipaddress.ip_address(request.client.host)
-        bound = ipaddress.ip_address(server[0]) if server else None
-    except ValueError:
-        # ASGI 测试或非 IP 绑定没有可比较的服务端 IP；回环客户端仍可识别。
-        bound = None
-        try:
-            peer = ipaddress.ip_address(request.client.host)
-        except ValueError:
-            return False
-    if os.environ.get("PEACH_HEADLESS_MANAGED") == "1":
-        if any(header.startswith("x-forwarded-") or header in {"forwarded", "cf-connecting-ip"}
-               for header in request.headers):
-            return False
-        return peer.is_loopback or (peer.is_private and not any((
-            peer.is_link_local, peer.is_reserved, peer.is_unspecified, peer.is_multicast,
-        )))
-    if not peer.is_loopback and (peer != bound or peer.is_unspecified):
-        return False
-    if managed_configuration():
-        name = request.app.state.settings.mdns_name.lower().removesuffix(".local")
-        hosts = {"127.0.0.1", "localhost", "::1", f"{name}.local"}
-        if bound and not bound.is_unspecified:
-            hosts.add(str(bound))
-        if (request.url.hostname or "").lower().rstrip(".") not in hosts:
-            return False
-    return True
 
 
 def local_only(request: Request) -> None:
@@ -114,7 +68,7 @@ def system_diagnostics(request: Request, args: dict[str, str] = Depends(require_
 
 @router.get("/api/diagnostics/bundle")
 def diagnostic_bundle(request: Request, args: dict[str, str] = Depends(require_auth)):
-    from . import diagnostics, support_bundle
+    from . import diagnostic_context, diagnostics, support_bundle
     local_only(request)
     try:
         report = diagnostics.report(request.app.state.settings, request.app.state.mount_reachability.summary())
@@ -122,12 +76,93 @@ def diagnostic_bundle(request: Request, args: dict[str, str] = Depends(require_a
         from .error_reporting import event
         event("diagnostics-report", error)
         report = None
-    return Response(support_bundle.bundle_bytes(report=report), media_type="application/zip",
+    browser = diagnostic_context.browser_header(request.headers.get('x-peach-browser-diagnostics', ''),
+                                                 user_agent=request.headers.get('user-agent', ''))
+    from .error_reporting import local_event
+    local_event('browser-context', browser=browser, user_agent=browser.get('user_agent', ''))
+    return Response(support_bundle.bundle_bytes(report=report, browser=browser, include_scraping=False), media_type="application/zip",
                     headers={"Content-Disposition": 'attachment; filename="peach-support.zip"',
                              "Cache-Control": "no-store"})
 
 
+@router.get('/api/diagnostics/exports')
+def diagnostic_export_status(request: Request, _args=Depends(require_auth)):
+    from .diagnostic_exports import manager
+    local_only(request)
+    return manager(request).snapshot()
+
+
+@router.post('/api/diagnostics/exports')
+def diagnostic_export_start(request: Request, body: dict = Body(default_factory=dict), _args=Depends(require_auth)):
+    from . import diagnostic_context, diagnostic_exports, diagnostics
+    local_only(request)
+    same_origin(request)
+    kind, codes = body.get('kind'), body.get('codes', '')
+    if not isinstance(codes, str):
+        raise HTTPException(400, '请填写有效番号')
+    browser = diagnostic_context.browser_header(request.headers.get('x-peach-browser-diagnostics', ''),
+                                                 user_agent=request.headers.get('user-agent', ''))
+    try:
+        return diagnostic_exports.manager(request).start(kind, codes, browser=browser,
+            report=lambda: diagnostics.report(request.app.state.settings, request.app.state.mount_reachability.summary()))
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from error
+
+
+@router.post('/api/diagnostics/exports/{identity}/cancel')
+def diagnostic_export_cancel(request: Request, identity: str, _args=Depends(require_auth)):
+    from .diagnostic_exports import manager
+    local_only(request)
+    same_origin(request)
+    try:
+        return manager(request).cancel(identity)
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+
+
+@router.get('/api/diagnostics/exports/{identity}/download')
+def diagnostic_export_download(request: Request, identity: str, _args=Depends(require_auth)):
+    from .diagnostic_exports import manager
+    from .streaming import BufferedFileResponse
+    local_only(request)
+    try:
+        path, name = manager(request).download(identity)
+    except FileNotFoundError as error:
+        raise HTTPException(404, str(error)) from error
+    return BufferedFileResponse(path, filename=name, media_type='application/zip', headers={'Cache-Control': 'no-store'})
+
+
 _CLIENT_ERROR_LOCK = threading.Lock()
+
+
+def _client_error_budget(request: Request) -> None:
+    with _CLIENT_ERROR_LOCK:
+        recent = getattr(request.app.state, 'client_error_times', deque(maxlen=20))
+        request.app.state.client_error_times = recent
+        now = time.monotonic()
+        while recent and now - recent[0] >= 60:
+            recent.popleft()
+        if len(recent) >= 20:
+            raise HTTPException(429, '错误记录过于频繁')
+        recent.append(now)
+
+
+def _record_browser_context(request: Request, context: dict) -> bool:
+    """同一份环境每分钟保留一次，环境快照独立于错误记录预算。"""
+    from .error_reporting import local_event
+    key = hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
+    with _CLIENT_ERROR_LOCK:
+        recent = getattr(request.app.state, 'client_context_times', deque(maxlen=64))
+        request.app.state.client_context_times = recent
+        now = time.monotonic()
+        while recent and now - recent[0][0] >= 60:
+            recent.popleft()
+        if any(saved == key for _, saved in recent):
+            return False
+        if local_event('browser-context', **context) is None:
+            raise HTTPException(503, '错误日志无法写入')
+        recent.append((now, key))
+    return True
 
 
 @router.post("/api/diagnostics/client-error")
@@ -137,15 +172,6 @@ async def client_error(request: Request):
     same_origin(request)
     if not local_client(request):
         require_authenticated_client(request)
-    with _CLIENT_ERROR_LOCK:
-        recent = getattr(request.app.state, "client_error_times", deque(maxlen=20))
-        request.app.state.client_error_times = recent
-        now = time.monotonic()
-        while recent and now - recent[0] >= 60:
-            recent.popleft()
-        if len(recent) >= 20:
-            raise HTTPException(429, "Error reports are too frequent")
-        recent.append(now)
     body = bytearray()
     async for part in request.stream():
         body.extend(part)
@@ -161,9 +187,25 @@ async def client_error(request: Request):
               if isinstance(value := data.get(key), str)}
     fields.update({key: value for key in ('line', 'column')
                    if type(value := data.get(key)) is int and value >= 0})
+    identities = data.get('bundle_debug_ids')
+    if isinstance(identities, dict):
+        from .diagnostic_browser import shipped
+        fields['bundle_debug_ids'] = {key: value for key, value in identities.items()
+            if shipped(key) and isinstance(value, str) and len(value) == 36}
     fields['user_agent'] = request.headers.get('user-agent', '')[:512]
-    if error_reporting.event("browser", **fields) is None:
-        raise HTTPException(503, "Error log cannot be written")
+    from . import diagnostic_context
+    context = {'browser': diagnostic_context.browser(data.get('browser'), user_agent=fields['user_agent'])}
+    if data.get('kind') == 'context':
+        return {'recorded': _record_browser_context(request, context)}
+    _client_error_budget(request)
+    if isinstance(data.get('playback'), dict):
+        context['playback'] = diagnostic_context.playback(data['playback'])
+        recorded = error_reporting.local_event('browser', **fields, **context)
+    else:
+        recorded = error_reporting.event('browser', **fields)
+        error_reporting.local_event('browser-context', **context)
+    if recorded is None:
+        raise HTTPException(503, "错误日志无法写入")
     return {"recorded": True}
 
 
@@ -175,35 +217,56 @@ def configurable(request: Request) -> bool:
             and local_client(request))
 
 
+def _read_section(result: dict, key: str, title: str, reader) -> None:
+    """各配置区域独立读取；故障留痕并提供重试信息。"""
+    try:
+        result[key] = reader()
+    except Exception as error:
+        error_id = uuid.uuid4().hex
+        result.setdefault("section_errors", {})[key] = {
+            "title": f"{title}未取得", "message": "请重新读取；持续失败时导出诊断报告。",
+            "error_id": error_id,
+        }
+        error_reporting.event("logging", error, logger=__name__, level="ERROR",
+                              message=f"配置区域 {key} 读取失败", section=key, error_id=error_id)
+
+
 def snapshot(config) -> dict[str, Any]:
     """配置页首屏要的一切：当前值、修订号、可写与否，以及这台机器的运行信息。"""
     editable = managed_configuration()
     from . import remote_reporting, library_sharing
     media = config.mounts.get("local") or config.locations.get("local", ())
-    return {
-        "remote_reporting": remote_reporting.snapshot(config),
-        "library_sharing": library_sharing.snapshot(config),
-        "startup": desktop_startup.snapshot(config),
-        "uninstall": desktop_uninstall.snapshot(config),
-        "peach_proxy": peach_proxy.describe(config.directory("secrets")),
-        "entry_links": entry_links.snapshot(config.directory("state")),
-        "updates": release_updates.snapshot(),
-        "update_job": standalone_update.public(),
-        "access": access.public(access.load(config.directory("secrets") / "access.json")),
+    result = {
         "editable": editable,
         "notice": "" if editable else FILE_MANAGED_NOTICE,
         "revision": revision(config),
         "media_dirs": list(media),
-        "media_sources": media_configuration.rows(config, windows=os.name == "nt", probe=True),
-        # 媒体库按 `media_libraries.libraries` 数：同名的几个数据库路径前缀是一个库，和侧栏切换器、
-        # `/api/libraries` 同一份分组，页面不自己再归并一遍。
-        "library_count": len(media_libraries.libraries(config)),
-        "mount_dependencies": media_configuration.mount_dependencies(),
+        # 媒体库按持久身份计数，与侧栏切换器和 `/api/libraries` 共用分组。
+        "library_count": 0,
         "windows": os.name == "nt",
         "port": config.server.port,
         "port_editable": distribution.standalone(),
-        "facts": runtime_fact_entries(config),
+        "facts": [],
     }
+    readers = (
+        ("remote_reporting", "错误诊断设置", lambda: remote_reporting.snapshot(config)),
+        ("library_sharing", "馆藏上传设置", lambda: library_sharing.snapshot(config)),
+        ("startup", "开机启动设置", lambda: desktop_startup.snapshot(config)),
+        ("uninstall", "卸载信息", lambda: desktop_uninstall.snapshot(config)),
+        ("storage", "存储空间", lambda: data_storage.snapshot(config)),
+        ("peach_proxy", "Peach 代理", lambda: peach_proxy.describe(config.directory("secrets"))),
+        ("entry_links", "外部入口", lambda: entry_links.snapshot(config.directory("state"))),
+        ("updates", "版本更新", release_updates.snapshot),
+        ("update_job", "更新任务", standalone_update.public),
+        ("access", "访问设置", lambda: access.public(access.load(config.directory("secrets") / "access.json"))),
+        ("media_sources", "媒体目录", lambda: media_configuration.rows(config, windows=os.name == "nt", probe=True)),
+        ("library_count", "媒体库状态", lambda: len(media_libraries.libraries(config))),
+        ("mount_dependencies", "挂载依赖", media_configuration.mount_dependencies),
+        ("facts", "运行信息", lambda: runtime_fact_entries(config)),
+    )
+    for key, title, reader in readers:
+        _read_section(result, key, title, reader)
+    return result
 
 
 def tunnel_payload(config, state: tunnel.TunnelSnapshot, enabled: bool) -> dict[str, Any]:
@@ -235,8 +298,8 @@ def push_discovery_payload(request: Request, payload: dict[str, Any] | None = No
 
     地址不取这次请求的 origin：配置页多半是从回环地址打开的，而 TLS 那条服务只绑在
     局域网地址上，把 `127.0.0.1` 抄过去 CloudDrive2 连不上。取这台机器对外公布的那个
-    地址，也就是 mDNS 登记的同一个。没开 TLS 或者不知道自己的地址时给空串，页面据此
-    说这段现在给不出来，而不是发一段填了也不通的配置出去。
+    地址，也就是 mDNS 登记的同一个。协议与端口取实际应用服务的设置；独立版的局域网
+    服务使用 HTTP，启用 TLS 的服务使用 HTTPS。不知道自己的地址时给空串。
     """
     if payload is None:
         payload = request.app.state.push_discovery.snapshot(reveal=True)
@@ -245,11 +308,41 @@ def push_discovery_payload(request: Request, payload: dict[str, Any] | None = No
     address = str(getattr(mdns, "address", "") or settings.mdns_address or "").strip()
     port = int(settings.mdns_port or 0)
     origin = ""
-    if settings.tls_enabled and address:
-        origin = f"https://{address}" if port in (0, 443) else f"https://{address}:{port}"
+    if address:
+        scheme, default_port = ("https", 443) if settings.tls_enabled else ("http", 80)
+        origin = str(httpx.URL(scheme=scheme, host=address, port=port or default_port))
     payload["origin"] = origin
     payload["config_toml"] = push_discovery.clouddrive_config(origin, payload.get("secret", ""))
     return payload
+
+
+def network_payload(request: Request, config) -> dict[str, Any]:
+    """连接地址来自实际监听信息，编辑值来自托盘配置。"""
+    settings = request.app.state.settings
+    standalone = distribution.standalone()
+    try:
+        local = ipaddress.ip_address(settings.host).is_loopback
+    except ValueError:
+        local = settings.host.lower() == 'localhost'
+    scheme = 'https' if settings.tls_enabled else 'http'
+    port = settings.mdns_port if settings.mdns_enabled else settings.port
+    suffix = '' if port == (443 if settings.tls_enabled else 80) else f':{port}'
+    mdns = getattr(request.app.state, 'mdns', None)
+    address = str(getattr(mdns, 'address', '') or settings.mdns_address or '')
+    try:
+        ip = ipaddress.ip_address(address)
+        address = f'[{ip}]' if ip.version == 6 else str(ip)
+        if ip.is_loopback or ip.is_unspecified or ip.is_link_local or ip.is_multicast:
+            address = ''
+    except ValueError:
+        address = ''
+    hostname = settings.mdns_name.removesuffix('.local')
+    return {'editable': managed_configuration() and standalone,
+            'host': config.server.host, 'mdns_name': config.server.mdns_name,
+            'scope': 'local' if local else 'lan',
+            'local_url': f'http://127.0.0.1:{settings.port}/' if standalone else str(request.base_url),
+            'lan_url': f'{scheme}://{hostname}.local{suffix}/' if not local and settings.mdns_enabled else '',
+            'ip_url': f'{scheme}://{address}{suffix}/' if not local and address and not settings.tls_enabled else ''}
 
 
 @router.get("/api/configuration")
@@ -259,15 +352,16 @@ def read_configuration(request: Request, _args=Depends(require_auth)):
     if not config.present:
         raise HTTPException(409, "Complete first-run setup first")
     result = snapshot(config)
+    _read_section(result, 'network', '访问地址', lambda: network_payload(request, config))
     sync = getattr(request.app.state, "sync", None)
     result["ledger_read_only"] = bool(sync is not None and sync.read_only)
-    state = request.app.state.tunnel.snapshot()
-    result["tunnel"] = tunnel_payload(config, state, config.tunnel.enabled)
-    result["automatic_updates"] = request.app.state.automatic_updates.snapshot()
+    _read_section(result, "tunnel", "公网入口", lambda: tunnel_payload(
+        config, request.app.state.tunnel.snapshot(), config.tunnel.enabled))
+    _read_section(result, "automatic_updates", "自动更新", lambda: request.app.state.automatic_updates.snapshot())
     # 这一路已经过了 `local_only`，密钥可以给出来：用户要把它抄进 CloudDrive2。
-    result["push_discovery"] = push_discovery_payload(request)
-    result["downloads"] = web_downloads.settings_payload(*_downloads(request))
-    if result["automatic_updates"].get("result"):
+    _read_section(result, "push_discovery", "推送发现", lambda: push_discovery_payload(request))
+    _read_section(result, "downloads", "下载设置", lambda: web_downloads.settings_payload(*_downloads(request)))
+    if result.get("automatic_updates", {}).get("result"):
         result["updates"] = result["automatic_updates"]["result"]
     return result
 
@@ -324,9 +418,31 @@ def save_peach_proxy(request: Request, body: dict = Body(...), _args=Depends(req
     local_only(request)
     same_origin(request)
     try:
-        return peach_proxy.save(settings_file.load_config().directory("secrets"), body)
+        saved = peach_proxy.save(settings_file.load_config().directory("secrets"), body)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    request.app.state.network_reachability.refresh()
+    return saved
+
+
+@router.get("/api/network-status")
+def network_status(request: Request, _args=Depends(require_auth)):
+    """外网连通的后台快照；探测按 Peach 代理设置出网，请求本身不出网。
+
+    探测线程在第一次有页面来读时才启动：没人打开界面的实例不出这份流量。
+    """
+    monitor = request.app.state.network_reachability
+    monitor.start()
+    return monitor.summary()
+
+
+@router.post("/api/network-status/check")
+def network_status_check(request: Request, _args=Depends(require_auth)):
+    """当场再探一次外网，回探完的快照。任务中心「网络不通」那一行的「立即重试」走这里。"""
+    monitor = request.app.state.network_reachability
+    monitor.start()
+    monitor.tick()
+    return monitor.summary()
 
 
 @router.post("/api/configuration/entry-links")
@@ -364,6 +480,37 @@ def _downloads(request: Request):
     """取得云下载服务，以及推送发现使用的同一份数据库路径前缀配置。"""
     return (request.app.state.downloads,
             getattr(request.app.state.push_discovery, "declared_roots", {}))
+
+
+@router.get("/api/configuration/cloud-proxies")
+def read_cloud_proxies(request: Request, _args=Depends(require_auth)):
+    from . import clouddrive_proxy
+    from .downloads import DownloadError
+    local_only(request)
+    try:
+        result = clouddrive_proxy.read(settings_file.load_config())
+    except DownloadError:
+        raise HTTPException(502, "无法读取 CloudDrive2 代理配置，请检查连接和令牌权限") from None
+    except (ValueError, OSError) as error:
+        raise HTTPException(400, str(error)) from None
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/api/configuration/cloud-proxies")
+def save_cloud_proxies(request: Request, body: dict = Body(...), _args=Depends(require_auth)):
+    from . import clouddrive_proxy
+    from .downloads import DownloadError
+    local_only(request)
+    same_origin(request)
+    try:
+        result = clouddrive_proxy.save(settings_file.load_config(), body)
+    except clouddrive_proxy.ProxyConflict as error:
+        raise HTTPException(409, str(error)) from None
+    except DownloadError:
+        raise HTTPException(502, "未能确认 CloudDrive2 已保存，请重新读取配置后核对") from None
+    except (ValueError, OSError) as error:
+        raise HTTPException(400, str(error)) from None
+    return JSONResponse(result, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/api/configuration/indexers")
@@ -512,12 +659,111 @@ def uninstall(request: Request, body: dict = Body(...), _args=Depends(require_au
         raise HTTPException(409, str(exc)) from exc
 
 
+def _storage_config():
+    config = settings_file.load_config()
+    if not config.present:
+        raise HTTPException(409, "请先完成首次设置")
+    return config
+
+
+@router.get("/api/configuration/storage")
+def read_storage(request: Request, _args=Depends(require_auth)):
+    """「存储空间」：数据目录位置、磁盘余量、上次统计的分类占用与迁移状态。"""
+    local_only(request)
+    return data_storage.snapshot(_storage_config())
+
+
+@router.post("/api/configuration/storage/measure")
+def measure_storage(request: Request, _args=Depends(require_auth)):
+    local_only(request)
+    same_origin(request)
+    config = _storage_config()
+    try:
+        data_storage.JOBS.start(config, "measure")
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return data_storage.snapshot(config)
+
+
+@router.post("/api/configuration/storage/clean")
+def clean_storage(request: Request, body: dict[str, Any] = Body(default_factory=dict),
+                  _args=Depends(require_auth)):
+    local_only(request)
+    same_origin(request)
+    config = _storage_config()
+    # 勾选几类一起清理时传 `categories`；单清一类的旧写法 `category` 照收。
+    raw = body.get("categories", [body.get("category")])
+    categories = raw if isinstance(raw, list) else []
+    if not categories or any(not isinstance(key, str) or key not in data_storage.CLEANABLE for key in categories):
+        raise HTTPException(400, "这一类不能在这里清理")
+    try:
+        data_storage.JOBS.start(config, categories)
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return data_storage.snapshot(config)
+
+
+@router.post("/api/configuration/storage/relocate")
+def relocate_storage(request: Request, body: dict[str, Any] = Body(default_factory=dict),
+                     _args=Depends(require_auth)):
+    """校验新位置并写下迁移请求；托盘接手后停服务、退出，由迁移助手搬家并重新打开。"""
+    local_only(request)
+    same_origin(request)
+    config = _storage_config()
+    try:
+        return data_storage.request(config, body.get("target"))
+    except ValueError as exc:
+        raise HTTPException(400, {"message": "无法迁移到这个位置", "errors": {"target": str(exc)}}) from exc
+    except Timeout as exc:
+        raise HTTPException(409, "迁移请求正在处理") from exc
+
+
 @router.get("/api/configuration/updates")
 def check_updates(request: Request, _args=Depends(require_auth)):
     local_only(request)
     result = release_updates.check()
     request.app.state.automatic_updates.remember(result)
     return result
+
+
+@router.get('/api/client-updates')
+def client_updates(request: Request, _args=Depends(require_auth)):
+    from .client_updates import snapshot
+    result = snapshot(request.app.state.automatic_updates)
+    result['update_job'] = standalone_update.public()
+    result['repairs'] = request.app.state.upgrade_repairs.snapshot()
+    return result
+
+
+@router.post('/api/configuration/upgrade-repairs/retry')
+async def retry_upgrade_repairs(request: Request, _args=Depends(require_auth)):
+    import asyncio
+    from .api import _installation_in_progress
+    local_only(request)
+    same_origin(request)
+    try:
+        if await asyncio.to_thread(_installation_in_progress, request.app.state.settings.db_path):
+            raise ValueError('正在安装更新，请稍后重试')
+        service = request.app.state.upgrade_repairs
+        activation = getattr(request.app.state, 'ledger_activation', None)
+        if activation is not None and not request.app.state.ledger_background_ready:
+            if not await activation.resume():
+                return service.snapshot()
+        await asyncio.to_thread(service.retry)
+        return service.snapshot()
+    except (ValueError, OSError, Timeout) as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.get('/api/configuration/upgrade-repairs/review')
+def upgrade_repairs_review(request: Request, _args=Depends(require_auth)):
+    local_only(request)
+    service = request.app.state.upgrade_repairs
+    path = service.root / 'catalog-review.json'
+    if not path.is_file():
+        raise HTTPException(404, '暂无升级复核记录')
+    return Response(path.read_bytes(), media_type='application/json',
+                    headers={'Content-Disposition': 'attachment; filename="upgrade-review.json"'})
 
 
 @router.get("/api/configuration/update-status")
@@ -544,10 +790,46 @@ def restart_update(request: Request, _args=Depends(require_auth)):
         raise HTTPException(409, str(exc)) from exc
 
 
+@router.post('/api/configuration/smb/test')
+def test_smb_connection(request: Request, body: dict[str, Any] = Body(default_factory=dict),
+                        _args=Depends(require_auth)):
+    local_only(request)
+    same_origin(request)
+    from .smb_media import address, canonical, credential_store
+    from .smb_transport import SmbConnection, SmbTransport
+    config = settings_file.load_config()
+    try:
+        host, share, tail, port = address(canonical(str(body.get('path', ''))))
+        values = {}
+        key = str(body.get('root_id', ''))
+        known = config.storage_roots.get(key)
+        if known and known.get('transport') == 'smb' and canonical(known['mount']) == canonical(body['path']):
+            credential = credential_store(config).load('smb-' + key)
+            values = credential.values if credential else {}
+        username = body.get('smb_username', values.get('username', ''))
+        password = body.get('smb_password') or (values.get('password', '') if username == values.get('username', '') else '')
+        if not isinstance(username, str) or not isinstance(password, str):
+            raise ValueError('SMB 账号和密码必须是文字')
+        transport = SmbTransport(SmbConnection(host, share, username=username, password=password, port=port,
+                                             encrypt=body.get('smb_encrypt') is True, timeout=8))
+        try:
+            entries = transport.scandir(tail)
+        finally:
+            transport.close()
+        return {'readable': True, 'directories': [entry.name for entry in entries if entry.is_dir and not entry.is_symlink][:500]}
+    except ValueError as error:
+        raise HTTPException(400, str(error)) from None
+    except PermissionError:
+        raise HTTPException(403, 'SMB 登录失败或没有读取权限，请检查账号、密码和共享权限') from None
+    except OSError:
+        raise HTTPException(502, 'SMB 共享无法读取，请检查地址、共享名和网络连接') from None
+
+
 def _validate(body: dict[str, Any], config) -> tuple[dict[str, Any], dict[str, Any]]:
     """逐项校验，错误按字段归位：文件夹按行、端口一句。全对时第一个返回值为空。"""
     errors: dict[str, Any] = {}
     validated: dict[str, Any] = {}
+    from . import media_identity
     raws = body.get("media_dirs")
     rows = [str(item) for item in raws] if isinstance(raws, list) else [str(raws or "")]
     if "media_sources" in body:
@@ -557,6 +839,13 @@ def _validate(body: dict[str, Any], config) -> tuple[dict[str, Any], dict[str, A
         validated.update(locations=locations, mounts=mounts)
         if not problems:
             validated["media_costs"] = media_configuration.costs(sources, config, windows=os.name == "nt")
+            try:
+                prepared = media_identity.configure_sources(config, sources, windows=os.name == "nt")
+                validated.update(library_catalog=prepared.library_catalog, storage_roots=prepared.storage_roots,
+                                 locations=prepared.locations, mounts=prepared.mounts,
+                                 media_costs=prepared.media_costs)
+            except ValueError as exc:
+                problems = [str(exc)] * len(sources)
         names, icons = {}, {}
         if not problems:
             for index, row in enumerate(sources):
@@ -565,7 +854,7 @@ def _validate(body: dict[str, Any], config) -> tuple[dict[str, Any], dict[str, A
                     problems = [""] * len(body["media_sources"])
                     problems[index] = "Use 1 to 80 visible characters for the library name"
                     break
-                root = str(media_configuration.PureWindowsPath(row["path"] if os.name == "nt" else row["root"]))
+                root = str(media_configuration.PureWindowsPath(row.get('root') or row['path']))
                 if name:
                     names[root] = name
                 from .media_libraries import LIBRARY_ICONS
@@ -581,10 +870,29 @@ def _validate(body: dict[str, Any], config) -> tuple[dict[str, Any], dict[str, A
     else:
         paths, problems = onboarding.read_media_dirs(
             rows, validate=onboarding.media_dir_validator(windows=os.name == "nt"))
+        if not problems:
+            sources = media_identity.sources_for_paths(config, paths, windows=os.name == "nt", keep_other_sources=True)
+            try:
+                prepared = media_identity.configure_sources(config, sources, windows=os.name == "nt")
+                validated.update(locations=prepared.locations, mounts=prepared.mounts,
+                                 library_catalog=prepared.library_catalog, storage_roots=prepared.storage_roots,
+                                 library_names=prepared.library_names, library_icons=prepared.library_icons,
+                                 media_costs=prepared.media_costs)
+            except ValueError as exc:
+                problems = [str(exc)] * max(1, len(rows))
     if problems:
         errors["media_dirs"] = problems
     else:
         validated["media_dirs"] = paths
+    server_errors, server_values = _validate_server(body, config)
+    errors.update(server_errors)
+    validated.update(server_values)
+    return errors, validated
+
+
+def _validate_server(body, config):
+    """端口、监听范围和局域网名称按运行方式校验。"""
+    errors, validated = {}, {}
     try:
         port = onboarding.validate_port(str(body.get("port", config.server.port)))
         if distribution.standalone():
@@ -594,6 +902,18 @@ def _validate(body: dict[str, Any], config) -> tuple[dict[str, Any], dict[str, A
         validated["port"] = port
     except ValueError as exc:
         errors["port"] = str(exc)
+    for field, validator in (('host', onboarding.validate_host), ('mdns_name', onboarding.validate_mdns_name)):
+        if field not in body:
+            continue
+        try:
+            if not isinstance(body[field], str):
+                raise ValueError('请选择访问范围' if field == 'host' else '请填写局域网名称')
+            value = validator(body[field])
+            if not distribution.standalone() and value != getattr(config.server, field):
+                raise ValueError('访问范围与名称由服务启动配置管理')
+            validated[field] = value
+        except ValueError as exc:
+            errors[field] = str(exc)
     return errors, validated
 
 
@@ -818,15 +1138,25 @@ def save_configuration(request: Request, body: dict[str, Any] = Body(default_fac
             validated["library_names"] = {**config.library_names, **{
                 row["root"]: row["library"] for row in sources if row.get("library")}}
         prepared = replace(config, locations=locations, mounts=mounts,
+                           library_catalog=validated.get("library_catalog", config.library_catalog),
+                           storage_roots=validated.get("storage_roots", config.storage_roots),
                            library_names=validated.get("library_names", config.library_names),
                            library_icons=validated.get("library_icons", config.library_icons),
                            media_costs=validated.get("media_costs", config.media_costs),
-                           server=replace(config.server, port=validated["port"]))
+                           server=replace(config.server, port=validated["port"],
+                                          host=validated.get('host', config.server.host),
+                                          mdns_name=validated.get('mdns_name', config.server.mdns_name)))
+        if prepared.storage_roots:
+            from . import media_identity
+            prepared = media_identity.project(prepared)
         temporary = config.path.with_suffix(".pending.toml")
         try:
             shutil.copy2(config.path, config.path.with_suffix(".previous.toml"))
+            settings_file.keep_pre_identity_backup(config.path)
             temporary.write_text(settings_file.render(prepared), encoding="utf-8")
-            os.replace(temporary, config.path)
+            from .smb_media import credential_transaction
+            with credential_transaction(prepared, body.get('media_sources', [])):
+                os.replace(temporary, config.path)
             if body.get("scan_now"):
                 onboarding.request_first_scan(prepared, "configured")
             config.directory("state").mkdir(parents=True, exist_ok=True)

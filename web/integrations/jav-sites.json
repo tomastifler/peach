@@ -348,10 +348,17 @@
       "domains": [
         "dmm.co.jp"
       ],
-      "mode": "selection",
+      "mode": "automatic",
+      "identity": "peach",
       "query_keys": [
         "id"
-      ]
+      ],
+      "selectors": [
+        "th",
+        "dt",
+        "[data-video-code]"
+      ],
+      "detail_pattern": "^/(?:av/content/?|(?:digital/(?:videoa|videoc)|mono/dvd)/-/detail/=/cid=([A-Za-z0-9_]+)/?)$"
     },
     {
       "id": "mgs",
@@ -360,7 +367,14 @@
       "domains": [
         "mgstage.com"
       ],
-      "mode": "selection"
+      "mode": "automatic",
+      "identity": "peach",
+      "selectors": [
+        "th",
+        "dt",
+        "[data-video-code]"
+      ],
+      "detail_pattern": "^/product/product_detail/([A-Za-z0-9_-]+)/?$"
     },
     {
       "id": "duga",
@@ -763,7 +777,17 @@
       "label": "JavBooks",
       "kind": "资源",
       "domains": [
-        "javbooks.com"
+        "javbooks.com",
+        "jmvbt.com"
+      ],
+      "mode": "selection"
+    },
+    {
+      "id": "javhd-today",
+      "label": "JavHD.today",
+      "kind": "在线播放",
+      "domains": [
+        "javhd.today"
       ],
       "mode": "selection"
     },

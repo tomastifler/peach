@@ -69,7 +69,8 @@ describe('来源链接与凭据布局', () => {
         });
         await form.getByRole('button', { name: 'Save source', exact: true }).click();
         await form.waitFor({ state: 'detached' });
-        await page.getByText('公开演示元数据 · Disabled', { exact: true }).waitFor();
+        const savedSource = region.getByText('公开演示元数据', { exact: true }).locator('..');
+        await savedSource.locator('[data-status-tone="neutral"]').filter({ hasText: '已停用' }).waitFor();
         assert.equal(items.length, 1);
         assert.equal(await add.evaluate(button => parseFloat(getComputedStyle(button.parentElement!).borderTopWidth)), 1);
         assert.deepEqual(opened.problems, []);

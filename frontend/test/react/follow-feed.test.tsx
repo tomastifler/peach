@@ -235,7 +235,7 @@ function helpers(): FollowFeedHelpers {
 
 function actions(): FollowFeedActions {
   return {
-    route: vi.fn(), shuffle: vi.fn(), loaded: vi.fn(), openDetail: vi.fn(), openAuthor: vi.fn(), openManage: vi.fn(), toggleSelection: vi.fn(),
+    route: vi.fn(), shuffle: vi.fn(), loaded: vi.fn(), openDetail: vi.fn(), openAuthor: vi.fn(), toggleSelection: vi.fn(),
     setImagesOnly: vi.fn(), setPhotoLayout: vi.fn(), canFlip: () => false, toast: vi.fn(), failure: vi.fn(), checkReport: vi.fn(),
   };
 }
@@ -357,10 +357,11 @@ describe('页面', () => {
     vi.stubGlobal('fetch', fetcher);
     const given = props();
     const host = await open(given);
-    expect(host.querySelector('[data-follow-title]')?.textContent).toBe('Follow');
-    await click(host.querySelector('[data-follow-manage]'));
-    expect(given.actions.openManage).toHaveBeenCalled();
-    expect(host.querySelector('[data-media-error] [data-note-action]')?.textContent).toBe('Retry');
+    expect(host.querySelector('[data-follow-title]')?.textContent).toBe('关注');
+    const manage = host.querySelector('[data-follow-manage]');
+    expect(manage?.tagName).toBe('A');
+    expect(manage?.getAttribute('href')).toBe('/subscriptions');
+    expect(host.querySelector('[data-media-error] [data-note-action]')?.textContent).toBe('立即重试');
   });
 
   it('有来源、一条更新都还没有：没设筛选时说还没有更新，设了筛选才叫人换筛选', async () => {
@@ -370,8 +371,13 @@ describe('页面', () => {
     expect(bare.querySelector('[data-follow-empty]')?.textContent).not.toContain('filter');
     queryClient.clear();
     serve(feed([]));
-    const filtered = await open(props({ view: view({ status: 'saved' }), revision: 2 }));
-    expect(filtered.querySelector('[data-follow-empty]')?.textContent).toContain('Try changing the status or source filter.');
+    const given = props({ view: view({ status: 'saved' }), revision: 2 });
+    const filtered = await open(given);
+    const empty = filtered.querySelector('[data-follow-empty]');
+    expect(empty?.querySelector('h3')?.textContent).toBe('当前筛选下没有更新');
+    expect(empty?.querySelector('button')?.textContent).toBe('清除筛选');
+    await click(empty?.querySelector('button') ?? null);
+    expect(given.actions.route).toHaveBeenLastCalledWith(view());
   });
 
   it('全部创作者可从同一横滚行访问', async () => {

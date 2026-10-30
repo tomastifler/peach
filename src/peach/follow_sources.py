@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import html
+import hashlib
 import json
 import re
 import time
@@ -401,15 +402,9 @@ _PAHEAL_LIST_RE = re.compile(r"^/post/list/([^/]+)/\d+$")
 
 
 def canonical_source_ref(provider: str, ref: str) -> str:
-    """Return the provider's stable source identity.
-
-    Most provider ids are case-sensitive opaque values.  rule34.xxx tags are not:
-    the API returns the same feed for ``LazyProcrastinator`` and
-    ``lazyprocrastinator``.  Keeping the pasted spelling in the unique key therefore
-    creates duplicate subscriptions when the same author is added in two batches.
-    """
+    """来源的稳定身份；booru 标签与 Iwara 用户名忽略大小写。"""
     value = str(ref or "").strip()
-    return value.casefold() if provider in {"rule34xxx", "rule34paheal"} else value
+    return value.casefold() if provider in {"rule34xxx", "rule34paheal", "iwara"} else value
 
 
 #: 线程 slug 里从这个 token 起就不是作品名了：f95 的惯例是
@@ -774,6 +769,197 @@ class _BaseConnector:
             self.transport, credential=self.gofile_credential,
             timeout=self.timeout, max_bytes=self.max_bytes, max_items=self.max_items,
         ).expand(links, labels=labels)
+
+
+class IwaraConnector(_BaseConnector):
+    """Iwara 作者视频列表及播放格式；协议依据见 docs/REUSE.md。"""
+
+    provider = "iwara"
+    API_ROOT = "https://apiq.iwara.tv"
+    PAGE_SIZE = 32
+    _HANDLE_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
+    _VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9]{1,80}$")
+
+    def __init__(self, **kwargs):
+        if kwargs.get("transport") is None:
+            kwargs["transport"] = CurlCffiTransport(impersonate="chrome")
+        super().__init__(**kwargs)
+
+    @classmethod
+    def parse_url(cls, provider, parsed, host):
+        matched = re.fullmatch(r"/profile/([A-Za-z0-9_-]{1,80})(?:/videos)?/?",
+                               parsed.path)
+        if host not in {"iwara.tv", "ecchi.iwara.tv"} or not matched:
+            raise FollowSourceError("Iwara 请粘贴作者主页，例如 https://www.iwara.tv/profile/username")
+        ref = matched.group(1).casefold()
+        return ParsedSource(provider, ref, f"https://www.iwara.tv/profile/{ref}", ref)
+
+    @classmethod
+    def profile_handle(cls, ref):
+        value = str(ref or "").strip()
+        return value if cls._HANDLE_RE.fullmatch(value) else ""
+
+    def _headers(self):
+        headers = {**super()._headers(), "Accept": "application/json",
+                   "Origin": "https://www.iwara.tv", "Referer": "https://www.iwara.tv/",
+                   "X-Site": "www.iwara.tv"}
+        if self.credential and self.credential.values.get("access_token"):
+            headers["Authorization"] = "Bearer " + self.credential.values["access_token"]
+        return headers
+
+    def _check_status(self, response):
+        if response.status in (401, 403):
+            raise FollowSourceError(
+                f"Iwara 拒绝访问（HTTP {response.status}）：登录凭据可能已过期，"
+                "或站点要求浏览器验证，请核对来源与订阅设置")
+        if response.status == 404:
+            raise FollowSourceError("Iwara 作者或视频未取得：可能已删除或需要有访问权的账号")
+        super()._check_status(response)
+
+    def _object(self, response):
+        payload = self.parse_json(response)
+        if not isinstance(payload, dict):
+            raise FollowSourceError("Iwara 接口响应格式不符")
+        if payload.get("message"):
+            code = str(payload["message"])
+            if code in {"errors.privateVideo", "errors.notFound", "errors.unauthorized"}:
+                raise FollowSourceError("Iwara 内容未取得：请确认账号有访问权并更新登录凭据")
+            raise FollowSourceError("Iwara 接口拒绝请求，请在来源页面核对内容状态")
+        return payload
+
+    def fetch(self, ref, *, etag=None, last_modified=None, page=0):
+        handle = self.profile_handle(ref).casefold()
+        if not handle:
+            raise FollowSourceError("Iwara 的 ref 必须是作者用户名")
+        if int(page) < 0:
+            raise FollowSourceError("Iwara 页码不能小于 0")
+        profile = self.fetch_json(f"{self.API_ROOT}/profile/{handle}")
+        if not isinstance(profile, dict) or not isinstance(profile.get("user"), dict):
+            raise FollowSourceError("Iwara 作者资料格式不符")
+        user = profile["user"]
+        user_id = str(user.get("id") or "")
+        if not re.fullmatch(r"[A-Za-z0-9-]{1,80}", user_id):
+            raise FollowSourceError("Iwara 作者 ID 未取得")
+        url = self.API_ROOT + "/videos?" + urllib.parse.urlencode({
+            "user": user_id, "page": int(page), "limit": self.PAGE_SIZE,
+            "sort": "date", "rating": "all"})
+        common, response = self._request(url, ref=handle, page=page,
+                                         etag=etag, last_modified=last_modified)
+        if response is None:
+            return SourceFetch(not_modified=True, **common)
+        payload = self._object(response)
+        rows = payload.get("results")
+        if not isinstance(rows, list):
+            raise FollowSourceError("Iwara 视频列表格式不符")
+        if page and not rows:
+            raise FollowHistoryEnd("没有更多历史内容")
+        candidates = []
+        seen = set()
+        for row in rows[:self.max_items]:
+            candidate = self._candidate(row, user, handle)
+            if candidate.external_id in seen:
+                continue
+            seen.add(candidate.external_id)
+            candidates.append(candidate)
+        return SourceFetch(candidates=tuple(candidates), raw_body=response.body, **common)
+
+    def _candidate(self, row, user, handle):
+        """把列表字段映射为稳定 DTO，不保存短效文件地址。"""
+        if not isinstance(row, dict) or not self._VIDEO_ID_RE.fullmatch(str(row.get("id") or "")):
+            raise FollowSourceError("Iwara 视频条目缺少有效 ID")
+        video_id = row["id"]
+        file = row.get("file") if isinstance(row.get("file"), dict) else {}
+        file_id = str(file.get("id") or "")
+        thumbnail = None
+        if re.fullmatch(r"[A-Za-z0-9-]{1,80}", file_id):
+            thumbnail = f"https://files.iwara.tv/image/thumbnail/{file_id}/thumbnail-00.jpg"
+        url = f"https://www.iwara.tv/video/{video_id}"
+        extra = {"media_kind": "video", **self._tag_metadata(row.get("tags"))}
+        if row.get("embedUrl"):
+            extra["media_error"] = "Iwara 此条目使用外部播放器，请打开来源页面观看"
+        return FollowCandidate(
+            provider=self.provider, external_id=video_id,
+            title=plain_text(str(row.get("title") or "")) or video_id,
+            url=url, media_url=None if row.get("embedUrl") else url,
+            thumb_url=thumbnail, published_at=_iso_from_text(row.get("createdAt")),
+            duration=self._duration(file.get("duration")),
+            author=plain_text(str(user.get("name") or handle)),
+            summary=plain_text(str(row.get("body") or "")) or None, extra=extra)
+
+    @staticmethod
+    def _tag_metadata(value):
+        """仅接纳上游明确的 general 类型，其他类型保留原值。"""
+        rows = value if isinstance(value, list) else []
+        tags = [tag for tag in rows if isinstance(tag, dict)
+                and isinstance(tag.get("id"), str)]
+        source_types = {tag["id"]: tag["type"] for tag in tags
+                        if isinstance(tag.get("type"), str) and tag["type"]}
+        return {"tags": [tag["id"] for tag in tags], "source_tag_types": source_types,
+                "tag_types": {name: "general" for name, kind in source_types.items()
+                              if kind == "general"}}
+
+    @staticmethod
+    def _duration(value):
+        try:
+            seconds = float(value)
+            return seconds if 0 < seconds < 10 ** 7 else None
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+    @staticmethod
+    def media_url_allowed(url):
+        try:
+            parsed = urllib.parse.urlsplit(url)
+            return (parsed.scheme == "https" and parsed.port in {None, 443}
+                    and not parsed.username and not parsed.password
+                    and (parsed.hostname == "iwara.tv"
+                         or str(parsed.hostname or "").endswith(".iwara.tv")))
+        except ValueError:
+            return False
+
+    def playback_formats(self, video_id):
+        """播放时取得短效格式清单；凭据只发送到固定 API。"""
+        if not self._VIDEO_ID_RE.fullmatch(str(video_id or "")):
+            raise FollowSourceError("Iwara 视频 ID 无效")
+        response = self._get(f"{self.API_ROOT}/video/{video_id}")
+        self._check_status(response)
+        detail = self._object(response)
+        file_url = str(detail.get("fileUrl") or "")
+        if not file_url:
+            raise FollowSourceError("Iwara 正片地址未取得，请打开来源页面核对访问权")
+        if not self.media_url_allowed(file_url):
+            raise FollowSourceError("Iwara 返回了不受信任的文件接口地址")
+        parsed = urllib.parse.urlsplit(file_url)
+        expires = urllib.parse.parse_qs(parsed.query).get("expires", [""])[0]
+        if not expires.isdecimal():
+            raise FollowSourceError("Iwara 文件接口缺少有效期限")
+        # yt-dlp IwaraIE 的公开文件接口签名，固定 revision 见 docs/REUSE.md。
+        key = "_".join((parsed.path.rstrip("/").rsplit("/", 1)[-1], expires,
+                        "mSvL05GfEmeEmsEYfGCnVpEjYgTJraJN"))
+        response = self._get(file_url, connector_headers=False,
+                             headers={"X-Version": hashlib.sha1(key.encode()).hexdigest()})
+        self._check_status(response)
+        rows = self.parse_json(response)
+        if not isinstance(rows, list):
+            raise FollowSourceError("Iwara 播放格式清单不符")
+        formats = []
+        file = detail.get("file") if isinstance(detail.get("file"), dict) else {}
+        source_height = file.get("height")
+        for row in rows:
+            if not isinstance(row, dict) or not isinstance(row.get("src"), dict):
+                continue
+            value = str(row["src"].get("view") or row["src"].get("download") or "")
+            value = "https:" + value if value.startswith("//") else value
+            if not self.media_url_allowed(value):
+                continue
+            name = str(row.get("name") or "")
+            level = int(name) if name.isdecimal() else (
+                int(source_height) if name == "Source" and str(source_height).isdecimal() else 0)
+            formats.append((level, value, name == "Source"))
+        if not formats:
+            raise FollowSourceError("Iwara 正片格式未取得")
+        return tuple((level, value) for level, value, _ in sorted(
+            formats, key=lambda entry: (entry[2], entry[0]), reverse=True))
 
 
 class KemonoConnector(_BaseConnector):
@@ -2047,8 +2233,15 @@ _PROFILE_PATH_STOPWORDS = frozenset({
 _PROFILE_HANDLE_RE = re.compile(r"^[A-Za-z0-9._-]{2,64}$")
 _PIXIV_USER_RE = re.compile(r"(?:^|/)users/(\d{1,20})(?:$|/)")
 _XENFORO_MEMBER_RE = re.compile(r"^members/([^/.]+)\.(\d{1,20})/?$")
-_BSKY_PROFILE_RE = re.compile(r"^profile/([^/]+)$")
+_BSKY_PROFILE_RE = re.compile(r"^profile/([A-Za-z0-9._-]{2,64})$")
 _FANTIA_FANCLUB_RE = re.compile(r"^fanclubs/(\d{1,20})(?:$|/)")
+_PROFILE_PATH_IDENTITIES = {
+    "pixiv.net": ("pixiv", _PIXIV_USER_RE),
+    "bsky.app": ("bsky", _BSKY_PROFILE_RE),
+    "fantia.jp": ("fantia", _FANTIA_FANCLUB_RE),
+    "iwara.tv": ("iwara", re.compile(r"^profile/([A-Za-z0-9_-]{1,80})(?:/videos)?$")),
+    "ecchi.iwara.tv": ("iwara", re.compile(r"^profile/([A-Za-z0-9_-]{1,80})(?:/videos)?$")),
+}
 
 
 def profile_link_identity(url: str, *, forum_host: str = "") -> tuple[str, str] | None:
@@ -2074,19 +2267,14 @@ def profile_link_identity(url: str, *, forum_host: str = "") -> tuple[str, str] 
     if host == "fanbox.cc" and first.startswith("@"):
         handle = first[1:]
         return ("fanbox", handle) if _PROFILE_HANDLE_RE.match(handle) else None
-    if host == "pixiv.net":
-        matched = _PIXIV_USER_RE.search(path)
-        return ("pixiv", matched.group(1)) if matched else None
+    identity = _PROFILE_PATH_IDENTITIES.get(host)
+    if identity:
+        service, pattern = identity
+        matched = pattern.search(path)
+        return (service, canonical_source_ref(service, matched.group(1))) if matched else None
     if host.endswith(".itch.io"):
         handle = host.removesuffix(".itch.io")
         return ("itchio", handle) if _PROFILE_HANDLE_RE.match(handle) else None
-    if host == "bsky.app":
-        matched = _BSKY_PROFILE_RE.match(path)
-        handle = matched.group(1) if matched else ""
-        return ("bsky", handle) if _PROFILE_HANDLE_RE.match(handle) else None
-    if host == "fantia.jp":
-        matched = _FANTIA_FANCLUB_RE.match(path)
-        return ("fantia", matched.group(1)) if matched else None
     if forum_host and host == forum_host.lower().removeprefix("www."):
         matched = _XENFORO_MEMBER_RE.match(path)
         return (forum_host.split(".")[0], matched.group(1)) if matched else None
@@ -3058,7 +3246,7 @@ def parse_source_url(raw_url: str) -> ParsedSource:
 _CONNECTOR_CLASSES: tuple[type, ...] = (
     FanboxConnector, PatreonConnector, SubscribeStarConnector, KemonoConnector,
     Rule34VideoConnector, Rule34XxxConnector, Rule34PahealConnector,
-    F95ZoneConnector, SimpCityConnector,
+    F95ZoneConnector, SimpCityConnector, IwaraConnector,
 )
 
 CONNECTORS: dict[str, type] = {

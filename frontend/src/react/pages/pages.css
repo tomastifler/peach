@@ -10,6 +10,11 @@
 @import "../boardui/styles/typography.css";
 @import "../components/surface-motion.css";
 @import "../base.css";
+@import "../components/selection-dock.css";
+@import "../batch-dock/batch-dock.css";
+@import "./copy-editor-page.css";
+@import "../accent-palette.css";
+@import "./setup/setup.css";
 
 @source "./";
 @source "../settings/folder-rows.tsx";
@@ -17,6 +22,9 @@
 @source "../settings/section.tsx";
 @source "../components/note.tsx";
 @source "../components/segmented.tsx";
+@source "../components/configuration-fields.tsx";
+@source "../settings/library-icon-picker.tsx";
+@source "../settings/library-policy-settings.tsx";
 @source "../boardui/components/base/";
 @source "../boardui/components/application/settings/settings-rows.tsx";
 

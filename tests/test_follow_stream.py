@@ -1,4 +1,5 @@
 import threading
+import json
 import unittest
 from types import SimpleNamespace
 from unittest import mock
@@ -16,6 +17,75 @@ from peach.http import HttpResponse
 
 
 class FollowMediaResolverTests(unittest.TestCase):
+    def test_iwara_transport_cleanup_preserves_the_callers_transport(self):
+        owned = mock.Mock()
+        upstream = peach_http.HttpxTransport()
+        with mock.patch("peach.follow_stream.IwaraConnector", return_value=SimpleNamespace(transport=owned)):
+            resolver = FollowMediaResolver(upstream)
+        resolver.close()
+        owned.close.assert_called_once_with()
+        upstream.close()
+        injected = mock.Mock()
+        FollowMediaResolver(injected).close()
+        injected.close.assert_not_called()
+
+    def test_iwara_playback_uses_shared_cache_quality_selection_and_no_media_credentials(self):
+        requests = []
+
+        def transport(request, timeout, max_bytes):
+            requests.append(request)
+            payload = ({"fileUrl": "https://files.iwara.tv/file/id?expires=2000000000",
+                        "file": {"height": 1080}}
+                       if "/video/" in request.url else [
+                           {"name": "Source", "src": {"view": "//hime.iwara.tv/1080.mp4"}},
+                           {"name": "540", "src": {"view": "//mikoto.iwara.tv/540.mp4"}}])
+            return HttpResponse(200, {}, json.dumps(payload).encode())
+
+        item = SimpleNamespace(id=90, provider="iwara", external_id="Video123",
+                               url="https://www.iwara.tv/video/Video123", metadata={},
+                               media_url="https://www.iwara.tv/video/Video123")
+        resolver = FollowMediaResolver(transport).with_credential_loader(
+            lambda _: Credential("iwara", {"access_token": "private-token"}))
+        self.assertEqual(resolver.resolve(item).url, "https://hime.iwara.tv/1080.mp4")
+        lower = resolver.resolve(item, height=540)
+        self.assertEqual(lower.url, "https://mikoto.iwara.tv/540.mp4")
+        self.assertEqual(len(requests), 2)
+        self.assertEqual(lower.allowed_hosts, ("iwara.tv",))
+        self.assertIsNone(lower.headers)
+        self.assertNotIn("Authorization", requests[1].headers)
+        self.assertTrue(proxyable("iwara", item.media_url))
+
+    def test_iwara_access_failure_is_cached_and_rate_limit_pauses_the_source(self):
+        transport = mock.Mock(return_value=HttpResponse(429, {"Retry-After": "30"}, b""))
+        resolver = FollowMediaResolver(transport, clock=lambda: 100)
+        item = SimpleNamespace(id=90, provider="iwara", external_id="Video123",
+                               url="https://www.iwara.tv/video/Video123", metadata={})
+        with self.assertRaises(FollowMediaUnavailable):
+            resolver.resolve(item)
+        with self.assertRaises(FollowMediaUnavailable):
+            resolver.resolve(item)
+        self.assertEqual(transport.call_count, 1)
+        self.assertEqual(resolver.cooling("iwara"), 30)
+
+    def test_iwara_unknown_original_height_preserves_default_and_explicit_selection(self):
+        transport = mock.Mock(side_effect=[
+            HttpResponse(200, {}, json.dumps({
+                "fileUrl": "https://files.iwara.tv/file/id?expires=2000000000",
+                "file": {"height": 0}}).encode()),
+            HttpResponse(200, {}, json.dumps([
+                {"name": "540", "src": {"view": "//hime.iwara.tv/540.mp4"}},
+                {"name": "Source", "src": {"view": "//mikoto.iwara.tv/original.mp4"}}]).encode())])
+        resolver = FollowMediaResolver(transport)
+        item = SimpleNamespace(id=91, provider="iwara", external_id="Video123",
+                               url="https://www.iwara.tv/video/Video123", metadata={})
+        original = resolver.resolve(item)
+        self.assertEqual(original.url, "https://mikoto.iwara.tv/original.mp4")
+        self.assertEqual(original.qualities[0][0], 0)
+        self.assertEqual(resolver.resolve(item, height=540).url, "https://hime.iwara.tv/540.mp4")
+        self.assertEqual(resolver.resolve(item, height=0), original)
+        self.assertEqual(resolver.resolve(item, height=9999), original)
+        self.assertEqual(transport.call_count, 2)
+
     def test_rule34video_resolves_the_current_signed_url_and_caches_it(self):
         requests = []
 
@@ -410,6 +480,7 @@ class ProxyUpstreamTests(unittest.TestCase):
         with self.assertRaises(FollowProxyError) as raised:
             open_upstream(self._client(handler), "GET", target, incoming={})
         self.assertIn("403", str(raised.exception))
+        self.assertEqual(raised.exception.status_code, 403)
         self.assertNotIn("shield", str(raised.exception))
 
     def test_a_redirect_loop_is_bounded(self):

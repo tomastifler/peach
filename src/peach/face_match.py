@@ -8,8 +8,9 @@ opencv_zoo，走同一个 `cv2` 包：`cv2.FaceRecognizerSF` 先按 YuNet 给的
 用它的地方只有一处：补头像后继在图库同名多张时，拿每张候选上的脸和她单人作品封面上
 截到的脸比，挑出是她本人的那几张（ADR-0056）。
 
-模型不进 Git：37 MB 的 ONNX，与 YuNet 一样放 `peach-data/tools/`，首次用到时按固定
-地址取一次、校验 sha256（`face_detect.fetch_model`）。取不到时 `FaceMatcher` 记下原因、
+模型不进 Git：37 MB 的 ONNX，与 YuNet 一样随安装包分发，随包那份不在或对不上时退回
+`peach-data/tools/`，再退回按固定地址联网取一次，都校验 sha256（`face_detect.bundled_model`、
+`face_detect.fetch_model`）。取不到时 `FaceMatcher` 记下原因、
 一张都不比，调用方退回不看脸的旧判据——一次下载失败不能变成「装了一张别人的脸」。
 """
 from __future__ import annotations
@@ -20,12 +21,8 @@ from . import face_detect
 from .config import TOOLS_DIR
 from .face_detect import FaceDetector, main_face
 
-#: opencv_zoo 的 SFace 定版模型。走 media. 域名的原因和 YuNet 一样：仓库用 Git LFS，
-#: raw. 域名只回一个指针文件——那个指针里的 oid 就是下面这个哈希。
-MODEL_URL = (
-    "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/"
-    "models/face_recognition_sface/face_recognition_sface_2021dec.onnx"
-)
+#: opencv_zoo 的 SFace 定版模型，与 YuNet 同一个定版提交。LFS 指针里的 oid 就是下面这个哈希。
+MODEL_URL = face_detect.ZOO_MEDIA + "face_recognition_sface/face_recognition_sface_2021dec.onnx"
 MODEL_SHA256 = "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"
 MODEL_PATH = TOOLS_DIR / "sface" / "face_recognition_sface_2021dec.onnx"
 #: 记进头像边车的模型名，回溯时要答得出「这个分是哪一版模型给的」。
@@ -43,6 +40,8 @@ FACE_CROP_SIDE = 480
 
 
 def ensure_model(path: Path | None = None, *, allow_download: bool = True) -> Path:
+    if path is None and (bundled := face_detect.bundled_model(MODEL_PATH.name, MODEL_SHA256)) is not None:
+        return bundled
     target = Path(path) if path is not None else MODEL_PATH
     return face_detect.fetch_model(target, MODEL_URL, MODEL_SHA256,
                                    allow_download=allow_download, label="face matching model")
@@ -64,14 +63,17 @@ class FaceEmbedder:
     def __init__(self, model: Path | None = None, *, detector: FaceDetector | None = None,
                  allow_download: bool = True) -> None:
         import cv2
+        import numpy
 
         self._cv2 = cv2
         self.model_path = ensure_model(model, allow_download=allow_download)
         create = getattr(getattr(cv2, "FaceRecognizerSF", None), "create", None)
         if create is None:                       # pragma: no cover - 依赖版本兜底
             raise face_detect.FaceModelUnavailable(
-                "This OpenCV build has no FaceRecognizerSF; 4.5.4 or later is required")
-        self._recognizer = create(str(self.model_path), "")
+                "当前 OpenCV 没有 FaceRecognizerSF；需要 4.5.4 以上")
+        # 模型路径交给 Python 读取，OpenCV 只接收校验后的 ONNX 字节。
+        model_bytes = numpy.frombuffer(self.model_path.read_bytes(), dtype=numpy.uint8)
+        self._recognizer = create("ONNX", model_bytes, numpy.empty(0, dtype=numpy.uint8))
         self._detector = detector or FaceDetector(allow_download=allow_download)
 
     def embed(self, image):

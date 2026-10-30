@@ -1,0 +1,23 @@
+/* 独立页面以 BoardUI token 适配共用编辑工具条。 */
+body.peach-react {
+  --ink: var(--color-text-primary);
+  --ink-2: var(--color-text-secondary);
+  --muted: var(--color-text-tertiary);
+  --ground: var(--color-background-full);
+  --surface: var(--color-background-primary-default);
+  --line: var(--color-border-button-default);
+  --border-15: var(--color-border-button-default);
+  --hover: var(--color-background-primary-hover);
+  --control-hover: var(--color-background-primary-hover);
+  --tungsten: var(--color-border-focus-ring);
+  --badge-radius: var(--radius-lg);
+  --control-radius: var(--radius-2lg);
+  --board-body: 400 14px/20px var(--font-sans);
+  --board-body-medium: 500 14px/20px var(--font-sans);
+}
+:is(body.peach-react, [data-copy-editor].peach-react) [data-copy-bar] {
+  border: 1px solid var(--color-border-button-default);
+  background: var(--color-background-secondary-default);
+  box-shadow: var(--elevation-card, var(--elevation-dropdown));
+}
+body.peach-react:has([data-copy-bar]) { padding-bottom: 108px; }

@@ -53,14 +53,17 @@ def digest(path: Path) -> str:
 
 
 def serving_identity(*, timeout: float = 60.0,
-                     sleep: Callable[[float], None] = time.sleep) -> dict | None:
-    """轮询生产 HTTPS 口的 `/healthz`，返回它报的版本号与构建提交；没回话返回 None。
+                     sleep: Callable[[float], None] = time.sleep) -> dict:
+    """轮询生产 HTTPS 口的 `/healthz`，返回它报的版本号与构建提交。
 
+    期限内没拿到 200 时返回 `{"error": 最后一次的原始错误}`：证书校验失败、连接被拒、
+    非 200 状态码要原样交给调用方报告，不能只剩一句「没回话」。
     地址和 CA 都取自 `build_service_specs()`，跟托盘自己探活用的是同一份规格。
     HTTPS 的结论必须由项目 CA 严格校验得出，明文口的 200 不算数：那条只是跳转进程。
     """
     spec = next(spec for spec in build_service_specs() if spec.name == "https")
     deadline = time.monotonic() + timeout
+    last = "没有回话"
     while True:
         try:
             response = httpx.get(spec.health_url, timeout=5.0, verify=spec.verify,
@@ -69,10 +72,11 @@ def serving_identity(*, timeout: float = 60.0,
                 payload = response.json()
                 return {"version": str(payload.get("version")),
                         "build_commit": payload.get("build_commit")}
-        except (httpx.HTTPError, OSError, ValueError):
-            pass
+            last = f"HTTP {response.status_code}"
+        except (httpx.HTTPError, OSError, ValueError) as error:
+            last = f"{type(error).__name__}: {error}"
         if time.monotonic() >= deadline:
-            return None
+            return {"error": f"{spec.health_url} {last}"}
         sleep(1.0)
 
 
@@ -94,7 +98,7 @@ def deploy(
     installer: WindowsUpdateInstaller | None = None,
     restart: Callable[..., object] = restart_tray,
     run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
-    identity: Callable[..., dict | None] = serving_identity,
+    identity: Callable[..., dict] = serving_identity,
 ) -> dict:
     """把 `root` 这份检出打成新托盘并换上 `target`，返回可直接打印的结果字典。
 
@@ -150,9 +154,11 @@ def deploy(
 
     served = identity(timeout=timeout)
     fields["expected_version"] = __version__
-    if served is None:
+    if served is None or "error" in served:
+        detail = (served or {}).get("error")
         return _outcome(False, "verify",
-                        "新托盘已就位，但生产 HTTPS 口的 /healthz 没在期限内回话。",
+                        "新托盘已就位，但生产 HTTPS 口的 /healthz 没在期限内回话"
+                        + (f"；最后一次：{detail}" if detail else "") + "。",
                         **fields)
     fields["version"] = served["version"]
     fields["served_commit"] = served["build_commit"]

@@ -136,7 +136,8 @@ def proxy_flags(*, direct: bool, proxy: str) -> tuple[str, ...] | None:
     parsed = urlsplit(proxy)
     if parsed.username or parsed.password:
         return None
-    return (f"--proxy-server={urlunsplit((parsed.scheme, parsed.netloc, '', '', ''))}",)
+    scheme = 'socks5' if parsed.scheme == 'socks5h' else parsed.scheme
+    return (f"--proxy-server={urlunsplit((scheme, parsed.netloc, '', '', ''))}",)
 
 
 class _WebSocket:
@@ -221,7 +222,9 @@ class _WebSocket:
 
 
 def _targets(port: int) -> list[dict]:
-    with urllib.request.urlopen(f"http://127.0.0.1:{port}/json", timeout=10) as response:
+    # 回环 DevTools 端口不经任何代理；裸 urlopen 读系统代理，绕过名单没列 127.0.0.1 时会被代理接走。
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(f"http://127.0.0.1:{port}/json", timeout=10) as response:
         return json.load(response)
 
 
@@ -418,6 +421,8 @@ class BrowserTransport:
         atexit.register(self.close)
 
     def __call__(self, request: HttpRequest, timeout: float, max_bytes: int) -> HttpResponse:
+        from .processing_traffic import unobserved
+        unobserved('浏览器采集流量未观测')
         if request.method.upper() != "GET":
             raise BrowserUnavailable("Browser transport only sends GET")
         with self._lock:

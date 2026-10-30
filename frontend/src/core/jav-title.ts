@@ -1,9 +1,10 @@
 /* JAV 标题：从 item 计算番号、版本徽章与标题。
- * 纯字符串逻辑，只依赖 core 的 esc，不碰 DOM、不读 state。
+ * 纯字符串逻辑，只依赖 core 的 esc 与语言标记，不碰 DOM、不读 state。
  * Application 与 React 页面直接引用本模块，标题规则只有一份。
  * 后缀只对 is_jav 剥离；官方标题优先取含日文的一条，再按字段顺序回落。 */
 
 import { esc } from './index';
+import { langAttr } from './text-lang';
 
 /** 算标题要读的那几个字段。 */
 export interface JavTitleSource {
@@ -65,6 +66,6 @@ export const javDisplayName=(it:Item,value=it?.name)=>{
 export function javTitleHtml(it:Item,value=it?.name){
   const {code,title,badges=[]}=javTitleParts(it,value);
   if(!code)return esc(title);
-  const edition=badges.map(label=>`<small class="javedition ${label==='中字'?'subtitle':label==='无码'?'uncensored':label==='无码破解'?'cracked':'quality'}">${esc(({'中字':'Subtitled','无码':'Uncensored','无码破解':'Cracked'} as Record<string,string>)[label]||label)}</small>`).join('');
-  return `<span class="ui-javidentity"><strong class="ui-javcode">${esc(code)}</strong>${edition}</span>${title?` <span class="ui-javtitle">${esc(title)}</span>`:''}`;
+  const edition=badges.map(label=>`<small class="javedition ${label==='中字'?'subtitle':label==='无码'?'uncensored':label==='无码破解'?'cracked':'quality'}">${esc(label)}</small>`).join('');
+  return `<span class="ui-javidentity"><strong class="ui-javcode">${esc(code)}</strong>${edition}</span>${title?` <span class="ui-javtitle"${langAttr(title)}>${esc(title)}</span>`:''}`;
 }

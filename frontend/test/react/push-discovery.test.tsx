@@ -20,20 +20,22 @@ const clipboard = () => {
   return writeText;
 };
 
-it('配置块给的是服务端拼好的那一段，复制键把它整个写进剪贴板', async () => {
+it.each(['https://192.0.2.10', 'http://192.0.2.10:38473'])(
+  '%s 的配置块展示并复制服务端生成的完整配置', async (origin) => {
   // 地址和密钥不再单独列成读数：抄两处就会抄漏一处，而 CloudDrive2 要的本来就是整段。
   const writeText = clipboard();
   const receipt = vi.fn();
-  const host = await mount(<PushDiscoveryForm initial={state()} receipt={receipt} />);
+  const toml = TOML.replace('https://192.0.2.10', origin);
+  const host = await mount(<PushDiscoveryForm initial={state({ origin, config_toml: toml })} receipt={receipt} />);
   // 卡片自己就是 `secondary`，代码块用同一档等于没有块——底色要比它亮一级才看得出来。
   expect(host.querySelector('[data-code-block]')?.className).toContain('bg-background-tertiary-default');
-  expect(host.querySelector('pre')?.textContent).toBe(TOML);
-  expect(host.textContent).not.toContain('Shared secret');
-  expect(host.textContent).not.toContain('Notification address');
-  await click(buttonNamed('Copy configuration', host));
+  expect(host.querySelector('pre')?.textContent).toBe(toml);
+  expect(host.textContent).not.toContain('共享密钥');
+  expect(host.textContent).not.toContain('通知地址');
+  await click(buttonNamed('复制配置', host));
   await settle();
-  expect(writeText).toHaveBeenCalledWith(TOML);
-  expect(receipt).toHaveBeenCalledWith('CloudDrive2 configuration copied');
+  expect(writeText).toHaveBeenCalledWith(toml);
+  expect(receipt).toHaveBeenCalledWith('已复制 CloudDrive2 配置');
 });
 
 it('配置块默认收起，横向滚动用全站的覆盖式滑块', async () => {
@@ -51,12 +53,12 @@ it('配置块默认收起，横向滚动用全站的覆盖式滑块', async () =
   expect(pre.parentElement?.querySelector('.ovtrack')).not.toBeNull();
 });
 
-it('这台机器没有对外的 HTTPS 地址时说出原因，不发一段填了也不通的配置', async () => {
+it('这台机器没有局域网地址时说明生成条件', async () => {
   const host = await mount(
     <PushDiscoveryForm initial={state({ origin: '', config_toml: '' })} receipt={vi.fn()} />);
   expect(host.querySelector('pre')).toBeNull();
-  expect(buttonNamed('Copy configuration', host)).toBeNull();
-  expect(host.textContent).toContain('Requires an HTTPS address that CloudDrive2 can reach');
+  expect(buttonNamed('复制配置', host)).toBeNull();
+  expect(host.textContent).toContain('要先有 CloudDrive2 能访问的局域网地址');
 });
 
 it('配置块跟着已保存的开关走，拨一下不算数', async () => {
@@ -74,4 +76,20 @@ it('换过密钥之后配置块换成新的那一段', async () => {
   await click(buttonNamed('Replace secret', host));
   await settle();
   expect(host.querySelector('pre')?.textContent).toBe(next.config_toml);
+});
+
+it('入库失败时给出服务端记下的原因与失败数，没有失败时不出现', async () => {
+  const queue = { ...state().queue, failed: 2, last_error: 'database is locked' };
+  const failing = await mount(<PushDiscoveryForm initial={state({ queue })} receipt={vi.fn()} />);
+  const alert = failing.querySelector('[role="alert"]');
+  expect(alert?.textContent).toContain('最近一次入库失败');
+  expect(alert?.textContent).toContain('database is locked');
+  expect(failing.textContent).toContain('已入库 3 个文件，2 个入库失败');
+
+  const healthy = await mount(<PushDiscoveryForm initial={state()} receipt={vi.fn()} />);
+  expect(healthy.querySelector('[role="alert"]')).toBeNull();
+  expect(healthy.textContent).not.toContain('入库失败');
+
+  const disabled = await mount(<PushDiscoveryForm initial={state({ enabled: false, queue })} receipt={vi.fn()} />);
+  expect(disabled.querySelector('[role="alert"]')).toBeNull();
 });

@@ -35,11 +35,12 @@ if(location.pathname==='/wall')document.documentElement.setAttribute('data-wall-
 </script>
 </head>
 <body>
-<a class="skiplink" href="#main">Skip to main content</a>
-<!-- Lucide static 1.57.0, ISC. Local pinned subset; no CDN/runtime dependency.
-     Climax uses Health Icons 2.0.0 sperm outline-24px, CC0/public domain.
+<a class="skiplink" href="#main">跳到正文</a>
+<!-- Lucide static 1.64.0, ISC. Local pinned subset; no CDN/runtime dependency.
+     Climax uses Health Icons 3.0.0 sperm outline-24px, CC0/public domain.
      Phosphor 2.1.1 regular, MIT: filled glyphs where a stroked icon cannot say it. -->
 <svg aria-hidden="true" width="0" height="0" style="position:absolute;overflow:hidden">
+<symbol id="i-network" viewBox="0 0 24 24"><rect x="16" y="16" width="6" height="6" rx="1" /><rect x="2" y="16" width="6" height="6" rx="1" /><rect x="9" y="2" width="6" height="6" rx="1" /><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3" /><path d="M12 12V8" /></symbol>
 <symbol id="i-snail" viewBox="0 0 24 24"><path d="M2 13a6 6 0 1 0 12 0 4 4 0 1 0-8 0 2 2 0 0 0 4 0" /><circle cx="10" cy="13" r="8" /><path d="M2 21h12c4.4 0 8-3.6 8-8V7a2 2 0 1 0-4 0v6" /><path d="M18 3 19.1 5.2" /><path d="M22 3 20.9 5.2" /></symbol>
 <symbol id="i-zap" viewBox="0 0 24 24"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z" /></symbol>
 <symbol id="i-heart-hand" viewBox="0 0 24 24"><path d="M11 14h2a2 2 0 0 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 16" /><path d="m14.45 13.39 5.05-4.694C20.196 8 21 6.85 21 5.75a2.75 2.75 0 0 0-4.797-1.837.276.276 0 0 1-.406 0A2.75 2.75 0 0 0 11 5.75c0 1.2.802 2.248 1.5 2.946L16 11.95" /><path d="m2 15 6 6" /><path d="m7 20 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a1 1 0 0 0-2.75-2.91" /></symbol>
@@ -215,25 +216,30 @@ if(location.pathname==='/wall')document.documentElement.setAttribute('data-wall-
   <symbol id="i-file-archive" viewBox="0 0 24 24"><path d="M13.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v11.5" /><path d="M14 2v5a1 1 0 0 0 1 1h5" /><path d="M8 12v-1" /><path d="M8 18v-2" /><path d="M8 7V6" /><circle cx="8" cy="20" r="2" /></symbol>
   <symbol id="i-file-audio" viewBox="0 0 24 24"><path d="M4 6.835V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.706.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2h-.343" /><path d="M14 2v5a1 1 0 0 0 1 1h5" /><path d="M2 19a2 2 0 0 1 4 0v1a2 2 0 0 1-4 0v-4a6 6 0 0 1 12 0v4a2 2 0 0 1-4 0v-1a2 2 0 0 1 4 0" /></symbol>
   <symbol id="i-file-stack" viewBox="0 0 24 24"><path d="M11 21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1" /><path d="M16 16a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1" /><path d="M21 6a2 2 0 0 0-.586-1.414l-2-2A2 2 0 0 0 17 2h-3a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1z" /></symbol>
+  <symbol id="ri-folder-3-line" viewBox="0 0 24 24"><path d="M12.4142 5H21C21.5523 5 22 5.44772 22 6V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V4C2 3.44772 2.44772 3 3 3H10.4142L12.4142 5ZM4 7V19H20V7H4Z" /></symbol>
+  <symbol id="ri-list-unordered" viewBox="0 0 24 24"><path d="M8 4H21V6H8V4ZM4.5 6.5C3.67157 6.5 3 5.82843 3 5C3 4.17157 3.67157 3.5 4.5 3.5C5.32843 3.5 6 4.17157 6 5C6 5.82843 5.32843 6.5 4.5 6.5ZM4.5 13.5C3.67157 13.5 3 12.8284 3 12C3 11.1716 3.67157 10.5 4.5 10.5C5.32843 10.5 6 11.1716 6 12C6 12.8284 5.32843 13.5 4.5 13.5ZM4.5 20.4C3.67157 20.4 3 19.7284 3 18.9C3 18.0716 3.67157 17.4 4.5 17.4C5.32843 17.4 6 18.0716 6 18.9C6 19.7284 5.32843 20.4 4.5 20.4ZM8 11H21V13H8V11ZM8 18H21V20H8V18Z" /></symbol>
   <symbol id="i-table" viewBox="0 0 24 24"><path d="M12 3v18" /><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M3 9h18" /><path d="M3 15h18" /></symbol>
   <symbol id="i-sperm" viewBox="1.5 1.2 21.2 21.2"><path d="M18.2574 3.04039C16.6079 3.3153 15.3153 4.60785 15.0404 6.25731C14.9261 6.94343 15.1179 7.59015 15.5007 8.08229L15.1947 8.49031C14.8361 8.96852 14.2732 9.24995 13.6754 9.24995H12.8524C10.9372 9.24995 9.58486 11.1262 10.1905 12.9431L10.3037 13.2827C10.5666 14.0715 9.88821 14.8537 9.07014 14.705C7.36157 14.3943 5.83623 15.8176 6.02801 17.5435L6.05171 17.7569C6.12353 18.4033 5.68919 18.9973 5.05144 19.1248L4.35291 19.2645C3.94674 19.3458 3.68333 19.7409 3.76456 20.147C3.8458 20.5532 4.24092 20.8166 4.64709 20.7354L5.34562 20.5957C6.74631 20.3155 7.70028 19.0109 7.54253 17.5912L7.51883 17.3779C7.43795 16.65 8.08124 16.0497 8.80181 16.1808C10.7416 16.5334 12.3502 14.6787 11.7267 12.8083L11.6135 12.4688C11.3317 11.6232 11.9611 10.75 12.8524 10.75H13.6754C14.7453 10.75 15.7528 10.2462 16.3947 9.39031L16.7517 8.9143C17.0623 8.99708 17.3975 9.01704 17.7426 8.95951C19.3921 8.6846 20.6847 7.39205 20.9596 5.7426C21.2244 4.15334 19.8466 2.77552 18.2574 3.04039Z" fill="currentColor"/><path d="M11.0548 3.32416C10.1507 3.47484 9.41308 4.15197 9.17192 5.03625C9.06125 5.44203 9.13468 5.83765 9.32677 6.15771L8.8594 6.85877C8.69647 7.10316 8.42219 7.24995 8.12847 7.24995H7.75C6.64543 7.24995 5.75 8.14538 5.75 9.24995C5.75 9.52609 5.52614 9.74995 5.25 9.74995C4.14543 9.74995 3.25 10.6454 3.25 11.75V12C3.25 12.4142 3.58579 12.75 4 12.75C4.41421 12.75 4.75 12.4142 4.75 12V11.75C4.75 11.4738 4.97386 11.25 5.25 11.25C6.35457 11.25 7.25 10.3545 7.25 9.24995C7.25 8.97381 7.47386 8.74995 7.75 8.74995H8.12847C8.92372 8.74995 9.66635 8.35251 10.1075 7.69082L10.6492 6.87823C10.7526 6.87326 10.8578 6.85692 10.9637 6.82804C11.848 6.58687 12.5251 5.84929 12.6758 4.94518C12.8347 3.9918 12.0081 3.16526 11.0548 3.32416Z" fill="currentColor"/><path d="M18.1471 11.3088C17.2045 11.4659 16.4659 12.2045 16.3088 13.147C16.2724 13.3658 16.2904 13.5775 16.3514 13.7709L15.0321 15.31C14.7928 15.5892 14.4434 15.75 14.0756 15.75C13.1529 15.75 12.2912 16.2111 11.7793 16.9789L11.7373 17.0419C11.4196 17.5185 11.25 18.0785 11.25 18.6513V19C11.25 19.4142 11.5858 19.75 12 19.75C12.4142 19.75 12.75 19.4142 12.75 19V18.6513C12.75 18.3747 12.8319 18.1042 12.9854 17.874L13.0274 17.8109C13.261 17.4605 13.6544 17.25 14.0756 17.25C14.8813 17.25 15.6467 16.8979 16.171 16.2862L17.5255 14.706C17.6318 14.7141 17.7415 14.7097 17.8529 14.6911C18.7955 14.534 19.5341 13.7954 19.6912 12.8529C19.8425 11.9447 19.0552 11.1574 18.1471 11.3088Z" fill="currentColor"/></symbol>
 </svg>
 
 <header class="top">
-  <button class="ib" id="filterBtn" title="Navigation and filters" aria-label="Expand navigation and filters"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-panel-left"/></svg></button>
-  <a class="brand" href="#" id="brandHome"><img class="mark" src="/peach-logo.png" alt=""><h1 class="disp">Peach</h1><span class="sub mono">video library</span></a>
-  <button class="ib searchback" id="searchBack" title="Exit search" aria-label="Exit search"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chevron-left"/></svg></button>
+  <button class="ib" id="filterBtn" title="导航与筛选" aria-label="展开导航与筛选"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-panel-left"/></svg><span data-glass-drift aria-hidden="true"><span data-drift="b"><span></span></span><span data-drift="a"><span></span></span></span></button>
+  <a class="brand" href="#" id="brandHome" aria-label="选择媒体库"><span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24"><use href="#i-database"/></svg></span><h1 class="disp">全部媒体库</h1><svg class="board-library-chevron" viewBox="0 0 16 16" aria-hidden="true"><path d="m5 6 3-3 3 3M5 10l3 3 3-3"/></svg></a>
+  <button class="ib searchback" id="searchBack" title="退出搜索" aria-label="退出搜索"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chevron-left"/></svg><span data-glass-drift aria-hidden="true"><span data-drift="b"><span></span></span><span data-drift="a"><span></span></span></span></button>
   <div class="search"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-search"/></svg>
-    <input id="q" name="q" type="search" enterkeyhint="search" placeholder="Search library" data-suggestion="" autocomplete="off" aria-label="Search works, performers, studios, or tags">
-    <div class="searchmenu" id="searchMenu" data-search-menu hidden></div></div>
-  <button class="ib" id="searchBtn" title="Search" aria-label="Search"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-search"/></svg></button>
-  <button class="ib" id="immerseBtn" title="Immersive mode · random autoplay" aria-label="Enter immersive mode"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-play"/></svg></button>
-  <button class="ib" id="wallBtn" title="Play wall" aria-label="Enter play wall"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-gallery-thumbnails"/></svg></button>
-  <button class="ib" id="selectMode" title="Multi-select (Ctrl for single item, Shift for range)" aria-label="Multi-select mode" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-square-check-big"/></svg></button>
-  <button class="ib" id="density" title="Density: large / dense" aria-label="Switch card density"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-layout-grid"/></svg></button>
-  <button class="ib" id="settingsBtn" title="Settings" aria-label="Open settings"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-settings"/></svg></button>
+    <input id="q" name="q" type="search" enterkeyhint="search" placeholder="搜索馆藏" data-suggestion="" autocomplete="off" aria-label="搜索作品、女优、厂牌或标签">
+    <div class="searchmenu" id="searchMenu" data-search-menu hidden></div><span data-glass-drift aria-hidden="true"><span data-drift="b"><span></span></span><span data-drift="a"><span></span></span></span></div>
+  <button class="ib" id="searchBtn" title="搜索" aria-label="搜索"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-search"/></svg><span data-glass-drift aria-hidden="true"><span data-drift="b"><span></span></span><span data-drift="a"><span></span></span></span></button>
+  <button class="ib" id="immerseBtn" title="沉浸模式 · 随机连播" aria-label="进入沉浸模式"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-play"/></svg><span data-glass-drift aria-hidden="true"><span data-drift="b"><span></span></span><span data-drift="a"><span></span></span></span></button>
+  <button class="ib" id="wallBtn" title="播放墙" aria-label="进入播放墙"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-gallery-thumbnails"/></svg><span data-glass-drift aria-hidden="true"><span data-drift="b"><span></span></span><span data-drift="a"><span></span></span></span></button>
+  <button class="ib" id="selectMode" title="多选（Ctrl 单项，Shift 连续）" aria-label="多选模式" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-square-check-big"/></svg><span data-glass-drift aria-hidden="true"><span data-drift="b"><span></span></span><span data-drift="a"><span></span></span></span></button>
+  <button class="ib" id="density" title="密度：大图 / 密集" aria-label="切换卡片密度"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-layout-grid"/></svg><span data-glass-drift aria-hidden="true"><span data-drift="b"><span></span></span><span data-drift="a"><span></span></span></span></button>
+  <button class="ib" id="settingsBtn" title="设置" aria-label="打开设置"><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-settings"/></svg><span data-glass-drift aria-hidden="true"><span data-drift="b"><span></span></span><span data-drift="a"><span></span></span></span></button>
 
 </header>
+
+<!-- 外网连不上时的通栏横幅（`react/network-banner.tsx`），由路由树画进这个节点；联网时它是空的。 -->
+<div data-network-banner></div>
 
 <!-- 首页筛选条（`catalog-filter` 岛）：两排头像与筛选浮层。宿主不生成盒子，里面那几块直接当 body 的孩子排。 -->
 <div id="catalogPageHeading" hidden><h2 class="disp" data-page-title>Home</h2></div>
@@ -265,7 +271,28 @@ if(location.pathname==='/wall')document.documentElement.setAttribute('data-wall-
      自定义属性，写在 <html> 上等于让整棵树重算样式，拖一次强度拉条每帧要赔十几毫秒；
      写在这枚没有子节点的空 div 上，失效范围就只剩它和它那两枚伪元素。
      怎么画仍然只在 web/css/01-base.css 一份。 -->
-<aside id="drawer" data-sidebar-drawer><div class="glowlayer" aria-hidden="true"></div><div id="drawerScroll" data-sidebar-scroll></div></aside>
+<aside id="drawer" data-sidebar-drawer><div class="glowlayer" aria-hidden="true"></div><div id="drawerScroll" data-sidebar-scroll><div data-sidebar-head></div></div></aside>
+<script>
+(()=>{
+  const drawer=document.querySelector('#drawer'),head=drawer.querySelector('[data-sidebar-head]');
+  const brand=document.querySelector('#brandHome'),toggle=document.querySelector('#filterBtn');
+  const narrow=matchMedia('(max-width:760px)').matches;
+  let expanded=!narrow,library='';
+  try{expanded=!narrow&&sessionStorage.getItem('board.sidebar')!=='closed';library=sessionStorage.getItem('peach.library')?(sessionStorage.getItem('peach.library-label')||'媒体库'):''}catch(_e){}
+  brand.querySelector('h1').textContent=library||'全部媒体库';head.append(brand);
+  if(!narrow)head.append(toggle);
+  drawer.classList.toggle('open',expanded);drawer.inert=narrow;
+  document.body.classList.toggle('drawer-open',expanded);
+  toggle.setAttribute('aria-expanded',String(expanded));toggle.setAttribute('aria-controls','drawer');
+  toggle.setAttribute('aria-label',expanded?'收起侧栏':'展开侧栏');
+  try{
+    const settings=JSON.parse(localStorage.getItem('peach.settings.v1')||'{}');
+    const photos=new URLSearchParams(location.search).get('media')==='photos';
+    const small=photos?settings.photoSize!=='big':localStorage.getItem('density')==='dense';
+    document.querySelector('#density use').setAttribute('href',small?'#i-layout-grid':'#i-maximize');
+  }catch(_e){}
+})();
+</script>
 <!-- 批量条是常驻组件 batch-dock（`frontend/src/react/batch-dock/`），由路由树画进这个节点；选中集与写操作留在壳里。 -->
 <div data-batch-dock></div>
 

@@ -70,6 +70,8 @@ basicConstraints=critical,CA:FALSE
 keyUsage=critical,digitalSignature,keyEncipherment
 extendedKeyUsage=serverAuth
 subjectAltName=DNS:$DnsName,IP:$Address
+subjectKeyIdentifier=hash
+authorityKeyIdentifier=keyid,issuer
 "@ | Set-Content -LiteralPath $extensions -Encoding ascii
 
 & $openssl genrsa -out $caKey 3072

@@ -35,6 +35,17 @@ class JobPaused(JobPolicyError):
     exit_code = 3
 
 
+class JobDeferred(RuntimeError):
+    """后台任务这会儿跑不了，得给别的任务让路；回到队列，`ready()` 为真时再领。"""
+
+    def ready(self) -> bool:
+        return True
+
+
+class JobCancelled(InterruptedError):
+    """用户停止任务；已保存结果保留，不再自动恢复。"""
+
+
 class JobAlreadyRunning(JobPolicyError):
     exit_code = 0
 
@@ -325,7 +336,7 @@ class BackgroundJob:
             from .job_recovery import read
             previous = read(db, self.task_key)
             saved = previous.get('checkpoint') or {}
-            if previous.get('status') in ('complete', 'failed') and saved.get(self.id_key):
+            if previous.get('status') in ('complete', 'failed', 'cancelled') and saved.get(self.id_key):
                 self.state = copy.deepcopy(saved)
 
     def snapshot(self) -> dict | None:
@@ -413,7 +424,8 @@ class BackgroundJob:
         return ""
 
     def _summary(self, state: dict) -> dict:
-        """结算摘要：只留标量，明细留在各域自己的状态与日志里。"""
+        """结算摘要保留标量与领域定义的问题清单。"""
+        from .task_results import result_counts
         summary: dict[str, object] = {}
         for key, value in state.items():
             if key in self.BULKY_STATE_KEYS or key == self.id_key:
@@ -422,7 +434,7 @@ class BackgroundJob:
                 summary[key] = value
             elif isinstance(value, str) and 0 < len(value) <= 200:
                 summary[key] = value
-        return summary
+        return {**summary, **result_counts(self.task_key, state)}
 
     def start(self, fn: Callable[[str], None], *, initial: dict | None = None,
               restart: bool = False, trigger: str = "manual", recovery: dict | None = None) -> dict:
@@ -628,8 +640,13 @@ class BackgroundJob:
         except JobPaused:
             with self.lock:
                 if self.state is not None and self.state.get(self.id_key) == job_id:
-                    self.state.update(waiting_for_update=True, stage='Waiting for the installation to finish', error='',
-                                      message='The task is paused and will resume automatically after installation finishes.')
+                    self.state.update(waiting_for_update=True, stage='等待安装完成后继续', error='',
+                                      message='任务已暂停，安装完成后自动继续。')
+        except JobCancelled:
+            with self.lock:
+                if self.state is not None and self.state.get(self.id_key) == job_id:
+                    self.state.update(status='cancelled', outcome='cancelled', error='',
+                                      followups=[], completed_at=time.time())
         except Exception as error:   # 后台失败必须变成可轮询的状态，不能只留在日志里
             from .error_reporting import event
             event('background-job', error, job_id=job_id, task_key=self.task_key,
@@ -662,7 +679,7 @@ class BackgroundJob:
                     from .job_recovery import checkpoint, finish
                     checkpoint(db, self.task_key, job_id, state)
                     finish(db, self.task_key, job_id,
-                           'failed' if state.get('status') == 'failed' else 'complete')
+                           state['status'] if state.get('status') in ('failed', 'cancelled') else 'complete')
             finally:
                 activity = self._activity_files.pop(job_id, None)
                 if activity is not None:
@@ -699,6 +716,9 @@ class BackgroundJob:
         所以这里收的是调用方手上那一份，不重新读。
         """
         status = state.get("status")
+        if status == 'cancelled':
+            self._close_run(job_id, 'cancelled', summary=self._summary(state))
+            return
         if status == "failed":
             # 声明了后继就是结算到了底，只是留下了要人处理的项（ADR-0053）：后继照派。
             # 中途抛异常的那一轮走不到声明那一步，一条都不派。

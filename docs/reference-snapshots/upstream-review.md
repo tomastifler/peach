@@ -1,8 +1,25 @@
 # 上游依赖与参考来源复核
 
-复核日期：2026-10-13（Asia/Taipei）。本文件是人工复核笔记，不登记为可覆盖的上游快照；原文字节、哈希与 revision 见 [来源登记](../reference-sources.json)。
+各节分别记录复核日期（Asia/Taipei）。本文件是人工复核笔记，不登记为可覆盖的上游快照；原文字节、哈希与 revision 见 [来源登记](../reference-sources.json)。
 
 ## amane 桥
+
+### 稳定版 v0.23.0 暂不采用
+
+2026-10-30 复核官方 [v0.23.0](https://github.com/sqzw-x/amane/releases/tag/v0.23.0)，提交 `4230de458c3197e1e17b6c5b42cc385fc6961d15`。[相对现固定提交的差集](https://github.com/sqzw-x/amane/compare/fd9294fbe5b4aa88ce1df84d534f6816ad9460d5...4230de458c3197e1e17b6c5b42cc385fc6961d15)含 16 个提交、142 个文件，爬虫只改了 `theporndb`；桥消费的 makers、prestige、faleno、dahlia、mgstage、fc2club、freejavbt、airav、avsox 站点类和 `amane.net` 都没有变化，其余是 CLI、服务端与图片代理。继续固定 v0.22.1；桥接站点或网络接口出现修复时再升级。本次更新其约束允许的传递依赖，并核对独立环境的离线类加载。
+
+### 稳定版 v0.22.1 的桥接范围
+
+2026-10-26 静态复核官方 [v0.22.1](https://github.com/sqzw-x/amane/releases/tag/v0.22.1)，固定提交 `fd9294fbe5b4aa88ce1df84d534f6816ad9460d5`。[相对固定基线的差集](https://github.com/sqzw-x/amane/compare/cc42cee6ecf290cf05af1caa347d2dc2d5aeffcd...fd9294fbe5b4aa88ce1df84d534f6816ad9460d5)含 55 个提交。按桥直接消费的模型、站点、检索身份与网络接口判断采用范围；上游 main 的未发布提交不作为稳定发行依赖。
+
+- `SearchQuery`、`FetchOptions`、`MediaMetadata` 与爬虫构造接口继续适用。AIRAV、FreeJavBT 的 FC2 写法，以及 MGStage 的数字前缀检索、简介、剧照和海报由桥消费；Peach 的独立 DMM、JavBus、JavDB、FC2 来源保持各自归属。
+- 上游新增 `login_required`。桥保留这个原因，Peach 映射为 `auth_required`，使用既有认证等待与冷却契约；凭据缺失不写入确定无结果记忆。
+- MGStage 的封面与海报分别投影；缺少字段不清空已有人工资料。素人条目的站点代名不产生规范人物身份。
+- `WebClient.download` 的分块参数归属调整不影响桥使用的 HTML/JSON 查询接口；Peach 继续限制整个查询子进程的总时限，不引入上游下载、数据库、聚合或任务中心。
+
+验收覆盖桥的离线类加载、失败分类、精确检索与候选投影，联网查询和报告者原场景分别记录；源码复核不表示全站或所有作品的可用性已验证。GPL-3.0、独立运行环境、子进程与对应源码分发边界沿用 ADR-0043、ADR-0124。
+
+### v0.20.0 复核记录（2026-10-13）
 
 采用 [amane 0.20.0](https://github.com/sqzw-x/amane/releases/tag/v0.20.0)，固定 revision `cc42cee6ecf290cf05af1caa347d2dc2d5aeffcd`，GPL-3.0。Python 下限仍为 3.14，桥以独立 venv 和子进程消费；不引入其数据库、整理、任务中心或界面。
 

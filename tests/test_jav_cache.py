@@ -1,6 +1,7 @@
 """公开快照的发行边界、磁盘复用和并发原子读取。"""
 from datetime import date, datetime, timezone
 import tempfile
+import json
 from pathlib import Path
 import unittest
 from concurrent.futures import ThreadPoolExecutor
@@ -20,25 +21,37 @@ class PublicationCacheTests(unittest.TestCase):
     def api(self, root, now):
         return PublicAPI(cache_root=root, wallclock=lambda: now[0], clock=lambda: now[0], sleeper=lambda _: None)
 
+    def test_legacy_rule_snapshot_is_not_reused_or_deleted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = PublicSnapshots(Path(directory).resolve(), clock=lambda: 100)
+            store.save('movie:EXM-001', {'id':'Exact'}, '2020-01-01')
+            path = store.path('movie:EXM-001')
+            saved = json.loads(path.read_text(encoding='utf-8'))
+            saved['version'] = 1
+            path.write_text(json.dumps(saved), encoding='utf-8')
+            self.assertIsNone(store.load('movie:EXM-001'))
+            self.assertTrue(path.is_file())
+
     def test_public_api_reuses_movie_comments_and_resources_after_restart(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             now = [stamp('2026-10-13')]
             api = self.api(root, now)
-            movie = {'id': 'Exact', 'number': 'EXM-001', 'release_date': '2020-01-01'}
-            api._cached('movie:EXM-001', lambda: movie)
+            movie = {'id': 'Exact', 'number': 'EXM-001', 'release_date': '2020-01-01', 'javdb_rule': 2}
+            api._cached('movie-id:EXM-001', lambda: ['Exact'])
+            api._cached('movie:EXM-001:Exact', lambda: movie)
             api._rows = Mock(side_effect=[[{'id': 'review'}], [{'hash': 'resource'}]])
             self.assertEqual(api.reviews('EXM-001', 1), [{'id': 'review'}])
             self.assertEqual(api.magnets('EXM-001'), [{'hash': 'resource'}])
             now[0] = stamp('2030-01-01')
             reader = self.api(root, now)
-            reader._rows = Mock(side_effect=AssertionError('缓存读取不得触发来源'))
+            reader._rows = Mock(return_value=[{'id': 'Exact', 'number': 'EXM-001'}])
             with public_cache_scope(root):
                 self.assertEqual(reader.movie('EXM-001'), movie)
                 self.assertEqual(reader.reviews('EXM-001', 1), [{'id': 'review'}])
                 self.assertEqual(cache_checked_at('reviews:'), stamp('2026-10-13'))
                 self.assertEqual(reader.magnets('EXM-001'), [{'hash': 'resource'}])
-            reader._rows.assert_not_called()
+            reader._rows.assert_called_once_with('/v2/search', 'movies', {'q': 'EXM-001', 'type': 'movie', 'page': 1})
 
     def test_daily_refresh_and_failed_manual_refresh_keep_good_snapshot(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -88,9 +101,10 @@ class PublicationCacheTests(unittest.TestCase):
             root = Path(directory).resolve()
             now = [stamp('2026-10-13')]
             api = self.api(root, now)
-            movie = {'id': 'Exact', 'number': 'EXM-001', 'release_date': '2020-01-01',
+            movie = {'id': 'Exact', 'number': 'EXM-001', 'release_date': '2020-01-01', 'javdb_rule': 2,
                      'cover_url': 'https://tp.spfcas.com/cover.jpg?token=temporary'}
-            api._cached('movie:EXM-001', lambda: movie)
+            api._cached('movie-id:EXM-001', lambda: ['Exact'])
+            api._cached('movie:EXM-001:Exact', lambda: movie)
             api._rows = Mock(return_value=[{'id': 'Exact', 'number': 'EXM-001'}])
             api._json = Mock(return_value={'movie': {**movie, 'cover_url': 'https://tp.spfcas.com/current.jpg'}})
             now[0] += DAY
@@ -108,8 +122,11 @@ class PublicationCacheTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
             now = [stamp('2026-10-13')]
-            movie = {'number': 'EXM-001', 'release_date': '2020-01-01', 'tags': [], 'score': 4, 'duration': 120}
-            self.api(root / 'jav-public', now)._cached('movie:EXM-001', lambda: movie)
+            movie = {'id': 'Exact', 'number': 'EXM-001', 'release_date': '2020-01-01', 'tags': [],
+                     'score': 4, 'duration': 120, 'javdb_rule': 2}
+            writer = self.api(root / 'jav-public', now)
+            writer._cached('movie-id:EXM-001', lambda: ['Exact'])
+            writer._cached('movie:EXM-001:Exact', lambda: movie)
             now[0] += 10 * DAY
             reader = self.api(root / 'jav-public', now)
             metadata = DiscoveryMetadata(root / 'metadata.json', api=reader, clock=lambda: now[0])

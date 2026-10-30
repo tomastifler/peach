@@ -1,0 +1,14 @@
+.peach-react [data-rating-stars] { display: inline-flex; align-items: center; gap: 2px; }
+.peach-react [data-rating-stars] [data-rate] { width: 26px; height: 26px; padding: 0; border: 0; border-radius: var(--control-radius); background: transparent; color: var(--rating); display: grid; place-items: center; }
+.peach-react [data-rating-stars] button[data-rate] { cursor: pointer; }
+.peach-react [data-rating-stars] [data-rate] svg { width: 19px; height: 19px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.peach-react [data-rating-stars] [data-rate][data-on="true"] svg { fill: currentColor; }
+.peach-react [data-rating-stars]:hover button[data-rate] svg { fill: none; }
+.peach-react [data-rating-stars]:hover button[data-rate]:hover svg,
+.peach-react [data-rating-stars]:hover button[data-rate]:has(~ [data-rate]:hover) svg { fill: currentColor; }
+.peach-react [data-rating-stars] button[data-rate]:focus-visible { outline: 2px solid var(--tungsten); outline-offset: 2px; }
+.peach-react [data-rating-stars] button[aria-disabled="true"] { color: var(--muted); cursor: wait; }
+.peach-react [data-rating-icon] { position: relative; display: block; width: 19px; height: 19px; }
+.peach-react [data-rating-icon] svg { display: block; position: absolute; inset: 0; }
+.peach-react [data-rating-fill] { position: absolute; inset: 0 auto 0 0; overflow: hidden; }
+.peach-react [data-rating-fill] svg { fill: currentColor; max-width: none; }

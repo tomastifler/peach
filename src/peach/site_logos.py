@@ -31,6 +31,8 @@ X 登出页的 `og:image` 指向 `pbs.twimg.com/profile_images/...`，按
 from __future__ import annotations
 
 import re
+import unicodedata
+from html import unescape
 from urllib.parse import urljoin, urlsplit
 
 from .social_links import twimg_tiers
@@ -59,7 +61,7 @@ def _attrs(tag: str) -> dict[str, str]:
             for name, double, single, bare in _ATTR.findall(tag)}
 
 
-def logo_images(html: str, base_url: str) -> list[str]:
+def logo_images(html: str, base_url: str, *, owner: str = '') -> list[str]:
     """首页 HTML → 站点自己那几张标识图的绝对地址，按出现顺序去重。
 
     出现顺序就是优先级：header 在页面最上面，站点自己把最正式的那张放在那里。
@@ -68,6 +70,9 @@ def logo_images(html: str, base_url: str) -> list[str]:
     seen: set[str] = set()
     for tag in _IMG_TAG.findall(html or ""):
         attributes = _attrs(tag)
+        if owner and not any(_owner_key(attributes.get(field, '')) == _owner_key(owner)
+                             for field in ('alt', 'title')):
+            continue
         src = (attributes.get("src") or attributes.get("data-src") or "").strip()
         if not src:
             continue
@@ -86,6 +91,10 @@ def logo_images(html: str, base_url: str) -> list[str]:
             seen.add(url)
             found.append(url)
     return found
+
+
+def _owner_key(value: str) -> str:
+    return re.sub(r'\s+', '', unicodedata.normalize('NFKC', unescape(value))).casefold()
 
 
 def is_x_profile(url: str) -> bool:

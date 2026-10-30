@@ -1,0 +1,5 @@
+.peach-react [data-filter-row="bottom"][aria-busy="true"] [data-entity-batch] svg,
+.peach-react [data-entity-batch][aria-busy="true"] svg {
+  --strand-dash: 100;
+  --strand-cycle: 2.2s;
+}

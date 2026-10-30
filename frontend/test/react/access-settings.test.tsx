@@ -49,9 +49,8 @@ it('系统口令可直接转为可选密码且关闭需要明确提交', async (
   expect(host.querySelector('[autocomplete="current-password"]')).toBeNull();
   expect(host.querySelector('button[type="submit"]')?.textContent).toBe('Save settings');
   await click(checkbox(host));
-  expect(newPasswords(host)).toHaveLength(2);
-  expect(newPasswords(host).every((input) => input.disabled)).toBe(true);
-  expect(host.querySelector('[role="note"]')?.textContent).toContain('will open the library directly');
+  expect(newPasswords(host)).toHaveLength(0);
+  expect(host.querySelector('[role="note"]')?.textContent).toContain('直接访问馆藏');
   expect(fetcher).not.toHaveBeenCalled();
   await submit(host);
   expect(sentBody(fetcher)).toMatchObject({ action: 'disable', confirm_disable: true });
@@ -67,10 +66,11 @@ it('关闭选项位于输入上方且保留草稿并要求当前密码验证', a
   expect(checkbox(host).compareDocumentPosition(current) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   for (const input of newPasswords(host)) await type(input, 'draft-password');
   await click(checkbox(host));
-  expect(newPasswords(host).every((input) => input.disabled && input.value === 'draft-password')).toBe(true);
+  expect(newPasswords(host)).toHaveLength(0);
   expect(current.disabled).toBe(false);
   expect(current.getAttribute('aria-required')).toBe('true');
   await click(checkbox(host));
+  expect(newPasswords(host)).toHaveLength(2);
   expect(newPasswords(host).every((input) => !input.disabled && input.value === 'draft-password')).toBe(true);
   await click(checkbox(host));
   await submit(host);

@@ -19,6 +19,8 @@
 .video-js :is(hlsjs-video,dash-video){display:contents}
 .video-js .vjs-tech{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
 .video-js .vjs-control-bar{display:flex;position:absolute;bottom:0;left:0;width:100%;height:3em;z-index:2}
+.video-js .vjs-picture-in-picture-control[data-peach-pip-supported][hidden]{display:block!important}
+.video-js .vjs-picture-in-picture-control[aria-disabled="true"]{color:rgba(255,255,255,.45);cursor:not-allowed}
 .video-js .vjs-control{position:relative;flex:none;box-sizing:border-box;width:4em;height:3em;color:inherit}
 .video-js .vjs-button{display:block;cursor:pointer;background:none;border:0;padding:0;color:inherit;font:inherit;outline-offset:2px;touch-action:manipulation;user-select:none}
 .video-js .vjs-button:focus-visible,.video-js media-slider-thumb:focus-visible{outline:2px solid var(--tungsten)}
@@ -256,6 +258,7 @@ video.video-js{vertical-align:top;font-size:10px;line-height:1;font-family:Arial
 .video-js .vjs-peach-menu-row{display:grid;grid-template-columns:56px minmax(0,1fr) minmax(0,max-content) 32px;gap:0;align-items:center;padding:0!important;text-align:left}
 .vjs-peach-menu-row>svg{justify-self:start;margin-left:8px;width:24px;height:24px;fill:currentColor;stroke:none}.vjs-peach-menu-row>span{font-size:var(--fs-md);line-height:18.2px}.vjs-peach-menu-row>b{padding-left:8px;font-size:var(--fs-md);line-height:18.2px;font-weight:400;color:rgba(255,255,255,.7);white-space:nowrap}
 .vjs-peach-menu-row>svg:last-child{justify-self:center;margin:0;width:18px;height:18px;color:rgba(255,255,255,.7);fill:currentColor;stroke:none}
+.vjs-peach-menu-row>svg.vjs-peach-menu-line-icon{fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .vjs-peach-menu-row[data-player-ambient]{grid-template-columns:56px minmax(0,1fr) auto;padding-right:8px!important}.vjs-peach-switch{box-sizing:border-box;display:block;position:relative;width:40px;height:24px;border-radius:var(--floating-radius);background:rgba(0,0,0,.3)}
 .vjs-peach-switch:after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:rgba(255,255,255,.7);box-shadow:none;transition:transform .2s cubic-bezier(.05,0,0,1),background .2s cubic-bezier(.05,0,0,1)}
 .vjs-peach-menu-row[aria-checked="true"] .vjs-peach-switch{background:rgba(255,255,255,.3)}.vjs-peach-menu-row[aria-checked="true"] .vjs-peach-switch:after{background:#fff;transform:translateX(16px)}
@@ -400,7 +403,7 @@ video.video-js{vertical-align:top;font-size:10px;line-height:1;font-family:Arial
 [data-stage-media] :is([data-stage-media]>.video-js.vjs-fullscreen,.video-js.vjs-fullscreen,.video-js[data-peach-fullscreen],body.vjs-full-window .video-js,.video-js:fullscreen,.video-js:-webkit-full-screen,.video-js:-moz-full-screen,[data-stage-media]:fullscreen>.video-js,[data-stage-media]:-webkit-full-screen>.video-js,[data-stage-media]:-moz-full-screen>.video-js){position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;padding:0!important;
   max-width:none!important;max-height:none!important;aspect-ratio:auto!important;z-index:10000!important}
 [data-stage-media] :is([data-stage-media]>.video-js.vjs-fullscreen,.video-js.vjs-fullscreen,.video-js[data-peach-fullscreen],body.vjs-full-window .video-js,.video-js:fullscreen,.video-js:-webkit-full-screen,.video-js:-moz-full-screen,[data-stage-media]:fullscreen>.video-js,[data-stage-media]:-webkit-full-screen>.video-js,[data-stage-media]:-moz-full-screen>.video-js) .vjs-tech{
-  position:absolute!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;object-fit:cover!important}
+  position:absolute!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;object-fit:contain!important}
 [data-player-stats-button]{position:absolute;left:11px;top:11px;z-index:8;width:40px;height:40px;padding:0;
   display:grid;place-items:center;border:0;border-radius:50%;
   background:rgba(0,0,0,.6);color:#fff;cursor:pointer;box-shadow:none;isolation:isolate;overflow:hidden}
@@ -430,7 +433,7 @@ video.video-js{vertical-align:top;font-size:10px;line-height:1;font-family:Arial
 /* 徽标里的图标必须自己声明描边：sprite 里的仪表盘是描边图形，不声明就按 SVG 默认的
    fill 画成黑色实心块，压在 rgba(0,0,0,.6) 的底上等于没有。速率也要按整体不换行，
    否则「640 KB/s」会在这条 flex 行里断成两行，把 40px 的胶囊顶破。 */
-[data-player-net] svg{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+[data-player-net] svg{width:var(--icon-inline);height:var(--icon-inline);flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
 [data-player-net][hidden]{display:none}
 /* 被门挡住的 <video> 只带 hidden 属性，而 `.video-js{display:block}` 是作者样式，
    压得住 UA 的 `[hidden]`。原先靠内联 `style="display:none"` 顶住，三个门里

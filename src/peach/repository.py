@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from .catalog_rules import is_jav_code, normalise_code_key
+from .catalog_rules import is_jav_code, is_local_extra, normalise_code_key
 from .entities import normalize_entity_name
 from .regions import infer_region
 
@@ -14,8 +14,9 @@ from .regions import infer_region
 class LedgerDatabase:
     """Shared SQLite connection and transaction boundary for one Peach app."""
 
-    def __init__(self, db_path: Path):
+    def __init__(self, db_path: Path, *, media_roots=()):
         self.db_path = Path(db_path)
+        self.media_roots = tuple(media_roots)
         self.write_lock = threading.Lock()
         self.after_commit = lambda: None
 
@@ -30,6 +31,9 @@ class LedgerDatabase:
         )
         connection.row_factory = sqlite3.Row
         connection.create_function("is_jav_code", 1, is_jav_code, deterministic=True)
+        roots = self.media_roots
+        connection.create_function("peach_is_local_extra", 2,
+            lambda name, path: is_local_extra(name, path, library_roots=roots), deterministic=True)
         connection.create_function(
             "normalise_code_key", 1, normalise_code_key, deterministic=True)
         # 产地推断要和 Python 侧同一份实现。SQL 里重写一遍前缀名单的话，账本筛出来的

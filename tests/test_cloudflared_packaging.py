@@ -71,6 +71,23 @@ class CloudflaredFetchTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.destination.read_bytes(), b"pretend cloudflared")
 
+    def test_relative_output_uses_the_powershell_location(self):
+        project = self.root / 'project with spaces'
+        project.mkdir()
+        harness = self.root / 'fetch-from-location.ps1'
+        harness.write_text(
+            "param([string]$Project, [string]$Fetch, [string]$Source, [string]$Manifest)\n"
+            "$ErrorActionPreference = 'Stop'\nSet-Location -LiteralPath $Project\n"
+            "& $Fetch -OutputPath 'build/cloudflared.exe' -SourcePath $Source -ManifestPath $Manifest\n"
+            "exit $LASTEXITCODE\n", encoding='utf-8')
+        result = subprocess.run(
+            [PWSH, '-NoProfile', '-File', str(harness), str(project), str(FETCH),
+             str(self.source), str(self.manifest(self.digest))], cwd=self.root,
+            capture_output=True, text=True, encoding='utf-8', timeout=120, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((project / 'build/cloudflared.exe').read_bytes(), self.source.read_bytes())
+        self.assertFalse((self.root / 'build/cloudflared.exe').exists())
+
     def test_a_mismatched_hash_fails_and_leaves_nothing_behind(self):
         result = self.fetch("0" * 64)
         self.assertNotEqual(result.returncode, 0)

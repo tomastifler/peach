@@ -142,7 +142,9 @@ export function sidebarHost(){
 
 export function mountSidebar(){
   const scroll=$('#drawerScroll');
+  const anchors=[...(scroll.querySelector('[data-sidebar-head]')?.children||[])];
   scroll.innerHTML=sidebarSkeletonHtml(preferencesState.appSettings.sidebarOrder,layoutState.NAV_CATALOG,navOn);
+  scroll.querySelector('[data-sidebar-head]').append(...anchors);
   applicationEffects.listen(scroll, 'click', event=>{
     if(sidebarApi())return;
     const button=event.target.closest?.('[data-nav]');

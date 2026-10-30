@@ -12,7 +12,6 @@ import sqlite3
 import sys
 from pathlib import Path
 
-import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -47,7 +46,8 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         targets = {key: value for key, value in targets.items() if key in wanted}
 
     faces = icons.FaceGate(not args.no_face_gate)
-    client = httpx.Client(trust_env=True, follow_redirects=True)
+    from peach.peach_proxy import http_client
+    client = http_client(follow_redirects=True)
     try:
         rows = icons.harvest(targets, links, icons.Fetcher(client, args.timeout, args.interval),
                              args.candidate_dir.resolve(), faces,

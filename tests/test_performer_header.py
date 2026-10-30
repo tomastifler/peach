@@ -10,11 +10,11 @@ import unittest
 from datetime import date
 from pathlib import Path
 
-from peach import minnano_av, performer_header
+from peach import minnano_av, performer_header, performer_name_display
 from peach import web_contract as rm_web
 from peach.entities import normalize_entity_name
 from peach.genre_decisions import record_genre_decision
-from peach.performer_profiles import write_profile
+from peach.performer_profiles import read_profile, write_profile
 from peach.web_entity import q_entity_shapes
 from support.ledger import fresh_ledger
 
@@ -58,6 +58,12 @@ ALICE = """<!doctype html><html lang="ja"><head>
 
 
 class NameEntryTests(unittest.TestCase):
+    def test_alias_annotation_cells_have_no_names(self):
+        for marker in ("(注)", "（注）", "【注】"):
+            with self.subTest(marker=marker):
+                self.assertEqual(minnano_av.name_entries(
+                    f"<p>{marker}現在は”楓カレン”が正式女優名です。…復活！！ （ / ）</p>"), [])
+
     def test_alias_cells_split_names_and_carry_their_channel_note(self):
         self.assertEqual(
             [(entry["name"], entry["note"], entry["reading"]) for entry in
@@ -107,6 +113,82 @@ class Case(unittest.TestCase):
 
 
 class HeaderTests(Case):
+    def test_chinese_display_keeps_original_stage_names_and_only_changes_confirmed_glyphs(self):
+        for original, chinese in [('宮澤寧音', '宫泽宁音'), ('山田鈴奈', '山田铃奈'),
+                                  ('本郷愛', '本乡爱'), ('天使萌', '天使萌'),
+                                  ('篠田优', '篠田优'), ('槙泉奈', '槙泉奈')]:
+            with self.subTest(original=original):
+                page = {'name': original, 'aliases': []}
+                result = performer_name_display.writing(original, page, 'https://example.invalid/')
+                self.assertEqual(result['zh_cn'], chinese)
+                self.assertEqual(result['ja'], original)
+                self.assertEqual(page['name'], original)
+
+    def test_display_writings_keep_stage_names_and_raw_aliases_separate(self):
+        aliases = [('楓カレン', 'avdb'), ('田中柠檬', 'user:alias'),
+                   ('田中レモン', 'avdb'), ('かえでかれん', 'r18:performer'),
+                   ('Kaede Karen', 'r18:performer'), ('FC2', 'user:alias'),
+                   ('楓カレン（旧名）', 'user:alias')]
+        entity_id = self.entity('枫花恋', *aliases)
+        profile = {'kana': 'かえでかれん', 'raw': {'名前': '楓カレン', '別名': [
+            '楓カレン （かえでかれん / Kaede Karen）',
+            '田中レモン(旧名) （たなかれもん / Tanaka Remon）']}}
+        with self.connection:
+            write_profile(self.connection, entity_id, profile, source='auto:performer-profile@1',
+                          source_url='https://example.invalid/', fetched_at=STAMP)
+        before = list(self.connection.iterdump())
+        rows = [{'alias': name, 'source': source} for name, source in aliases]
+        result = performer_name_display.display(self.connection, entity_id, '枫花恋', rows,
+                                                self.header(entity_id, '枫花恋')['name_groups'])
+        self.assertEqual(result['choices']['zh-CN'], [
+            {'value': '枫花恋', 'label': '枫花恋'}, {'value': '田中柠檬', 'label': '田中柠檬'}])
+        self.assertEqual(result['choices']['ja'], [
+            {'value': '枫花恋', 'label': '楓カレン'}, {'value': '田中レモン', 'label': '田中レモン'}])
+        self.assertEqual(result['groups']['zh-CN']['shown'], ['田中柠檬'])
+        self.assertEqual(result['current']['ja'], '楓カレン')
+        historical = performer_name_display.display(self.connection, entity_id, '田中柠檬', rows, None)
+        self.assertEqual(historical['current']['ja'], '田中レモン')
+        self.assertEqual(before, list(self.connection.iterdump()))
+        with self.connection:
+            self.connection.execute('INSERT INTO entity_external_ref(entity_id,provider,external_kind,external_id) '
+                                    "VALUES(?,'javdb','performer','sample')", (entity_id,))
+        self.connection.row_factory = sqlite3.Row
+        variants = performer_name_display.variants(self.connection)
+        self.assertEqual([(row['id'], row['canonical_name'], row['zh_cn'], row['ja']) for row in variants],
+                         [(entity_id, '枫花恋', '枫花恋', '楓カレン')])
+
+    def test_missing_translation_keeps_current_spelling_and_latin_stage_names(self):
+        entity_id = self.entity('篠田ゆう', ('Alice', 'user:alias'))
+        self.land(entity_id, SHINODA)
+        result = performer_name_display.display(self.connection, entity_id, '篠田ゆう',
+                                                [{'alias': 'Alice', 'source': 'user:alias'}], None)
+        self.assertIsNone(result['current']['zh_cn'])
+        self.assertEqual(result['choices']['zh-CN'][0], {'value': '篠田ゆう', 'label': '篠田ゆう'})
+        latin = performer_name_display.writing('Alice', {'name': '', 'aliases': []}, '')
+        self.assertEqual((latin['zh_cn'], latin['ja']), ('Alice', 'Alice'))
+
+    def test_cached_alias_annotations_stay_in_raw_profile_only(self):
+        entity_id = self.entity("枫花恋", ("楓カレン", "avdb"),
+                                ("田中レモン", "auto:performer-alias@1"))
+        annotation = '(注)現在は”楓カレン”が正式女優名です。…復活！！ （ / ）'
+        profile = {
+            "kana": "かえでかれん", "raw": {
+                "名前": "楓カレン", "別名": [
+                    "楓カレン （かえでかれん / Kaede Karen）",
+                    "田中レモン(旧名) （たなかれもん / Tanaka Remon）", annotation]}}
+        with self.connection:
+            write_profile(self.connection, entity_id, profile,
+                          source="auto:performer-profile@1", source_url="https://example.invalid/",
+                          fetched_at=STAMP)
+        groups = self.header(entity_id, "枫花恋")["name_groups"]
+        self.assertEqual(groups["shown"], ["楓カレン", "田中レモン"])
+        self.assertEqual(groups["total"], 2)
+        self.assertEqual([(group["label"], [entry["name"] for entry in group["names"]])
+                          for group in groups["groups"]],
+                         [("现名", ["楓カレン"]), ("旧名义", ["田中レモン"])])
+        raw = read_profile(self.connection, entity_id)["raw"]
+        self.assertIn(annotation, raw["別名"])
+
     def test_five_facts_and_the_name_groups_of_the_header(self):
         shinoda = self.entity(
             "篠田优", ("篠田ゆう", "avdb"), ("Yu Shinoda", "r18:performer"),

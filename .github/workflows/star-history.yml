@@ -1,0 +1,72 @@
+name: Star History
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '43 5 * * *'
+  push:
+    branches: [master]
+    paths: [.github/workflows/star-history.yml, scripts/render_star_history.py]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: star-history
+  cancel-in-progress: false
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: 按逐日记录生成蜜桃色累计图
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/render_star_history.py --repo "${{ github.repository }}" --output-dir build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: star-history
+          path: |
+            build/star-history-light.svg
+            build/star-history-dark.svg
+          if-no-files-found: error
+
+  publish:
+    needs: render
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          path: publication
+      - uses: actions/download-artifact@v8
+        with:
+          name: star-history
+          path: incoming
+      - name: 发布到独立图表分支
+        working-directory: publication
+        shell: bash
+        run: |
+          branch_ref=$(git ls-remote --heads origin refs/heads/star-history)
+          if [ -n "$branch_ref" ]; then
+            git fetch --depth=1 origin star-history
+            git switch -C star-history FETCH_HEAD
+          else
+            git switch --orphan star-history
+          fi
+          cp ../incoming/star-history-light.svg star-history-light.svg
+          cp ../incoming/star-history-dark.svg star-history-dark.svg
+          git rm --quiet --ignore-unmatch -- star-chart-LICENSE.txt
+          git add -- star-history-light.svg star-history-dark.svg
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'docs(stats): 更新 Star 图'
+          git push origin HEAD:refs/heads/star-history

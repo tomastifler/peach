@@ -16,8 +16,8 @@ export async function mockJavDetail(page: Page) {
     preview_video_url: `/stream?id=${process.env.PEACH_E2E_ITEM}` } }));
   await page.route(/\/logo\?/, route => route.fulfill({ contentType: 'image/svg+xml', body:
     '<svg xmlns="http://www.w3.org/2000/svg" width="46" height="46"><rect width="46" height="46" fill="#ccc"/></svg>' }));
-  await page.route(/\/api\/jav\/image\?/, route => route.fulfill({ json: { ok: true,
-    image: 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600"><rect width="900" height="600" fill="#777"/></svg>') } }));
+  await page.route(/\/jav-image\?/, route => route.fulfill({ contentType: 'image/svg+xml',
+    body: '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600"><rect width="900" height="600" fill="#777"/></svg>' }));
   await page.route(/\/api\/jav\/reviews\?/, route => {
     const pageNumber = Number(new URL(route.request().url()).searchParams.get('page'));
     const count = pageNumber === 1 ? 10 : 2;

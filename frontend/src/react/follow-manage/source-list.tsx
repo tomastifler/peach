@@ -9,13 +9,13 @@
  * 操作发出去的也是整个 ID 集合，而不是屏幕上这一页。 */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  RiArrowDownLine, RiArrowDownSLine, RiArrowUpLine, RiArrowUpSLine, RiCheckDoubleLine,
+  RiCheckDoubleLine,
   RiDeleteBinLine, RiLayoutGridLine, RiRefreshLine, RiRssLine, RiTableLine,
 } from '@remixicon/react';
 import { useMutation } from '@tanstack/react-query';
 import {
   createColumnHelper, createPaginatedRowModel, flexRender, rowPaginationFeature,
-  rowSelectionFeature, rowSortingFeature, tableFeatures, useTable,
+  rowSelectionFeature, rowSortingFeature, columnVisibilityFeature, tableFeatures, useTable,
   type RowSelectionState, type SortingState,
 } from '@tanstack/react-table';
 import { VisuallyHidden } from 'react-aria-components';
@@ -23,9 +23,9 @@ import { VisuallyHidden } from 'react-aria-components';
 import { mapLimit } from '@peach/legacy/core';
 import { confirmModal } from '@peach/legacy/ui';
 
-import { Button, ButtonLink } from '@/components/base/buttons/button';
+import { Button } from '@/components/base/buttons/button';
 import { Checkbox } from '@/components/base/checkbox/checkbox';
-import { Select, SelectItem } from '@/components/base/select/select';
+import { Select, SelectItem } from '../components/select';
 import { Switch } from '@/components/base/switch/switch';
 import {
   Table, TableBody, TableCell, TableColumn, TableHeader, TableRow,
@@ -37,6 +37,11 @@ import { DataTableFooter } from '../components/table-controls';
 import { useBackgroundJob } from '../background-job';
 import { cardClass } from '../components/card';
 import { DataTableFrame } from '../components/data-table-frame';
+import { useTablePreferences } from '../components/table-column-preferences';
+import { TableColumnControls, TableColumnResizer } from '../components/table-column-controls';
+import { CollapseChevron, CollapseRegion } from '../components/collapse-region';
+import { TableSelectionHeader } from '../components/table-selection-header';
+import { SortDirectionIcon } from '../components/icon-swap';
 import { EmptyState } from '../components/empty-state';
 import { clickedBlank } from '../components/row-click';
 import { Note } from '../components/note';
@@ -58,6 +63,7 @@ const sourceTableFeatures = tableFeatures({
   rowPaginationFeature,
   rowSelectionFeature,
   rowSortingFeature,
+  columnVisibilityFeature,
   paginatedRowModel: createPaginatedRowModel(),
 });
 
@@ -95,6 +101,12 @@ const COLUMN_LABELS: Record<string, string> = {
   select: 'Select', author: 'Creator', source: 'Source', provider: 'Site',
   status: 'Status', checked: 'Last checked', actions: 'Actions',
 };
+const preferenceColumns = Object.entries(COLUMN_LABELS).map(([id, label]) => ({ id, label,
+  width: id === 'select' ? 48 : id === 'source' ? 320 : id === 'author' ? 240 : id === 'actions' ? 208 : 184,
+  min: id === 'select' ? 48 : id === 'actions' ? 200 : id === 'source' ? 320 : 112, max: id === 'select' ? 48 : id === 'source' ? 2000 : 800,
+  flex: id === 'source',
+  required: id === 'select' || id === 'source',
+}));
 
 /** 行上那两个动作由调用方给，但列定义不该跟着每一次渲染重建；两者之间放一个当前值的盒子。 */
 interface RowHandlers {
@@ -122,37 +134,45 @@ export interface SourceListProps {
   onSelected(next: Set<number>): void;
   toast(message: string): void;
   openFollow(): void;
+  onAdd(): void;
 }
 
 /** 页码。上一页／下一页在两端，页码居中，页数多时两侧折成「…」。 */
 export { Pagination } from '../components/table-pagination';
 
-/** 一条来源在创作者卡里的那一行：勾选、名字、站点、状态、上次检查、动作。 */
+/** 一条来源在创作者卡里的那一行：勾选、站标与名字、状态、上次检查、动作。 */
 function SourceRow(
   { source, selected, onToggle, handlers }:
   { source: FollowSource; selected: boolean; onToggle(on: boolean): void; handlers: RowHandlers },
 ) {
   /* 点这一行的空白处就是勾上或取消：勾选框只有 16px，一行里其余的地方点了没反应的话，选几条要瞄几次。
-     窄屏固定两行：上一行勾选、名字、站标与状态，下一行上次检查、开关与两枚动作键。 */
+     第一行是勾选、站标与名字、状态，宽屏时上次检查、开关与动作键也在这一行；报错单独占一整行，
+     左边让出勾选框与站标的宽度，和名字对齐。窄屏依次是第一行、报错、操作行。 */
   return (
     <div data-selected={selected || undefined} data-follow-source-row=""
-      className="flex min-h-16 flex-wrap items-center gap-3 px-2 py-3 max-sm:gap-x-2"
+      className="flex min-h-16 flex-wrap items-center gap-3 px-2 py-3 last:rounded-b-lg max-sm:gap-x-2"
       onClick={(event) => { if (clickedBlank(event, event.currentTarget)) onToggle(!selected) }}>
-      <Checkbox isSelected={selected} onChange={onToggle} aria-label={`Select ${source.label}`} />
-      {/* 名字列从零宽起长：长名字和报错在列内折行或截断，不把站标、状态和操作键挤到下一行。 */}
-      <span className="flex min-w-0 grow basis-0 flex-col gap-0.5">
+      <Checkbox isSelected={selected} onChange={onToggle} aria-label={`选择 ${source.label}`} />
+      {/* 名字从零宽起长：长名字在列内折行，不把状态和操作键挤到下一行。站标贴在名字前。 */}
+      <span className="flex min-w-0 grow basis-0 items-center gap-1.5">
+        <span data-follow-source-site="" className="flex shrink-0 items-center text-body-medium">
+          <SourceIcon provider={source.provider} />
+        </span>
         <SourceLink source={source} />
-        {source.last_error ? <ErrorLine text={source.last_error} /> : null}
       </span>
-      {/* 卡片里站名只出一枚图标：这一行紧挨着的就是作者名和状态徽章，站名写出来是同一个词
-          并排两次。名字仍在 DOM 里，读屏和取不到图标时都还读得到；表格那边「站点」是独立
-          一列，列头就叫这个名字，那里才出文字。 */}
-      <span className="flex shrink-0 items-center gap-1.5 text-body-2-regular text-text-secondary"
-        title={source.provider_label}>
-        <SourceIcon provider={source.provider} label={source.provider_label} />
-      </span>
+      {/* 站标只画字形，站名给读屏。 */}
+      <VisuallyHidden>{source.provider_label}</VisuallyHidden>
       <StatusBadge source={source} />
-      <span data-follow-source-controls="" className="contents max-sm:flex max-sm:w-full max-sm:flex-wrap max-sm:items-center max-sm:gap-1.5">
+      {source.last_error ? (
+        <span data-follow-source-error="" className="flex min-w-0 basis-full gap-3 max-sm:gap-x-2 sm:order-last">
+          <span aria-hidden className="w-4 shrink-0" />
+          <span className="flex min-w-0 grow gap-1.5">
+            <span aria-hidden className="w-(--icon-inline) shrink-0 text-body-medium" />
+            <span className="min-w-0 grow"><ErrorLine text={source.last_error} /></span>
+          </span>
+        </span>
+      ) : null}
+      <span data-follow-source-controls="" className="flex w-max max-w-full flex-none flex-wrap items-center gap-1.5 max-sm:w-full">
         <span className="shrink-0 text-body-2-regular whitespace-nowrap text-text-secondary max-sm:mr-auto max-sm:text-caption-1-regular">
           {checkedText(source)}
         </span>
@@ -197,37 +217,41 @@ function AuthorCard(
       <div data-follow-author-header data-open={open || undefined}
         className="flex flex-wrap items-center gap-3 px-2 py-2.5">
         <AuthorAvatar group={group} name={name} />
-        <b className="min-w-0 grow text-body-medium wrap-anywhere text-text-primary max-sm:basis-0">{name}</b>
-        <Button variant="secondary" size="small" iconOnly leadingIcon={RiRefreshLine}
-          aria-label={`Check all sources of ${name}`} disabled={!enabled.length || handlers.readOnly}
-          {...busyProps(handlers.busy)} onClick={() => handlers.check(enabled)} />
-        {/* 窄屏固定两行：上一行头像、名字与检查键，下一行站标、失败数与全选、收起。 */}
-        <span data-follow-author-controls="" className="contents max-sm:flex max-sm:w-full max-sm:items-center max-sm:gap-2">
-          <span className="flex shrink-0 items-center gap-1 max-sm:mr-auto max-sm:min-w-0 max-sm:shrink max-sm:flex-wrap" title={providers}>
+        {/* 名字下面一行说这个人的来源：各站站标与失败数。窄屏时操作键另起一行靠右。 */}
+        <span className="flex min-w-0 grow basis-0 flex-col gap-1">
+          <b className="min-w-0 text-body-medium wrap-anywhere text-text-primary">{name}</b>
+          <span data-follow-author-sites="" className="flex min-w-0 flex-wrap items-center gap-1 text-body-2-regular" title={providers}>
             {group.map((source) => <SourceIcon key={source.id} provider={source.provider} />)}
             {/* 只读屏用的文字走 `VisuallyHidden`：它把样式写在元素上，不会生成一个和旧
                 样式表同名的工具类（`web/css/01-base.css` 里那条 `.sr-only` 带 !important）。 */}
-            <VisuallyHidden>{`Sources: ${providers}`}</VisuallyHidden>
+            <VisuallyHidden>{`来源：${providers}`}</VisuallyHidden>
+            {bad
+              ? <span className="ml-1 shrink-0 text-text-error-primary">{`${bad} 个失败`}</span>
+              : null}
           </span>
-          {bad
-            ? <span className="shrink-0 text-body-2-regular text-text-error-primary">{`${bad} failed`}</span>
-            : null}
+        </span>
+        <span data-follow-author-controls="" className="flex flex-none items-center gap-2 max-sm:w-full max-sm:justify-end">
+          <Button variant="secondary" size="small" iconOnly leadingIcon={RiRefreshLine}
+            aria-label={`检查 ${name} 的全部来源`} disabled={!enabled.length || handlers.readOnly}
+            {...busyProps(handlers.busy)} onClick={() => handlers.check(enabled)} />
+          <span className="flex flex-none items-center gap-2">
           <Button variant="secondary" size="small" leadingIcon={RiCheckDoubleLine}
             aria-pressed={state.all ? 'true' : state.some ? 'mixed' : 'false'}
             aria-label={`${state.all ? 'Deselect all' : 'Select all'} sources of ${name}`}
             onClick={() => onToggleGroup(!state.all)}>{state.all ? 'Deselect all' : 'Select all'}</Button>
           <Button variant="secondary" size="small" aria-expanded={open} aria-controls={panel}
-            leadingIcon={open ? RiArrowUpSLine : RiArrowDownSLine}
-            aria-label={`${open ? 'Collapse' : 'Expand'} sources of ${name}`}
-            onClick={() => onOpen(!open)}>{open ? 'Collapse' : 'Expand'}</Button>
+            leadingIcon={CollapseChevron}
+            aria-label={`${open ? '收起' : '展开'} ${name} 的来源`}
+            onClick={() => onOpen(!open)}>{open ? '收起' : '展开'}</Button>
+          </span>
         </span>
       </div>
-      <div id={panel} hidden={!open} data-source-divider>
+      <CollapseRegion id={panel} open={open} data-source-divider>
         {group.map((source) => (
           <SourceRow key={source.id} source={source} handlers={handlers}
             selected={selected.has(source.id)} onToggle={(on) => onToggle(source.id, on)} />
         ))}
-      </div>
+      </CollapseRegion>
     </section>
   );
 }
@@ -235,7 +259,7 @@ function AuthorCard(
 export function SourceList(props: SourceListProps) {
   const {
     data, sort, dir, page, layout, pageSize, selected, readOnly,
-    onSort, onPage, onLayout, onPageSize, onSelected, toast, openFollow,
+    onSort, onPage, onLayout, onPageSize, onSelected, toast, openFollow, onAdd,
   } = props;
   const sources = data.sources;
   const aliases = useMemo(() => data.author_aliases || [], [data.author_aliases]);
@@ -365,7 +389,7 @@ export function SourceList(props: SourceListProps) {
     return column.columns([
       column.display({
         id: 'select',
-        header: label('select'),
+        header: context => <TableSelectionHeader table={context.table} label="全选本页来源" page />,
         /* `slot={null}`：表格自带一个叫 selection 的插槽，摆进去的勾不声明归属就会被它
            拦下报错。这一列的勾归 TanStack Table 那份行选择管，不走 Table 自己的选择。 */
         cell: (context) => (
@@ -444,6 +468,7 @@ export function SourceList(props: SourceListProps) {
     () => Object.fromEntries([...selected].map((id) => [String(id), true])), [selected]);
 
   const asTable = layout === 'table';
+  const preferences = useTablePreferences('follow-sources', preferenceColumns);
   // 越界的页码落到末页：地址栏里挂着的可能是上一次、来源更多时的页码。
   const win = pageWindow(asTable ? rows.length : groups.length, pageSize, page);
 
@@ -454,7 +479,8 @@ export function SourceList(props: SourceListProps) {
     /* 行的身份是来源 ID，不是它在这一页里的下标：换页、换排序之后 `rowSelection` 里记着的
        仍是同一批来源，卡片视图读的也是同一组数。 */
     getRowId: (row) => String(row.source.id),
-    state: { sorting, rowSelection, pagination: { pageIndex: win.page - 1, pageSize } },
+    state: { sorting, rowSelection, pagination: { pageIndex: win.page - 1, pageSize }, columnVisibility: preferences.visibility },
+    onColumnVisibilityChange: preferences.change,
     /* 排序由共用的比较器算好再交进来：表格自己再排一遍的话，卡片视图与表格视图会各有一套
        顺序，同一份数据在两个视图里的先后就不一样了。 */
     manualSorting: true,
@@ -492,10 +518,9 @@ export function SourceList(props: SourceListProps) {
 
   if (!sources.length) {
     return (
-      /* 去处写成地址：遗留层那个全局点击处理器认这条链接，已经在关注管理页上时只换到「添加关注」页签。 */
-      <EmptyState shell="plain" icon={RiRssLine} title="No followed sources yet" actions={
-        <ButtonLink variant="primary" size="small" href="/subscriptions?tab=add">Add follow</ButtonLink>
-      }>Followed sources and their check status will show up here.</EmptyState>
+      <EmptyState icon={RiRssLine} title="还没有关注来源" actions={
+        <Button variant="primary" size="small" onClick={onAdd}>添加关注</Button>
+      }>关注来源及其检查状态会显示在这里。</EmptyState>
     );
   }
 
@@ -506,22 +531,22 @@ export function SourceList(props: SourceListProps) {
       padding: 'none',
       className: 'flex flex-col gap-4 px-6 py-5 max-sm:px-4',
     })}>
-      {/* 放不下时带字的按钮先收成图标，再让整行换行。收起后名字由 `aria-label` 接着说。
-          窄屏固定两行：上一行标题、读数与检查全部，下一行版式、排序与全部收起。 */}
-      <div ref={toolbar} data-follow-toolbar="" className="flex flex-wrap items-center gap-2">
-        <span className="contents max-sm:flex max-sm:min-w-0 max-sm:flex-1 max-sm:flex-col">
-          <h3 className="mr-auto text-title-2-medium text-text-primary">Follow list</h3>
+      {/* 操作区作为一组换行；独占一行仍放不下时，组内控件继续按顺序换行。 */}
+      <div ref={toolbar} data-follow-toolbar="" data-responsive-toolbar="">
+        <span data-follow-toolbar-heading="" data-toolbar-heading="">
+          <h3 className="text-title-2-medium text-text-primary">关注列表</h3>
           <span className="text-body-2-regular text-text-secondary">
             {`${sources.length.toLocaleString()} sources${counts.new ? ` · ${count(counts.new)} unseen` : ''}`}
           </span>
         </span>
-        <Button variant="primary" leadingIcon={RiRefreshLine} disabled={readOnly}
-          aria-label="Check all" iconOnly={compact}
-          {...busyProps(rowHandlers.busy)} onClick={() => startChecking([])}>Check all</Button>
+        <div data-follow-toolbar-actions="" data-toolbar-actions="">
         {failedSourceIds.length ? <Button variant="secondary" disabled={readOnly}
-          {...busyProps(rowHandlers.busy)} onClick={() => startChecking(failedSourceIds)}>Check failed ones</Button> : null}
-        <span data-follow-toolbar-controls="" className="contents max-sm:flex max-sm:w-full max-sm:items-center max-sm:gap-2">
-          <span data-button-group role="group" aria-label="Follow list layout">
+          {...busyProps(rowHandlers.busy)} onClick={() => startChecking(failedSourceIds)}>检查失败项</Button> : null}
+        <Button variant="primary" leadingIcon={RiRefreshLine} disabled={readOnly}
+          aria-label="检查全部" iconOnly={compact}
+          {...busyProps(rowHandlers.busy)} onClick={() => startChecking([])}>检查全部</Button>
+        <span data-follow-toolbar-controls="" className="contents">
+          <span data-button-group role="group" aria-label="关注列表版式">
             <Button variant="ghost" iconOnly
               leadingIcon={RiLayoutGridLine} aria-label={LAYOUTS[0][1]} aria-pressed={!asTable}
               onClick={() => onLayout('default')} />
@@ -529,7 +554,9 @@ export function SourceList(props: SourceListProps) {
               leadingIcon={RiTableLine} aria-label={LAYOUTS[1][1]} aria-pressed={asTable}
               onClick={() => onLayout('table')} />
           </span>
-          <Select aria-label="Follow list sort" selectedKey={sort}
+          {asTable ? <TableColumnControls preferences={preferences} label="关注来源" /> : null}
+          <span className="flex flex-none items-center gap-2">
+          <Select aria-label="关注列表排序" prefix="排序" selectedKey={sort}
             onSelectionChange={(key) => {
               if (key === null) return;
               const next = String(key) as SortKey;
@@ -539,13 +566,14 @@ export function SourceList(props: SourceListProps) {
           </Select>
           {/* 箭头是装饰，方向由无障碍名称说，而且说的是点下去会得到的那一头。 */}
           <Button variant="secondary" iconOnly
-            leadingIcon={dir === 'asc' ? RiArrowUpLine : RiArrowDownLine}
+            leadingIcon={SortDirectionIcon} data-icon-state={dir === 'asc' ? 'a' : 'b'}
             aria-label={sortLabel(sort, dir)}
             onClick={() => onSort(sort, dir === 'asc' ? 'desc' : 'asc')} />
+          </span>
           {asTable ? null : (
             <Button variant="secondary" iconOnly={compact}
-              leadingIcon={allCollapsed ? RiArrowDownSLine : RiArrowUpSLine}
-              aria-label={allCollapsed ? 'Expand all' : 'Collapse all'}
+              leadingIcon={CollapseChevron} aria-expanded={!allCollapsed}
+              aria-label={allCollapsed ? '全部展开' : '全部收起'}
               onClick={() => setCollapsed(allCollapsed
                 ? new Set<string>()
                 : new Set(groups.map((group) => String(group[0]!.author_key || group[0]!.id))))}>
@@ -553,6 +581,7 @@ export function SourceList(props: SourceListProps) {
             </Button>
           )}
         </span>
+        </div>
       </div>
 
       {/* 这一趟在后台跑，关掉页面还在继续，所以状态留在页面上而不是只让按钮转一下。 */}
@@ -597,8 +626,8 @@ export function SourceList(props: SourceListProps) {
         </SelectionDock>
 
       {asTable ? (
-        <DataTableFrame follow onRowClick={(key) => toggleOne(Number(key), !selected.has(Number(key)))}>
-          <Table aria-label="Followed sources" size="sm"
+        <DataTableFrame follow preferences={preferences} onRowClick={(key) => toggleOne(Number(key), !selected.has(Number(key)))}>
+          <Table aria-label="关注来源" size="sm"
             sortDescriptor={sorting[0]
               ? { column: sorting[0].id, direction: sorting[0].desc ? 'descending' : 'ascending' }
               : undefined}
@@ -611,28 +640,30 @@ export function SourceList(props: SourceListProps) {
                 const text = flexRender(header.column.columnDef.header, header.getContext());
                 return (
                   <TableColumn key={header.id} id={header.id} allowsSorting={sortable}
-                    isRowHeader={header.column.id === 'source'}>
-                    {({ sortDirection }) => sortable ? (
+                    isRowHeader={header.column.id === 'source'} {...preferences.columnProps(header.id)}>
+                    {({ sortDirection }) => <>{header.id === 'select' ? text : sortable ? (
                       <span className="flex items-center gap-0.5">
                         {text}
                         <span data-sort-indicator data-direction={sortDirection || undefined}>
                           <ChevronSortDown />
                         </span>
                       </span>
-                    ) : <VisuallyHidden>{text}</VisuallyHidden>}
+                    ) : <VisuallyHidden>{text}</VisuallyHidden>}<TableColumnResizer preferences={preferences} id={header.id} /></>}
                   </TableColumn>
                 );
               })}
+              <TableColumn id="remaining-space" aria-label="行空白区域" data-table-space="" width={preferences.spaceWidth} minWidth={0} />
             </TableHeader>
             <TableBody renderEmptyState={() => 'No sources on this page'}>
               {pageRows.map((row) => (
                 <TableRow key={row.id} id={row.id}
                   data-follow-selected={row.getIsSelected() || undefined}>
-                  {row.getAllCells().map((cell) => (
+                  {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}
+                  <TableCell data-table-space="" />
                 </TableRow>
               ))}
             </TableBody>

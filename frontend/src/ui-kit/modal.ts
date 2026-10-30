@@ -25,8 +25,9 @@ export function formModal({title,description='',body='',confirmLabel,cancelLabel
   const titleId=`geist-form-title-${++formModalSeq}`;
   dialog.setAttribute('aria-labelledby',titleId);
   dialog.innerHTML=`<form class="ui-geist-modal-form" novalidate>
-      <div class="ui-geist-modal-body"><h3 id="${titleId}"></h3>${description?'<p></p>':''}
-        <div class="ui-geist-modal-fields">${body}</div><div data-modal-error></div></div>
+      <header class="ui-geist-modal-header"><h3 id="${titleId}"></h3></header>
+      <div class="ui-geist-modal-scroll"><div class="ui-geist-modal-body">${description?'<p></p>':''}
+        <div class="ui-geist-modal-fields">${body}</div><div data-modal-error></div></div></div>
       <footer class="geist-modal-footer">
         <div><button type="button" class="geist-button" data-modal-cancel></button></div>
         <div><button type="submit" class="geist-button primary" data-modal-confirm></button></div>
@@ -64,6 +65,7 @@ export function formModal({title,description='',body='',confirmLabel,cancelLabel
     }finally{busy=false}
   };
   dialog.showModal();
+  attachOverlayScrollbar(dialog.querySelector<HTMLElement>('.ui-geist-modal-body'));
   playUiSound('pop');
   (dialog.querySelector<HTMLElement>('.ui-geist-modal-fields input:not([type="checkbox"])')||accept).focus();
   return {dialog,confirmButton:accept,done,close:()=>dialog.close()};
@@ -95,8 +97,9 @@ export function confirmModal({title,body,items=[],confirmLabel,cancelLabel='Canc
   dialog.className='ui-geist-modal';
   const titleId=`geist-modal-title-${++modalSeq}`;
   dialog.setAttribute('aria-labelledby',titleId);
-  dialog.innerHTML=`<div class="ui-geist-modal-body">
-      <h3 id="${titleId}"></h3><p></p><div data-modal-error></div></div>
+  dialog.innerHTML=`<header class="ui-geist-modal-header"><h3 id="${titleId}"></h3></header>
+    <div class="ui-geist-modal-scroll"><div class="ui-geist-modal-body">
+      <p></p><div data-modal-error></div></div></div>
     <footer class="geist-modal-footer">
       <div><button type="button" class="geist-button" data-modal-cancel></button></div>
       <div><button type="button" class="geist-button primary" data-modal-confirm></button></div>
@@ -153,6 +156,7 @@ export function confirmModal({title,body,items=[],confirmLabel,cancelLabel='Canc
       }finally{busy=false}
     };
     dialog.showModal();
+    attachOverlayScrollbar(dialog.querySelector<HTMLElement>('.ui-geist-modal-body'));
     attachOverlayScrollbar(list);
     playUiSound('pop');
     (danger?cancel:accept).focus();

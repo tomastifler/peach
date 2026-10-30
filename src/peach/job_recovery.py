@@ -107,7 +107,7 @@ def resume(db: Path, handlers: dict) -> list[str]:
                 data = read(db, key)
                 pid = data.get("pid")
                 if key == 'library-processing':
-                    from .processing_control import user_paused
+                    from .processing_control import user_paused, user_cancelled
                     if user_paused(db, data.get('job_id')):
                         continue
                 if (data.get("status") != "active" or not isinstance(data.get("request"), dict)
@@ -115,6 +115,12 @@ def resume(db: Path, handlers: dict) -> list[str]:
                     continue
                 # 当前进程自己的新任务不属于启动恢复。
                 if pid == os.getpid():
+                    continue
+                if key == 'library-processing' and user_cancelled(db, data.get('job_id')):
+                    if data.get('run_id') is not None:
+                        from .task_runs import TaskRunStore
+                        TaskRunStore(db).finish(data['run_id'], 'cancelled', error='用户停止任务')
+                    finish(db, key, data['job_id'], 'cancelled')
                     continue
                 try:
                     context = current_run.set(data.get('run_id'))

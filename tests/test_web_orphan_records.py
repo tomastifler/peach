@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from contextlib import closing
 from pathlib import Path
+from unittest.mock import patch
 
 from peach import record_rehome, web_batch
 from peach import web_contract as rm_web
@@ -21,6 +22,8 @@ class OrphanRecordsTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name).resolve()
+        self.enterContext(patch.object(web_batch, "LOCATION_ROOT_DECLARATIONS",
+                                      {"local": (str(self.root),)}))
         self.db = fresh_ledger(self.root)
         gone, here = self.root / "gone", self.root / "here"
         rows = [

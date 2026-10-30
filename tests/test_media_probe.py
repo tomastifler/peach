@@ -83,10 +83,64 @@ class ProbeUnmeasuredTests(unittest.TestCase):
         self.assertEqual(self.probed, [])
         self.assertIsNone(self.row(pending)[0])
 
+    def test_registered_trailer_is_not_read_or_changed_by_background_probe(self):
+        main = self.add(ROOT + r'\ABC-123.mp4')
+        trailer = self.add(ROOT + r'\ABC-123-trailer.mp4')
+        self.assertEqual(self.probe(), 1)
+        self.assertEqual(self.probed, ['ABC-123.mp4'])
+        self.assertEqual(self.row(main)[0], 1800)
+        self.assertIsNone(self.row(trailer)[0])
+
+    def test_directory_extras_and_numbered_suffixes_are_not_probed(self):
+        main = self.add(ROOT + r'\Film\Film.mp4')
+        extras = [self.add(ROOT + relative) for relative in (
+            r'\Film\Trailers\Teaser.mp4', r'\Film\Extras\Disc 1\Making of.mkv',
+            r'\Film\Actor-interview2.mp4', r'\Film\sample2.mp4')]
+        self.assertEqual(self.probe(), 1)
+        self.assertEqual(self.row(main)[0], 1800)
+        self.assertTrue(all(self.row(aid)[0] is None for aid in extras))
+
     def test_without_ffprobe_the_scan_still_finishes_and_leaves_rows_pending(self):
         pending = self.add(ROOT + r"\a.mp4")
         self.assertEqual(self.probe(ffprobe=None), 0)
         self.assertIsNone(self.row(pending)[0])
+
+    def test_file_scope_reads_exactly_that_file(self):
+        self.add(ROOT + r'\a.mp4')
+        self.add(ROOT + r'\b.mp4')
+        self.assertEqual(self.probe(root=ROOT + r'\a.mp4'), 1)
+        self.assertEqual(self.probed, ['a.mp4'])
+
+    def test_measured_short_promotion_is_isolated_and_bound_main_is_protected(self):
+        from peach.repository import LedgerDatabase
+        for aid in (1, 2):
+            self.add(ROOT + rf'\bbsxv.xyz-ABC-123\附件{aid}.mp4')
+        with LedgerDatabase(self.db).write_transaction() as connection:
+            connection.execute("UPDATE asset SET size=1048576,creator='bbsxv.xyz',code='ABC-123'")
+        with mock.patch.object(media_probe, 'probe_file', return_value=(10, 1280, 720, 'h264', 30, None)), \
+                mock.patch.object(media_probe, 'resolve_case_insensitive', str):
+            count = media_probe.probe_unmeasured(self.db, 'ffprobe', 'local', ROOT, protected_ids=[1])
+        self.assertEqual(count, 2)
+        with LedgerDatabase(self.db).read_connection() as connection:
+            self.assertEqual([tuple(row) for row in connection.execute(
+                'SELECT id,duration,disposal FROM asset ORDER BY id')], [(1, 10, None), (2, 10, 'trash')])
+
+    def test_personal_records_reattach_before_measured_junk_isolation(self):
+        from peach.repository import LedgerDatabase
+        fresh = self.add(ROOT + r'\bbsxv.xyz\点击进入.mp4')
+        with LedgerDatabase(self.db).write_transaction() as connection:
+            connection.execute("UPDATE asset SET size=1000,creator='bbsxv.xyz' WHERE id=?", (fresh,))
+            connection.execute("INSERT INTO asset(location,path,name,medium,size,creator,duration,play_count,disposal) "
+                "VALUES('local','R:\\gone\\点击进入.mp4','点击进入.mp4','video',1000,'bbsxv.xyz',10,1,'vanished')")
+        checked = []
+        with mock.patch.object(media_probe, 'probe_file', return_value=(10, 1280, 720, 'h264', 30, None)), \
+                mock.patch.object(media_probe, 'resolve_case_insensitive', str):
+            media_probe.probe_unmeasured(self.db, 'ffprobe', 'local', ROOT, on_junk=checked.append)
+        with LedgerDatabase(self.db).read_connection() as connection:
+            self.assertEqual(tuple(connection.execute('SELECT disposal,play_count FROM asset WHERE id=?',
+                                                     (fresh,)).fetchone()), (None, 1))
+            self.assertEqual(connection.execute('SELECT count(*) FROM record_rehome').fetchone()[0], 1)
+        self.assertEqual(checked[0]['isolated'], 0)
 
     def test_an_unreadable_file_is_marked_failed_so_the_next_scan_skips_it(self):
         broken = self.add(ROOT + r"\坏.mp4")

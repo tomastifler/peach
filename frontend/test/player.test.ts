@@ -12,6 +12,7 @@ import { mountPlayer } from '../src/player/detail-player';
 import { wireTelemetry } from '../src/player/telemetry';
 import type { QualityLevel, QualityLevelList, VjsPlayer } from '../src/player/types';
 import * as videojsLoader from '../src/player/videojs';
+import { mountPlayerPipControl } from '../src/player/pip';
 
 type FetchCall = { url: string; init: RequestInit | undefined };
 
@@ -119,14 +120,21 @@ describe('沉浸模式的每一格', () => {
       const record: (typeof made)[number] = { sources: [], disposed: false };
       made.push(record);
       const shell = document.createElement('div');
-      shell.append(video);
+      const container = document.createElement('media-container'); container.append(video); shell.append(container);
+      Object.defineProperty(video, 'textTracks', { value: Object.assign([], new EventTarget(), {
+        addEventListener: () => {}, removeEventListener: () => {},
+      }) });
+      const disposing: (() => void)[] = [];
       return {
+        on: (_event: string, handler: () => void) => { disposing.push(handler) },
+        addRemoteTextTrack: () => {},
         src: (source: unknown) => { record.sources.push(source) },
         one: (_event: string, handler: () => void) => { record.error = handler },
         el: () => shell,
         isDisposed: () => record.disposed,
         pause: () => {},
-        dispose: () => { record.disposed = true },
+        playbackRate: (next?: number) => next === undefined ? video.playbackRate : (video.playbackRate = next),
+        dispose: () => { record.disposed = true; disposing.forEach(handler => handler()) },
       } as unknown as VjsPlayer;
     });
     vi.spyOn(videojsLoader, 'ensureVideojs').mockResolvedValue(factory);
@@ -134,8 +142,8 @@ describe('沉浸模式的每一格', () => {
   }
 
   it('片源按 stream-plan 交给裸播放器，分片出错退回直读；拆这一格时按会话取消并拆播放器', async () => {
-    const calls = stubFetch((url) => (url.startsWith('/api/stream-plan')
-      ? { protocol: 'hls', src: '/stream/hls/8/index.m3u8' } : { cancelled: 1 }));
+    const calls = stubFetch((url) => url.startsWith('/api/player/memory') ? { selected: null, tracks: [] }
+      : url.startsWith('/api/stream-plan') ? { protocol: 'hls', src: '/stream/hls/8/index.m3u8' } : { cancelled: 1 });
     const { factory, made } = fakeVideojs();
     const video = document.createElement('video');
     const onLoaded = vi.fn();
@@ -211,6 +219,30 @@ function fakePlayer(state: { time: number; duration: number }) {
   return { player: player as unknown as VjsPlayer, raw: player, fire };
 }
 
+it('画中画入口保持占位，媒体就绪后启用，浏览器不支持时保留原因并禁用', async () => {
+  const root = document.createElement('div'), video = document.createElement('video'), button = document.createElement('button');
+  root.append(video, button);
+  let ready = 0;
+  Object.defineProperties(video, { readyState: { get: () => ready }, videoWidth: { value: 1280 },
+    webkitSetPresentationMode: { value: () => {} } });
+  const original = vi.fn(async () => { throw new DOMException('Picture-in-Picture is not available', 'NotSupportedError') });
+  const pip = Object.assign(button, { activate: original });
+  const { player, fire } = fakePlayer({ time: 0, duration: 10 });
+  Object.assign(player, { el: () => root });
+  const label = vi.fn(), failure = vi.fn();
+  mountPlayerPipControl(player, pip, label, failure);
+  expect(pip.hasAttribute('data-peach-pip-supported')).toBe(true);
+  expect(pip.disabled).toBe(true);
+  ready = 4; video.dispatchEvent(new Event('loadedmetadata'));
+  expect(pip.disabled).toBe(false);
+  await (pip.activate as (media: unknown) => Promise<unknown>)({});
+  expect(failure).toHaveBeenCalledWith('当前浏览器不支持画中画');
+  expect(pip.disabled).toBe(true);
+  expect(pip.getAttribute('label')).toBe('当前浏览器不支持画中画');
+  fire('dispose');
+  expect(pip.activate).toBe(original);
+});
+
 describe('播放器清晰度', () => {
   function menu(entries: QualityLevel[], selectedIndex = 0) {
     configurePlayer(host());
@@ -235,6 +267,25 @@ describe('播放器清晰度', () => {
     return { bar, video, levels, open, labels, change: () => events.get('change')?.(), notify: (name: string) => events.get(name)?.(),
       close: () => { fire('dispose'); root.remove() } };
   }
+
+  it('设置菜单选择四个方向并可恢复原始画面', () => {
+    const view = menu([]);
+    try {
+      Object.defineProperties(view.video, { videoWidth: { value: 1920 }, videoHeight: { value: 1080 },
+        clientWidth: { value: 640 }, clientHeight: { value: 360 } });
+      Object.defineProperties(view.video.closest('media-container')!, { clientWidth: { value: 640 }, clientHeight: { value: 360 } });
+      view.bar.querySelector<HTMLButtonElement>('.vjs-peach-settings-toggle')!.click();
+      for (const angle of [90, 180, 270, 0]) {
+        view.bar.querySelector<HTMLButtonElement>('[data-player-rotation]')!.click();
+        expect(view.bar.querySelectorAll('[data-player-rotation-option]')).toHaveLength(4);
+        view.bar.querySelector<HTMLButtonElement>(`[data-player-rotation-option="${angle}"]`)!.click();
+        expect(view.video.style.transform).toBe(angle % 180 ? `translate(-50%, -50%) rotate(${angle}deg)` : angle ? `rotate(${angle}deg)` : '');
+        expect(view.video.style.width).toBe(angle % 180 ? '360px' : '');
+        expect(view.video.style.height).toBe(angle % 180 ? '640px' : '');
+      }
+    } finally { view.close() }
+    expect(view.video.style.transform).toBe('');
+  });
 
   it('单档 HLS 用实际视频尺寸命名，不展示轨道地址或虚构自动档', () => {
     const view = menu([{ id: '0-https://example.test/index.m3u8?session=private', enabled: true }]);
@@ -348,16 +399,16 @@ describe('画中画的快进快退', () => {
 describe('外挂字幕', () => {
   it('能播的轨全挂上，一条都不预先打开', async () => {
     stubFetch(() => ({ subtitles: [
-      { playable: true, src: '/sub/1.vtt', language: 'zh', label: '简体' },
-      { playable: false, src: '/sub/2.ass', language: 'ja', label: '日语' },
-      { playable: true, src: '/sub/3.vtt', label: '繁体' },
+      { id: 'sidecar:1', playable: true, src: '/sub/1.vtt', language: 'zh', label: '简体' },
+      { id: 'sidecar:2', playable: false, src: '/sub/2.ass', language: 'ja', label: '日语' },
+      { id: 'sidecar:3', playable: true, src: '/sub/3.vtt', label: '繁体' },
     ] }));
     const { player, raw } = fakePlayer({ time: 0, duration: 0 });
     mountPlayerSubtitles(player, 21);
     await flush(); await flush();
     expect(raw.addRemoteTextTrack.mock.calls).toEqual([
-      [{ kind: 'subtitles', src: '/sub/1.vtt', srclang: 'zh', label: '简体', default: false }, true],
-      [{ kind: 'subtitles', src: '/sub/3.vtt', srclang: '', label: '繁体', default: false }, true],
+      [{ id: 'sidecar:1', kind: 'subtitles', src: '/sub/1.vtt', srclang: 'zh', label: '简体', default: false }, true],
+      [{ id: 'sidecar:3', kind: 'subtitles', src: '/sub/3.vtt', srclang: '', label: '繁体', default: false }, true],
     ]);
   });
 });

@@ -1,5 +1,5 @@
 /* feed 域控制器：本域状态与动作，启动由 Application 的生命周期统一安装。 */
-import { coverImage } from './../card-art/markup';
+import { coverImage, remoteCoverUrl } from './../card-art/markup';
 import { feedIdentity } from './../card-art/feed-identity';
 import { $, api, esc, foldName, icon, isCatalogPath } from '../core';
 import { javTitleHtml } from '../core/jav-title';
@@ -14,12 +14,13 @@ export const feedState = { FEED_SKELETON_CARDS: undefined, feedNewSkeletonHtml: 
 
 export function feedNewCoverHtml(item){
   if(item.has_cover)return coverImage(item,'big');
-  if(!item.cover_url)return item.cover_fetching
-    ?`<span class="nopic" data-feed-cover-state="fetching">${loadingDotsHtml('Fetching')}</span>`
-    :'<span class="nopic" data-feed-cover-state="missing">No cover</span>';
+  if(!item.cover_url||!item.code)return item.cover_fetching
+    ?`<span class="nopic" data-feed-cover-state="fetching">${loadingDotsHtml('抓取中')}</span>`
+    :'<span class="nopic" data-feed-cover-state="missing">无封面</span>';
+  // 官方图经 Peach 代理取，断网或上游失败时换成「封面未取得」占位。
   return coverImage(item,'big').replace(/ src="[^"]*"/,
-    ` src="${esc(item.cover_url)}" referrerpolicy="no-referrer" data-panel-prior="1"`)
-    .replace('data-drop="self"', 'data-drop="initial" data-initial="No cover" data-drop-class="nopic"');
+    ` src="${esc(remoteCoverUrl(item))}" data-panel-prior="1"`)
+    .replace('data-drop="self"', 'data-drop="initial" data-initial="封面未取得" data-drop-class="nopic"');
 }
 
 export function feedNewCardHtml(item){
@@ -64,10 +65,21 @@ export async function loadEntityShapes(){
     feedState.entityShapesComplete=true;
     feedState.entityShapes=new Map((data.entities||[])
       .flatMap(entity=>[String(entity.id),...entity.names].map(name=>[`${entity.kind}/${foldName(name)}`,entity.parts])));
-    if(typeof data.home?.feed==='boolean')catalogState.homeHasFeed=data.home.feed;
+    if(typeof data.home?.feed==='boolean')rememberHomeFeed(data.home.feed);
     if(isFeedNewPath(location.pathname))prepareHomeFeed($('#feedNew'));
   }
   return feedState.entityShapes;
+}
+
+/* 首页有没有「未入库的新作」记在本机：首屏骨架就按上次的结论铺这一行，不等形状接口回来再插进来，
+   把下面的目录往下推一跳。接口或那一行画完后改记新的结论。 */
+const HOME_FEED_KEY='peach.home-feed.v1';
+export function rememberHomeFeed(has){
+  catalogState.homeHasFeed=has;
+  try{localStorage.setItem(HOME_FEED_KEY,has?'1':'0')}catch{/* 下次照旧等接口。 */}
+}
+export function recalledHomeFeed(){
+  try{const value=localStorage.getItem(HOME_FEED_KEY);return value==='1'?true:value==='0'?false:null}catch{return null}
 }
 
 export function prepareHomeFeed(host){
@@ -128,13 +140,19 @@ export function syncFeedAutoScroll(){
     preferencesState.appSettings.feedAutoScroll?wireAutoScroll(row):stopAutoScroll(row));
 }
 
+/* 开关挪到下一帧写：它一翻，资料卡换栏、页面变高，而整页那条覆盖滚动条正观察着 `<body>`。在尺寸观察
+   回调里当场写，`<body>` 这一层浅的变化本轮送不出去，浏览器就报一次 ResizeObserver 循环错误，
+   每开一次资料页都进错误上报。 */
+let heroWideFrame=0;
 export function syncHeroWide([entry]){
-  $('#index').toggleAttribute('data-hero-wide',entry.contentRect.width>=feedState.HERO_WIDE_PX);
+  const wide=entry.contentRect.width>=feedState.HERO_WIDE_PX;
+  cancelAnimationFrame(heroWideFrame);
+  heroWideFrame=requestAnimationFrame(()=>{heroWideFrame=0;$('#index')?.toggleAttribute('data-hero-wide',wide)});
 }
 
 export function installFeed13() {
 feedState.FEED_SKELETON_CARDS = 8;
-feedState.feedNewSkeletonHtml = ()=>`<div class="feednewrow srow" aria-hidden="true">${
+feedState.feedNewSkeletonHtml = ()=>`<div class="feednewrow srow" data-skeleton="feed/new" aria-hidden="true">${
   `<article class="card feednewcard feednewskeleton"><div class="pic imgwait" style="--card-ratio:${COVER_FRONT_RATIO}"></div>
     <div class="meta"><div class="mtext"><span class="t"><span class="skeleton"></span></span>
       <div class="s mono"><span class="skeleton">&#8203;</span></div></div></div></article>`
@@ -152,7 +170,7 @@ feedState.factsSkeleton = ()=>`<dl class="entityfacts" data-entity-facts>${
   '<dt><span class="skeleton"></span></dt><dd><span class="skeleton"></span></dd>'.repeat(5)}</dl>`;
 feedState.feedRevision = 0;
 feedState.feedNewHelpers = {feedRowHtml,wireFeedRow:row=>wireFeedNewRow(row)};
-feedState.feedNewActions = {settled:hasItems=>{catalogState.homeHasFeed=hasItems}};
+feedState.feedNewActions = {settled:hasItems=>rememberHomeFeed(hasItems)};
 feedState.HERO_WIDE_PX = 900;
 applicationEffects.resize(syncHeroWide).observe($('#index'));
 }

@@ -3,7 +3,19 @@ from __future__ import annotations
 
 import re
 from collections import Counter, defaultdict
+from functools import lru_cache
 from urllib.parse import parse_qs, unquote, urlparse
+
+#: 一条浏览记录要经 `host`、`account_key`、`identity_key`、`mixed_adult` 与
+#: `_url_candidates` 几道判据，每道都要解析同一条网址；逐条处理时只有最近几条会被
+#: 再问到，小容量就够，几十万条历史也不会把整份网址留在内存里。
+URL_CACHE_SIZE = 512
+
+
+@lru_cache(maxsize=URL_CACHE_SIZE)
+def parse_url(url: str):
+    """`urlparse` 的结果是不可变的命名元组，可以在各判据之间共用。"""
+    return urlparse(url)
 
 ADULT_DOMAINS = {
     "dmm.co.jp", "fanza.co.jp", "fanza.com", "fanza.jp", "mgstage.com", "sod.co.jp", "sodprime.com",
@@ -50,18 +62,20 @@ def _profile_url(parsed, domain, parts):
     return parsed._replace(netloc=domain, path=path, query="", fragment="").geturl()
 
 
+@lru_cache(maxsize=URL_CACHE_SIZE)
 def host(url: str) -> str:
     try:
-        domain = (urlparse(url).hostname or "").casefold().removeprefix("www.").removeprefix("mobile.")
+        domain = (parse_url(url).hostname or "").casefold().removeprefix("www.").removeprefix("mobile.")
     except ValueError:
         return ""
     return "x.com" if domain == "twitter.com" else domain
 
 
+@lru_cache(maxsize=URL_CACHE_SIZE)
 def account_key(url: str) -> tuple[str, str] | None:
     from .follow_sources import profile_link_identity
     try:
-        parsed = urlparse(url)
+        parsed = parse_url(url)
     except ValueError:
         return None
     if parsed.scheme not in {"http", "https"}:
@@ -99,9 +113,10 @@ def _extra_account(domain, parts):
     return domain, account.removeprefix("@")
 
 
+@lru_cache(maxsize=URL_CACHE_SIZE)
 def mixed_adult(url: str, title: str = "") -> bool:
     try:
-        parsed = urlparse(url)
+        parsed = parse_url(url)
     except ValueError:
         return False
     domain = host(url)
@@ -113,9 +128,10 @@ def mixed_adult(url: str, title: str = "") -> bool:
     return bool(ADULT_TITLE.search(title) or re.search(r"(?:^|[/=])r-?18(?:$|[/&])", unquote(url).casefold()))
 
 
+@lru_cache(maxsize=URL_CACHE_SIZE)
 def identity_key(url: str):
     try:
-        parsed = urlparse(url)
+        parsed = parse_url(url)
     except ValueError:
         return None
     if parsed.scheme not in {"http", "https"}:

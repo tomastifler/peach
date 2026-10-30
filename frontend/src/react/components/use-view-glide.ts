@@ -15,7 +15,7 @@
  * 默认是一排横着的键；`axis: 'y'` 给竖着的一列（侧栏导航）：位移的回弹换到纵轴，滚出可视区
  * 的判据也换成纵向。 */
 import { useCallback, useEffect, useLayoutEffect, useRef, type PointerEvent, type RefObject } from 'react';
-import { moveGlidePane } from '@peach/legacy/ui';
+import { cancelGlide, moveGlidePane } from '@peach/legacy/ui';
 
 interface Box { x: number; y: number; w: number; h: number }
 
@@ -67,7 +67,7 @@ export function useViewGlide(
     const active = line && line.offsetWidth ? target ?? line.querySelector<HTMLElement>(pressed) : null;
     const box = active && host ? geometry(active, host, axis) : null;
     if (!box || !box.w || !box.h) {
-      glass.getAnimations().forEach((animation) => animation.cancel());
+      cancelGlide(glass);
       glass.hidden = true;
       last.current = null;
       return;
@@ -136,7 +136,7 @@ export function useViewGlide(
     if (event.pointerType !== 'touch') place(null, true);
   }, [place]);
   const sync = useCallback(() => {
-    pane.current?.getAnimations().forEach((animation) => animation.cancel());
+    cancelGlide(pane.current);
     place(null, false);
   }, [pane, place]);
   return { hover, leave, sync };

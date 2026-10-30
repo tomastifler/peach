@@ -24,7 +24,7 @@ def _cached_movie(code, contract):
     with public_cache_scope(contract.cover_root.parent / 'jav-public'):
         source = PUBLIC_API.peek_movie(code)
         if source:
-            metadata.remember(code, source, checked_at=cache_checked_at('movie:' + code, exact=True))
+            metadata.remember(code, source, checked_at=cache_checked_at('movie:' + code + ':'))
     return source or {}
 
 

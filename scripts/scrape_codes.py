@@ -773,6 +773,8 @@ def _candidates_from(payload: dict, *, query: str, source: str, profile: str, sn
         row[field] += 1
     spec = SOURCE_SPECS[source]
     return {field: {
+        **({'javdb_rule': payload.get('javdb_rule'), 'source_id': payload.get('source_id')}
+           if source == 'javdb' else {}),
         "candidate_key": _candidate_key(query, field, source, extracted["value"]),
         "source": source,
         "provider": _provider_name(source),

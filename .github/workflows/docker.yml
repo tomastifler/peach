@@ -1,12 +1,13 @@
 name: Docker
 
+# 只验收不发布：镜像的版本号与 edge 由 release.yml 在 GitHub Release 成功后推送，
+# edge 始终指向最新发布的版本（ADR-0121）。
 on:
   pull_request:
     paths: [Dockerfile, .dockerignore, compose.yaml, 'src/**', 'migrations/**', 'web/**', 'resources/**', pyproject.toml, uv.lock, setup.py, MANIFEST.in, scripts/smoke_docker.py, .github/workflows/docker.yml]
   push:
     branches: [master]
-    tags: ['v*.*.*']
-    paths: [Dockerfile, .dockerignore, compose.yaml, 'src/**', 'migrations/**', 'web/**', 'resources/**', pyproject.toml, uv.lock, setup.py, MANIFEST.in, scripts/smoke_docker.py, scripts/release_tag.py, .github/workflows/docker.yml]
+    paths: [Dockerfile, .dockerignore, compose.yaml, 'src/**', 'migrations/**', 'web/**', 'resources/**', pyproject.toml, uv.lock, setup.py, MANIFEST.in, scripts/smoke_docker.py, .github/workflows/docker.yml]
   workflow_dispatch:
 
 permissions:
@@ -27,11 +28,6 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.14'
-      - name: 核对标签提交的主线 CI
-        if: github.ref_type == 'tag'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/release_tag.py --repo "$GITHUB_REPOSITORY" --verify-sha "$GITHUB_SHA"
       - uses: docker/setup-buildx-action@v4
       - name: 构建候选镜像
         uses: docker/build-push-action@v7
@@ -43,27 +39,3 @@ jobs:
           cache-to: type=gha,mode=max
       - name: 验收临时容器
         run: python3 scripts/smoke_docker.py longmeidao/peach:test
-      - name: 登录 Docker Hub
-        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) && vars.DOCKERHUB_USERNAME != ''
-        uses: docker/login-action@v4
-        with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: 计算镜像标签
-        id: tags
-        env:
-          REF_TYPE: ${{ github.ref_type }}
-          REF_NAME: ${{ github.ref_name }}
-        run: |
-          if [ "$REF_TYPE" = tag ]; then
-            echo "value=longmeidao/peach:${REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          else
-            echo 'value=longmeidao/peach:edge' >> "$GITHUB_OUTPUT"
-          fi
-      - name: 发布已验收镜像
-        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v')) && vars.DOCKERHUB_USERNAME != ''
-        env:
-          PUBLISH_TAG: ${{ steps.tags.outputs.value }}
-        run: |
-          docker tag longmeidao/peach:test "$PUBLISH_TAG"
-          docker push "$PUBLISH_TAG"

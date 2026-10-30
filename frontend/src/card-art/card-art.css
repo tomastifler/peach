@@ -11,3 +11,4 @@
    不写 z-index，和 `.hv` 一样靠 DOM 次序压在 `.poster` 之上。 */
 img.ui-hvframes{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;
   background:#000;display:block}
+img.ui-hvframes[hidden]{display:none}

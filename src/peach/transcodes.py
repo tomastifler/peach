@@ -10,6 +10,7 @@ import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
+from .smb_media import input_url
 
 from .ffmpeg import FFmpegResolver
 from .hardware_transcode import HardwareTranscoder
@@ -41,11 +42,21 @@ class _TranscodeAttempt:
 
 
 class TranscodeUnavailable(RuntimeError):
-    pass
+    """转码不可用；本机保留有界工具证据，远程仅投影错误码和类别。"""
+
+    def __init__(self, message='', *, diagnostics=None):
+        super().__init__(message)
+        from .error_reporting import scrub
+        self.diagnostics = scrub(diagnostics or {})
+        self.returncode = self.diagnostics.get('returncode')
 
 
 class TranscodeCancelled(TranscodeUnavailable):
     pass
+
+
+class TranscodeNeedsSession(TranscodeUnavailable):
+    """片源要整片转码，但请求没带可取消的流会话，也没有现成缓存。"""
 
 
 class TranscodeService:
@@ -58,11 +69,12 @@ class TranscodeService:
         *,
         max_concurrent: int = 2,
         prefer_hardware: bool | None = None,
+        state_root: Path | None = None,
     ):
         self.resolver = resolver
         self.cache_root = cache_root
         self.prefer_hardware = prefer_hardware is not False
-        self.hardware = HardwareTranscoder(enabled=self.prefer_hardware)
+        self.hardware = HardwareTranscoder(enabled=self.prefer_hardware, state_root=state_root)
         self._locks: dict[int, list] = {}
         self._locks_guard = threading.Lock()
         self._slots = threading.Semaphore(max(1, max_concurrent))
@@ -71,6 +83,16 @@ class TranscodeService:
     @staticmethod
     def needs_transcode(source: Path) -> bool:
         return source.suffix.lower() not in BROWSER_NATIVE_SUFFIXES
+
+    def diagnostic_profile(self, source: Path) -> dict:
+        """只读本次进程已有的探测缓存，不为诊断读取媒体或启动工具。"""
+        from dataclasses import asdict
+        with self._locks_guard:
+            matches = [(key, profile) for key, profile in self._native_profiles.items() if key[0] == str(source)]
+        if not matches:
+            return {'status': 'unavailable', 'reason': 'not-probed'}
+        key, profile = matches[-1]
+        return {'status': 'cached', 'size_bytes': key[1], 'modified_ns': key[2], **asdict(profile)}
 
     def requires_conversion(self, source: Path, *, session: str = "", registry=None) -> bool:
         """按容器和内部编码选择浏览器兼容路径，不生成整片缓存。"""
@@ -121,7 +143,13 @@ class TranscodeService:
 
     def browser_path(
         self, asset_id: int, source: Path, *, session: str = "", registry=None,
+        convert: bool = True,
     ) -> tuple[Path, bool]:
+        """浏览器能直接放的路径，以及它是不是转码产物。
+
+        `convert=False` 时只交现成的整片缓存，缺缓存就抛 `TranscodeNeedsSession`。
+        没有会话的请求取消不了，浏览器断开后整片 FFmpeg 还会跑到结束。
+        """
         profile = None
         if not self.needs_transcode(source):
             if self.resolver.ffprobe() is None:
@@ -145,6 +173,8 @@ class TranscodeService:
         target = self.cache_root / f"{asset_id}-{stat.st_size}-{stat.st_mtime_ns}.mp4"
         if target.is_file() and target.stat().st_size:
             return target, True
+        if not convert:
+            raise TranscodeNeedsSession("conversion needs a stream session")
 
         with self._lock_for(asset_id):
             if target.is_file() and target.stat().st_size:
@@ -153,6 +183,8 @@ class TranscodeService:
             temporary = target.with_name(f"{target.stem}.{uuid.uuid4().hex}.tmp.mp4")
             deadline = time.monotonic() + TRANSCODE_TIMEOUT_SECONDS
             last_detail = ""
+            last_diagnostics = {}
+            last_error = None
             completed = False
             try:
                 with self._slots:
@@ -175,6 +207,8 @@ class TranscodeService:
                             raise
                         except (OSError, TranscodeUnavailable) as exc:
                             last_detail = f"{attempt.name}: {exc}"
+                            last_diagnostics = getattr(exc, 'diagnostics', {})
+                            last_error = exc
                             if time.monotonic() >= deadline:
                                 break
                             continue
@@ -186,8 +220,12 @@ class TranscodeService:
                             break
                         detail = (stderr or b"").decode("utf-8", "replace")[-1000:]
                         last_detail = f"{attempt.name}: {detail or 'ffmpeg failed'}"
+                        last_diagnostics = {'reason': 'ffmpeg_error', 'returncode': returncode,
+                                            'stderr': detail, 'attempt': attempt.name}
+                        last_error = None
                 if not completed:
-                    raise TranscodeUnavailable(last_detail or "ffmpeg failed")
+                    raise TranscodeUnavailable(last_detail or "ffmpeg failed",
+                                               diagnostics=last_diagnostics) from last_error
             finally:
                 temporary.unlink(missing_ok=True)
 
@@ -218,7 +256,7 @@ class TranscodeService:
         command = (
             str(choice.path), "-v", "error", "-show_entries",
             "stream=codec_type,codec_name,pix_fmt,has_b_frames:format=duration",
-            "-of", "json", str(source),
+            "-of", "json", input_url(source),
         )
         try:
             returncode, stdout, _stderr = self._execute(
@@ -263,7 +301,7 @@ class TranscodeService:
 
         整片转码要占满一个编码位、写一份和原片同量级的缓存，只有编码本身不被支持才值得。
         缺 `ctts` 的片源画面解得出来，错的只是容器写的显示顺序，交给 HLS 转码分片按需修
-        就够。卡片悬停预览直接打 `/stream`，鼠标划过一张卡片不能启动一次整片转码。
+        就够。卡片悬停预览直接打不带会话的 `/stream`，那条路只交现成缓存，见 `browser_path`。
         """
         return TranscodeService._browser_compatible(
             source, replace(profile, decode_order_timestamps=False),
@@ -312,7 +350,7 @@ class TranscodeService:
             )
             yield _TranscodeAttempt(
                 "video-copy",
-                prefix + ("-i", str(source)) + mapping + ("-c:v", "copy") + audio + finish,
+                prefix + ("-i", input_url(source)) + mapping + ("-c:v", "copy") + audio + finish,
             )
 
         fast_audio = (
@@ -320,19 +358,26 @@ class TranscodeService:
             if profile is not None and profile.audio_codec in {"", "aac"}
             else ("-c:a", "aac", "-b:a", "160k")
         )
+        codec = profile.video_codec if profile else ""
         for encoder in self.hardware.encoders(ffmpeg):
-            for attempt in encoder.attempts(profile.video_codec if profile else ""):
+            for attempt in encoder.attempts(codec):
                 yield _TranscodeAttempt(
-                    attempt.name, prefix + attempt.before_input + ("-i", str(source))
+                    attempt.name, prefix + attempt.before_input + ("-i", input_url(source))
                     + mapping + attempt.output + fast_audio + finish,
                 )
 
+        software = (
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
+            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
+        )
+        decode = self.hardware.decode_options(ffmpeg, codec)
+        if decode:
+            yield _TranscodeAttempt(
+                "d3d11va-libx264",
+                prefix + decode + ("-i", input_url(source)) + mapping + software + finish,
+            )
         yield _TranscodeAttempt(
-            "libx264",
-            prefix + ("-i", str(source)) + mapping + (
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "21",
-                "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k",
-            ) + finish,
+            "libx264", prefix + ("-i", input_url(source)) + mapping + software + finish,
         )
 
     def _execute(
@@ -372,8 +417,10 @@ class TranscodeService:
                         raise TranscodeCancelled(session)
                     if time.monotonic() >= deadline:
                         process.kill()
-                        process.communicate()
-                        raise TranscodeUnavailable(f"{label} timed out")
+                        _stdout, stderr = process.communicate()
+                        raise TranscodeUnavailable(f"{label} timed out", diagnostics={
+                            'reason': 'timeout', 'returncode': process.returncode,
+                            'stderr': (stderr or b'').decode('utf-8', 'replace')[-1000:]})
             self._raise_if_cancelled(session, registry)
             return (
                 process.returncode if process.returncode is not None else -1,

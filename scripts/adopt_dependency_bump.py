@@ -42,6 +42,12 @@ if not __package__:
 from . import co_author
 
 ROOT = Path(__file__).resolve().parents[1]
+DELIVERY_STEPS = [
+    "提交后预检（工作树根目录，PowerShell 7）："
+    "& .\\.venv\\Scripts\\python.exe -X utf8 .\\scripts\\agent_worktree.py preflight",
+    "测试：& .\\scripts\\test.ps1 full",
+    "交付：推送工作者分支并创建交付 PR，核对当前提交的 CI；ready 后由协调者 integrate",
+]
 
 #: 每份清单的接管方式。`manifests` 是从 Dependabot 分支套过来的文件，`derived` 是重算后
 #: 可能变的路径，`commands` 是重算命令，`checks` 只核对不产出文件。以 `/` 结尾的条目按
@@ -80,6 +86,13 @@ RECIPES = {
         "derived": (),
         "commands": (),
         "checks": (("uv", "lock", "--check"),),
+    },
+    "amane": {
+        "label": "amane 桥的独立 Python 依赖",
+        "manifests": ("tools/amane-bridge/pyproject.toml", "tools/amane-bridge/uv.lock"),
+        "derived": (),
+        "commands": (),
+        "checks": (("uv", "lock", "--project", "tools/amane-bridge", "--check"),),
     },
     "actions": {
         "label": "GitHub Actions 工作流",
@@ -241,6 +254,7 @@ def commit_message(key: str, versions: list[str], pr: str | None,
                "所以接管到本地分支。")
     return (f"chore(deps): 接管 {recipe['label']} 的升级\n\n{why}\n\n"
             + ("升级：" + "、".join(versions) + "\n\n" if versions else "")
+            + (f"Refs #{pr}\n\n" if pr else "")
             + "README-Impact: none; 依赖版本与派生产物，README 不涉及。\n"
             + f"Co-Authored-By: {signature}\n")
 
@@ -278,7 +292,8 @@ def adopted(number: int, branch: str, *, root: Path = ROOT) -> bool:
     """
     base = run(("git", "merge-base", "HEAD", f"origin/{branch}"), root=root).strip()
     log = run(("git", "log", "--format=%B", f"{base}..HEAD"), root=root)
-    return re.search(rf"Dependabot PR #{number}(?!\d)", log) is not None
+    return re.search(rf"^Dependabot PR #{number}(?!\d) (?:只改了 manifest 与 lock|没有派生产物)",
+                     log, re.M) is not None
 
 
 def adopt(pr: dict, *, apply: bool, signature: str, root: Path = ROOT) -> dict:
@@ -343,8 +358,7 @@ def adopt_all(prs: list[dict], *, signature: str, root: Path = ROOT) -> dict:
                              "再跑一次 --all-open --apply，已接管的会跳过"]}
         except RuntimeError as exc:
             return {"ok": False, "error": str(exc), "stopped_at": pr["number"], "done": done}
-    next_steps = ["测试：& .\\scripts\\test.ps1 full",
-                  "交付：scripts/agent_worktree.py ready，再由协调者 integrate",
+    next_steps = [*DELIVERY_STEPS,
                   "推送 master 之后逐个收尾：",
                   *(close_command(item["pr"], item["recipe"]) for item in done)]
     return {"ok": True, "done": done, "next": next_steps if done else []}
@@ -392,8 +406,7 @@ def main(argv: list[str] | None = None) -> int:
             pr = pull_request(args.pr) if args.pr else {"headRefName": args.branch}
             item = adopt(pr, apply=args.apply, signature=args.co_author)
             plan = {"ok": True, **item,
-                    "next": ["测试：& .\\scripts\\test.ps1 full",
-                             "交付：scripts/agent_worktree.py ready，再由协调者 integrate"]}
+                    "next": list(DELIVERY_STEPS)}
             if item.get("already"):
                 plan["next"] = []
             elif not args.apply:

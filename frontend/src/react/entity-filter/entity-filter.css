@@ -61,10 +61,10 @@
   position: relative;
   z-index: 1;
   display: grid;
-  flex: 0 0 30px;
+  flex: 0 0 var(--control-h-compact);
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: var(--control-h-compact);
+  height: var(--control-h-compact);
   border-radius: 50%;
   color: color-mix(in srgb, var(--glass-text) 60%, transparent);
   cursor: pointer;
@@ -110,7 +110,7 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  height: 30px;
+  height: var(--control-h-compact);
   padding: 0 10px;
   border-radius: 999px;
   color: color-mix(in srgb, var(--glass-text) 60%, transparent);
@@ -138,7 +138,7 @@
 }
 .peach-react [data-entity-tags]::-webkit-scrollbar { display: none; }
 
-/* 标签 30px 高、13px 字，没加上去时一圈 `--glass-low` 实线，悬停线换 `--field-ring`、字提到
+/* 标签取紧凑档（32px）、13px 字，没加上去时一圈 `--glass-low` 实线，悬停线换 `--field-ring`、字提到
  * `--ink`；加上去之后是浮层上「这一项已生效」那块料。计数是附注，11px 等宽、降一档字色。 */
 .peach-react [data-entity-tag] {
   gap: 0;
@@ -181,7 +181,7 @@
 }
 
 /* ── 下排：内容区头 ──
- * 读数照首页那条 `10,471 个符合` 写：12px、常规字重、比标签低一档。排序键 30px 高、12px 字、
+ * 读数照首页那条 `10,471 个符合` 写：12px、常规字重、比标签低一档。排序键取紧凑档（32px）、12px 字、
  * 7px 圆角；生效那枚回到满字色加半档字重，其余退到六成。换一批是动作不是参数，走蓝色强调档。 */
 .peach-react [data-entity-readout] {
   flex: 0 0 auto;
@@ -193,36 +193,38 @@
   letter-spacing: normal;
   white-space: nowrap;
 }
-/* 资料页这一行的读数可以让位：右边那排排序键放不下时它截成省略号，不把页面撑宽。 */
-.peach-react [data-entity-filter-glass] [data-entity-readout] {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* 读数与操作保持完整，空间不足时整行横滚；最左侧读数和最右侧排序都能到达。 */
+.peach-react :is([data-entity-filter-glass], [data-catalog-frame]) > [data-filter-row="bottom"] {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+  touch-action: pan-x pan-y;
 }
+.peach-react :is([data-entity-filter-glass], [data-catalog-frame]) > [data-filter-row="bottom"]::-webkit-scrollbar { display: none; }
 
 .peach-react [data-entity-sorts] {
   display: flex;
+  flex: none;
   flex-wrap: nowrap;
   align-items: center;
   gap: 4px;
-  min-width: 0;
+  width: max-content;
   margin-left: auto;
   /* 横滚容器会把里面东西的落影从上下两边裁掉：分段器滑块最远那层影落在 14px 外。上下各留出
-     这 14px 再用负外边距收回，排在行里还是 30px 高。 */
+     这 14px 再用负外边距收回，排在行里还是紧凑档的高度。 */
   margin-block: -14px;
   padding: 14px 2px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  overflow: visible;
 }
-.peach-react [data-entity-sorts]::-webkit-scrollbar { display: none; }
 
 .peach-react [data-entity-sort] {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  height: 30px;
-  min-height: 30px;
+  height: var(--control-h-compact);
+  min-height: var(--control-h-compact);
   padding: 0 8px;
   border-radius: 7px;
   color: color-mix(in srgb, var(--glass-text) 62%, transparent);
@@ -238,10 +240,12 @@
 }
 .peach-react [data-entity-sort] svg {
   flex: none;
-  width: 14px;
-  height: 14px;
+  width: var(--icon-inline);
+  height: var(--icon-inline);
   margin-left: 5px;
 }
+.peach-react [data-entity-sort] [data-icon-swap] { margin-left: 5px; }
+.peach-react [data-entity-sort] [data-icon-swap] svg { margin-left: 0; }
 
 
 /* 分段器两侧各让 6px，跟换一批和排序键分开：它答的是「这批东西怎么摆」，不是同一排里的又一枚键。 */
@@ -258,7 +262,7 @@
   flex: none;
   align-items: center;
   gap: 4px;
-  height: 30px;
+  height: var(--control-h-compact);
   padding: 0 10px 0 6px;
   border: 1px solid var(--glass-low);
   border-radius: var(--control-radius);
@@ -269,8 +273,8 @@
 }
 .peach-react [data-photo-back]:hover { background: var(--overlay-5); }
 .peach-react [data-photo-back] svg {
-  width: 15px;
-  height: 15px;
+  width: var(--icon-inline);
+  height: var(--icon-inline);
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -282,26 +286,11 @@
 .peach-react [data-entity-srctools] > * { flex: none; margin: 0; }
 .peach-react [data-entity-srctools] [aria-live] { flex: none; }
 
-/* 浮层下半在手机上仍是一横条：读数在左，控件跟在右边，装不下就整条往右滚。 */
+/* 手机操作行使用紧凑间距。 */
 @media (max-width: 760px) {
   .peach-react :is([data-entity-filter-glass], [data-catalog-frame]) > [data-filter-row="bottom"] {
-    flex-wrap: nowrap;
     gap: 10px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    overscroll-behavior-inline: contain;
-    scrollbar-width: none;
-    touch-action: pan-x pan-y;
   }
-  .peach-react :is([data-entity-filter-glass], [data-catalog-frame]) > [data-filter-row="bottom"]::-webkit-scrollbar { display: none; }
-  .peach-react [data-entity-sorts] {
-    flex: none;
-    width: max-content;
-    max-width: none;
-    overflow: visible;
-  }
-  /* 整条在横滚，读数不用让位：让位的话它会先被挤成 0 宽。 */
-  .peach-react [data-entity-filter-glass] [data-entity-readout] { flex: none; }
 }
 
 /* 窄屏往下滚时浮层让出顶栏下沿，往回滚再落下来；`--filter-free-top` 与标记由壳的

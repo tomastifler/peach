@@ -58,7 +58,8 @@ def _get(client: httpx.Client, url: str, *, suffix: str = "", params: dict | Non
 
 
 def _client() -> httpx.Client:
-    return httpx.Client(timeout=8, headers={"User-Agent": USER_AGENT})
+    from .peach_proxy import http_client
+    return http_client(timeout=8, headers={"User-Agent": USER_AGENT})
 
 
 def _id(url: str) -> str:

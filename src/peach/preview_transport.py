@@ -31,9 +31,7 @@ class _CurlStream(httpx.SyncByteStream):
 
 class _CurlClient:
     def __init__(self, root):
-        options = peach_proxy.client_options(root)
-        self.session = requests.Session(impersonate='chrome', proxy=options.get('proxy'),
-                                        trust_env=options.get('trust_env', True))
+        self.session = requests.Session(impersonate='chrome', **peach_proxy.curl_options(root))
 
     def build_request(self, method, url, *, headers):
         return httpx.Request(method, url, headers=headers)

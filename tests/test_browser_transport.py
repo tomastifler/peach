@@ -627,6 +627,7 @@ class BrowserLookupTests(unittest.TestCase):
         self.assertEqual(proxy_flags(direct=True, proxy="http://x:1"), ("--no-proxy-server",))
         self.assertEqual(proxy_flags(direct=False, proxy=""), ())
         self.assertEqual(proxy_flags(direct=False, proxy="socks5://127.0.0.1:7890/"), ("--proxy-server=socks5://127.0.0.1:7890",))
+        self.assertEqual(proxy_flags(direct=False, proxy="socks5h://127.0.0.1:7890/"), ("--proxy-server=socks5://127.0.0.1:7890",))
         self.assertIsNone(proxy_flags(direct=False, proxy="http://user:pw@127.0.0.1:7890"), "命令行带不了代理凭据")
 
 

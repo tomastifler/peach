@@ -8,12 +8,14 @@ import os
 import subprocess
 import uuid
 from collections import OrderedDict
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .ffmpeg import FFmpegResolver
 from .hardware_transcode import HardwareTranscoder
 from .mp4index import keyframe_seconds, segment_plan
-from .streaming import StreamSessionRegistry
+from .streaming import StreamSessionRegistry, _cancel_and_wait, _wait_for_tasks
+from .smb_media import input_url
 
 HLS_SEGMENT_SECONDS = 6
 # 片段缓存上限。超了按最后访问时间淘汰；片段可再生，丢了只是重跑一次 FFmpeg。
@@ -21,13 +23,14 @@ DEFAULT_CACHE_BYTES = 2 << 30
 PLAN_CACHE_LIMIT = 256
 CODEC_CACHE_LIMIT = 256
 PROBE_TIMEOUT_SECONDS = 20
+GENERATION_TIMEOUT_SECONDS = 120
 logger = logging.getLogger(__name__)
 
 
 def _probe_video_codec(ffprobe: Path, source: Path) -> str:
     """问 ffprobe 要第一条视频流的编码名。问不出来返回空串，调用方按软件解码处理。"""
     command = (str(ffprobe), "-v", "error", "-select_streams", "v:0", "-show_entries",
-               "stream=codec_name", "-of", "default=nw=1:nk=1", str(source))
+               "stream=codec_name", "-of", "default=nw=1:nk=1", input_url(source))
     try:
         result = subprocess.run(command, capture_output=True, timeout=PROBE_TIMEOUT_SECONDS,
                                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
@@ -64,6 +67,13 @@ def build_hls_playlist(plan: list[tuple[float, float]], segment_url) -> str:
     return "\n".join(lines)
 
 
+@dataclass
+class _Generation:
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    users: int = 0
+    task: asyncio.Task[Path] | None = None
+
+
 class HlsSegmentService:
     """按关键帧边界 remux 单个时间段，输出可缓存的 MPEG-TS。"""
 
@@ -90,7 +100,7 @@ class HlsSegmentService:
         self._codecs: OrderedDict[tuple, str] = OrderedDict()
         # 同一分片常被并发请求：播放器预取、重连、多设备同看都会撞上同一个目标文件。
         # 同目标只放一个生成者，后到者等它完事后直接用缓存，不再各起一个 FFmpeg 重读网盘。
-        self._generation_locks: dict[Path, asyncio.Lock] = {}
+        self._generation_locks: dict[Path, _Generation] = {}
 
     def _gate(self) -> asyncio.Semaphore:
         if self._semaphore is None:
@@ -186,20 +196,45 @@ class HlsSegmentService:
         if target.is_file() and target.stat().st_size:
             os.utime(target, None)      # 命中即续期，淘汰按最后访问时间
             return target
-        lock = self._generation_locks.setdefault(target, asyncio.Lock())
+        consumer = asyncio.current_task()
+        if consumer is None or not registry.register(session, consumer):
+            raise SegmentCancelled(session)
+        entry = self._generation_locks.setdefault(target, _Generation())
+        entry.users += 1
         try:
-            async with lock:
-                # 等到锁的可能是排在生成者后面的请求，先看缓存再决定要不要自己跑。
-                if target.is_file() and target.stat().st_size:
-                    os.utime(target, None)
-                    return target
-                return await self._generate_uncached(
-                    source, start, duration, target,
-                    session=session, registry=registry, transcode=transcode,
-                )
+            if entry.task is not None and entry.task.cancelling():
+                await _wait_for_tasks(entry.task)
+            if entry.task is None or entry.task.done():
+                entry.task = asyncio.create_task(self._generate_locked(
+                    entry.lock, source, start, duration, target, registry=registry, transcode=transcode))
+            generation = entry.task
+            await asyncio.wait({generation})
+            return generation.result()
         finally:
-            if not lock.locked():
-                self._generation_locks.pop(target, None)
+            registry.unregister(session, consumer)
+            entry.users -= 1
+            if entry.users == 0:
+                try:
+                    if entry.task is not None:
+                        await _cancel_and_wait(entry.task)
+                finally:
+                    if entry.users == 0 and self._generation_locks.get(target) is entry:
+                        self._generation_locks.pop(target, None)
+
+    async def _generate_locked(self, lock: asyncio.Lock, source: Path, start: float,
+                               duration: float, target: Path, *, registry: StreamSessionRegistry,
+                               transcode: bool) -> Path:
+        async with lock:
+            if target.is_file() and target.stat().st_size:
+                os.utime(target, None)
+                return target
+            try:
+                async with asyncio.timeout(GENERATION_TIMEOUT_SECONDS):
+                    return await self._generate_uncached(
+                        source, start, duration, target, session=f'hls-{uuid.uuid4().hex}',
+                        registry=registry, transcode=transcode)
+            except TimeoutError as error:
+                raise SegmentUnavailable('segment generation timed out') from error
 
     async def _generate_uncached(
         self, source: Path, start: float, duration: float, target: Path, *,
@@ -247,7 +282,8 @@ class HlsSegmentService:
                   transcode: bool, codec: str = ""):
         """依次尝试的命令，每项是 (名字, 接收临时文件路径的构造函数)。
 
-        封装复制只有一种。重编码与整片转码共享可用硬件后端，最后回退 libx264。
+        封装复制只有一种。重编码与整片转码共享可用硬件后端，最后回退 libx264；Windows 上
+        libx264 前先试一次 D3D11VA 解码。
 
         NVDEC 解得出来的编码才走 CUDA 解码，`codec` 空或不在名单里就从软件解码起。
         判据要在开跑前定，因为坏结果不会自报：实测 `MIAD573_02.wmv`（vc1、1080p）经
@@ -264,9 +300,9 @@ class HlsSegmentService:
             # 退出码 0、空 stderr 写出 0 字节，服务端只能报一句没有内容的 ffmpeg failed。
             # 保留原始时间戳，让每段接着上一段走。用 -avoid_negative_ts make_zero
             # 把每段归零的话，每段都自称从 0 秒开始，拖动进度条时容易跳错位置。
-            window = ["-ss", f"{start:.3f}", "-i", str(source), "-to", f"{start + duration:.3f}"]
+            window = ["-ss", f"{start:.3f}", "-i", input_url(source), "-to", f"{start + duration:.3f}"]
             return [("copy", lambda out: prefix + window + mapping + ["-c", "copy", "-copyts"] + mux + [str(out)])]
-        window = ["-ss", f"{start:.3f}", "-i", str(source), "-t", f"{duration:.3f}"]
+        window = ["-ss", f"{start:.3f}", "-i", input_url(source), "-t", f"{duration:.3f}"]
         audio = ["-c:a", "aac", "-b:a", "160k", "-output_ts_offset", f"{start:.3f}"]
         attempts = []
         for encoder in self.hardware.encoders(ffmpeg):
@@ -274,9 +310,12 @@ class HlsSegmentService:
                 attempts.append((attempt.name, lambda out, attempt=attempt:
                                  prefix + list(attempt.before_input) + window + mapping
                                  + list(attempt.output) + audio + mux + [str(out)]))
-        attempts.append(("libx264", lambda out: prefix + window + mapping + [
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-pix_fmt", "yuv420p", "-threads", "2",
-        ] + audio + mux + [str(out)]))
+        software = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-pix_fmt", "yuv420p", "-threads", "2"]
+        decode = list(self.hardware.decode_options(ffmpeg, codec))
+        if decode:
+            attempts.append(("d3d11va-libx264", lambda out: prefix + decode + window + mapping
+                             + software + audio + mux + [str(out)]))
+        attempts.append(("libx264", lambda out: prefix + window + mapping + software + audio + mux + [str(out)]))
         return attempts
 
     async def _run(self, command: list[str], session: str, registry: StreamSessionRegistry) -> tuple[int, bytes]:
@@ -296,11 +335,12 @@ class HlsSegmentService:
             _kill_process(process)
             await process.communicate()
             raise SegmentCancelled(session)
+        communication = asyncio.create_task(process.communicate())
         try:
-            _, stderr = await process.communicate()
+            _, stderr = await asyncio.shield(communication)
         except asyncio.CancelledError:
             _kill_process(process)
-            await process.communicate()
+            await _wait_for_tasks(communication)
             raise
         finally:
             registry.unregister_process(session, process)

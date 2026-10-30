@@ -1,4 +1,5 @@
 660b0a63d43cfb14aaeabd7f1c6dc4ad6f30df387c2b6aca9497d5c417b14c53  registry/charts/recharts-bar-chart.tsx
+12d68c0c60874f4b59a30d26f19c9f97f291e4a98df5a6b0f759bd4335b20497  registry/charts/recharts-pie-chart.tsx
 fd30c1b5186ad2c1f6fd3e35b0e6a5a6c510c640861b406af1a6d3c9e89897c4  registry/charts/recharts-radar-chart.tsx
 1445226e0365c4b4747da16e17cd86e9d7bdf96bf1a90cfa9a95cd9b8e6e6d63  registry/charts/recharts-radial-chart.tsx
 eb71bf98cc051f1638a91f1a50fc0b27b36d48502b8db5da420bf34b14b689cd  registry/ui/recharts-background.tsx

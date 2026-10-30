@@ -27,6 +27,18 @@ PAGE = """
 
 
 class LogoImageTests(unittest.TestCase):
+    def test_a_shared_page_requires_the_named_owner_on_each_mark(self):
+        html = ('<img src="/logo-network.png" alt="Network">'
+                '<img src="/logo-other.png" alt="別メーカー/妄想族">'
+                '<img src="/logo-own.png" alt="ボニータ／妄想族">')
+        self.assertEqual(site_logos.logo_images(html, 'https://network.example/maker/456/',
+                                              owner='ボニータ/妄想族'),
+                         ['https://network.example/logo-own.png'])
+
+    def test_an_unnamed_shared_page_mark_has_no_owner_evidence(self):
+        self.assertEqual(site_logos.logo_images('<img src="/logo.png">',
+                         'https://network.example/maker/456/', owner='ボニータ/妄想族'), [])
+
     def test_the_header_mark_is_found_and_made_absolute(self):
         self.assertEqual(site_logos.logo_images(PAGE, "https://bambi.ne.jp/"),
                          ["https://bambi.ne.jp/images/_/header_logo.png"])

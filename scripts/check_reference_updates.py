@@ -46,8 +46,8 @@ def fetch_bytes(url: str, *, timeout: float = 20.0) -> bytes:
             "User-Agent": USER_AGENT,
         },
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return response.read()
+    from peach.peach_proxy import read_url
+    return read_url(request.full_url, headers=dict(request.header_items()), timeout=timeout)
 
 
 def resolve_git_revision(source: dict, *, timeout: float = 20.0) -> str | None:

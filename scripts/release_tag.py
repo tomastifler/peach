@@ -25,9 +25,10 @@ import time
 if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     __package__ = "scripts"
-from . import changelog, version_bump
+from . import changelog, github_release_candidate, version_bump
 
 ROOT = Path(__file__).resolve().parents[1]
+GITLAB = None
 
 #: 主检出的 master 上该落提交的只有本脚本与 `agent_worktree.py integrate`。它们调用 git 时
 #: 带上这个配置，`scripts/githooks/pre-commit` 据此放行，别的提交与手工 merge 一律拒收。
@@ -39,9 +40,14 @@ MASTER_WRITER = "peach.masterWriter"
 #: 定版只该改这两份：版本号一行，变更日志一节。`--ship` 拒绝夹带别的文件。
 RELEASE_FILES = (version_bump.VERSION_FILE, changelog.CHANGELOG)
 
-#: `--ship` 等 Test 工作流的默认秒数上限，以及两次查询之间的间隔。
-TEST_TIMEOUT = 1800.0
+#: `--ship` 等 Test 工作流的默认秒数上限，以及两次查询之间的间隔。版本提交的流水线里还有发布
+#: 演练（macOS 两个架构从源码编译，作业时限 2 小时），所以按整条演练定。
+TEST_TIMEOUT = 4 * 3600.0
 TEST_POLL = 30.0
+#: 任务排队多久仍没开始就判定等不到。空闲 runner 几秒内轮询接单，GitLab Runner 默认
+#: 3 秒一轮，平台创建流水线也只要几秒；五分钟还没动静就不是正常排队，而是 runner
+#: 不在线或一直被占着，继续等只会把总超时耗完。推送后迟迟没有 Test 记录也按这个数判。
+STALL_SECONDS = 300.0
 
 
 def command(*args: str, strip: bool = True) -> str:
@@ -54,6 +60,18 @@ def command(*args: str, strip: bool = True) -> str:
 
 def api(repo: str, endpoint: str):
     return json.loads(command("gh", "api", f"repos/{repo}/{endpoint}"))
+
+
+def master_sha(repo: str) -> str:
+    return GITLAB.master_sha(repo) if GITLAB else api(repo, "git/ref/heads/master")["object"]["sha"]
+
+
+def remote_url(repo: str) -> str:
+    return GITLAB.remote_url(repo) if GITLAB else f"https://github.com/{repo}.git"
+
+
+def release_url(repo: str, tag: str) -> str:
+    return GITLAB.release_url(repo, tag) if GITLAB else f"https://github.com/{repo}/releases/tag/{tag}"
 
 
 def latest_run(runs: list[dict], sha: str) -> dict | None:
@@ -75,34 +93,140 @@ def require_success(runs: list[dict], sha: str) -> dict:
 
 
 def test_runs(repo: str, sha: str) -> list[dict]:
+    if GITLAB:
+        return GITLAB.test_runs(repo, sha)
     endpoint = f"actions/workflows/test.yml/runs?head_sha={sha}&event=push&per_page=100"
-    return api(repo, endpoint)["workflow_runs"]
+    runs = api(repo, endpoint)["workflow_runs"]
+    latest = latest_run(runs, sha)
+    if latest is not None and latest.get("status") != "completed":
+        latest["queued_jobs"] = github_queued_jobs(repo, latest["id"])
+    return runs
+
+
+def github_queued_jobs(repo: str, run_id: int) -> list[dict]:
+    """GitHub 上排着队、没有 runner 接走的自建 runner 任务，字段与 GitLab 一侧一致。
+
+    只看 `queued` 且没有 `runner_id` 的；`waiting` 是在等环境审批。托管 runner
+    （`ubuntu-latest`、`macos-15` 这类）排队是平台容量问题，迟早会接，不在这里下结论。
+    """
+    jobs = api(repo, f"actions/runs/{run_id}/jobs?per_page=100")["jobs"]
+    waiting = [job for job in jobs if job.get("status") == "queued" and not job.get("runner_id")
+               and "self-hosted" in {label.lower() for label in job.get("labels") or ()}]
+    if not waiting:
+        return []
+    try:
+        # 列 runner 要仓库管理员权限；读不到就只按排队时长判断。
+        runners = api(repo, "actions/runners?per_page=100")["runners"]
+    except (subprocess.CalledProcessError, OSError, ValueError, KeyError):
+        runners = None
+    result = []
+    for job in waiting:
+        labels = {label.lower() for label in job["labels"]}
+        matching = [runner for runner in runners or ()
+                    if labels <= {item["name"].lower() for item in runner.get("labels") or ()}]
+        if any(runner.get("status") == "online" for runner in matching):
+            continue
+        result.append({"id": job["id"], "name": job["name"], "tags": sorted(job["labels"]),
+                       "queued": None, "runners": "offline" if matching else "unknown"})
+    return result
+
+
+def _stalled(queued: list[dict], first_seen: dict, now: float) -> list[str]:
+    """排队任务里已经可以判定等不到的，每项一句说明。"""
+    lines = []
+    for job in queued:
+        seen = first_seen.setdefault(job["id"], now)
+        waited = max(job.get("queued") or 0.0, now - seen)
+        tags = "、".join(job["tags"]) or "无"
+        if job["runners"] == "offline":
+            lines.append(f"{job['name']}（tags：{tags}）排队 {waited / 60:.0f} 分钟未开始，"
+                         "带这些 tags 的 runner 都不在线或已暂停")
+        elif waited >= STALL_SECONDS:
+            lines.append(f"{job['name']}（tags：{tags}）排队 {waited / 60:.0f} 分钟未开始；"
+                         "确认不了有没有带这些 tags 的在线 runner（列表要维护者权限，"
+                         "共享 runner 也未必列出），runner 不在线或一直被占着都会这样")
+    return lines
 
 
 def await_test(repo: str, sha: str, *, timeout: float = TEST_TIMEOUT, poll: float = TEST_POLL,
                sleep=time.sleep, clock=time.monotonic) -> dict:
     """等这个提交的 Test 出结果。
 
-    跑完了但不是绿的立刻抛，不耗到超时——红的等多久都不会变绿。超时也抛，那时版本
-    提交已经在 master 上，等 CI 自己跑完再跑一次 `--ship --apply` 就接着走。
+    能确定等不到结果的立刻抛，不耗到超时：跑完了但不是绿的、必需任务已经失败的、
+    任务排着队却没有 runner 能接的、推送后迟迟没有 Test 记录的。正常运行中的继续等，
+    超时也抛。无论哪种，版本提交都已经在 master 上，处理好之后再跑一次
+    `--ship --apply` 就接着走。
     """
-    deadline = clock() + timeout
+    start = clock()
+    deadline = start + timeout
+    first_seen: dict = {}
     while True:
         runs = test_runs(repo, sha)
         latest = latest_run(runs, sha)
-        if latest is not None and latest.get("status") == "completed":
+        now = clock()
+        if latest is None:
+            if now - start >= STALL_SECONDS:
+                raise ValueError(
+                    f"推送后 {(now - start) / 60:.0f} 分钟仍没有 {sha[:8]} 的 master Test 记录，"
+                    "CI 没有被触发；检查流水线触发规则与项目的 CI 开关，"
+                    "Test 跑起来后再跑一次 --ship --apply")
+        elif latest.get("status") == "completed":
             return require_success(runs, sha)
-        if clock() >= deadline:
+        else:
+            url = latest.get("html_url", "")
+            if latest.get("failed_jobs"):
+                raise ValueError(
+                    f"{sha[:8]} 的 Test 必需任务已失败：{'、'.join(latest['failed_jobs'])}，"
+                    f"整条流水线不会转绿：{url}；版本提交已在 master 上，"
+                    "修好或重试这些任务、Test 转绿后再跑一次 --ship --apply")
+            stalled = _stalled(latest.get("queued_jobs") or [], first_seen, now)
+            if stalled:
+                raise ValueError(
+                    f"已等 {(now - start) / 60:.0f} 分钟，{sha[:8]} 的 Test 等不到结果：{'；'.join(stalled)}。"
+                    f"{url}\n版本提交已在 master 上：启动对应 runner（或等它空出来）、"
+                    "这些任务开始运行后，再跑一次 --ship --apply")
+        if now >= deadline:
             raise ValueError(
                 f"等了 {timeout / 60:.0f} 分钟，{sha[:8]} 的 Test 还没有结果；"
                 "版本提交已在 master 上，等它跑完再跑一次 --ship --apply")
         sleep(poll)
 
 
+def require_rehearsal(repo: str, sha: str, checked: dict, *, timeout: float = TEST_TIMEOUT,
+                      poll: float = TEST_POLL, sleep=time.sleep, clock=time.monotonic) -> None:
+    """版本提交的发布演练全部通过才打标签（ADR-0121）。
+
+    GitGud 上演练就在版本提交自己的主线流水线里，Test 绿了以后再核对演练作业都在、都成功；
+    GitHub 上演练是同一提交推送触发的 Release 工作流（不带标签时只构建、验收不发布），等它跑完。
+    """
+    if GITLAB:
+        GITLAB.require_rehearsal(repo, checked["id"])
+        return
+    start = clock()
+    while True:
+        runs = api(repo, f"actions/workflows/release.yml/runs?head_sha={sha}&event=push&per_page=100")["workflow_runs"]
+        latest = latest_run(runs, sha)
+        now = clock()
+        if latest is not None and latest.get("status") == "completed":
+            if latest.get("conclusion") != "success":
+                raise ValueError(f"版本提交的发布演练没有通过，不打标签：{latest.get('html_url', '')}")
+            return
+        if latest is None and now - start >= STALL_SECONDS:
+            raise ValueError(f"推送后 {(now - start) / 60:.0f} 分钟仍没有 {sha[:8]} 的 Release 演练记录；"
+                             "检查 release.yml 的触发条件，演练跑起来后再跑一次 --ship --apply")
+        if now - start >= timeout:
+            raise ValueError(f"等了 {timeout / 60:.0f} 分钟，{sha[:8]} 的发布演练还没有结果；"
+                             "版本提交已在 master 上，演练跑完后再跑一次 --ship --apply")
+        sleep(poll)
+
+
 def verify(repo: str, sha: str) -> dict:
-    comparison = api(repo, f"compare/master...{sha}")
-    if comparison["status"] not in {"identical", "behind"}:
-        raise ValueError("发布提交不属于远端 master 历史")
+    if GITLAB:
+        GITLAB.require_ancestor(repo, sha)
+    else:
+        comparison = api(repo, f"compare/master...{sha}")
+        if comparison["status"] not in {"identical", "behind"}:
+            raise ValueError("发布提交不属于远端 master 历史")
     checked = require_success(test_runs(repo, sha), sha)
     return {"sha": sha, "test": checked["html_url"]}
 
@@ -115,12 +239,27 @@ def _require_clean_master() -> None:
 
 
 def _require_free_tag(repo: str, tag: str) -> None:
+    if GITLAB:
+        GITLAB.require_free_tag(repo, tag)
+        return
     # matching-refs 返回空列表代表不存在；网络或权限错误不能被当成空列表。
     if any(ref["ref"] == f"refs/tags/{tag}" for ref in api(repo, f"git/matching-refs/tags/{tag}")):
         raise ValueError(f"{tag} 已存在，不覆盖；发布新版本请先推进 __version__")
 
 
-def prepare(repo: str, part: str, *, apply: bool) -> dict:
+def require_clean_dependencies(root: Path = None) -> None:
+    """标签前复核依赖审计：标签流水线第一件事就是同一套 npm 审计，新公布的高危漏洞
+    会让已经打出去的标签什么也发不出。在打标签之前先查，有漏洞就不定版、不打标签。"""
+    from . import npm_audit
+    root = root or ROOT
+    failed = [str(project.relative_to(root)) or "." for project in (root, root / "frontend")
+              if npm_audit.audit(project) != 0]
+    if failed:
+        raise ValueError("依赖审计发现高危漏洞（" + "、".join(failed) + "）；先升级依赖再发布")
+
+
+def prepare(repo: str, part: str, *, apply: bool,
+            reference_evidence: dict[str, Path] | None = None) -> dict:
     """为下一次发布推进版本号并起草变更日志。
 
     只写文件，不提交：变更日志的措辞要人过一遍，脚本自己提交等于鼓励不看。
@@ -133,8 +272,12 @@ def prepare(repo: str, part: str, *, apply: bool) -> dict:
     result = {**planned, "tag": tag, "repo": repo, "applied": apply}
     if not apply:
         return result
+    require_clean_dependencies()
     from .release_review import review
-    result["upstream_review"] = review(ROOT, repo)
+    options = {"public_github": True} if GITLAB else {}
+    if reference_evidence:
+        options["reference_evidence"] = reference_evidence
+    result["upstream_review"] = review(ROOT, repo, **options)
     version_bump.write_version(ROOT, str(planned["bump"]))
     changelog.release(ROOT, version, repo=repo, spec=str(planned["range"]))
     # 那一节原样带在输出里：确认措辞的人不该再去翻文件才知道自己在确认什么。
@@ -190,7 +333,7 @@ def ship(repo: str, *, apply: bool, timeout: float = TEST_TIMEOUT) -> dict:
     """
     version, tag, pending = _staged_release(repo)
     head = command("git", "rev-parse", "HEAD")
-    remote = api(repo, "git/ref/heads/master")["object"]["sha"]
+    remote = master_sha(repo)
     result = {"version": version, "tag": tag, "repo": repo, "applied": apply,
               "commit": bool(pending), "push": bool(pending) or remote != head}
     if not apply:
@@ -200,20 +343,22 @@ def ship(repo: str, *, apply: bool, timeout: float = TEST_TIMEOUT) -> dict:
         command("git", "-c", f"{MASTER_WRITER}=release", "commit",
                 "-m", f"chore(release): 版本 {version}")
     sha = command("git", "rev-parse", "HEAD")
-    if api(repo, "git/ref/heads/master")["object"]["sha"] != sha:
-        command("git", "push", f"https://github.com/{repo}.git", "refs/heads/master")
+    if master_sha(repo) != sha:
+        command("git", "push", remote_url(repo), "refs/heads/master")
     checked = await_test(repo, sha, timeout=timeout)
+    require_rehearsal(repo, sha, checked, timeout=timeout)
+    require_clean_dependencies()
     command("git", "tag", "-a", tag, sha, "-m", f"Peach {tag} Windows 测试版")
-    command("git", "push", f"https://github.com/{repo}.git", f"refs/tags/{tag}")
+    command("git", "push", remote_url(repo), f"refs/tags/{tag}")
     return {**result, "sha": sha, "test": checked["html_url"],
-            "release": f"https://github.com/{repo}/releases/tag/{tag}"}
+            "release": release_url(repo, tag)}
 
 
 def plan(repo: str) -> dict:
     _require_clean_master()
     sha = command("git", "rev-parse", "HEAD")
-    if api(repo, "git/ref/heads/master")["object"]["sha"] != sha:
-        raise ValueError("本地 HEAD 与 GitHub master 不一致，请先完成同步")
+    if master_sha(repo) != sha:
+        raise ValueError("本地 HEAD 与发布平台 master 不一致，请先完成同步")
     version = version_bump.read_version(ROOT)
     tag = "v" + version
     document = (ROOT / changelog.CHANGELOG).read_text(encoding="utf-8")
@@ -245,14 +390,26 @@ def plan_commit(repo: str, sha: str) -> dict:
     _require_free_tag(repo, tag)
     if command("git", "tag", "--list", tag):
         raise ValueError(f"本地 {tag} 已存在，请先检查它的归属")
-    return {**verify(repo, sha), "tag": tag, "version": version, "repo": repo,
-            "section": changelog.section_of(document, version)}
+    return {**verify(repo, sha), **require_candidate(repo, sha), "tag": tag, "version": version,
+            "repo": repo, "section": changelog.section_of(document, version)}
+
+
+def require_candidate(repo: str, sha: str) -> dict:
+    """补打标签沿用标签工作流的晋级判据，取不到演练产物时不留下无法发布的标签。"""
+    if GITLAB:
+        return {}
+    run = github_release_candidate.select(repo, sha)
+    return {"rehearsal": f"https://github.com/{repo}/actions/runs/{run['run_id']}"}
 
 
 def main(argv=None) -> int:
+    global GITLAB
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--repo", default="peach-mitao/peach")
+    parser.add_argument("--gitlab-host", help="使用此 GitLab 主机发布，例如 gitgud.io；默认使用 GitHub")
+    parser.add_argument("--reference-evidence", action="append", default=[], metavar="SOURCE=FILE",
+                        help="为 --bump 明确提供本次参考正文，报告保留用户取证渠道")
     parser.add_argument("--apply", action="store_true",
                         help="真的动手：带 --bump 时写版本号与变更日志，带 --ship 时走完发布，"
                              "都不带时创建并推送标签")
@@ -267,11 +424,18 @@ def main(argv=None) -> int:
     mode.add_argument("--release-sha", help="为完整 SHA 指定的已通过 CI 的主线提交补打标签")
     args = parser.parse_args(argv)
     try:
+        from .release_forge import GitLabForge
+        GITLAB = GitLabForge(args.gitlab_host, command) if args.gitlab_host else None
+        if args.reference_evidence and not args.bump:
+            raise ValueError("--reference-evidence 仅用于 --bump 的参考检查")
         if args.verify_sha:
             print(json.dumps(verify(args.repo, args.verify_sha), ensure_ascii=False, indent=2))
             return 0
         if args.bump:
-            print(json.dumps(prepare(args.repo, args.bump, apply=args.apply),
+            from .release_review import local_reference_files
+            options = ({"reference_evidence": local_reference_files(args.reference_evidence)}
+                       if args.reference_evidence else {})
+            print(json.dumps(prepare(args.repo, args.bump, apply=args.apply, **options),
                              ensure_ascii=False, indent=2))
             return 0
         if args.ship:
@@ -284,18 +448,20 @@ def main(argv=None) -> int:
             # 固定提交在动手前复核归属、CI、版本说明与标签占用。
             if args.release_sha is not None:
                 result = plan_commit(args.repo, args.release_sha)
-            elif api(args.repo, "git/ref/heads/master")["object"]["sha"] != result["sha"]:
+            elif master_sha(args.repo) != result["sha"]:
                 raise ValueError("检查期间 master 已更新，请重新执行")
             command("git", "tag", "-a", result["tag"], result["sha"],
                     "-m", f"Peach {result['tag']} Windows 测试版")
-            command("git", "push", f"https://github.com/{args.repo}.git",
+            command("git", "push", remote_url(args.repo),
                     f"refs/tags/{result['tag']}")
         print(json.dumps({**result, "applied": args.apply}, ensure_ascii=False, indent=2))
         return 0
-    except (ValueError, version_bump.VersionError, subprocess.CalledProcessError) as exc:
+    except (OSError, ValueError, version_bump.VersionError, subprocess.CalledProcessError) as exc:
         detail = exc.stderr if isinstance(exc, subprocess.CalledProcessError) else str(exc)
         print(f"发布检查未通过：{detail}")
         return 1
+    finally:
+        GITLAB = None
 
 
 if __name__ == "__main__":

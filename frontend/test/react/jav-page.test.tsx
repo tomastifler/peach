@@ -5,7 +5,7 @@ import { JavPage } from '../../src/react/jav/jav-page';
 import { JavHeader } from '../../src/react/jav/jav-header';
 import { discoveryKey, prefetchJav } from '../../src/react/jav/jav';
 import { WANTS_KEY } from '../../src/react/wants/wants';
-import { buttonNamed, click, mount, settle, type } from './render';
+import { actionOrder, buttonNamed, click, mount, settle, type } from './render';
 
 notifyManager.setScheduler(notify => notify());
 afterEach(() => queryClient.clear());
@@ -75,6 +75,7 @@ it('发现按范围读取，清除文字和标签恢复列表，卡片打开对�
   const host = await mount(<QueryClientProvider client={queryClient}><JavPage tab="discover" readOnly navigate={navigate} receipt={vi.fn()} /></QueryClientProvider>);
   await settle();
   expect(host.querySelectorAll('[data-jav-card]')).toHaveLength(2);
+  expect(actionOrder(host.querySelector('[data-jav-card] [data-jav-actions]'))).toEqual(['作品来源', '想要', '查找资源']);
   expect(host.querySelector('[data-jav-card] h3')?.textContent).toContain('ABC-001');
   await click(host.querySelector('[data-jav-card] [data-media-tag]'));
   expect(host.querySelectorAll('[data-jav-card]')).toHaveLength(1);
@@ -92,4 +93,13 @@ it('发现按范围读取，清除文字和标签恢复列表，卡片打开对�
   await click(host.querySelector('[data-jav-card] h3'));
   expect(navigate).toHaveBeenLastCalledWith('/assets/22');
   expect(buttonNamed('In library', host)?.disabled).toBe(true);
+});
+
+it('没有推荐时空态的查看口味在左，主入口在右', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ items: [] }) })));
+  const host = await mount(<QueryClientProvider client={queryClient}><JavPage tab="discover" readOnly navigate={vi.fn()} receipt={vi.fn()} /></QueryClientProvider>);
+  await settle();
+  expect(actionOrder(host.querySelector('[data-empty-state]'))).toEqual(['查看口味', '浏览馆藏']);
+  const main = [...host.querySelectorAll('[data-empty-state] a')].find((link) => link.textContent === '浏览馆藏');
+  expect(main?.className).toContain('bg-button-primary');
 });

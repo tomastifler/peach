@@ -682,14 +682,11 @@ def tray_preparation(config, manager: "ServiceManager") -> TrayPreparation:
     database = config.directory("database") / "ledger.db"
     state = config.directory("state")
     restart_log = config.directory("logs") / "tray-restart.out.log"
-    shared = config.shared_root / "database" / "ledger.db"
     return TrayPreparation(
         dependencies=runtime_prepare.Dependencies(PROJECT_ROOT),
         migrations=runtime_prepare.Migrations(
             database, peach=_peach_executable,
-            writer=lambda: runtime_prepare.ledger_writer(
-                replication_enabled=bool(config.replication.enabled) and not standalone(),
-                db=database, shared_db=shared, state_dir=state),
+            writer=lambda: runtime_prepare.configured_ledger_writer(config),
             environ=manager.child_environment,
         ),
         state_dir=state,
@@ -1130,7 +1127,8 @@ class PeachTray:
         if self.preparation is None or self.gate.waiting:
             return None
         step = self.preparation.migrations.apply()
-        (LOGGER.error if step.failed else LOGGER.info)("Migrations: %s", step.message)
+        self._migration_failed = step.failed
+        (LOGGER.error if step.failed else LOGGER.info)("迁移：%s", step.message)
         return step
 
     def _readiness(self) -> "runtime_prepare.Step | None":
@@ -1189,8 +1187,15 @@ class PeachTray:
                 and self._restart_whole_tray(tray_icon, dependencies)):
             return None, []
         migrated: list = []
-        prepare = (lambda: migrated.append(self._migrate())) if self.preparation else None
-        ready = self.manager.restart(prepare=prepare)
+        def prepare():
+            step = self._migrate()
+            migrated.append(step)
+            if step is not None and step.failed:
+                raise RuntimeError(step.message)
+        try:
+            ready = self.manager.restart(prepare=prepare if self.preparation else None)
+        except RuntimeError:
+            return False, self._record([dependencies, *migrated])
         readiness = [self._readiness()] if ready else []
         return ready, self._record([dependencies, *migrated, *readiness])
 
@@ -1405,6 +1410,10 @@ class PeachTray:
             poll(self)
             from .desktop_uninstall import poll as poll_uninstall
             poll_uninstall(self)
+            from .dev_copy_runtime import poll as poll_copy
+            poll_copy(self, PROJECT_ROOT)
+            from .data_storage import poll as poll_relocation
+            poll_relocation(self)
             if self._stop_event.is_set():
                 return
             # 先看首次设置有没有完成：切换会换掉 `manager.specs`，采样必须落在换完之后。
@@ -1427,7 +1436,7 @@ class PeachTray:
         if not self._action_lock.acquire(blocking=False):
             return False
         try:
-            if self._stop_event.is_set():
+            if self._stop_event.is_set() or getattr(self, '_migration_failed', False):
                 return False
             self.manager.start_missing()
             return True
@@ -1446,7 +1455,8 @@ class PeachTray:
         # 迁移排在第一次拉起子服务之前：服务查到还没建的表就是 500。依赖只读核对，
         # 托盘自己已经加载着这个 venv，换不了包。
         startup = [self._check_dependencies(), self._migrate()]
-        self.manager.start_missing()
+        if not any(step is not None and step.failed for step in startup):
+            self.manager.start_missing()
         # 上一次更新留下的备份与暂存构建在这里清退：替换助手结束时托盘已经不在，
         # 只有下一次启动能确认「新托盘已经活下来、旧备份可以少留一份」。
         self.windows_updates.sweep_artifacts()
@@ -1830,6 +1840,10 @@ def _main(argv: list[str] | None = None) -> int:
         manager = ServiceManager(specs, log_dir=config.directory("logs"))
         gate = SetupGate(manager, config, waiting=waiting, instance=instance)
         if sys.platform == "darwin":
+            if not waiting:
+                migration = tray_preparation(config, manager).migrations.apply()
+                if migration.failed:
+                    raise RuntimeError(migration.message)
             manager.start_missing()
             run_macos_menu_bar(manager, gate, silent=args.silent, show_browser=args.show)
         else:

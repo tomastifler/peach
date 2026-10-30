@@ -168,7 +168,7 @@
   flex: none;
   align-items: center;
   justify-content: center;
-  height: 30px;
+  height: var(--control-h-compact);
   padding: 0 10px;
   border-radius: 8px;
   color: color-mix(in srgb, var(--glass-text) 60%, transparent);
@@ -321,7 +321,7 @@
 .peach-react [data-catalog-placeholder="tag"] > span {
   flex: none;
   width: 72px;
-  height: 30px;
+  height: var(--control-h-compact);
   border-radius: var(--tag-radius);
   background: var(--hover);
 }

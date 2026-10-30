@@ -32,6 +32,7 @@ import { ensureVideojs } from './videojs';
 export interface PlayerResume { time: number; autoplay: boolean }
 
 export interface DetailPlayerOptions {
+  playbackKey?: string;
   /** 给定片源（关注条目的 `/follow-stream`）；不给就按作品的来源解析。 */
   source?: PlayerSource;
   /** 播放出错时要不要查来源状态判脱盘。关注条目的片源不在本机来源里，不查。 */
@@ -107,6 +108,7 @@ export async function mountDetailPlayer(
   });
   setDetailPlayer(player);
   player.peachItem = item;
+  player.peachPlaybackKey = options.playbackKey || playbackKey('item', item);
   wirePlayerContextMenu(player);
   /* 手机上的画面格按视频自己的比例排（`--peach-video-ratio`）。 */
   player.on('loadedmetadata', () => {
@@ -216,8 +218,8 @@ export async function mountDetailPlayer(
     // 播到一半掉盘时 video 元素只报通用错误；来源状态才分得清脱盘和文件损坏。
     if (options.checkSourceStatus === false) return;
     void host.loadSourceStatus().then((status) => {
-      if (status[String(item.location)] !== false || player.isDisposed()) return;
-      player.error({ code: 2, message: `Media folder unavailable · ${host.offlineReason(String(item.location))}` });
+      if (status[String(item.root_id || item.location)] !== false || player.isDisposed()) return;
+      player.error({ code: 2, message: `媒体目录无法访问 · ${host.offlineReason(String(item.root_id || item.location))}` });
     });
   });
   player.ready(() => {
@@ -253,13 +255,18 @@ export async function mountDetailPlayer(
 
 const AMBIENT_CANVAS = '<canvas data-ambient-canvas="" width="32" height="18"></canvas>';
 
-/** 媒体框里氛围光画布与三块读数的占位：画布是框的第一个子节点，读数插在 `before` 前面（不给就
- *  放到最后）。已经有了就不再插。 */
+/** 氛围光放在媒体框首部；作品详情的统计键与速率挂到 React 留出的工具栏插槽，统计面板留在框内。
+ *  关注详情没有工具栏，读数插在 `before` 前面。已有读数时保留当前节点与事件。 */
 export function preparePlayerFrame(frame: HTMLElement, before: Element | null = null): void {
   if (!frame.querySelector(':scope > [data-ambient-canvas]')) frame.insertAdjacentHTML('afterbegin', AMBIENT_CANVAS);
-  if (frame.querySelector(':scope > #playerStatsBtn')) return;
+  if (frame.querySelector('#playerStatsBtn')) return;
   const overlay = document.createElement('template');
   overlay.innerHTML = playerStatsOverlayHtml();
+  const toolbar = frame.querySelector(':scope > [data-player-toolbar]');
+  if (toolbar) {
+    toolbar.querySelector('[data-player-stats-slot]')!.append(overlay.content.querySelector('#playerStatsBtn')!);
+    toolbar.querySelector('[data-player-net-slot]')!.append(overlay.content.querySelector('#playerNet')!);
+  }
   frame.insertBefore(overlay.content, before);
 }
 
@@ -268,7 +275,7 @@ export function preparePlayerFrame(frame: HTMLElement, before: Element | null = 
 export function attachPlayerChrome(player: VjsPlayer, frame: HTMLElement): () => void {
   const session = sessions.get(player);
   if (!session || player.isDisposed()) return () => {};
-  const find = (id: string) => frame.querySelector<HTMLElement>(`:scope > #${id}`);
+  const find = (id: string) => frame.querySelector<HTMLElement>(`#${id}`);
   const chrome: PlayerChrome = { statsButton: find('playerStatsBtn'), statsPanel: find('playerStats'), netBadge: find('playerNet') };
   session.chrome = chrome;
   const { statsButton, statsPanel } = chrome;
@@ -340,7 +347,7 @@ export function mountPlayer(video: HTMLVideoElement, options: MountPlayerOptions
   const frame = options.chrome === false ? null : video.parentElement;
   if (frame) preparePlayerFrame(frame, video);
   const key = playbackKey(kind, item, media?.index ?? null);
-  let detail: DetailPlayerOptions = { resume: options.resume ?? { time: playbackPosition(key, item), autoplay: false } };
+  let detail: DetailPlayerOptions = { playbackKey: key, resume: options.resume ?? { time: playbackPosition(key, item), autoplay: false } };
   if (kind === 'follow') {
     detail = {
       ...detail,

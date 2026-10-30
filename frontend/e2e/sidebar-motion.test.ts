@@ -13,8 +13,9 @@ const DESKTOP = VIEWPORTS.find((viewport) => !viewport.mobile)!;
 interface Toggle {
   /** 第一段过渡结束那一刻，已经画过几张位移贴图。 */
   mapsDuring: number;
-  /** 两段过渡都结束、补画之后，一共画过几张。 */
-  mapsAfter: number;
+  /** 两段过渡都结束、补画之后，抽屉那张位移贴图的宽度（同尺寸的贴图会复用，不一定重画）。 */
+  mapWidth: number;
+  drawerClientWidth: number;
   opticDuring: string;
   opticAfter: string;
   open: boolean;
@@ -65,7 +66,9 @@ async function toggle(page: Page): Promise<Toggle> {
         const mainBox = document.querySelector('#main')!.getBoundingClientRect();
         resolve({
           mapsDuring,
-          mapsAfter: counter.__maps - start,
+          mapWidth: Number(document.getElementById(/#(peach-optic-\d+)/.exec(drawer.style.getPropertyValue('--glass-optic'))?.[1] || '')
+            ?.querySelector('feImage')?.getAttribute('width')),
+          drawerClientWidth: Math.round(drawer.clientWidth),
           opticDuring,
           opticAfter: drawer.style.getPropertyValue('--glass-optic'),
           open: drawer.classList.contains('open'),
@@ -121,7 +124,7 @@ describe('侧栏开合', () => {
       for (const [name, state] of [['收起', collapsed], ['展开', expanded]] as const) {
         assert.equal(state.mapsDuring, 0, `${name}过渡中重画了 ${state.mapsDuring} 张玻璃贴图`);
         assert.equal(state.opticDuring, 'blur(14px)', `${name}过渡中抽屉仍挂着旧尺寸的位移贴图`);
-        assert.ok(state.mapsAfter >= 1, `${name}停下后没有按终态尺寸补画贴图`);
+        assert.equal(state.mapWidth, state.drawerClientWidth, `${name}停下后贴图宽 ${state.mapWidth}，没有按终态尺寸 ${state.drawerClientWidth} 补上`);
         assert.match(state.opticAfter, /url\("#peach-optic-\d+"\)/, `${name}停下后抽屉没有恢复位移滤镜`);
         assert.ok(Math.abs(state.mainLeft - state.railW) <= .5, `${name}后主区左缘 ${state.mainLeft}，应落在 --railW ${state.railW}`);
         assert.ok(Math.abs(state.mainRight - state.viewport) <= 1, `${name}后主区右缘 ${state.mainRight} 没有贴到视口右缘 ${state.viewport}`);

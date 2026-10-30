@@ -1,10 +1,11 @@
 """javdb 的作品页。
 
-搜索页 `/search?q=<番号>&f=all` 的结果卡片带番号，番号一致的那张进详情页；详情页
+搜索页 `/search?q=<番号>&f=all` 的结果卡片带番号，只在对应唯一来源 ID 时进详情页；详情页
 `?locale=zh` 下面板字段是 `番號`、`日期`、`片商`、`發行`、`系列`、`導演`、`演員`，
 演员里女优带 `actor-female`，类别保留链接里的原词。它按出口 IP 计配额，限速与封禁的处理在 `scraping_access`
 和调用方的主机间隔里，这里只管取页与解析。几家的值常有出入：ABW-358 在 javdb 上发行日期是
 MGS 的 5/23、标题带 MGS 附注、演员里有男优，各字段按 Peach 的来源策略结算。
+有隐藏 `origin-title` 时用作原标题，`current-title` 单独保存为显示标题；两者不互相改写。
 
 一部分页面要登录才给，回的是登入页而不是 401/403（`peach.javdb.LOGIN`），搜索页与详情页都要认。
 """
@@ -17,6 +18,7 @@ from bs4 import BeautifulSoup
 
 from ..catalog_rules import same_release_code
 from ..javdb import LOGIN, clean
+from ..javdb_identity import RULE
 from .base import FailureReason, Page, Session, SiteConfig, SiteRecord, SiteSource, SourceFailure
 
 #: 主机间隔由用户定（2026-09-22 定为 3 秒，每分钟 20 页）。参照面：每分钟 40～50 页会招来 3～7 天
@@ -28,7 +30,6 @@ JAVDB = SiteConfig(name="javdb", label="javdb", provider="javdb-page",
 _BOX = re.compile(r'<a href="(/v/[A-Za-z0-9]+)" class="box" title="[^"]*">.*?<strong>([^<]+)</strong>', re.S)
 _PANEL = re.compile(r'<div class="panel-block[^"]*">\s*<strong>([^<:：]+)[:：]</strong>\s*(?:&nbsp;)?\s*'
                     r'<span class="value">(.*?)</span>', re.S)
-_TITLE = re.compile(r'<strong class="current-title">([^<]*)</strong>')
 #: 详情页那张封面。认标签、再从标签里取 `src`，不把属性挨着写死：站上 `class` 与 `src` 的先后
 #: 两种写法都出现过，中间还可能夹着 `width`、`height` 与 `fetchpriority`。
 _COVER = re.compile(r'<img\b[^>]*\bclass="video-cover"[^>]*>')
@@ -124,10 +125,14 @@ class JavDBSource(SiteSource):
 
     def fetch(self, code: str, *, session: Session) -> Page:
         search = self._page(self.search_url(code), session=session)
-        path = next((path for path, shown in _BOX.findall(search.text)
-                     if same_release_code(code, clean(shown))), None)
-        if path is None:
-            raise SourceFailure(FailureReason.NOT_FOUND, "javdb has no such code")
+        paths = list(dict.fromkeys(path for path, shown in _BOX.findall(search.text)
+                                  if same_release_code(code, clean(shown))))
+        if not paths:
+            raise SourceFailure(FailureReason.NOT_FOUND, "javdb 没有这个番号")
+        if len(paths) > 1:
+            raise SourceFailure(FailureReason.PARSE_ERROR, "javdb 同番号对应多个作品，请核对来源身份：" + '、'.join(paths),
+                                detail='identity_ambiguous')
+        path = paths[0]
         detail = self._page(self.config.base_url + path + "?locale=zh", session=session)
         # `source_url` 记不带界面语言参数的详情页地址。
         return Page(self.config.base_url + path, detail.body)
@@ -139,7 +144,11 @@ class JavDBSource(SiteSource):
         if not same_release_code(code, shown):
             raise SourceFailure(FailureReason.PARSE_ERROR, "The code on the javdb detail page does not match the search result")
         runtime = re.search(r"\d+", clean(panel.get("時長", "")))
-        title = _TITLE.search(text)
+        soup = BeautifulSoup(text, "html.parser")
+        title = soup.select_one('strong.current-title')
+        original = soup.select_one('.origin-title')
+        display_title = clean(title.get_text(' ', strip=True)) if title else ''
+        origin_title = clean(original.get_text(' ', strip=True)) if original else ''
         tag = _COVER.search(text)
         cover = _IMG_SRC.search(tag.group(0)) if tag else None
         genres = tuple(dict.fromkeys(
@@ -148,13 +157,15 @@ class JavDBSource(SiteSource):
             if clean(link.get_text(" ", strip=True))))
         return SiteRecord(
             source=self.config.name, provenance=self.config.provider, code=shown, source_url=page.url,
-            title=clean(title.group(1)) if title else "",
+            title=origin_title or display_title,
             performers=tuple(actresses(panel.get("演員", ""))),
             studio=maker_writing(clean(panel.get("片商", ""))), label=clean(panel.get("發行", "")),
             series=clean(panel.get("系列", "")), director=clean(panel.get("導演", "")),
             release_date=clean(panel.get("日期", "")), runtime=int(runtime.group()) if runtime else None,
             tags=genres,
-            cover_urls=(cover.group(1),) if cover else ())
+            cover_urls=(cover.group(1),) if cover else (),
+            extra={'origin_title': origin_title, 'display_title': display_title,
+                   'source_id': urllib.parse.urlsplit(page.url).path.rsplit('/', 1)[-1], 'javdb_rule': RULE})
 
 
 def parse_magnets(page: Page) -> list[dict]:

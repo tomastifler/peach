@@ -30,7 +30,7 @@ from peach.repository import MediaAsset
 
 POSIX_ONLY = unittest.skipIf(os.name == "nt", "路径翻译只在非 Windows 上发生")
 
-#: 测试固定使用程序默认的数据库路径前缀，不依赖本机 config.toml。
+#: 测试显式声明数据库路径前缀，不依赖本机 config.toml。
 LOCATIONS = {"local": (r"R:\media",), "115": ("B:/",), "pikpak": ("A:/",)}
 
 
@@ -108,6 +108,19 @@ class LocationResolutionTests(unittest.TestCase):
 
 
 class MountSourceTests(unittest.TestCase):
+    def test_mixed_mount_mapping_keeps_each_roots_position(self):
+        declared = {'local': ('R:\\one', 'S:\\two')}
+        with tempfile.TemporaryDirectory() as temporary:
+            mounted = Path(temporary).resolve()
+            with with_media({'local': ('', str(mounted))}, declared), patch.dict(os.environ, {MOUNTS_ENV: ''}):
+                self.assertEqual(location_mounts()['local'][1], mounted)
+                first = translate_ledger_path('R:\\one\\a.mp4')
+                if os.name == 'nt':
+                    self.assertEqual(first, Path('R:\\one\\a.mp4'))
+                else:
+                    self.assertTrue(is_unmapped(first))
+                self.assertEqual(translate_ledger_path('S:\\two\\b.mp4'), mounted / 'b.mp4')
+
     """挂载表按来源 ID 取自设置文件；`PEACH_MEDIA_MOUNTS` 仍然压过它。"""
 
     def test_empty_source_uses_the_settings_parser_shape(self):
@@ -175,7 +188,28 @@ class TranslationTests(unittest.TestCase):
         self.assertEqual(translate_ledger_path("/tmp/one.mp4"), Path("/tmp/one.mp4"))
 
     def test_system_volume_is_the_disk_gate_target(self):
-        self.assertEqual(system_volume(), Path("C:/") if os.name == "nt" else Path("/"))
+        volume = system_volume()
+        self.assertTrue(volume.is_absolute())
+        self.assertTrue(volume.is_dir())
+        self.assertEqual(volume, Path(volume.anchor))
+
+
+class SystemVolumeTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'nt', 'Windows 系统目录 API')
+    def test_system_directory_can_be_on_another_drive(self):
+        import ctypes
+        def windows_directory(buffer, size):
+            buffer.value = 'Z:\\Windows'
+            return len(buffer.value)
+        with patch.object(ctypes.windll.kernel32, 'GetWindowsDirectoryW', side_effect=windows_directory):
+            self.assertEqual(system_volume(), Path('Z:/'))
+
+    @unittest.skipUnless(os.name == 'nt', 'Windows 系统目录 API')
+    def test_missing_system_directory_is_reported(self):
+        import ctypes
+        with patch.object(ctypes.windll.kernel32, 'GetWindowsDirectoryW', return_value=0):
+            with self.assertRaises(OSError):
+                system_volume()
 
 
 class RootBoundaryTests(unittest.TestCase):
@@ -250,6 +284,20 @@ class OfflineModeTests(unittest.TestCase):
 
 
 class MountReachabilityTests(unittest.TestCase):
+    def test_an_offline_root_does_not_disable_other_roots_of_the_same_source(self):
+        from peach.mount_reachability import MountReachability, MountRoot
+        monitor = MountReachability([
+            MountRoot('local', '本地磁盘', 'D:/JAV', self.root, 'root-one', 'library-one'),
+            MountRoot('local', '本地磁盘', 'E:/JAV', None, 'root-two', 'library-one'),
+        ], probe=lambda _path: 'ok', retry_delay=0)
+        self.addCleanup(monitor.stop)
+        monitor._states[self.root].state = 'ok'
+        row = monitor.sources()[0]
+        self.assertTrue(row['online'])
+        self.assertEqual([(root['root_id'], root['online']) for root in row['roots']],
+                         [('root-one', True), ('root-two', False)])
+        self.assertEqual(monitor.summary()['state'], 'degraded')
+
     def setUp(self):
         from peach.mount_reachability import MountReachability, MountRoot
         self.tmp = tempfile.TemporaryDirectory()

@@ -133,14 +133,14 @@ function shellProps(patch: Partial<EntityPageProps> = {}): EntityPageProps {
       actions: {
         open: vi.fn(), openResource: vi.fn(), openShort: vi.fn(), openShorts: vi.fn(), openMix: vi.fn(),
         openEntity: vi.fn(), openUnowned: vi.fn(), toggleTag: vi.fn(), toggleSelection: vi.fn(),
-        watchLater: vi.fn(async () => {}), resourceOperation: vi.fn(async () => {}), mixRelated: vi.fn(async () => []),
+        watchLater: vi.fn(async () => {}), rate: vi.fn(async () => {}), resourceOperation: vi.fn(async () => {}), mixRelated: vi.fn(async () => []),
         canFlip: () => true, revealSource: vi.fn(async () => ''),
       },
     },
     follow: {
       helpers: { workMark: () => '', tagLabel: (tag) => tag, wireDrag: vi.fn(), wireScroller: vi.fn(),
         listSkeletonHtml: () => '<div data-test-follow-skeleton></div>', jobProgress: vi.fn() },
-      actions: { route: vi.fn(), shuffle: vi.fn(), loaded: vi.fn(), openDetail: vi.fn(), openAuthor: vi.fn(), openManage: vi.fn(),
+      actions: { route: vi.fn(), shuffle: vi.fn(), loaded: vi.fn(), openDetail: vi.fn(), openAuthor: vi.fn(),
         toggleSelection: vi.fn(), setImagesOnly: vi.fn(), setPhotoLayout: vi.fn(), canFlip: () => false, toast: vi.fn(),
         failure: vi.fn(), checkReport: vi.fn() },
     },
@@ -302,14 +302,14 @@ describe('换筛选与视图', () => {
     expect(page.props.hosts.body.textContent).toContain('No videos yet');
     expect(page.props.hosts.body.querySelector('[data-media-grid]')).toBeNull();
     expect(page.props.hosts.filter.querySelector('[data-entity-sort]')).toBeNull();
-    expect(buttonNamed('View all videos', page.props.hosts.body)).toBeNull();
+    expect(buttonNamed('清除筛选', page.props.hosts.body)).toBeNull();
   });
 
   it('筛完一部不剩：空态给一条回到全部视频的路，撤掉观看状态与交集条上的筛选', async () => {
     const page = await open({ items: (query) => items(query.get('tag') ? [] : [1, 2, 3]) },
       { filters: { tag: '巨乳', state: 'fresh', sort: 'new' } });
-    expect(page.props.hosts.body.textContent).toContain('No matching videos');
-    await click(buttonNamed('View all videos', page.props.hosts.body));
+    expect(page.props.hosts.body.textContent).toContain('没有符合条件的视频');
+    await click(buttonNamed('清除筛选', page.props.hosts.body));
     expect(page.props.actions.route).toHaveBeenCalledWith(
       expect.objectContaining({ sort: 'new', tag: '', state: '', creator: '', studio: '', owner: '' }),
       expect.objectContaining({ media: 'videos' }));
@@ -501,13 +501,13 @@ describe('写操作', () => {
     await settle();
     // 换统称会重写整条实体的扁平投影：写之前让人看见换成什么、旧写法去哪；按钮与回执同一个动词。
     expect(legacyUi.confirmModal).toHaveBeenCalledWith(expect.objectContaining({
-      title: 'Change canonical name', confirmLabel: 'Change canonical name',
-      body: `"しのだゆう" will become the name shown for this profile, and "${NAME}" becomes an alias. Credits on works, search and tags will be rewritten accordingly.`,
+      title: '更改统一名称', confirmLabel: '更改统一名称',
+      body: `「しのだゆう」将成为这份档案显示的名称，「${NAME}」留作别名。作品上的署名、搜索和标签都会跟着改写。`,
     }));
     expect(page.writes[0]).toEqual({ url: '/api/entity-name', body: { kind: 'performer', name: NAME, canonical: 'しのだゆう' } });
     expect(page.props.actions.openEntity).toHaveBeenLastCalledWith('performer', 'しのだゆう');
     const [message, options] = vi.mocked(page.props.helpers.receipt).mock.calls[0]!;
-    expect(message).toBe('Canonical name changed to しのだゆう');
+    expect(message).toBe('已把统一名称更改为 しのだゆう');
     await act(async () => { await options?.undo?.() });
     expect(page.writes[1]).toEqual({ url: '/api/entity-name', body: { kind: 'performer', name: 'しのだゆう', canonical: NAME } });
     expect(page.props.actions.openEntity).toHaveBeenLastCalledWith('performer', NAME);

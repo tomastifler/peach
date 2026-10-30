@@ -28,6 +28,10 @@ def normalized_path(path: Path | str) -> Path:
     而同一个文件走盘符只要 1 毫秒。盘符路径本身就是绝对路径，`..` 由 `abspath` 折掉。
     macOS 仍要 `resolve()`：`/var` 是 `/private/var` 的软链，挂载点的大小写也靠它对齐。
     """
+    from .smb_media import resolve
+    remote = resolve(path)
+    if remote is not None:
+        return remote
     candidate = translate_ledger_path(path)
     if os.name == "nt":
         return Path(os.path.abspath(os.fspath(candidate)))
@@ -70,6 +74,10 @@ def resolve_case_insensitive(path: Path | str) -> str:
     """返回可直接打开的实际路径：原路径不存在时按大小写不敏感匹配同目录文件。"""
     # 批处理脚本直接调用本函数，不经过 FilesystemBackend；因此这里也必须先把账本的
     # Windows 盘符翻译成本机挂载点，否则 macOS 会把 `A:\\...` 当成相对文件名。
+    from .smb_media import resolve, input_url
+    remote = resolve(path)
+    if remote is not None:
+        return input_url(remote)
     candidate = normalized_path(path)
     if candidate.is_file():
         return str(candidate)
@@ -107,6 +115,7 @@ class MediaOffline(MediaUnavailable):
         super().__init__(asset_id)
         self.asset_id = asset_id
         self.source = source
+        self.root_id = ""
 
 
 class FilesystemBackend:
@@ -126,6 +135,17 @@ class FilesystemBackend:
         raw = asset.snapshot_path if thumbnail else asset.path
         if not raw:
             raise MediaUnavailable(asset.id)
+        from .smb_media import resolve
+        remote = resolve(raw) if not thumbnail else None
+        if remote is not None:
+            if not any(within_root(remote, root) for root in self.allowed_roots):
+                raise MediaUnavailable(asset.id)
+            try:
+                if remote.is_file():
+                    return remote
+            except OSError:
+                raise MediaOffline(asset.id, remote.root_id) from None
+            raise MediaUnavailable(asset.id)
         path = normalized_path(raw)
         roots = (self.snapshot_root,) if thumbnail else self.allowed_roots
         if not any(within_root(path, root) for root in roots):
@@ -142,13 +162,19 @@ class FilesystemBackend:
         if not thumbnail and is_windows_path(raw):
             translated = translate_ledger_path(raw)
             source = PureWindowsPath(raw).drive
+            from . import media_identity, settings_file
+            root_id = media_identity.ownership(settings_file.active(), raw).get("root_id", "")
+            def offline():
+                error = MediaOffline(asset_id, source)
+                error.root_id = root_id
+                return error
             if is_unmapped(translated):
-                raise MediaOffline(asset_id, source)
+                raise offline()
             candidate = normalized_path(raw)
             for root in self.allowed_roots:
                 if within_root(candidate, root):
                     if not root_online(root):
-                        raise MediaOffline(asset_id, source)
+                        raise offline()
                     break
         raise MediaUnavailable(asset_id)
 
@@ -162,8 +188,7 @@ class FilesystemBackend:
 class MediaEngine:
     """按 asset id 解析媒体文件。
 
-    本机文件是唯一来源，中间不设 backend 契约层：多一层间接只会让「谁决定了
-    这个路径」变得不好回答。见 ADR-0021。
+    媒体根目录决定本机文件或 SMB 资源；工具输入使用受控的回环读取入口。
     """
 
     def __init__(self, repository: LedgerRepository, filesystem: FilesystemBackend):

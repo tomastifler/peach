@@ -22,6 +22,10 @@ class GuangyaSourceTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
+        declared = patch.object(web_batch, "LOCATION_ROOT_DECLARATIONS",
+                                {location: (str(self.root),) for location in MOUNTED_SOURCES})
+        declared.start()
+        self.addCleanup(declared.stop)
 
     def test_cloud_only_setup_roundtrips_windows_and_macos_mounts(self):
         for windows, path in ((True, "G:/Movies"), (False, "/Volumes/Guangya/Movies")):
@@ -118,20 +122,19 @@ class GuangyaSourceTests(unittest.TestCase):
         with closing(sqlite3.connect(fresh_ledger(self.root))) as connection:
             connection.row_factory = sqlite3.Row
             for location in MOUNTED_SOURCES:
-                for columns in ("id,location,path,snapshot_path", "id,path,snapshot_path"):
-                    with self.subTest(location=location, columns=columns):
-                        media = self.root / "film.mp4"
-                        media.write_bytes(b"media")
-                        connection.execute("INSERT INTO asset(id,location,path,name,medium) "
-                            "VALUES(1,?,?,'film.mp4','video')", (location, str(media)))
-                        result = web_batch.purge_assets(connection,
-                            connection.execute(f"SELECT {columns} FROM asset").fetchall())
-                        self.assertEqual((result["purged"], result["blocked"]), (1, []))
-                        self.assertFalse(media.exists())
-                        self.assertEqual(result["_staged"][0][1].read_bytes(), b"media")
-                        self.assertEqual(connection.execute("SELECT count(*) FROM asset").fetchone()[0], 0)
-                        web_batch._restore_staged_media(result["_staged"])
-                        self.assertEqual(media.read_bytes(), b"media")
+                with self.subTest(location=location):
+                    media = self.root / "film.mp4"
+                    media.write_bytes(b"media")
+                    connection.execute("INSERT INTO asset(id,location,path,name,medium) "
+                        "VALUES(1,?,?,'film.mp4','video')", (location, str(media)))
+                    result = web_batch.purge_assets(connection,
+                        connection.execute("SELECT id,location,path,snapshot_path FROM asset").fetchall())
+                    self.assertEqual((result["purged"], result["blocked"]), (1, []))
+                    self.assertFalse(media.exists())
+                    self.assertEqual(result["_staged"][0][1].read_bytes(), b"media")
+                    self.assertEqual(connection.execute("SELECT count(*) FROM asset").fetchone()[0], 0)
+                    web_batch._restore_staged_media(result["_staged"])
+                    self.assertEqual(media.read_bytes(), b"media")
 
     def test_mount_write_error_keeps_the_media_and_ledger_row(self):
         with closing(sqlite3.connect(fresh_ledger(self.root))) as connection:

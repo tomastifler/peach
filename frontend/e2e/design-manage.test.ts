@@ -13,7 +13,92 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
   let browser: Browser;
   installDesignBrowser((next) => { browser = next; });
 
-  it('数据管理骨架里等数据的操作键是禁用态，数据到了才换回蓝色主按钮', { timeout: 60_000 }, async () => {
+  it('关注列表操作区按整组换行，并在窄屏内继续排布控件', { timeout: 60_000 }, async () => {
+    const opened = await openFollowManage(browser, DESKTOP, {
+      counts: { new: 17_097 }, extra: [
+        followSource(4, 'kou', 'Fanbox', 'kou · Fanbox'),
+        followSource(5, 'kou', 'Patreon', 'kou · Patreon'),
+        followSource(6, 'kou', 'Rule34Video', 'kou · Rule34Video'),
+      ],
+    });
+    try {
+      const { page } = opened;
+      for (const width of [1698, 1000, 820, 760, 650, 390]) {
+        await page.setViewportSize({ width, height: 900 });
+        await settle(page);
+        const geometry = await page.locator('[data-follow-toolbar]').evaluate((root) => {
+          const box = (element: Element) => {
+            const r = element.getBoundingClientRect();
+            return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+          };
+          const actions = root.querySelector('[data-follow-toolbar-actions]')!;
+          return {
+            toolbar: box(root), heading: box(root.querySelector('[data-follow-toolbar-heading]')!),
+            actions: box(actions), buttons: [...actions.querySelectorAll('button')].map(box),
+          };
+        });
+        const { toolbar, heading, actions, buttons } = geometry;
+        assert.ok(actions.left >= toolbar.left - 1 && actions.right <= toolbar.right + 1,
+          `${width}px 操作区越出工具栏`);
+        for (const button of buttons) {
+          assert.ok(button.left >= actions.left - 1 && button.right <= actions.right + 1,
+            `${width}px 控件越出操作区`);
+        }
+        const below = actions.top >= heading.bottom - 1;
+        if (below) {
+          assert.ok(Math.abs(actions.left - toolbar.left) < 1, `${width}px 换行操作区未左对齐`);
+        } else {
+          assert.ok(actions.left >= heading.right, `${width}px 操作区与标题重叠`);
+          assert.ok(Math.max(...buttons.map((b) => b.top)) - Math.min(...buttons.map((b) => b.top)) < 2,
+            `${width}px 与标题同行时只有部分控件换行`);
+        }
+        if (width === 1698) assert.equal(below, false);
+        if (width <= 650) assert.equal(below, true);
+        const authorButtons = await page.locator('[data-follow-author-controls]').evaluateAll(groups => groups.map(group =>
+          [...group.querySelectorAll(':scope > span:last-child > button')].map(button => button.getBoundingClientRect().top)));
+        assert.ok(authorButtons.every(tops => tops.length === 2 && Math.abs(tops[0]! - tops[1]!) < 1),
+          `${width}px 创作者卡的全选与收起按钮被拆行`);
+      }
+      assert.deepEqual(opened.problems, []);
+    } finally {
+      await opened.close();
+    }
+  });
+
+  for (const viewport of [DESKTOP, MOBILE]) {
+    it(`数据管理骨架与内容卡共用外框、内边距和操作区布局（${viewport.name}）`, { timeout: 60_000 }, async () => {
+      const opened = await visit(browser, '/data-cleanup', viewport);
+      try {
+        const page = opened.page;
+        await page.route('**/api/library-processing', route => route.fulfill({ json: { status: 'idle' } }));
+        const release = await holdApi(page);
+        await page.reload({ waitUntil: 'load' });
+        await page.locator('[data-skeleton="cleanup"] #mediaRepair footer').waitFor({ timeout: 15_000 });
+        const geometry = () => page.locator('section[aria-label="扫描与采集"], section[aria-label="媒体修复"]')
+          .evaluateAll(cards => cards.map(card => {
+            const style = (part: Element) => {
+              const css = getComputedStyle(part);
+              return [css.display, css.padding, css.gap, css.borderTopWidth, css.borderRadius, css.backgroundColor];
+            };
+            const box = card.getBoundingClientRect();
+            return { width: Math.round(box.width), face: style(card), body: style(card.firstElementChild!),
+              footer: style(card.querySelector('footer')!) };
+          }));
+        const waiting = await geometry();
+        assert.equal(waiting.length, 2);
+        for (const card of waiting) assert.equal(card.face[3], '1px', '骨架卡缺少外框');
+        release();
+        await page.locator('section[aria-label="媒体修复"] footer > button:not([data-skeleton-action])')
+          .waitFor({ timeout: 15_000 });
+        await settle(page);
+        assert.deepEqual(await geometry(), waiting, '骨架与内容卡的容器布局不一致');
+      } finally {
+        await opened.close();
+      }
+    });
+  }
+
+  it('数据管理骨架里等数据的操作键是禁用态，数据到了才换回主操作样式', { timeout: 60_000 }, async () => {
     const opened = await visit(browser, '/data-cleanup', DESKTOP);
     try {
       const page = opened.page;
@@ -23,19 +108,19 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
       }));
       const release = await holdApi(page);
       await page.reload({ waitUntil: 'load' });
-      await page.locator('[data-skeleton="cleanup"] .cleanupscraping [data-split-button]').waitFor({ timeout: 15_000 });
+      await page.locator('[data-skeleton="cleanup"] #libraryProcessing [data-split-button]').waitFor({ timeout: 15_000 });
       const expected = await disabledTokens(page);
       const waiting = await waitingActionFaces(page, '[data-skeleton="cleanup"] [data-skeleton-action]');
-      assert.deepEqual(waiting.map((face) => face.name),
-        ['Sync library', 'More sync options', 'Start repair', 'Preview', 'Check dead links', 'Check files']);
+      assert.deepEqual(waiting.filter((face) => !face.name.includes('skeleton')).map((face) => face.name).filter(Boolean),
+        ['同步新增文件', '更多同步方式', '开始修复', '预览', '检查死链']);
       for (const face of waiting) assertDisabledFace(face, expected);
       const ring = await page.locator('[data-skeleton="cleanup"] [data-split-button]')
         .evaluate((element) => getComputedStyle(element).boxShadow);
       assert.ok(ring.includes(expected.ring), `骨架里的分体键外圈不是禁用那一档描边：${ring}`);
       const sizes = await controlFaces(page, {
-        'Sync library': '.cleanupscraping [data-split-button] > button:first-child',
-        'More options': '.cleanupscraping [data-split-button] > button:last-child',
-        'Start repair': '.cleanupmediarepair footer > button',
+        同步新增文件: '#libraryProcessing [data-split-button] > button:first-child',
+        更多方式: '#libraryProcessing [data-split-button] > button:last-child',
+        开始修复: '#mediaRepair footer > button',
       });
       release();
       await page.locator('[data-skeleton="cleanup"]').waitFor({ state: 'detached', timeout: 15_000 });
@@ -46,13 +131,13 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
         .waitFor({ timeout: 15_000 });
       await settle(page);
       const final = await controlFaces(page, {
-        'Sync library': 'section[aria-label="Scan and collect"] [data-split-button] > button:first-child',
-        'More options': 'section[aria-label="Scan and collect"] [data-split-button] > button:last-child',
-        'Start repair': 'section[aria-label="Media repair"] footer > button',
+        同步新增文件: 'section[aria-label="扫描与采集"] [data-split-button] > button:first-child',
+        更多方式: 'section[aria-label="扫描与采集"] [data-split-button] > button:last-child',
+        开始修复: 'section[aria-label="媒体修复"] footer > button',
       });
       for (const name of Object.keys(sizes)) {
         assert.equal(sizes[name]!.size, final[name]!.size, `${name} 接管时尺寸跳了`);
-        assert.match(final[name]!.face, /gradient/, `${name} 接管后没换回蓝色主按钮`);
+        assert.match(final[name]!.face, /gradient/, `${name} 接管后没换回主操作样式`);
       }
       const enabled = await page.locator('section[aria-label="Scan and collect"] [data-split-button] > button')
         .evaluateAll((buttons) => buttons.map((button) => (button as HTMLButtonElement).disabled));
@@ -450,7 +535,7 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
     } finally { await opened.close(); }
   });
 
-  it('标签多选坞出现时页底让出 96px；在线词表的类型色走上游 tag_type 那一套', { timeout: 60_000 }, async () => {
+  it('标签多选坞出现时页底按实际高度留白；在线词表的类型色走上游 tag_type 那一套', { timeout: 60_000 }, async () => {
     const opened = await openIndexPage(browser, '/tags');
     try {
       const page = opened.page;
@@ -459,14 +544,17 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
       await page.locator('#index [data-alpha-tag]').nth(1).click({ timeout: 5_000 });
       const dock = page.locator('[data-selection-dock]');
       await dock.waitFor({ timeout: 5_000 });
-      const padding = await page.evaluate(() =>
-        getComputedStyle(document.querySelector('#index .peach-react')!).paddingBottom);
-      assert.equal(padding, '96px', '选择坞盖住了最后一行标签');
+      const clearance = await dock.evaluate((element) => ({
+        padding: parseFloat(getComputedStyle(document.querySelector('#index .peach-react')!).paddingBottom),
+        required: (element as HTMLElement).offsetHeight + parseFloat(getComputedStyle(element).bottom) + 16,
+      }));
+      assert.ok(clearance.padding >= clearance.required, `选择坞下方留白不足：${JSON.stringify(clearance)}`);
       await page.locator('#index [role="tab"][data-tab="online"]').click({ timeout: 5_000 });
       const dot = page.locator('#index [data-alpha-tag][data-tag-cat="r34-artist"] [data-tag-dot]');
       await dot.waitFor({ timeout: 5_000 });
       assert.equal(await dot.evaluate((element) => getComputedStyle(element).backgroundColor), 'rgb(227, 108, 108)');
       assert.equal(await dock.count(), 0, '在线词表不给多选坞');
+      assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue('--selection-dock-space')), '');
       assert.deepEqual(opened.problems, []);
     } finally {
       await opened.close();
@@ -479,7 +567,7 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
       const page = opened.page;
       const spacing = await page.locator('#index [data-tag-chip]').first().evaluate((chip) => {
         // 名字那段文字按字符切开量：字的右缘到计数左缘，与末尾那个空格自己画出来的宽度相比。
-        const name = chip.firstChild!;
+        const name = chip.firstElementChild!.firstChild!;
         const end = name.textContent!.trimEnd().length;
         const box = (from: number, to: number) => {
           const part = document.createRange();
@@ -520,7 +608,8 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
         const header = getComputedStyle(head);
         const code = getComputedStyle(head.querySelector('b')!);
         return {
-          glass: { filter: glass.backdropFilter, padding: glass.padding, height: glass.height },
+          glass: { filter: glass.backdropFilter, padding: glass.padding, height: glass.height,
+            compact: parseFloat(glass.getPropertyValue('--control-h-compact')) },
           card: { radius: card.borderRadius, overflow: card.overflow, face: card.backgroundColor },
           head: { padding: header.padding, face: header.backgroundColor, size: code.fontSize, weight: code.fontWeight },
           rows: [...group.querySelectorAll('.duplicate-row')].map((row) => {
@@ -530,7 +619,8 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
         };
       });
       assert.match(faces.glass.filter, /blur\(/, '汇总条没有背景模糊，不是玻璃面');
-      assert.deepEqual([faces.glass.padding, faces.glass.height], ['10px 16px', '50px']);
+      // 汇总条里的控件取紧凑档，条高是上下各 10px 内边距加一档紧凑控件。
+      assert.deepEqual([faces.glass.padding, faces.glass.height], ['10px 16px', `${20 + faces.glass.compact}px`]);
       assert.deepEqual([faces.card.radius, faces.card.overflow], ['14px', 'hidden'], '组卡圆角或裁切不对');
       assert.notEqual(faces.head.face, faces.card.face, '组头和组卡同色，番号那一行分不出来');
       assert.deepEqual([faces.head.padding, faces.head.size, faces.head.weight], ['20px', '20px', '500']);
@@ -542,7 +632,59 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
     }
   });
 
-  it('整页空态沉一档底色、20px 圆角、至少 320px 高，图标装进 54px 描边方框；卡里的空态不带方框', { timeout: 60_000 }, async () => {
+  it('统计、高清版和配置空清单有背景与边框，窄屏不越界', { timeout: 60_000 }, async () => {
+    const cases = [
+      { path: '/stats', title: '还没有视频', height: 320 },
+      { path: '/quality-goals', title: '没有标记中的高清版目标', height: 320 },
+      { path: '/settings/diagnostics', title: '清单为空', height: 240 },
+      { path: '/settings/subscriptions', title: '没有可配置的来源', height: 240 },
+    ];
+    for (const viewport of [DESKTOP, MOBILE]) {
+      for (const example of cases) {
+        const opened = await visit(browser, example.path, viewport, async page => {
+          await page.route('**/api/stats', async route => {
+            const report = await (await route.fetch()).json();
+            await route.fulfill({ json: { ...report, by_loc: [] } });
+          });
+          await page.route('**/api/quality-goals?**', route => route.fulfill({ json: { total: 0, items: [] } }));
+          await page.route('**/api/follow/credentials', route => route.fulfill({ json: { providers: [] } }));
+          await page.route('**/api/diagnostics', async route => {
+            const report = await (await route.fetch()).json();
+            report.library.groups = { empty: { label: '空清单样例', status: 'ok', count: 0, items: [], truncated: false } };
+            await route.fulfill({ json: report });
+          });
+        });
+        try {
+          const { page } = opened;
+          if (example.path === '/settings/diagnostics') {
+            await page.locator('summary').filter({ hasText: '空清单样例 · 0 项' }).click();
+          }
+          const empty = page.locator('[data-empty-state]').filter({
+            has: page.getByRole('heading', { name: example.title, exact: true }),
+          });
+          await empty.waitFor();
+          await settle(page);
+          const face = await empty.evaluate(node => {
+            const style = getComputedStyle(node);
+            const glyph = node.querySelector('svg')!;
+            const frame = glyph.parentElement!;
+            return { background: style.backgroundColor, border: style.borderTopWidth, color: style.borderTopColor,
+              height: node.getBoundingClientRect().height, glyph: getComputedStyle(glyph).width,
+              frame: getComputedStyle(frame).width, title: getComputedStyle(node.querySelector('h3')!).fontSize };
+          });
+          assert.equal(face.background, await tokenColor(page, '.peach-react', '--color-background-secondary-default'));
+          assert.equal(face.border, '1px', `${example.path}空态缺少边框`);
+          assert.equal(face.color, await tokenColor(page, '.peach-react', '--color-separator-border'));
+          assert.ok(face.height >= example.height);
+          assert.deepEqual([face.glyph, face.frame, face.title], ['32px', '54px', '14px']);
+          assert.deepEqual((await layout(page)).offenders, []);
+          assert.deepEqual(opened.problems, []);
+        } finally { await opened.close(); }
+      }
+    }
+  });
+
+  it('标准空态共用底色、圆角、320px 高度与 54px 图标框', { timeout: 60_000 }, async () => {
     // 演示库在一轮里凑得出重复组，桩成空的才一定落到整页空态上。
     const opened = await visit(browser, '/duplicates', DESKTOP);
     try {
@@ -583,7 +725,7 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
     } finally {
       await opened.close();
     }
-    // 卡里那一档（活动页没有任务记录）图标直接挂在空态上，外面没有方框。
+    // 任务记录使用同一档标准空态。
     const activity = await visit(browser, '/tasks', DESKTOP);
     try {
       await activity.page.route('**/api/tasks', (route) => route.fulfill({
@@ -594,8 +736,8 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
       const empty = activity.page.locator('[data-empty-state]');
       await empty.waitFor({ timeout: 15_000 });
       await settle(activity.page);
-      assert.equal(await empty.evaluate((root) => root.querySelector('svg')!.parentElement === root), true,
-        '卡里的空态也套了图标方框');
+      assert.equal(await empty.evaluate((root) => root.querySelector('svg')!.parentElement === root), false,
+        '任务空态缺少图标框');
       assert.deepEqual(activity.problems, []);
     } finally {
       await activity.close();
@@ -610,15 +752,15 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
         prepare: (page) => page.route(/\/api\/entity\/shapes/, (route) => route.fulfill({ json: {
           ok: true, entities: [{ id: 90_001, kind: 'performer', names: [name], parts: ['costars'] }] } })) },
       { path: '/data-cleanup', ready: '[data-skeleton="cleanup"] [data-skeleton-action]',
-        targets: ['[data-skeleton] .board-plain-stat', '[data-skeleton] a[href="/sources"]',
-          '[data-skeleton] [data-skeleton-action]', '[data-skeleton] .cleanupfieldset [data-skeleton-action]'] },
+        targets: ['[data-skeleton] .inline-grid > div', '[data-skeleton] a[href="/sources"]',
+          '[data-skeleton] [data-skeleton-action]', '[data-skeleton] #organize [data-skeleton-action]'] },
       { path: '/review', ready: '[data-skeleton="review"] .reviewtabs button',
         targets: ['[data-skeleton] .reviewtabs button', '[data-skeleton] .skeletoncard'] },
       { path: '/follow', ready: '.followauthors .avskeleton',
         targets: ['.followauthors .avskeleton', '.followworks .brandskeleton', '[data-skeleton^="cards/"] > div > *'] },
       { path: '/subscriptions', ready: '[data-skeleton="board/subscriptions"] .ui-follow-skeleton-toolbar',
-        targets: ['[data-skeleton] .ui-follow-skeleton-toolbar [data-follow-toolbar-controls] > button:nth-of-type(1)',
-          '[data-skeleton] .ui-follow-skeleton-toolbar > button:nth-of-type(1)'] },
+        targets: ['[data-skeleton] .ui-follow-skeleton-toolbar [data-follow-toolbar-controls] button',
+          '[data-skeleton] .ui-follow-skeleton-toolbar [data-follow-toolbar-actions] > button:nth-of-type(1)'] },
     ];
     for (const { path, ready, targets, prepare } of pages) {
       const opened = await visit(browser, '/', DESKTOP);
@@ -656,6 +798,43 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
           assert.ok(['auto', 'default', 'not-allowed'].includes(hit.cursor), `${path} ${target} 悬停换了光标：${hit.cursor}`);
           assert.ok(!hit.inside || hit.disabled, `${path} ${target} 在骨架里还能点中`);
         }
+      } finally {
+        await opened.close();
+      }
+    }
+  });
+
+  it('暂停来源的标签使用主文字色；卡片末行的反馈面与外框同心', { timeout: 60_000 }, async () => {
+    for (const viewport of [DESKTOP, MOBILE]) {
+      const opened = await openFollowManage(browser, viewport, {
+        extra: [{ ...followSource(4, 'paused', 'Kemono', 'paused · Kemono'), enabled: false }],
+      });
+      try {
+        const { page } = opened;
+        for (const theme of ['light', 'dark']) {
+          await page.evaluate((value) => {
+            document.documentElement.dataset.theme = value;
+            document.documentElement.classList.toggle('dark', value === 'dark');
+          }, theme);
+          const card = page.getByRole('region', { name: 'paused 的关注来源', exact: true });
+          const badge = card.getByText('已暂停', { exact: true });
+          assert.equal(await badge.evaluate((node) => getComputedStyle(node).color),
+            await tokenColor(page, '.peach-react', '--color-text-primary'));
+          assert.notEqual(await badge.evaluate((node) => getComputedStyle(node).backgroundColor),
+            await card.evaluate((node) => getComputedStyle(node).backgroundColor));
+          const row = card.locator('[data-follow-source-row]').last();
+          await row.hover();
+          const corners = await row.evaluate((node) => {
+            const parent = node.closest('section')!, outer = getComputedStyle(parent), inner = getComputedStyle(node);
+            return { outer: parseFloat(outer.borderBottomLeftRadius), inset: parseFloat(outer.paddingBottom),
+              left: parseFloat(inner.borderBottomLeftRadius), right: parseFloat(inner.borderBottomRightRadius),
+              top: parseFloat(inner.borderTopLeftRadius) };
+          });
+          assert.equal(corners.left + corners.inset, corners.outer);
+          assert.equal(corners.right, corners.left);
+          assert.equal(corners.top, 0);
+        }
+        assert.deepEqual(opened.problems, []);
       } finally {
         await opened.close();
       }
@@ -815,12 +994,12 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
   it('凭据的四种处境四副底色：待办和完成一眼分得开', { timeout: 60_000 }, async () => {
     const opened = await openFollowManage(browser);
     try {
-      await opened.page.getByRole('button', { name: /^Source and subscription settings/ }).click();
-      await opened.page.getByRole('tab', { name: 'Sources & subscriptions', exact: true, selected: true }).waitFor();
-      await opened.page.getByRole('region', { name: 'Credentials configurable', exact: true }).waitFor();
+      await opened.page.getByRole('link', { name: /^来源与订阅设置/ }).click();
+      await opened.page.getByRole('tab', { name: '来源与订阅', exact: true, selected: true }).waitFor();
+      await opened.page.getByRole('region', { name: '可配置凭据', exact: true }).waitFor();
       await settle(opened.page);
       const faces: Record<string, string> = {};
-      for (const state of ['Required', 'Configured', 'Cannot connect', 'Not needed']) {
+      for (const state of ['需要', '已配置', '暂时无法连接', '不需要']) {
         faces[state] = await opened.page.getByText(state, { exact: true }).first()
           .evaluate((chip) => getComputedStyle(chip).backgroundColor);
       }

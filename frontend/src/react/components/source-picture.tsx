@@ -1,24 +1,54 @@
-import { useQuery } from '@tanstack/react-query';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { coverUrl } from '@peach/card-art';
-import { apiGet } from '../../api';
 import { Button } from '@/components/base/buttons/button';
 import { Note } from './note';
-import { busyProps } from '../settings/use-action';
 import type { JavDetail } from '../jav-detail/jav-detail';
 
-/** 来源图片复用查询及持久图片缓存。 */
+/** 来源图片（样张、来源封面、来源头像）的地址。服务端取过一次就落盘，回的是图片本身，
+ *  浏览器按 ETag 与私有时效缓存；`attempt` 让重试换一个地址，不复用刚失败的那一次。 */
+export const javImageUrl = (code: string, image: string, attempt = 0): string =>
+  `/jav-image?code=${encodeURIComponent(code)}&image=${encodeURIComponent(image)}${attempt ? `&attempt=${attempt}` : ''}`;
+
+/** 来源图片：本地有封面用本地那张，否则经 `/jav-image` 取。 */
 export function SourcePicture({ item, image, thumbnail = false }: {
   item: Pick<JavDetail, 'code' | 'has_cover' | 'source_image' | 'cover_url' | 'cover_version'>;
   image: string; thumbnail?: boolean;
 }) {
+  const [attempt, setAttempt] = useState(0);
+  const [loaded, setLoaded] = useState<{ src: string; alt: string } | null>(null);
+  const [failed, setFailed] = useState('');
+  const picture = useRef<HTMLImageElement>(null);
   const local = image === 'cover' && item.has_cover;
   const remote = !local && (image !== 'cover' || item.source_image);
-  const result = useQuery({ queryKey: ['jav-image', item.code, image], enabled: remote, staleTime: Infinity,
-    queryFn: ({ signal }) => apiGet<{ ok: boolean; image: string; message?: string }>(
-      `/api/jav/image?code=${encodeURIComponent(item.code)}&image=${image}`, signal) });
-  const src = local ? coverUrl(item, true) : result.data?.image || (image === 'cover' && !item.source_image ? item.cover_url : '');
-  if (src) return <img data-jav-picture={thumbnail ? undefined : ''} src={src} alt={thumbnail ? '' : image === 'cover' ? `${item.code} cover` : `${item.code} preview ${Number(image) + 1}`} referrerPolicy="no-referrer" />;
-  if (thumbnail) return remote && result.isPending ? <span className="relative block h-full w-full skeleton-sheen" aria-label="Loading preview" /> : <span>Preview unavailable</span>;
-  if (remote && result.isPending) return <div data-jav-picture-wait="" data-skeleton="image" role="status" aria-label="Loading image"><span className="relative skeleton-sheen" /></div>;
-  return <div data-jav-picture-wait=""><Note tone="neutral" action={remote ? <Button variant="secondary" {...busyProps(result.isFetching)} onClick={() => { void result.refetch() }}>Retry</Button> : undefined}>{result.data?.message || (result.error ? 'Image unavailable' : 'Cover unavailable')}</Note></div>;
+  const alt = thumbnail ? '' : image === 'cover' ? `${item.code} 封面` : `${item.code} 预览 ${Number(image) + 1}`;
+  const src = remote ? javImageUrl(item.code, image, attempt) : local ? coverUrl(item, true) : item.cover_url || '';
+  useLayoutEffect(() => {
+    const node = picture.current;
+    if (node?.complete && node.naturalWidth > 0) setLoaded({ src, alt });
+  }, [src, alt]);
+  if (!remote) {
+    if (src) return <img ref={picture} data-jav-picture={thumbnail ? undefined : ''} src={src} alt={alt} referrerPolicy="no-referrer"
+      onLoad={() => setLoaded({ src, alt })} />;
+    return thumbnail ? <span>预览未取得</span> : <div data-jav-picture-wait=""><Note tone="neutral">封面未取得</Note></div>;
+  }
+  if (failed === src) {
+    if (thumbnail) return <span>预览未取得</span>;
+    return <div data-jav-picture-wait=""><Note tone="neutral"
+      action={<Button variant="secondary" onClick={() => setAttempt((value) => value + 1)}>立即重试</Button>}>
+      图片未取得</Note></div>;
+  }
+  const ready = loaded?.src === src;
+  const reveal = async (node: HTMLImageElement) => {
+    try { await node.decode() } catch { return }
+    if (picture.current === node && node.getAttribute('src') === src) setLoaded({ src, alt });
+  };
+  return <>
+    {ready || loaded ? null : thumbnail
+      ? <span className="relative block h-full w-full skeleton-sheen" aria-label="正在读取预览" />
+      : <div data-jav-picture-wait="" data-skeleton="image" role="status" aria-label="正在读取图片"><span className="relative skeleton-sheen" /></div>}
+    {!ready && loaded ? <img data-jav-picture={thumbnail ? undefined : ''} data-source-picture="" src={loaded.src}
+      alt={loaded.alt} referrerPolicy="no-referrer" /> : null}
+    <img ref={picture} data-jav-picture={thumbnail ? undefined : ''} data-source-picture="" src={src} alt={alt} referrerPolicy="no-referrer"
+      hidden={!ready} onLoad={event => { void reveal(event.currentTarget) }} onError={() => setFailed(src)} />
+  </>;
 }

@@ -11,10 +11,11 @@
  * 令牌与密码只往本机凭据文件写，读接口只回「存没存过」，所以令牌框保存后清空、提示改成
  * 「已保存，留空不改」。PikPak 要人机验证时服务端回一个验证页地址，这里给出链接让用户在浏览器
  * 里完成，Peach 不替他过验证。 */
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 
 import { Button } from '@/components/base/buttons/button';
 import { Chip } from '@/components/base/badges/chip';
+import { StatusLabel } from '../components/status-label';
 import { Checkbox } from '@/components/base/checkbox/checkbox';
 import { Input } from '@/components/base/input/input';
 import { Select, SelectItem } from '@/components/base/select/select';
@@ -25,13 +26,14 @@ import type {
 } from '../bundle';
 import { LoadingDots } from '../components/loading-dots';
 import { Note } from '../components/note';
-import { SourceLabel, PROVIDER_ICONS } from '../components/source-label';
+import { SourceLabel, providerIcon } from '../components/source-label';
 import { groupRoot } from './configuration-panel';
 import {
   ErrorText, ExternalLink, Fact, FactList, FieldLabel, Footer, Help, Section, Stack,
 } from './section';
 import { busyProps, useAction } from './use-action';
 import { JavBrowserSettings } from './jav-browser-settings';
+import { CLOUD_LOCATIONS } from '../../core/media-sources';
 
 export const DOWNLOADS_URL = '/api/configuration/downloads';
 const CHECK_URL = '/api/configuration/downloads/check';
@@ -40,16 +42,19 @@ const LOGIN_URL = '/api/configuration/downloads/pikpak/login';
 const LOGOUT_URL = '/api/configuration/downloads/pikpak/logout';
 const BROWSER_URL = '/api/configuration/downloads/pikpak/browser-login';
 const POLL_MS = 2000;
+const PikPakIcon = providerIcon('pikpak');
 
 /** 「下载渠道」分组：CloudDrive2 与 PikPak 账号。 */
-export function DownloadGroup({ initial, receipt, panel }: {
-  initial: DownloadSettingsState;
+export function DownloadGroup({ initial, receipt, panel, issues }: {
+  initial?: DownloadSettingsState;
   receipt(message: string): void;
   panel?: ConfigurationPanel;
+  issues?: ReactNode;
 }) {
   return (
     <div {...groupRoot(panel)}>
-      <DownloadSettings initial={initial} receipt={receipt} />
+      {issues}
+      {initial ? <DownloadSettings initial={initial} receipt={receipt} /> : null}
     </div>
   );
 }
@@ -61,13 +66,19 @@ export function DownloadSettings({ initial, receipt }: {
   const [state, setState] = useState(initial);
   // 账号框放在上面这一层：云下载卡要知道用户有没有在用 PikPak，没在用就不报 PikPak 根的提示。
   const [username, setUsername] = useState('');
-  const pikpakAccount = state.pikpak.logged_in || Boolean(username.trim());
+  useEffect(() => {
+    setState(current => ({ ...current, media_sources: initial.media_sources, pikpak_roots: initial.pikpak_roots }));
+  }, [initial.media_sources, initial.pikpak_roots]);
+  const sources = state.media_sources ?? [];
+  const hasPikPak = sources.includes('pikpak');
+  const hasCloud = sources.some(source => CLOUD_LOCATIONS.includes(source));
+  const pikpakAccount = hasPikPak && (state.pikpak.logged_in || Boolean(username.trim()));
   return (
     <>
-      <DownloadForm state={state} settle={setState} receipt={receipt} pikpakAccount={pikpakAccount} />
-      <PikPakAccount state={state} settle={setState} receipt={receipt} username={username} setUsername={setUsername} />
+      {hasCloud ? <DownloadForm state={state} settle={setState} receipt={receipt} pikpakAccount={pikpakAccount} /> : null}
+      {hasPikPak ? <PikPakAccount state={state} settle={setState} receipt={receipt} username={username} setUsername={setUsername} /> : null}
       <JavBrowserSettings receipt={receipt} refreshKey={JSON.stringify([
-        state.config, state.token_set, state.pikpak.logged_in,
+        state.media_sources, state.config, state.token_set, state.pikpak.logged_in,
       ])} />
     </>
   );
@@ -89,11 +100,14 @@ function DownloadForm({ state, settle, receipt, pikpakAccount }: CardProps & { p
   const [failure, setFailure] = useState('');
   const [saveBlocked, setSaveBlocked] = useState(false);
   const action = useAction();
+  const sources = state.media_sources ?? [];
+  const has115 = sources.includes('115');
+  const hasPikPak = sources.includes('pikpak');
   const target = (key: '115' | 'pikpak') => config.targets[key] ?? '';
   const setTarget = (key: '115' | 'pikpak', value: string) =>
     setConfig({ ...config, targets: { ...config.targets, [key]: value } });
   // 检查标为不存在、用户也没改过的那个目录，存下来提交时只会报「没有这个文件夹」。
-  const missing = Boolean(suggested.target && !suggested.target.exists && target('115') === suggested.target.path);
+  const missing = has115 && Boolean(suggested.target && !suggested.target.exists && target('115') === suggested.target.path);
 
   // 把一份检查报告落到表单上：留空的地址、115 目标目录与 PikPak 根填建议值，用户填过的不覆盖。
   // `saved` 是服务端保存时已经存上的 115 目标目录，它不再填回、也不再说「保存配置后生效」。
@@ -178,7 +192,8 @@ function DownloadForm({ state, settle, receipt, pikpakAccount }: CardProps & { p
   };
 
   return (
-    <Section title="Cloud download" onSubmit={submit}>
+    <Section title="云下载" onSubmit={submit}>
+      {state.problems?.length ? <Stack><Note tone="error" title="云下载配置需要检查">{state.problems.join('\n')}</Note></Stack> : null}
       <Stack>
         <Input label="CloudDrive2 address" placeholder="Leave blank to detect automatically" autoComplete="off" maxLength={200}
           value={config.clouddrive_address} isDisabled={!state.available}
@@ -187,27 +202,27 @@ function DownloadForm({ state, settle, receipt, pikpakAccount }: CardProps & { p
           placeholder={state.token_set ? 'Saved; leave blank to keep' : 'Generate in CloudDrive2 under Settings → API token'}
           hint="Requires offline task permission."
           value={token} isDisabled={!state.available} onChange={setToken} />
-        <Input label={<SourceLabel source="115" label="115 target folder" />} placeholder="Filled in automatically from push discovery when blank" autoComplete="off" maxLength={300}
+        {has115 ? <Input label={<SourceLabel source="115" label="115 目标目录" />} placeholder="留空时根据媒体库目录自动填写" autoComplete="off" maxLength={300}
           validationBehavior="aria" isInvalid={missing}
-          hint={missing ? (saveBlocked ? 'Create this folder first, or enter an existing one.' : 'This folder does not exist.') : 'Should be inside a cloud path prefix that is imported automatically.'}
-          value={target('115')} isDisabled={!state.available} onChange={(value) => setTarget('115', value)} />
-        <Input label={<SourceLabel source="pikpak" label="PikPak target folder" />} placeholder="Cloud path starting with /" autoComplete="off" maxLength={300}
-          hint="The folder must already exist."
+          hint={missing ? (saveBlocked ? '先新建这个目录，或填写已有目录。' : '这个目录不存在。') : '应位于自动入库的云端路径前缀内。'}
+          value={target('115')} isDisabled={!state.available} onChange={(value) => setTarget('115', value)} /> : null}
+        {hasPikPak ? <><Input label={<SourceLabel source="pikpak" label="PikPak 目标目录" />} placeholder="以 / 开头的网盘路径" autoComplete="off" maxLength={300}
+          hint="目录要已经存在。"
           value={target('pikpak')} isDisabled={!state.available} onChange={(value) => setTarget('pikpak', value)} />
         <div className="flex flex-col gap-1">
           <FieldLabel><SourceLabel source="pikpak" label="Media folder for the PikPak root" /></FieldLabel>
           {state.pikpak_roots.length ? (
-            <Select aria-label="Media folder for the PikPak root" selectedKey={config.pikpak_root || null}
-              isDisabled={!state.available} placeholder="Chosen from push discovery on check"
+            <Select aria-label="PikPak 根目录对应的媒体目录" selectedKey={config.pikpak_root || null}
+              isDisabled={!state.available} placeholder="检查时根据媒体库目录选择"
               onSelectionChange={(key) => setConfig({ ...config, pikpak_root: key === null ? '' : String(key) })}>
               {state.pikpak_roots.map((root) => <SelectItem key={root} id={root}>{root}</SelectItem>)}
             </Select>
           ) : (
             <Help>First add the PikPak mount folder under "Libraries and import".</Help>
           )}
-        </div>
-        <Input label="Wait limit (hours)" type="number" inputMode="numeric" autoComplete="off"
-          hint={`Marked as stalled on timeout; enter 1–${state.max_wait_hours} hours.`}
+        </div></> : null}
+        <Input label="等待上限（小时）" type="number" inputMode="numeric" autoComplete="off"
+          hint={`超时标为停滞；可填 1–${state.max_wait_hours} 小时。`}
           value={hours} isDisabled={!state.available} onChange={setHours} />
       </Stack>
       {action.busy === 'auto' ? <Stack divided><LoadingDots label="Checking CloudDrive2" /></Stack> : null}
@@ -249,13 +264,15 @@ function CheckReport({ report, detected, suggested, create, creating }: {
   creating: boolean;
 }) {
   const folder = suggested.target;
+  const hasFacts = Boolean(detected || folder || suggested.root || report.permissions.length || report.folder || report.quota);
+  if (!hasFacts && !report.problems.length) return null;
   return (
     <Stack divided>
-      <FactList>
-        {detected ? <Fact term="CloudDrive2 address">{`Detected ${detected}; takes effect after saving`}</Fact> : null}
+      {hasFacts ? <FactList>
+        {detected ? <Fact term="CloudDrive2 地址">{`探测到 ${detected}，保存配置后生效`}</Fact> : null}
         {folder?.exists ? (
-          <Fact term={<SourceLabel source="115" label="115 target folder" />}>
-            {suggested.saved ? `Filled in from push discovery: ${folder.path}` : `Will fill in ${folder.path} from push discovery; takes effect after saving`}
+          <Fact term={<SourceLabel source="115" label="115 目标目录" />}>
+            {suggested.saved ? `已根据媒体库目录填入 ${folder.path}` : `根据媒体库目录填入 ${folder.path}，保存配置后生效`}
           </Fact>
         ) : null}
         {folder && !folder.exists ? (
@@ -264,12 +281,12 @@ function CheckReport({ report, detected, suggested, create, creating }: {
             {create ? <Button variant="secondary" size="small" onClick={() => create(folder.path)} {...busyProps(creating)}>Create this folder</Button> : null}
           </Fact>
         ) : null}
-        {suggested.root ? <Fact term={<SourceLabel source="pikpak" label="PikPak root folder" />}>{`Will fill in ${suggested.root} from push discovery; takes effect after saving`}</Fact> : null}
+        {suggested.root ? <Fact term={<SourceLabel source="pikpak" label="PikPak 根目录" />}>{`根据媒体库目录填入 ${suggested.root}，保存配置后生效`}</Fact> : null}
         {report.permissions.length ? (
-          <Fact term="Offline permissions">
-            <Chip variant="caption" color={report.missing.length ? 'yellow' : 'lime'}>
-              {report.missing.length ? `Missing: ${report.missing.join(', ')}` : 'Complete'}
-            </Chip>
+          <Fact term="离线权限">
+            {report.missing.length
+              ? report.missing.map(permission => <Chip key={permission} variant="caption" color="yellow">{`缺 ${permission}`}</Chip>)
+              : <Chip variant="caption" color="lime">齐全</Chip>}
           </Fact>
         ) : null}
         {report.folder ? (
@@ -278,7 +295,7 @@ function CheckReport({ report, detected, suggested, create, creating }: {
         {report.quota ? (
           <Fact term={<SourceLabel source="115" label="115 offline quota" />}>{`${report.quota.left} of ${report.quota.total} left this month`}</Fact>
         ) : null}
-      </FactList>
+      </FactList> : null}
       {report.problems.map((problem) => <ErrorText key={problem}>{problem}</ErrorText>)}
     </Stack>
   );
@@ -378,12 +395,14 @@ function PikPakAccount({ state, settle, receipt, username, setUsername }: CardPr
     </>
   );
   const passwordLogin = (
-    <Button type="submit" disabled={!state.available || waiting} {...busyProps(action.busy === 'login')}>Sign in</Button>
+    <Button type="submit" variant="primary" disabled={!state.available || waiting} {...busyProps(action.busy === 'login')}>登录</Button>
   );
   const outcomeFailed = browser.state === 'timeout' || browser.state === 'failed';
 
   return (
-    <Section title="PikPak account" icon={<PROVIDER_ICONS.pikpak />} onSubmit={login}>
+    <Section title="PikPak 账号" icon={<PikPakIcon />} onSubmit={login}
+      aside={<StatusLabel tone={account.logged_in ? 'success' : waiting ? 'progress' : outcomeFailed ? 'error' : 'neutral'}>
+        {account.logged_in ? '已登录' : waiting ? '等待登录' : outcomeFailed ? '登录未完成' : '待登录'}</StatusLabel>}>
       {account.logged_in ? (
         <FactList>
           <Fact term="Account">{account.username || 'Signed in'}</Fact>
@@ -403,13 +422,13 @@ function PikPakAccount({ state, settle, receipt, username, setUsername }: CardPr
       <Footer status={!account.logged_in && waiting
         ? <LoadingDots label={browser.message || 'Waiting for you to sign in to PikPak in the browser window'} /> : null}>
         {account.logged_in ? (
-          <Button variant="secondary" onClick={logout} disabled={!state.available} {...busyProps(action.busy === 'logout')}>Sign out</Button>
-        ) : <>{passwordLogin}{!browser.available ? null : waiting ? (
-          <Button variant="secondary" type="button" onClick={cancelBrowser} {...busyProps(action.busy === 'cancel')}>Cancel</Button>
+          <Button variant="secondary" onClick={logout} disabled={!state.available} {...busyProps(action.busy === 'logout')}>登出</Button>
+        ) : <>{!browser.available ? null : waiting ? (
+          <Button variant="secondary" type="button" onClick={cancelBrowser} {...busyProps(action.busy === 'cancel')}>取消</Button>
         ) : (
-          <Button type="button" onClick={openBrowser} disabled={!state.available}
-            {...busyProps(action.busy === 'browser')}>Sign in with browser</Button>
-        )}</>}
+          <Button variant="secondary" type="button" onClick={openBrowser} disabled={!state.available}
+            {...busyProps(action.busy === 'browser')}>用浏览器登录</Button>
+        )}{passwordLogin}</>}
       </Footer>
     </Section>
   );

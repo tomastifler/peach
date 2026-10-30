@@ -1,6 +1,6 @@
 # ADR-0043：amane 刮削站点以薄桥子进程接入
 
-- 状态：Accepted
+- 状态：Accepted；桌面与 Docker 的决策三由 [ADR-0125](0125-packaged-scraping-runtime.md) 取代。
 - 日期：2026-09-22
 
 ## 背景

@@ -90,6 +90,10 @@ export function useEntityOnline(author: string, active: boolean, wall: {
   };
   return {
     view, media, result, data, visible, context, head, actions, busy: active && pending,
+    clearFilters: () => {
+      patch({ status: '', provider: '', tags: [], durMin: 0, durMax: 0, work: '' });
+      setSelection({ author, media: '' });
+    },
     /** 读数：这一档状态下的条目数，同关注页的口径（`counts` 随来源、标签筛选变）。 */
     total: data ? total : null,
     /** 正文那一格的键：换筛选换一份骨架。媒体不进键，换视频／图片不重取。 */

@@ -3,7 +3,7 @@
   height:var(--topH);padding:0 16px;border-bottom:1px solid var(--line-soft);
   background:color-mix(in srgb,var(--ground) 88%,transparent);
   backdrop-filter:saturate(1.8) blur(20px);-webkit-backdrop-filter:saturate(1.8) blur(20px)}
-.ib{background:none;border:0;border-radius:var(--control-radius);cursor:pointer;width:40px;height:40px;
+.ib{background:none;border:0;border-radius:var(--control-radius);cursor:pointer;width:var(--control-h-large);height:var(--control-h-large);
   flex:none;display:inline-flex;align-items:center;justify-content:center;color:var(--ink-2);
   padding:0;line-height:0;transition:background .12s,color .12s}
 .top .ib[hidden]{display:none}
@@ -16,7 +16,7 @@
 .brand h1{font-family:Bahnschrift,"Segoe UI Variable Display","Microsoft YaHei UI","PingFang SC",sans-serif;font-weight:600;margin:0;font-size:var(--fs-xl);line-height:1;letter-spacing:.08em}
 .brand .sub{font-size:var(--fs-xs);line-height:1;letter-spacing:.14em;color:var(--muted);padding-top:2px}
 .search{flex:1;max-width:620px;margin:0 auto;display:flex;align-items:center;gap:8px;
-  background:var(--surface);border:1px solid var(--line);border-radius:var(--pill-radius);padding:8px 16px;position:relative;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--pill-radius);height:var(--control-h-large);padding:0 16px;position:relative;
   transition:box-shadow .12s ease}
 .search:focus-within{box-shadow:inset 0 0 0 2px var(--color-border-button-active)}
 .search input{flex:1;min-width:0;background:none;border:0;outline:none;font-size:var(--fs-lg)}
@@ -29,6 +29,7 @@
   background:color-mix(in srgb,var(--surface) 96%,var(--ground));
   box-shadow:0 22px 56px -20px #000b;backdrop-filter:saturate(1.5) blur(26px)}
 .searchmenu[hidden]{display:none}
+.searchmenu>.ovtrack{pointer-events:auto;touch-action:none}
 /* 栏里的行、组与页签归 `search` 岛（`frontend/src/react/search/search.css`）。两栏与否看下拉栏自己
    有多宽，不看窗口，所以容器查询名挂在这块面上。 */
 .searchmenu{container:searchmenu/inline-size}

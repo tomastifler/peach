@@ -95,7 +95,8 @@ def fingerprint(connection: sqlite3.Connection, entity_id: int) -> str:
     links = connection.execute(
         "SELECT count(*) FROM entity_link WHERE entity_id=? AND link_kind IN (?,?)",
         (int(entity_id), *studio_icons.ICON_LINK_KINDS)).fetchone()[0]
-    return f"{assets}/{links}"
+    from .upgrade_rules import CATALOG
+    return f"{CATALOG}/{assets}/{links}"
 
 
 def stock(connection: sqlite3.Connection, logo_root, attempts, *, limit: int,
@@ -126,8 +127,14 @@ def stock(connection: sqlite3.Connection, logo_root, attempts, *, limit: int,
 
 
 def run(contract, key: str, handle) -> dict:
-    """跑一条补厂牌后继，再把厂牌当时的指纹记进 `Attempts`，存量补派按它判。"""
+    """跑一条补厂牌后继，再把厂牌当时的指纹记进 `Attempts`，存量补派按它判。
+
+    人像闸取不到模型的那一次不记：结论取决于那天有没有网，记下来就要等到这家多一部
+    作品或多一条链接才会再试，活动中心「立即重试」取回模型之后也补不回来。
+    """
     summary = _run(contract, key, handle)
+    if summary.get("face_match_unavailable"):
+        return summary
     with contract.database.read_connection() as connection:
         current = fingerprint(connection, parse_key(key))
     Attempts(attempts_root(contract.candidate_root)).record(
@@ -192,12 +199,12 @@ def _land_site(contract, entity_id: int, name: str, aliases, batch: str) -> dict
 
 def _land_mark(contract, entity_id: int, name: str, batch: str) -> dict:
     """按账本里这家的链接取图，可装的直接落盘。"""
-    import httpx
+    from .peach_proxy import http_client
 
     with contract.database.read_connection() as connection:
         entries = studio_icons.entity_links(connection, entity_id, name)
     candidate_dir = contract.candidate_root / "provider-cache" / "studio-icons"
-    client = httpx.Client(trust_env=True, follow_redirects=True)
+    client = http_client(root=contract.follow_secrets_root, follow_redirects=True)
     try:
         landed = studio_icons.land_one(
             name, entries, contract.logo_root, candidate_dir,

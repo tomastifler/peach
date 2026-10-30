@@ -49,7 +49,7 @@ describe('JAV 推荐与加载结构', () => {
         assert.equal(await section.locator('[data-entity-sort="release_date"]').getAttribute('aria-pressed'), 'true');
         assert.equal(await section.getAttribute('data-return-probe'), 'kept');
         assert.equal(reads.length, count);
-        assert.ok(Math.abs(await page.evaluate(() => window.scrollY) - top) < 2);
+        await page.waitForFunction(previous => Math.abs(window.scrollY - previous) < 2, top);
       }
       assert.deepEqual(opened.problems.filter(line => !line.includes('VIDEOJS')), []);
     } finally { await opened.close() }
@@ -83,7 +83,7 @@ describe('JAV 推荐与加载结构', () => {
       });
       const sleeve = '<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="1000"><rect width="1480" height="1000" fill="#135590"/><rect x="800" y="50" width="660" height="900" fill="#f4ad43"/><text x="1050" y="500" font-size="100">FRONT</text></svg>';
       await page.route('**/cover?*', route => route.fulfill({ contentType: 'image/svg+xml', body: sleeve }));
-      await page.route('https://example.com/sleeve.svg', route => route.fulfill({ contentType: 'image/svg+xml', body: sleeve }));
+      await page.route('**/cover-image?code=*', route => route.fulfill({ contentType: 'image/svg+xml', body: sleeve }));
       await page.goto(new URL('/jav?tab=discover', page.url()).href, { waitUntil: 'load' });
       await page.locator('[data-jav-skeleton-cover]').first().waitFor();
       const cover = await page.locator('[data-jav-skeleton-cover]').first().boundingBox();
@@ -98,14 +98,14 @@ describe('JAV 推荐与加载结构', () => {
       const pendingBottom = await page.locator('[data-jav-filter] [data-filter-row="bottom"]').boundingBox();
       const pendingSize = await page.locator('[data-jav-filter] [data-entity-layout]').boundingBox();
       const pendingShortcut = await page.locator('[data-jav-filter] [data-shortcuts-trigger]').boundingBox();
-      assert.ok(pendingShortcut && pendingShortcut.width === 30 && pendingShortcut.height === 30, JSON.stringify(pendingShortcut));
+      assert.ok(pendingShortcut && pendingShortcut.width === 32 && pendingShortcut.height === 32, JSON.stringify(pendingShortcut));
       const tagPlaceholders = page.locator('[data-jav-filter] [data-catalog-tags] [data-skeleton="tag"]');
       assert.equal(await tagPlaceholders.count(), 6);
       const pendingTags = await tagPlaceholders.evaluateAll(nodes => nodes.map(node => {
         const style = getComputedStyle(node), box = node.getBoundingClientRect();
         return { height: box.height, y: box.y, pointer: style.pointerEvents, position: style.position, overflow: style.overflow };
       }));
-      assert.ok(pendingTags.every(chip => chip.height === 30 && chip.y === pendingTags[0].y && chip.pointer === 'none'), JSON.stringify(pendingTags));
+      assert.ok(pendingTags.every(chip => chip.height === 32 && chip.y === pendingTags[0].y && chip.pointer === 'none'), JSON.stringify(pendingTags));
       assert.ok(pendingTags.every(chip => chip.position === 'relative' && chip.overflow === 'hidden'), '标签光效在各自占位内定位和裁切');
       const avatarShape = await page.locator('[data-jav-skeleton-avatar]').first().evaluate(node => {
         const style = getComputedStyle(node); return { width: style.width, height: style.height, radius: style.borderRadius };

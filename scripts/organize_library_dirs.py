@@ -525,7 +525,7 @@ def restore(pairs):
     return failures
 
 def staging_name(source):
-    prefix = 'peach-organize-' if PureWindowsPath(source).drive.casefold() == 'a:' else '.peach-organize-'
+    prefix = 'peach-organize-' if resolve_root(source, location_roots())[0] == 'pikpak' else '.peach-organize-'
     return prefix + hashlib.sha256(source.encode()).hexdigest()[:20]
 
 
@@ -784,7 +784,7 @@ def provider_moves(pairs, root, allow_intermediate=True):
     result = []
     for old, new in pairs:
         source, target = PureWindowsPath(old), PureWindowsPath(new)
-        if source.drive.casefold() == 'a:' and source.parent != target.parent and source.name != target.name:
+        if source.parent != target.parent and source.name != target.name:
             if not allow_intermediate:
                 raise ValueError('目录折叠的改名中间路径需单独复核')
             intermediate = str(source.with_name(target.name))
@@ -891,7 +891,7 @@ def run_apply(stage, backup, limit, seconds, location=None, retry_failed=False, 
                       if organize.unverified_location(owner)})
     if blocked:
         raise ValueError('冻结批次含 ' + '、'.join(blocked) + ' 来源的操作，挂载改名无法核验云端结果；'
-                         'A 盘须用 --location pikpak --pikpak-webdav 经官方通道执行，其他来源用 --location 限定')
+                         'PikPak 须用 --location pikpak --pikpak-webdav 经官方通道执行，其他来源用 --location 限定')
     lock = PidFileLock(OUT/'directory-job.lock')
     lock.acquire()
     db = None
@@ -1020,7 +1020,7 @@ def run_rollback(stage, batch=None, backup=None, location=None, apply=False):
     blocked = sorted({owner for *_, owner, _ in candidates if organize.unverified_location(owner)})
     if blocked:
         raise ValueError('撤回含 ' + '、'.join(blocked) + ' 来源的操作，挂载改名无法核验云端结果；'
-                         'A 盘须用 --location pikpak --pikpak-webdav 经官方通道撤回')
+                         'PikPak 须用 --location pikpak --pikpak-webdav 经官方通道撤回')
     lock = PidFileLock(OUT/'directory-job.lock')
     lock.acquire()
     db = None
@@ -1051,12 +1051,14 @@ def run_rollback(stage, batch=None, backup=None, location=None, apply=False):
         lock.release()
 
 def pikpak_channel(stage, batch):
-    """A 盘批次的官方核验改名通道。"""
+    """PikPak 批次的官方核验改名通道。"""
     from peach.organize_clouddrive import pikpak_renames
     payload = json.loads((OUT/f'{stage}-{batch}-manifest.json').read_text(encoding='utf-8'))
-    rows = [row for op in payload['operations'] for row in op['rows'] if row['path'].startswith('A:')]
+    roots = payload['roots'].get('pikpak', ())
+    rows = [row for op in payload['operations'] for row in op['rows']
+            if any(beneath(row['path'], root) for root in roots)]
     if not rows:
-        raise ValueError('冻结批次没有 A 盘资源')
+        raise ValueError('冻结批次没有已声明的 PikPak 资源')
     return pikpak_renames(rows[0]['path'], payload['roots'])
 
 def self_check():
@@ -1139,7 +1141,7 @@ if __name__ == '__main__':
     parser.add_argument('--retry-failed', action='store_true')
     parser.add_argument('--skip-collapses', action='store_true')
     parser.add_argument('--pikpak-webdav', action='store_true',
-                        help='A 盘批次经 CloudDrive 官方改名与移动执行，并以官方完整目录核验；A 盘操作必须带它')
+                        help='PikPak 批次经 CloudDrive 官方改名与移动执行，并以官方完整目录核验；PikPak 操作必须带它')
     parser.add_argument('--batch', type=lambda value: value if re.fullmatch(r'[a-zA-Z0-9_-]+', value)
                         else parser.error('批次编号只能包含字母、数字、下划线与连字号'))
     parser.add_argument('--rollback', action='store_true',

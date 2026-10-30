@@ -19,7 +19,7 @@ describe('任务中心标题排版', () => {
         await held;
         await route.fulfill({ json: { available: true,
           running: [{ ...settledRun(1, 'running', '正在运行的示例任务'), finished_at: null }],
-          skipped: [settledRun(2, 'skipped', '被挡下的示例任务')],
+          skipped: [settledRun(2, 'skipped', '本次未执行示例任务')],
           finished: [settledRun(3, 'succeeded', '已完成的示例任务')],
         } });
       });
@@ -35,7 +35,7 @@ describe('任务中心标题排版', () => {
       assert.equal(waiting.size, '20px');
       release();
       await page.locator('[data-skeleton="board/tasks"]').waitFor({ state: 'detached' });
-      for (const title of ['In progress', 'Blocked', 'Recently completed']) {
+      for (const title of ['正在进行', '本次未执行', '最近完成']) {
         const heading = page.getByRole('heading', { name: title, exact: true });
         await heading.waitFor();
         assert.deepEqual(await heading.evaluate(read), waiting);

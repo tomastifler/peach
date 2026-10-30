@@ -1,12 +1,14 @@
-import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { firstGrapheme } from '@peach/legacy/core';
-import { apiGet } from '../../api';
+import { javImageUrl } from './source-picture';
+import { entityDisplayName } from '../../core/entity-names';
+import { useEntityNames } from '../use-entity-names';
 
-/** 来源头像与详情共用查询缓存；取图失败时保留首字。 */
+/** 来源头像经 `/jav-image` 取，浏览器缓存复用；进入视口才取，取图失败时保留首字。 */
 export function SourceAvatar({ code, person, detail = false }: {
   code: string; person: { name: string; source_actor_id?: string }; detail?: boolean;
 }) {
+  useEntityNames();
   const node = useRef<HTMLSpanElement>(null);
   const [visible, setVisible] = useState(detail || typeof IntersectionObserver === 'undefined');
   useEffect(() => {
@@ -17,12 +19,7 @@ export function SourceAvatar({ code, person, detail = false }: {
     observer.observe(node.current);
     return () => observer.disconnect();
   }, [visible]);
-  const result = useQuery({ queryKey: ['jav-actor-image', code, person.source_actor_id],
-    enabled: visible,
-    queryFn: ({ signal }) => apiGet<{ ok: boolean; image: string }>(
-      `/api/jav/image?code=${encodeURIComponent(code)}&image=${encodeURIComponent('actor:' + person.source_actor_id)}`, signal),
-    staleTime: 6 * 3600_000 });
-  const face = <><span ref={node} data-source-initial="">{firstGrapheme(person.name)}</span>{result.data?.image
-    ? <img src={result.data.image} alt="" data-drop="self" /> : null}</>;
+  const face = <><span ref={node} data-source-initial="">{firstGrapheme(entityDisplayName('performer', person.name))}</span>{visible && person.source_actor_id
+    ? <img src={javImageUrl(code, `actor:${person.source_actor_id}`)} alt="" data-drop="self" /> : null}</>;
   return detail ? <span data-id-face="">{face}</span> : face;
 }

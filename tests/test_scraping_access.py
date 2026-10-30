@@ -3,6 +3,7 @@ import json
 import io
 from pathlib import Path
 import tempfile
+import threading
 import time
 from types import SimpleNamespace
 import unittest
@@ -73,6 +74,65 @@ class ScrapingAccessTests(unittest.TestCase):
                 transport.renew()
             self.assertEqual(factory.call_count, 2)
             self.assertEqual(fake.close.call_count, 2)
+
+    def test_javbus_language_preference_reaches_checks_and_work_pages(self):
+        from peach.sources import JavBusSource, Session
+
+        save(self.root, "javbus", {"network": "direct", "cookie": "PHPSESSID=test-session"})
+        seen = []
+
+        def respond(request):
+            seen.append(request.url.path)
+            if request.headers.get("Accept-Language") != "zh-CN,zh;q=0.9":
+                return httpx.Response(200, text="<title>Age Verification JavBus</title>")
+            self.assertIn("PHPSESSID=test-session", request.headers.get("cookie", ""))
+            return httpx.Response(200, text=(
+                '<h3>ABW-123 测试作品</h3>'
+                '<p><span class="header">識別碼:</span> ABW-123</p>'
+                '<a class="bigImage" href="/imgs/cover/test.jpg"></a>'))
+
+        def client(root, source, **kwargs):
+            return client_for(root, source, transport=httpx.MockTransport(respond), **kwargs)
+
+        with patch("peach.scraping_access.client_for", side_effect=client):
+            check = w_scraping_check(SimpleNamespace(follow_secrets_root=self.root), {"source": "javbus"})
+            self.assertTrue(check["results"][0]["ok"])
+            transport = SourceTransport(self.root)
+            self.addCleanup(transport.close)
+            record = JavBusSource().query("ABW-123", session=Session(transport))
+        self.assertEqual(record.code, "ABW-123")
+        self.assertEqual(record.cover_urls, ("https://www.javbus.com/imgs/cover/test.jpg",))
+        self.assertEqual(seen, ["/", "/ABW-123"])
+
+    def test_javbus_cover_language_overrides_caller_headers_without_changing_other_sources(self):
+        from peach.jav_cover_fetch import _fetch
+
+        for source in ("javbus", "javdb"):
+            save(self.root, source, {"network": "direct"})
+        seen = []
+
+        def respond(request):
+            seen.append(request)
+            return httpx.Response(200, content=b"cover")
+
+        def client(root, source, **kwargs):
+            return client_for(root, source, transport=httpx.MockTransport(respond), **kwargs)
+
+        transport = SourceTransport(self.root)
+        self.addCleanup(transport.close)
+        with patch("peach.scraping_access.client_for", side_effect=client):
+            self.assertEqual(_fetch(transport, "https://www.javbus.com/imgs/cover/test.jpg",
+                referer="https://www.javbus.com/ABW-123", limit=1024, ranged=True), b"cover")
+            transport(HttpRequest("GET", "https://www.javbus.com/ABW-123",
+                {"accept-language": "en-US", "X-Test": "preserved"}), 1, 1024)
+            self.assertEqual(_fetch(transport, "https://javdb.com/test.jpg",
+                referer="https://javdb.com/", limit=1024), b"cover")
+        self.assertEqual([request.headers["Accept-Language"] for request in seen],
+                         ["zh-CN,zh;q=0.9", "zh-CN,zh;q=0.9", "ja,en;q=0.9"])
+        self.assertEqual(seen[0].headers["Range"], "bytes=0-65535")
+        self.assertEqual(seen[0].headers["Referer"], "https://www.javbus.com/ABW-123")
+        self.assertEqual(seen[1].headers.get_list("Accept-Language"), ["zh-CN,zh;q=0.9"])
+        self.assertEqual(seen[1].headers["X-Test"], "preserved")
 
     def test_browser_obeys_global_direct_proxy_and_environment_modes(self):
         transport = SourceTransport(self.root)
@@ -615,6 +675,67 @@ class BrowserFallbackTests(unittest.TestCase):
             self.assertTrue(describe(self.root, "minnano-av")["browser"])
         save(self.root, "minnano-av", {"network": "direct"})
         self.assertTrue(fixed_to_browser(self.root, "minnano-av"), "改连接方式不丢固定")
+
+    def test_user_pause_between_http_and_browser_waits_before_opening_the_browser(self):
+        from peach.processing_control import ProcessingControl
+
+        control = ProcessingControl(self.root / 'control.json')
+        paused = threading.Event()
+        finished = threading.Event()
+        errors = []
+        browser = self.browser(lambda request: HttpResponse(200, {}, b'<title>actress</title>'))
+        transport = SourceTransport(self.root)
+        self.addCleanup(transport.close)
+
+        def http(*args):
+            control.request('pause', 'job')
+            return HttpResponse(403, {}, b'')
+
+        transport.transports['minnano-av'] = http
+
+        def run():
+            try:
+                with control.bind('job', publish=lambda **values: paused.set() if values.get('status') == 'paused' else None,
+                                  active=lambda: True, db_path=self.root / 'database/ledger.db', mode='high'):
+                    transport(self.request, 1, 100)
+            except BaseException as error:
+                errors.append(error)
+            finally:
+                finished.set()
+
+        with patch('peach.browser_transport.shared', return_value=browser):
+            thread = threading.Thread(target=run)
+            thread.start()
+            try:
+                self.assertTrue(paused.wait(2))
+                self.assertEqual(browser.calls, [])
+                self.assertFalse(finished.is_set())
+            finally:
+                control.request('resume', 'job')
+                thread.join(2)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(browser.calls, [self.SEARCH])
+
+    def test_user_cancel_between_http_and_browser_does_not_open_the_browser(self):
+        from peach.jobs import JobCancelled
+        from peach.processing_control import ProcessingControl
+
+        control = ProcessingControl(self.root / 'control.json')
+        transport = SourceTransport(self.root)
+        self.addCleanup(transport.close)
+
+        def http(*args):
+            control.request('cancel', 'job')
+            return HttpResponse(403, {}, b'')
+
+        transport.transports['minnano-av'] = http
+        with patch('peach.browser_transport.shared') as browser, \
+                control.bind('job', publish=lambda **values: None, active=lambda: True,
+                             db_path=self.root / 'database/ledger.db', mode='high'):
+            with self.assertRaises(JobCancelled):
+                transport(self.request, 1, 100)
+        browser.assert_not_called()
 
     def test_a_challenge_page_over_http_also_gets_the_browser_check(self):
         challenge = HttpResponse(200, {}, b"<html><head><title>Just a moment...</title></head></html>")

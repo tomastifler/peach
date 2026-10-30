@@ -2,6 +2,10 @@
 import { useEffect, useLayoutEffect, useRef, useState, type AnimationEvent, type MouseEvent } from 'react';
 import { fitSkeleton, noteHtml } from '@peach/legacy/ui';
 
+/** 续页哨兵提前多远开始取下一段：一屏高（隐式根的百分比按视口算）。目录接一页是一次 150–250ms
+ *  的请求加几百毫秒的渲染，只提前几百像素时，连续往下滚每一页都要在底部干等。 */
+export const LOAD_MORE_MARGIN = '100% 0px';
+
 /** 骨架与它的退场。骨架那一层在数据到了之后原地变成淡出层：同一个元素、同一段 HTML，
  *  React 不重写它，`fitSkeleton` 补齐的那几张卡也还在。骨架还没到显示门槛（`fitSkeleton`
  *  给它挂着 `.skeleton-awaiting`）就已取完，就直接撤掉，不为从未被看见的占位播退场。
@@ -41,6 +45,6 @@ export function RetryNote({ message, onRetry }: { message: string; onRetry: () =
   };
   return (
     <div data-media-error="" onClick={click}
-      dangerouslySetInnerHTML={{ __html: noteHtml(message, { variant: 'error', actionLabel: 'Retry' }) }} />
+      dangerouslySetInnerHTML={{ __html: noteHtml(message, { variant: 'error', actionLabel: '立即重试' }) }} />
   );
 }

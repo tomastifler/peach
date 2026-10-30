@@ -86,12 +86,19 @@ class MediaSourceCostTests(unittest.TestCase):
                                       (*params, "free")).fetchall()
         self.assertEqual(rows, [("O:\\Public\\film.mp4",)])
 
+    def test_nested_roots_are_refused_before_the_file_is_written(self):
+        with self.assertRaisesRegex(settings_file.SettingsFileError, "互相包含"):
+            settings_file.write(self.config)
+        self.assertFalse(self.config.path.exists())
+
     def test_config_roundtrip_preserves_root_overrides_and_effective_form_cost(self):
-        settings_file.write(self.config)
+        config = replace(self.config, locations={**self.config.locations, "guangya": ("G:/Movies",)},
+                         media_costs={"G:/Movies": "metered", "O:/Public": "free"})
+        settings_file.write(config)
         loaded = settings_file.load_config(environ={"PEACH_DATA_ROOT": str(self.root)})
-        self.assertEqual(loaded.media_costs, self.config.media_costs)
+        self.assertEqual(loaded.media_costs, {"G:/Movies": "metered", "O:/Public": "free"})
         rows = media_configuration.rows(loaded, windows=True)
-        self.assertEqual([row["cost"] for row in rows], ["metered", "free", "free", "metered", "metered"])
+        self.assertEqual([row["cost"] for row in rows], ["metered", "free", "metered", "metered"])
         costs = media_configuration.costs([{"location": "guangya", "path": "G:/Movies", "cost": "free"}],
                                          loaded, windows=True)
         self.assertEqual(costs["G:\\Movies"], "free")
@@ -100,7 +107,7 @@ class MediaSourceCostTests(unittest.TestCase):
         for value in (True, "proxy", [], None):
             self.assertTrue(media_configuration.validate([
                 {"location": "onedrive", "path": "O:/", "cost": value}], windows=True)[2])
-        settings_file.write(replace(self.config, media_costs={"G:/": "unknown"}))
+        settings_file.write(replace(self.config, locations={"guangya": ("G:/Movies",)}, media_costs={"G:/": "unknown"}))
         with self.assertRaisesRegex(settings_file.SettingsFileError, "free.*metered"):
             settings_file.load_config(environ={"PEACH_DATA_ROOT": str(self.root)})
         with self.assertRaisesRegex(ValueError, "column names"):

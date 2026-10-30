@@ -172,8 +172,8 @@ def fetch_json(url: str, timeout: float, *, client_options=None):
     # curl_cffi 0.16.3 的 CONNECT_TO 接收原生 slist；Session 关闭后才释放。
     target = ffi.gc(lib.curl_slist_append(ffi.NULL, f'{host}:443:{address}:443'.encode()), lib.curl_slist_free_all)
     curl_options = {CurlOpt.CONNECT_TO: target}
-    if not options.get('proxy') and not options.get('trust_env'):
-        curl_options[CurlOpt.NOPROXY] = '*'
+    if not options.get('trust_env'):
+        curl_options[CurlOpt.NOPROXY] = '' if options.get('proxy') else '*'
     with requests.Session(curl_options=curl_options, **options) as client:
         try:
             with client.stream('GET', url, timeout=_remaining_seconds(expires), allow_redirects=False,

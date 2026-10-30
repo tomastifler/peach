@@ -411,7 +411,8 @@ def crawler_client() -> "httpx.Client":
     代价只是每次多建一个 client，在 0.8 秒的请求间隔下可以忽略。不改共享默认值——
     那会伤到真正需要复用连接的连接器。
     """
-    return httpx.Client(
+    from .peach_proxy import http_client
+    return http_client(
         follow_redirects=True,
         limits=httpx.Limits(max_connections=4, max_keepalive_connections=0),
         headers={"User-Agent": USER_AGENT},

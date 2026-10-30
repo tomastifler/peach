@@ -122,7 +122,7 @@ def scan_html(path: str, source: str) -> list[Finding]:
 
 
 def targets(root: Path) -> list[Path]:
-    picked = [root / name for name in ("AGENTS.md", "README.md", "README.en.md")]
+    picked = [root / name for name in ("AGENTS.md", "README.md", "README.zh-CN.md")]
     picked.extend(sorted((root / "docs").glob("*.md")))
     picked.extend(sorted((root / ".claude/skills").glob("*/SKILL.md")))
     picked.extend(sorted((root / "web").glob("*.html")))

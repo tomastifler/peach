@@ -1,8 +1,8 @@
 /* 人工复核页的数据契约、分组分页纯函数与写操作。三条端点在 `frontend/src` 里都只在这里
  * 声明一次（`tests/test_frontend_build.py` 盯着）。
  *
- * `['review']` 是整条复核队列。接口一次给出全部分类（实测 4.6 MB、1300 行，本机读
- *   0.1 秒），九个分类合在一个响应里，所以也只用一个 `queryKey`：分类切换是翻这一份的
+ * `['review']` 是整条复核队列。接口一次给出全部分类的可复核行，不重复传候选 CSV 的
+ *   JSON 字符串；各分类合在一个响应里，所以也只用一个 `queryKey`：分类切换是翻这一份的
  *   不同段落，不是另一份真相。判定写回来时只把那几行从缓存里摘掉（`dropReviewRows`），
  *   不为一次判定把整条队列重取一遍。
  *
@@ -83,11 +83,14 @@ export interface ReviewAsset {
  *  形状，用不上的项缺席。 */
 export interface ReviewRow {
   item_key: string;
+  queue_order?: number;
   decision?: string;
   status?: string;
   candidates?: ReviewCandidate[];
   field?: string;
   field_label?: string;
+  current_value?: string;
+  current_owner?: string;
   query?: string;
   code?: string;
   creator?: string;
@@ -136,12 +139,35 @@ export interface ReviewMirror {
   read_only?: boolean;
 }
 
-export interface ReviewData {
+export const REVIEW_QUEUES = ['pending', 'later', 'ignored'] as const;
+export type ReviewQueue = typeof REVIEW_QUEUES[number];
+export const REVIEW_QUEUE_LABELS: Record<ReviewQueue, string> = {
+  pending: '待处理', later: '稍后处理', ignored: '已忽略',
+};
+export const REVIEW_DECISION_LABELS: Record<string, string> = {
+  approved: '已通过', rejected: '已忽略', skipped: '稍后处理',
+};
+export const reviewQueueOf = (value: unknown): ReviewQueue =>
+  value === 'later' || value === 'ignored' ? value : 'pending';
+
+export interface ReviewQueueData {
   sections: Partial<Record<ReviewCategory, ReviewRow[]>>;
   counts: Partial<Record<ReviewCategory, number>>;
+}
+
+export interface ReviewData extends ReviewQueueData {
+  queues: Record<Exclude<ReviewQueue, 'pending'>, ReviewQueueData>;
   /** 收录 genre 时的候选词表：静态表已经投影到的那批内容标签。 */
   genre_tags?: string[];
   mirror?: ReviewMirror | null;
+}
+
+export const reviewQueueData = (data: ReviewData, queue: ReviewQueue): ReviewQueueData =>
+  queue === 'pending' ? { sections: data.sections, counts: data.counts } : data.queues[queue];
+
+function mapReviewQueues(data: ReviewData, transform: (snapshot: ReviewQueueData) => ReviewQueueData): ReviewData {
+  return { ...data, ...transform(reviewQueueData(data, 'pending')),
+    queues: { later: transform(data.queues.later), ignored: transform(data.queues.ignored) } };
 }
 
 /* ── 分组、筛选、分页 ── */
@@ -153,7 +179,7 @@ export interface ReviewGroup { key: string; title: string; rows: ReviewRow[] }
 /** 这一批队列能按什么分组。按来源、按字段两档要队列里真有那一项才出现。 */
 export function reviewGroupingOptions(rows: ReviewRow[], metadata: boolean): [ReviewGrouping, string][] {
   const options: [ReviewGrouping, string][] = [
-    ['candidates', metadata ? 'By source count' : 'All pending review'],
+    ['candidates', metadata ? '按来源数量' : '不分组'],
   ];
   if (rows.some((row) => row.source || row.candidates?.some((candidate) => candidate.source))) {
     options.push(['source', 'By source']);
@@ -178,7 +204,7 @@ export function groupReviewRows(rows: ReviewRow[], by: ReviewGrouping): ReviewGr
       title = sources.join(' / ') || 'Unlabeled source';
     } else {
       key = row.candidates ? (row.candidates.length === 1 ? 'single' : 'multiple') : 'pending';
-      title = key === 'single' ? 'Single source' : key === 'multiple' ? 'Source choice needed' : 'Pending review';
+      title = key === 'single' ? '单一来源' : key === 'multiple' ? '需选择来源' : '资料';
     }
     if (!groups.has(key)) groups.set(key, { key, title, rows: [] });
     groups.get(key)!.rows.push(row);
@@ -270,7 +296,7 @@ export function defaultChoice(row: ReviewRow): RowChoice {
   };
 }
 
-export type DecisionStatus = 'approved' | 'rejected' | 'skipped';
+export type DecisionStatus = 'approved' | 'rejected' | 'skipped' | 'restore';
 
 /** 交给 `/api/review/decision` 的那一份。
  *
@@ -295,12 +321,21 @@ export function decisionPayload(
   };
 }
 
-export const decisionReceipt = (status: DecisionStatus): string =>
-  (status === 'approved' ? 'Details approved' : status === 'rejected' ? 'Details rejected' : 'Details skipped');
+export const decisionReceipt = (status: DecisionStatus): string => ({
+  approved: '已通过资料', rejected: '已忽略资料', skipped: '已移至稍后处理', restore: '已恢复待处理',
+})[status];
 
 /* ── 取数与写操作 ── */
 
-export const fetchReview = (signal?: AbortSignal) => apiGet<ReviewData>(REVIEW_URL, signal);
+export async function fetchReview(signal?: AbortSignal): Promise<ReviewData> {
+  const data = await apiGet<ReviewData>(REVIEW_URL, signal);
+  for (const key of ['later', 'ignored'] as const) {
+    if (!data.queues?.[key]?.sections || !data.queues[key].counts) {
+      throw new Error(`${REVIEW_QUEUE_LABELS[key]}状态未取得，请刷新或更新写入端`);
+    }
+  }
+  return data;
+}
 
 export interface DecisionResult {
   ok: boolean;
@@ -312,25 +347,26 @@ export async function submitDecision(payload: Record<string, unknown>): Promise<
   const result = await apiSend<DecisionResult>(REVIEW_DECISION_URL, payload);
   if (result.ok && result.asset_revisions) {
     const revisions = result.asset_revisions;
-    queryClient.setQueryData<ReviewData>(REVIEW_KEY, (data) => data && ({
-      ...data,
+    queryClient.setQueryData<ReviewData>(REVIEW_KEY, (data) => data && mapReviewQueues(data, snapshot => ({
+      ...snapshot,
       sections: {
-        ...data.sections,
-        metadata_fields: data.sections.metadata_fields?.map((row) => {
+        ...snapshot.sections,
+        metadata_fields: snapshot.sections.metadata_fields?.map((row) => {
           const change = revisions[String(row.asset_id)];
           return row.asset_path && change && row.asset_mutation_revision === change.before
             ? { ...row, asset_mutation_revision: change.after } : row;
         }),
       },
-    }));
+    })));
   }
   return result;
 }
 
 /** 批量队列保留行身份；并发凭据来自共享缓存里的最新回执。 */
 export function currentReviewRow(category: ReviewCategory, row: ReviewRow): ReviewRow {
-  return queryClient.getQueryData<ReviewData>(REVIEW_KEY)?.sections[category]
-    ?.find((item) => item.item_key === row.item_key) || row;
+  const data = queryClient.getQueryData<ReviewData>(REVIEW_KEY);
+  return data ? REVIEW_QUEUES.flatMap(key => reviewQueueData(data, key).sections[category] || [])
+    .find(item => item.item_key === row.item_key) || row : row;
 }
 
 /** 收录一个 genre（给中文名）或把它判成非内容（`tag` 留空）。 */
@@ -346,18 +382,29 @@ export async function prefetchReview(signal: AbortSignal): Promise<void> {
  *
  *  失败的那几条不动：它们还要留在屏幕上供重试。 */
 export function dropReviewRows(category: ReviewCategory, keys: string[]): void {
+  settleReviewRows(category, keys, 'approved');
+}
+
+/** 一份响应内移动状态，三个队列的行与计数同时更新；失败的行保持原位。 */
+export function settleReviewRows(category: ReviewCategory, keys: string[], status: DecisionStatus): void {
   const gone = new Set(keys);
   if (!gone.size) return;
   queryClient.setQueryData<ReviewData>(REVIEW_KEY, (data) => {
     if (!data) return data;
-    const rows = data.sections[category] || [];
-    const kept = rows.filter((row) => !gone.has(String(row.item_key)));
-    if (kept.length === rows.length) return data;
-    return {
-      ...data,
-      sections: { ...data.sections, [category]: kept },
-      counts: { ...data.counts, [category]: Math.max(0, (data.counts[category] ?? rows.length) - (rows.length - kept.length)) },
-    };
+    const moved = REVIEW_QUEUES.flatMap(key => reviewQueueData(data, key).sections[category] || [])
+      .filter(row => gone.has(row.item_key));
+    if (!moved.length) return data;
+    const target = { skipped: 'later', rejected: 'ignored', restore: 'pending', approved: null }[status];
+    const snapshots = Object.fromEntries(REVIEW_QUEUES.map(key => {
+      const snapshot = reviewQueueData(data, key);
+      const kept = (snapshot.sections[category] || []).filter(row => !gone.has(row.item_key));
+      const rows = target === key ? [...kept, ...moved.map(row => ({ ...row,
+        decision: status === 'restore' ? 'pending' : status, decision_note: '' }))] : kept;
+      rows.sort((a, b) => (a.queue_order ?? 0) - (b.queue_order ?? 0));
+      return [key, { ...snapshot, sections: { ...snapshot.sections, [category]: rows },
+        counts: { ...snapshot.counts, [category]: rows.length } }];
+    })) as Record<ReviewQueue, ReviewQueueData>;
+    return { ...data, ...snapshots.pending, queues: { later: snapshots.later, ignored: snapshots.ignored } };
   });
 }
 

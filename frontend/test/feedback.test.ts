@@ -40,9 +40,11 @@ describe('持久提示控件',()=>{
     expect(host.querySelector('.ui-geist-gauge')?.getAttribute('data-level')).toBe(level);
     expect(gaugeHtml('完成率',value,100)).toContain('data-level="normal"');
   });
-  it('失败提示包含一个内部操作按钮',()=>{
-    const host=document.createElement('div');host.innerHTML=noteHtml('来源离线',{variant:'error',filled:true,actionLabel:'重试'});
-    expect(host.querySelectorAll('[role=alert] button')).toHaveLength(1);
+  it('失败提示包含一个次要样式的内部操作按钮',()=>{
+    const host=document.createElement('div');host.innerHTML=noteHtml('来源离线',{variant:'error',filled:true,actionLabel:'立即重试'});
+    const buttons=host.querySelectorAll('[role=alert] button');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]!.classList.contains('primary')).toBe(false);
   });
   it('容量比例和任务计数使用真实上限，未知容量不显示零',()=>{
     const host=document.createElement('div');host.innerHTML=gaugeHtml('使用率',25,50);

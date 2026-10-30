@@ -78,8 +78,12 @@
   --tag-fill:color-mix(in srgb,var(--surface) 82%,var(--ground));
   /* 一行里的输入框、下拉触发器和按钮共用这一个高度。写成变量是因为差 3px 就不是一行了，
      而窄屏那条把输入框字号顶到 16 像素的防放大规则只抬没写死高度的那几个，同排的按钮不动。
-     Geist 自己的实测值是 32px，见 docs/reference-snapshots/vercel-geist-controls-measured.md。 */
-  --control-h:38px;
+     Geist 自己的实测值是 32px，见 docs/reference-snapshots/vercel-geist-controls-measured.md。
+     四档用法见 docs/DESIGN_GUIDELINES.md 第 11 节，与 frontend/src/react/base.css 同名同值。 */
+  --control-h-inline:28px; /* 行内档：标签、标签删除、标题旁的小工具 */
+  --control-h-compact:32px; /* 紧凑档：行操作、卡片悬浮动作、卡内次级操作、筛选条 */
+  --control-h:36px; /* 默认档：表单字段与同组按钮、页面与分区操作、页签外框、导航 */
+  --control-h-large:40px; /* 大档：顶栏搜索与图标键、播放器控制条、首页厂牌胶囊 */
   /* 框体上下两条横条的统一高度。写成变量是因为它同时管数据管理的卡片、链接管理
      和资源同步：这三处任何一处单独调，页面上就会出现两种「同一种条」。 */
   --fieldset-bar-h:52px;
@@ -118,6 +122,9 @@
      design.md 里被明确列为要拒绝的生成式设计反射。新增字号前先证明现有 8 档都不合适。 */
   --fs-xs:12px; --fs-sm:13px; --fs-md:14px; --fs-lg:16px;
   --fs-xl:20px; --fs-2xl:24px; --fs-3xl:32px; --fs-4xl:48px;
+  /* 与文字同行的图标画框，按所在文字字号缩放。雪碧图字形在 24 画框里笔画约占 75%，
+     1.2em 让它和同排汉字的墨迹一样大；React 岛 `frontend/src/react/base.css` 同名同值。 */
+  --icon-inline:1.2em;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --ground:#080A0D; --surface:#0C0F14; --sunk:#0B0D11; --hover:rgba(255,255,255,.07); --skeleton-sheen:rgba(255,255,255,.12);
@@ -156,6 +163,9 @@
    宽度归零，跳版的前提也一并消失——设置面板、灯箱和播放器给 body 加 overflow:hidden 时，
    本来就没有东西会消失。 */
 html{color-scheme:light;scroll-padding-top:calc(var(--topH) + 8px);scrollbar-width:none}
+/* 汉字与拉丁字母、数字之间由浏览器加约 1/8em 的间距（CSS Text 4 `text-autospace`）。界面文案按写作规范
+   手写空格，已有空格处不再加；受益的是片名、文件名这类馆藏文本。不支持的浏览器原样显示。 */
+html{text-autospace:normal}
 /* 这段内边距给的是跳到锚点、键盘移焦时的落点，免得目标钻到粘性顶栏底下。焦点就在顶栏
    里时它反而帮倒忙：搜索框本来就钉在视口上沿，却落在这段「被盖住」的区域里，浏览器每敲
    一个字都要把光标往下滚，而顶栏跟着一起走，页面就一路往回退。 */
@@ -314,7 +324,7 @@ button,[role="button"],summary{user-select:none;-webkit-user-select:none;-webkit
 .geist-button:hover:not(:disabled){background:color-mix(in srgb,var(--ink) 8%,var(--ground))}
 .geist-button,.geist-button:hover{text-decoration:none}
 /* 按钮里唯一还挂图标的一类是走出 Peach 的链接，那一枚的长相由下面两条说。 */
-.geist-button svg{width:14px;height:14px;flex:none;stroke:currentColor;fill:none;stroke-width:2}
+.geist-button svg{width:var(--icon-inline);height:var(--icon-inline);flex:none;stroke:currentColor;fill:none;stroke-width:2}
 .geist-button:focus-visible{outline:2px solid var(--tungsten);outline-offset:2px}
 .geist-button:disabled{background:var(--sunk);color:var(--muted);cursor:not-allowed}
 /* Vercel/Geist loading actions look unavailable and reject repeat activation,
@@ -431,7 +441,7 @@ body.settings-open>.ovtrack.page,body.photolight-open>.ovtrack.page{display:none
 .gselectfield>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gselectmenu [data-select-content]{display:flex;align-items:center;gap:8px;min-width:0}
 .gselectfield .gselectmark{vertical-align:-3px;margin-inline-end:8px}
-.gselectmark{width:16px;height:16px;flex:none;object-fit:contain;stroke:currentColor;fill:none;stroke-width:2}
+.gselectmark{width:var(--icon-inline);height:var(--icon-inline);flex:none;object-fit:contain;stroke:currentColor;fill:none;stroke-width:2}
 .gselectfield>svg{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;color:var(--muted)}
 .gselectfield:hover:not(:disabled){border-color:var(--field-ring-hover)}
 /* 展开时按住焦点态：菜单开着而触发器看起来没被点中，读起来像两个控件。 */

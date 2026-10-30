@@ -1,11 +1,11 @@
 """实体事实种子包的导出与导入（ADR-0073）。
 
-    seed_pack.py export --version 2026-09-25
-    seed_pack.py validate --pack <Peach 数据目录>/state/seed/entities.json
+    seed_pack.py export --version 2026-10-23.1
+    seed_pack.py validate
     seed_pack.py import
     seed_pack.py import --apply --backup peach-data/database/ledger.pre-seed-<时间戳>.db
 
-`export` 只读账本，默认写入 Peach 数据目录的 `state/seed/entities.json`，不进入代码仓库；
+`export` 只读账本，默认写入应用资源的 `resources/seed/entities.json`，由维护者复核并随版本分发；
 格式 2 保留来源置信度、继承累计显式撤销，用内容摘要绑定版本与导入任务。内容变化须推进版本与修订，
 同一版本的不同内容或回退修订被拒绝。`validate` 只校验包，不打开账本。`import` 默认 dry-run，只报会补多少；
 `--apply` 必须同时给 `--backup`。撤回：`revert_auto_landing.py --source auto:seed`。
@@ -32,7 +32,7 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--db", type=Path, default=DATABASE_PATH, help="账本路径")
     export.add_argument("--version", default=date.today().isoformat(),
                         help="包版本号，也是批次号的后半段；默认当天日期")
-    export.add_argument("--out", type=Path, default=seed_pack.DEFAULT_PACK, help="落盘路径")
+    export.add_argument("--out", type=Path, default=seed_pack.DEFAULT_PACK, help="公共包路径；私人导出须显式指定仓库外路径")
     export.add_argument("--previous", type=Path, help="继承累计撤销的上一份包；缺省读取现有输出文件")
     export.add_argument("--revision", type=int, help="格式 2 的单调修订号；缺省由上一包递增")
     export.add_argument("--withdrawals", type=Path, help="已复核的显式撤销 JSON 数组，原样继承历史撤销")

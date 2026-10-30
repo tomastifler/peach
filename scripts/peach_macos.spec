@@ -2,6 +2,7 @@
 """macOS 独立应用：原生启动器、内置解释器与只读资源。"""
 import json
 import os
+import runpy
 from pathlib import Path
 import sys
 
@@ -13,9 +14,12 @@ from peach.appid import MACOS_BUNDLE_ID
 
 identity = Path(os.environ["PEACH_MACOS_BUILD_INFO"])
 version = json.loads(identity.read_text(encoding="utf-8"))["version"]
-datas = [(str(root / name), name) for name in ("web", "migrations", "resources")]
+resource_manifest = runpy.run_path(str(root / 'src/peach/bundle_resources.py'))
+datas = [(str(source), target) for source, target in resource_manifest['data_files'](root)]
 datas += [(str(identity), "."), (str(root / "scripts" / "standalone.txt"), ".")]
+datas += [(os.environ["PEACH_MACOS_REPORTING_CONFIG"], ".")]
 datas += [(str(root / "LICENSE"), ".")]
+datas += [(os.environ["PEACH_MACOS_AMANE_RUNTIME"], "tools/amane-runtime")]
 datas += copy_metadata("sentry-sdk")
 binaries = []
 hiddenimports = [

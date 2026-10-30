@@ -19,7 +19,7 @@ class EnsureModelTests(unittest.TestCase):
             target.write_bytes(payload)
             with patch.object(face_match, "MODEL_SHA256",
                               hashlib.sha256(payload).hexdigest()), \
-                 patch.object(face_detect.urllib.request, "urlopen") as opener:
+                 patch.object(face_detect, "read_url") as opener:
                 self.assertEqual(face_match.ensure_model(target), target)
             opener.assert_not_called()
 
@@ -34,6 +34,65 @@ class EnsureModelTests(unittest.TestCase):
         self.assertEqual(len(face_match.MODEL_SHA256), 64)
         self.assertIn("media.githubusercontent.com", face_match.MODEL_URL)
         self.assertEqual(face_match.COSINE_THRESHOLD, 0.363)
+
+
+class ModelLoadingTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.model = Path(temporary.name).resolve() / "中文模型" / "比对.onnx"
+        self.model.parent.mkdir()
+        self.payload = b"verified-sface-model"
+        self.model.write_bytes(self.payload)
+        digest = patch.object(face_match, "MODEL_SHA256", hashlib.sha256(self.payload).hexdigest())
+        digest.start()
+        self.addCleanup(digest.stop)
+
+    def test_unicode_model_path_is_read_as_onnx_bytes(self):
+        import cv2
+        import numpy
+
+        detector = object()
+        with patch.object(cv2, "FaceRecognizerSF") as recognizer:
+            embedder = face_match.FaceEmbedder(self.model, detector=detector, allow_download=False)
+        args = recognizer.create.call_args.args
+        self.assertEqual(args[0], "ONNX")
+        self.assertIsInstance(args[1], numpy.ndarray)
+        self.assertEqual((args[1].dtype, args[1].ndim, args[1].tobytes()),
+                         (numpy.dtype("uint8"), 1, self.payload))
+        self.assertEqual((args[2].dtype, args[2].size), (numpy.dtype("uint8"), 0))
+        self.assertEqual(len(args), 3)
+        self.assertEqual(embedder.model_path, self.model)
+        self.assertIs(embedder._recognizer, recognizer.create.return_value)
+        self.assertIs(embedder._detector, detector)
+
+    def test_model_read_error_after_verification_reaches_the_caller(self):
+        import cv2
+
+        failure = PermissionError(13, "model read denied")
+        with patch.object(Path, "read_bytes", side_effect=[self.payload, failure]), \
+                patch.object(cv2, "FaceRecognizerSF") as recognizer, \
+                self.assertRaises(PermissionError) as caught:
+            face_match.FaceEmbedder(self.model, detector=object(), allow_download=False)
+        self.assertIs(caught.exception, failure)
+        recognizer.create.assert_not_called()
+
+    def test_an_onnx_import_error_reaches_the_caller(self):
+        import cv2
+
+        failure = cv2.error("invalid ONNX buffer")
+        with patch.object(cv2, "FaceRecognizerSF") as recognizer, self.assertRaises(cv2.error) as caught:
+            recognizer.create.side_effect = failure
+            face_match.FaceEmbedder(self.model, detector=object(), allow_download=False)
+        self.assertIs(caught.exception, failure)
+
+    def test_mismatched_model_bytes_never_reach_opencv(self):
+        import cv2
+
+        self.model.write_bytes(b"partial-model")
+        with patch.object(cv2, "FaceRecognizerSF") as recognizer, self.assertRaises(FaceModelUnavailable):
+            face_match.FaceEmbedder(self.model, detector=object(), allow_download=False)
+        recognizer.create.assert_not_called()
 
 
 class CosineTests(unittest.TestCase):

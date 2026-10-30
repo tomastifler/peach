@@ -16,6 +16,38 @@ from peach.remote_media_cache import AVATAR_REFRESH_SECONDS, FAVICON_REFRESH_SEC
 
 
 class RemoteMediaCacheTests(unittest.IsolatedAsyncioTestCase):
+    async def test_active_documents_are_rejected_without_forwarding_or_caching_bytes(self):
+        self.payload=b'<svg><script>active()</script></svg>'
+        for kind in ('image/svg+xml','text/html','application/xhtml+xml','application/xml',''):
+            with self.subTest(kind=kind):
+                self.headers={'content-type':kind,'content-length':str(len(self.payload))}
+                response=await self.client.get('/media')
+                self.assertEqual(response.status_code,502)
+                self.assertNotIn(b'<script>',response.content)
+                self.assertEqual(response.headers['x-content-type-options'],'nosniff')
+                self.assertIn('sandbox',response.headers['content-security-policy'])
+                self.assertIsNone(self.cache.stored('follow:1:media:0'))
+
+    async def test_old_active_document_cache_is_not_served_after_upgrade(self):
+        slot=self.cache._slot('follow:1:media:0')
+        slot.parent.mkdir(parents=True)
+        body=b'<svg><script>active()</script></svg>'
+        slot.with_suffix('.bin').write_bytes(body)
+        slot.with_suffix('.json').write_text(json.dumps({'status':200,'size':len(body),
+            'headers':{'content-type':'image/svg+xml'}}),encoding='utf-8')
+        response=await self.client.get('/media')
+        self.assertEqual(response.content,self.payload)
+        self.assertEqual(self.calls,1)
+        self.assertEqual(response.headers['cache-control'],'private, no-cache')
+
+    async def test_hls_manifests_remain_available_as_passive_media(self):
+        self.payload=b'#EXTM3U\n'
+        self.headers={'content-type':'application/vnd.apple.mpegurl','content-length':str(len(self.payload))}
+        response=await self.client.get('/media')
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.content,self.payload)
+        self.assertIn('sandbox',response.headers['content-security-policy'])
+
     async def asyncSetUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name).resolve()
@@ -102,7 +134,7 @@ class RemoteMediaCacheTests(unittest.IsolatedAsyncioTestCase):
         self.headers['content-type'] = 'video/mp4'
         response = await self.client.get('/media')
         self.assertEqual(response.content, self.payload)
-        self.assertIn('max-age=31536000', response.headers['cache-control'])
+        self.assertEqual(response.headers['cache-control'], 'private, no-cache')
         await self.client.get('/media')
         self.assertEqual(self.calls, 2)
 

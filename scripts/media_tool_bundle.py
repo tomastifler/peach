@@ -11,7 +11,8 @@ import shutil
 
 REQUIRED_FILES = {"bin/ffmpeg.exe", "bin/ffprobe.exe", "LICENSE.txt", "NOTICE.md", "buildconf.txt"}
 POLICIES = {
-    "ffmpeg": (REQUIRED_FILES, {"ffmpeg", "x264", "nv-codec-headers", "dav1d"}, "GPL-3.0-or-later"),
+    "ffmpeg": (REQUIRED_FILES, {"ffmpeg", "x264", "nv-codec-headers", "dav1d", "amf-headers", "libvpl"},
+               "GPL-3.0-or-later"),
     "untrunc": ({"untrunc.exe", "LICENSE.txt", "NOTICE.md", "buildconf.txt"},
                 {"untrunc", "ffmpeg"}, "GPL-2.0-or-later"),
 }
@@ -34,10 +35,16 @@ def checked_file(root: Path, name: str, expected: str) -> Path:
     return target
 
 
-def validate(root: Path, tool: str = "ffmpeg") -> tuple[dict, Path]:
+def validate(root: Path, tool: str = "ffmpeg", *, architecture: str | None = None) -> tuple[dict, Path]:
     """构建和制品验收共用；哈希不匹配时不复制任何文件。"""
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     required, source_names, license_name = POLICIES[tool]
+    archive_name = f"{tool}-corresponding-source.zip"
+    if architecture is not None:
+        if architecture not in {"arm64", "x86_64"} or manifest.get("platform") != "darwin" or manifest.get("architecture") != architecture:
+            raise ValueError("macOS 媒体工具平台或架构不符")
+        required = {name.removesuffix(".exe") for name in required}
+        archive_name = f"{tool}-macos-{architecture}-corresponding-source.zip"
     if manifest.get("license") != license_name or not manifest.get("version"):
         raise ValueError("FFmpeg 清单缺少版本或 GPL 许可证声明")
     files = manifest.get("files", {})
@@ -56,7 +63,7 @@ def validate(root: Path, tool: str = "ffmpeg") -> tuple[dict, Path]:
                 or not re.fullmatch(r"[0-9a-f]{64}", source.get("sha256", ""))):
             raise ValueError("FFmpeg 源码来源缺少固定版本或哈希")
     archive = manifest["source_archive"]
-    if archive["name"] != f"{tool}-corresponding-source.zip":
+    if archive["name"] != archive_name:
         raise ValueError("媒体工具对应源码归档名称不符")
     source_path = checked_file(root.parent, archive["name"], archive["sha256"])
     return manifest, source_path

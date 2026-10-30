@@ -6,6 +6,11 @@
 **一轮拉取一条后继。** 同一轮发现的番号在活动页上是一件事，拆成一部一条，一次订阅
 就是二十张一模一样的卡片；键里带着这一批的番号，重跑、去重都按这一批算。
 
+**补封面单独排队。** 资料已经齐、只缺本机封面的壳不进取资料那一批，而是另派一条
+`feed-cover`（补新作封面）：它只取图、不问资料来源、不写账本，走自己的通道。资料来源
+连不上时取资料每部要等一轮超时，补封面若跟在后面，旧壳会被源源不断的新番号挤到轮不上。
+排在队里或正在跑的番号（`in_flight`）不再进下一批，两种批次也互不重复。
+
 **不复用 `process_library`**：那条路以 `asset` 行为单位、要写候选 CSV、要按字段优先级链
 结算到真相字段，而壳没有真相字段可写。壳上的每个值都只是「某个来源这么说」，用户复核
 的时机是文件真的到手、建成 `asset` 之后。所以这里只借来源链本身
@@ -34,48 +39,74 @@ from .followups import Followup, FollowupType, register
 from .metadata import extract_peach_fields
 
 TASK_KEY = "feed-scrape"
-TASK_LABEL = "Fetch new-release metadata"
+TASK_LABEL = "取新作资料"
+COVER_TASK_KEY = "feed-cover"
+COVER_TASK_LABEL = "补新作封面"
+LABELS = {TASK_KEY: TASK_LABEL, COVER_TASK_KEY: COVER_TASK_LABEL}
 
 #: 一条资料够用就停。四个标量都拿到就不再问下一家——Feed 是后台跑的，
 #: 多问一家换来的是配额，而壳上的值本来就不是真相字段。
 WANTED = ("title", "performers", "studio", "release_date")
 
-#: 一批最多带几部。新发现的先排，余下的名额给还缺资料或封面、到了重试时间的旧壳。
+#: 一批最多带几部。取资料那一批新发现的先排，余下的名额给上次没取到资料、到了重试时间的
+#: 旧壳；补封面那一批按上次尝试由远到近排。
 MAX_BATCH = 24
+
+#: 取资料那一批至少留给重试旧壳的名额。订阅一轮能发现几十部新番号，不留就一部旧壳也
+#: 轮不到：没取到资料的那些会一直停在页面上没有标题。
+RETRY_SHARE = 6
 
 #: 缺封面或上次没取到资料的壳，定时拉取隔多久再试一次。新片的封面常常晚于番号出现，
 #: 所以不是试一次就放弃；但也不该每拉一轮源就把同一批再问一遍。人手点的那一次不等：
 #: 点「检查」本身就是要现在取。
 RETRY_AFTER = timedelta(hours=12)
 
-#: 一部封面最多等多久。后继在写账本那条串行通道上，一部卡住不能拖住后面整批。
+#: 一部封面最多等多久。一部卡住不能拖住后面整批。
 COVER_SECONDS = 30
 
 
-def followup_key(codes) -> str:
-    return f"{TASK_KEY}:{','.join(codes)}"
+def followup_key(codes, task_key: str = TASK_KEY) -> str:
+    return f"{task_key}:{','.join(codes)}"
 
 
-def parse_key(key: str) -> list[str]:
+def parse_key(key: str, task_key: str = TASK_KEY) -> list[str]:
     prefix, _, body = str(key).partition(":")
     codes = [code for code in body.split(",") if code]
-    if prefix != TASK_KEY or not codes:
-        raise ValueError(f"Unrecognised metadata follow-up: {key}")
+    if prefix != task_key or not codes:
+        raise ValueError(f"认不出这条{LABELS.get(task_key, task_key)}后继：{key}")
     return codes
 
 
-def _label(codes: list[str]) -> str:
+def _label(codes: list[str], task_key: str = TASK_KEY) -> str:
+    name = LABELS[task_key]
     if len(codes) == 1:
-        return f"{TASK_LABEL}: {codes[0]}"
-    return f"{TASK_LABEL}: {codes[0]} and {len(codes) - 1} more"
+        return f"{name}：{codes[0]}"
+    return f"{name}：{codes[0]} 等 {len(codes)} 部"
 
 
-def plan(codes) -> list[Followup]:
+def plan(codes, task_key: str = TASK_KEY) -> list[Followup]:
     """一批番号合成一条后继；一部都没有就不派。"""
     batch = list(dict.fromkeys(code for code in codes if code))[:MAX_BATCH]
     if not batch:
         return []
-    return [Followup(key=followup_key(batch), task_key=TASK_KEY, label=_label(batch))]
+    return [Followup(key=followup_key(batch, task_key), task_key=task_key,
+                     label=_label(batch, task_key))]
+
+
+def plan_covers(codes) -> list[Followup]:
+    return plan(codes, COVER_TASK_KEY)
+
+
+def in_flight(task_runs) -> set[str]:
+    """排在队里或正在跑的取资料、补封面后继里的番号键。下一批不再带它们。"""
+    codes: set[str] = set()
+    for task_key in (TASK_KEY, COVER_TASK_KEY):
+        for run in task_runs.query(status="active", task_key=task_key, limit=500):
+            try:
+                codes.update(normalise_code_key(code) for code in parse_key(run.followup_key, task_key))
+            except ValueError:
+                continue
+    return codes
 
 
 def has_local_cover(cover_root: Path, code: str) -> bool:
@@ -84,39 +115,84 @@ def has_local_cover(cover_root: Path, code: str) -> bool:
     return bool(key) and cover_settled(Path(cover_root) / f"{key}.jpg")
 
 
-def backlog(connection, cover_root: Path, *, exclude=(), now: datetime | None = None,
-            limit: int = MAX_BATCH, retry_after: timedelta = RETRY_AFTER,
-            hidden: frozenset[str] = feeds.DEFAULT_HIDDEN_COMPILATIONS) -> list[str]:
-    """还缺资料或本机封面、上次尝试已经过了 `retry_after` 的壳。
+def scrape_batch(connection, fresh=(), *, exclude=(), now: datetime | None = None,
+                 retry_after: timedelta = RETRY_AFTER,
+                 hidden: frozenset[str] = feeds.DEFAULT_HIDDEN_COMPILATIONS) -> list[str]:
+    """下一批取资料的番号：这一轮新发现的 `fresh` 与还没取过资料的壳在前，上次没取到、
+    已经过了 `retry_after` 的壳在后，并且至少留 `RETRY_SHARE` 个名额给后者。资料齐了只缺
+    封面的归 `cover_backlog`。
 
     已忽略的不算：人说了不想看，就不再替它花配额。已经入库的壳本来就不在表里
     （入库即从列表里消失，ADR-0042 第三条），这里同样用番号键排除掉。取回标题后认出是
-    设置里收起的那类合集（`hidden`）也不算：页面上不列它，替它补封面的配额是白花的；
+    设置里收起的那类合集（`hidden`）也不算：页面上不列它，替它补资料的配额是白花的；
     开关打开后下一轮就轮到它。
     """
     moment = now or datetime.now(timezone.utc)
     cutoff = feeds.stamp(moment - retry_after)
-    skip = set(exclude)
-    rows = connection.execute(
-        "SELECT d.code,d.title,d.performers,d.studio,d.scraped_at,d.scrape_error FROM feed_discovery d"
-        " WHERE d.ignored_at IS NULL AND (d.scraped_at IS NULL OR d.scraped_at<?)"
-        " AND NOT EXISTS (SELECT 1 FROM asset a WHERE a.code IS NOT NULL"
-        " AND COALESCE(a.disposal,'')<>'vanished'"
-        " AND normalise_code_key(a.code)=normalise_code_key(d.code))"
-        " ORDER BY COALESCE(d.scraped_at,''), COALESCE(d.release_date,d.discovered_at) DESC, d.id DESC",
-        (cutoff,)).fetchall()
+    fresh = list(dict.fromkeys(code for code in fresh if code))
+    skip = [*exclude, *fresh]
+    untried = _first(_candidates(connection, "d.scraped_at IS NULL", (), ""),
+                     skip, hidden, MAX_BATCH)
+    retries = _first(_candidates(connection, "d.scrape_error IS NOT NULL AND d.scraped_at<?",
+                                 (cutoff,), "d.scraped_at, "), skip, hidden, MAX_BATCH)
+    head = [*fresh, *untried][:MAX_BATCH - min(len(retries), RETRY_SHARE)]
+    return head + retries[:MAX_BATCH - len(head)]
+
+
+def _first(rows, exclude, hidden, limit: int) -> list[str]:
     found: list[str] = []
-    for row in rows:
-        code = row["code"]
-        if code in skip or feeds.compilation_kind(
-                row["title"], row["performers"], row["studio"]) in hidden:
-            continue
-        needs_fields = row["scraped_at"] is None or row["scrape_error"] is not None
-        if needs_fields or not has_local_cover(cover_root, code):
-            found.append(code)
+    for row in _visible(rows, exclude, hidden):
+        found.append(row["code"])
         if len(found) >= limit:
             break
     return found
+
+
+def cover_backlog(connection, cover_root: Path, *, exclude=(), now: datetime | None = None,
+                  limit: int = MAX_BATCH, retry_after: timedelta = RETRY_AFTER,
+                  hidden: frozenset[str] = feeds.DEFAULT_HIDDEN_COMPILATIONS) -> list[str]:
+    """资料已经齐、本机还没有封面、上次取图已经过了 `retry_after` 的壳。
+
+    上次取图的时间读逐番号的取图记录（`record_cover_attempt`），没试过的排最前，其余由远到近；
+    同样远的新片在前。排除规则与 `scrape_batch` 相同。
+    """
+    from .catalog_rules import is_korean_mib_code
+
+    cutoff = (now or datetime.now(timezone.utc)).timestamp() - retry_after.total_seconds()
+    rows = _candidates(connection, "d.scraped_at IS NOT NULL AND d.scrape_error IS NULL", (), "")
+    due: list[tuple[float, int, str]] = []
+    for position, row in enumerate(_visible(rows, exclude, hidden)):
+        code = row["code"]
+        key = normalise_code_key(code)
+        if not key or is_korean_mib_code(key) or has_local_cover(cover_root, code):
+            continue
+        try:
+            attempted = cover_attempt_path(cover_root, key).stat().st_mtime
+        except OSError:
+            attempted = 0.0
+        if attempted < cutoff:
+            due.append((attempted, position, code))
+    return [code for _, _, code in sorted(due)[:limit]]
+
+
+def _candidates(connection, condition: str, values: tuple, order: str):
+    return connection.execute(
+        "SELECT d.code,d.title,d.performers,d.studio FROM feed_discovery d"
+        f" WHERE d.ignored_at IS NULL AND {condition}"
+        " AND NOT EXISTS (SELECT 1 FROM asset a WHERE a.code IS NOT NULL"
+        " AND COALESCE(a.disposal,'')<>'vanished'"
+        " AND normalise_code_key(a.code)=normalise_code_key(d.code))"
+        f" ORDER BY {order}COALESCE(d.release_date,d.discovered_at) DESC, d.id DESC",
+        values).fetchall()
+
+
+def _visible(rows, exclude, hidden):
+    skip = {normalise_code_key(code) for code in exclude}
+    for row in rows:
+        if normalise_code_key(row["code"]) in skip or feeds.compilation_kind(
+                row["title"], row["performers"], row["studio"]) in hidden:
+            continue
+        yield row
 
 
 def _cover(payload: dict) -> str | None:
@@ -139,10 +215,24 @@ def collect(provider, code: str) -> tuple[dict, str | None]:
     问哪几家由 `metadata_routes` 决定，与刮削链同一份判据；这里没有本机证据可给，
     所以只传番号本身。一家都没给就抛——调用方把原因写进壳的 `scrape_error`，
     页面上那一行因此能说清是「还没取」还是「取不到」。
+
+    一部最多问多久与媒体库资料处理同一份预算（`ACTION_BUDGETS['querying_metadata']`）：
+    来源连不上时每家要等满超时再退避重试，不设上限一部能耗掉几分钟，整批和排在后面的
+    后继都跟着等。
     """
+    from .jav_cover_fetch import DeadlineExceeded
+    from .library_processing import ACTION_BUDGETS
+    from .processing_control import deadline_after
+
     chain = metadata_routes.route_for_code(code)
-    found = provider.community(
-        code, route=metadata_routes.community_route(code))
+    budget = ACTION_BUDGETS["querying_metadata"]
+    try:
+        found = provider.community(
+            code, deadline=deadline_after(budget),
+            route=metadata_routes.community_route(code))
+    except DeadlineExceeded as error:
+        raise DeadlineExceeded(
+            f"来源链 {'、'.join(chain)} 在 {budget:g} 秒内没有答复") from error
     fields: dict[str, object] = {}
     cover: str | None = None
     for _source, payload in found:
@@ -195,10 +285,15 @@ def fetch_cover(contract, code: str,
     return data, size, evidence
 
 
+def cover_attempt_path(cover_root: Path, code: str) -> Path:
+    return Path(cover_root).parent / 'feed-cover-attempts' / (normalise_code_key(code) + '.json')
+
+
 def record_cover_attempt(contract, code: str, *, ok: bool, error=None):
-    """逐番号保存封面处理结果；不记录请求凭据或来源返回正文。"""
+    """逐番号保存封面处理结果；不记录请求凭据或来源返回正文。文件时间就是 `cover_backlog`
+    判重试的上次取图时间。"""
     from .fsutil import atomic_write_text
-    path = contract.cover_root.parent / 'feed-cover-attempts' / (normalise_code_key(code) + '.json')
+    path = cover_attempt_path(contract.cover_root, code)
     path.parent.mkdir(parents=True, exist_ok=True)
     record = {'code': code, 'checked_at': time.time(), 'ok': ok}
     if error is not None:
@@ -281,6 +376,10 @@ def run(contract, key: str, handle) -> dict:
 
     封面断在连接上的几部另记 `cover_network`：这一类换条线路就能取到，新作页据此提示
     去配来源的连接方式，而不是让人以为官方没出图。
+
+    检查点记的是这一批里已经试过的番号，不论取没取到：服务重启后这一条重新领取时只接着
+    试余下的。没取到的那几部由 `scrape_batch`、`cover_backlog` 到了重试时间再排，不在
+    同一批的续跑里每次重启都重耗一遍。
     """
     import httpx
 
@@ -291,11 +390,11 @@ def run(contract, key: str, handle) -> dict:
     provider = None
     saved = getattr(handle, 'saved', {})
     saved = saved if isinstance(saved, dict) else {}
-    completed = set(saved.get('completed_codes') or [])
+    done = set(saved.get('done_codes') or [])
     fetched, covers = saved.get('fetched', 0), saved.get('covers', 0)
-    missed = unreachable = 0
+    missed, unreachable = saved.get('miss', 0), saved.get('cover_network', 0)
     for index, code in enumerate(codes):
-        if code in completed:
+        if code in done:
             continue
         handle.progress(current=index, total=len(codes),
                         label=f"{TASK_LABEL}: {code}", throttle=0)
@@ -306,12 +405,10 @@ def run(contract, key: str, handle) -> dict:
         if row is None:
             # 壳被删了，或者这个番号这中间已经入库。两种都不该再取一遍。
             continue
-        metadata_ok = row['scraped_at'] is not None and row['scrape_error'] is None
         if row["scraped_at"] is None or row["scrape_error"] is not None:
             provider = provider or LibraryMetadataProvider(contract.follow_secrets_root)
             if _scrape_fields(contract, provider, row):
                 fetched += 1
-                metadata_ok = True
             else:
                 missed += 1
         # 封面地址在取资料那一步才写上壳，所以取完再读一遍，不用循环开头那份。
@@ -319,19 +416,18 @@ def run(contract, key: str, handle) -> dict:
             cover_url = connection.execute(
                 "SELECT cover_url FROM feed_discovery WHERE id=?", (int(row["id"]),)).fetchone()
         try:
-            covered = ensure_cover(contract, code, cover_url[0] if cover_url else None)
-            covers += covered
-            if metadata_ok and covered:
-                completed.add(code)
+            covers += ensure_cover(contract, code, cover_url[0] if cover_url else None)
         except (CoverConnectError, httpx.TransportError):
             unreachable += 1
         except Exception:  # noqa: BLE001 - 取不到封面这一部照样有资料，下一轮再试
             pass
-        # 封面取没取到都记下这一次尝试，`backlog` 按它隔 `RETRY_AFTER` 再试。
+        # 记下这一次尝试，没取到资料的由 `scrape_batch` 按它隔 `RETRY_AFTER` 再试；封面的重试另看取图记录。
         with contract.database.write_transaction() as connection:
             connection.execute("UPDATE feed_discovery SET scraped_at=? WHERE id=?",
                                (feeds.stamp(), int(row["id"])))
-        handle.checkpoint(completed_codes=sorted(completed), fetched=fetched, covers=covers)
+        done.add(code)
+        handle.checkpoint(done_codes=sorted(done), fetched=fetched, covers=covers,
+                          miss=missed, cover_network=unreachable)
     handle.progress(current=len(codes), total=len(codes), label=TASK_LABEL, throttle=0)
     contract.cache_bust()
     summary = {"total": len(codes), "ok": fetched, "miss": missed, "covers": covers}
@@ -340,6 +436,48 @@ def run(contract, key: str, handle) -> dict:
     return summary
 
 
+def run_covers(contract, key: str, handle) -> dict:
+    """跑一批补封面：只取图装进本机封面目录，不问资料来源、不写账本。摘要同取资料那一行，
+    连不上图片主机的几部同样另记 `cover_network`。"""
+    import httpx
+
+    from .jav_cover_fetch import CoverConnectError
+
+    codes = parse_key(key, COVER_TASK_KEY)
+    saved = getattr(handle, 'saved', {})
+    saved = saved if isinstance(saved, dict) else {}
+    done = set(saved.get('done_codes') or [])
+    covers = saved.get('covers', 0)
+    unreachable = saved.get('cover_network', 0)
+    for index, code in enumerate(codes):
+        if code in done:
+            continue
+        handle.progress(current=index, total=len(codes),
+                        label=f"{COVER_TASK_LABEL}：{code}", throttle=0)
+        with contract.database.read_connection() as connection:
+            row = connection.execute(
+                "SELECT cover_url FROM feed_discovery WHERE code=? AND ignored_at IS NULL",
+                (code,)).fetchone()
+        if row is not None:
+            try:
+                covers += ensure_cover(contract, code, row["cover_url"])
+            except (CoverConnectError, httpx.TransportError):
+                unreachable += 1
+            except Exception:  # noqa: BLE001 - 取图记录里有原因，到了重试时间再排
+                pass
+        done.add(code)
+        handle.checkpoint(done_codes=sorted(done), covers=covers, cover_network=unreachable)
+    handle.progress(current=len(codes), total=len(codes), label=COVER_TASK_LABEL, throttle=0)
+    contract.cache_bust()
+    summary = {"total": len(codes), "covers": covers}
+    if unreachable:
+        summary["cover_network"] = unreachable
+    return summary
+
+
 #: 写账本：壳与实体关联都在 `ledger.db` 里，所以它走串行那条通道。
 TYPE = register(FollowupType(task_key=TASK_KEY, label=TASK_LABEL,
                              writes_ledger=True, run=run))
+#: 补封面只写封面目录与取图记录，走自己的通道，不排在写账本的后继后面。
+COVER_TYPE = register(FollowupType(task_key=COVER_TASK_KEY, label=COVER_TASK_LABEL,
+                                   writes_ledger=False, run=run_covers))

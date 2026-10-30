@@ -12,10 +12,11 @@ from .catalog_rules import normalise_code_key, tag_cat
 from .genre_decisions import load_genre_decisions
 from .genre_taxonomy import resolve_genre
 from .javdb_public import (MAX_REVIEW_PAGES, PAGE_SIZE, PUBLIC_API, PublicSourceUnavailable,
-                          actor_gender, preview_video_url, public_image_url, public_cache_scope, cache_checked_at, cache_error)
+                          PublicIdentityAmbiguous, actor_gender, preview_video_url, public_image_url,
+                          public_cache_scope, cache_checked_at, cache_error)
 from .jav_discovery_metadata import discovery_metadata
 from .sources.javdb import maker_writing
-from .remote_media_cache import AVATAR_REFRESH_SECONDS, RemoteMediaUnavailable, cache_for
+from .remote_media_cache import AVATAR_REFRESH_SECONDS, cache_for
 from .preview_cache import PreviewCache
 
 
@@ -27,12 +28,21 @@ def detail_code(args) -> str:
 
 
 def discovery_cover_url(item, source) -> str:
-    """卡片只显示合格图源的封面地址。"""
-    from .jav_cover_fetch import is_javdb_image
+    """卡片只显示 `/cover-image` 能代理的官方封面地址。"""
+    from .jav_cover_fetch import proxyable_cover_url
     for value in (item.get('cover_url'), source.get('cover_url')):
-        if value and not is_javdb_image(value):
+        if proxyable_cover_url(value):
             return value
     return ''
+
+
+def stored_cover_url(contract, code) -> str:
+    """`/cover-image` 按番号取的上游地址；只读账本与已缓存的来源资料，不联网。"""
+    from .web_jav_discovery import _cached_movie
+    with contract.database.read_connection() as connection:
+        row = connection.execute("SELECT cover_url FROM feed_discovery WHERE code=? COLLATE NOCASE LIMIT 1",
+                                 (code,)).fetchone()
+    return discovery_cover_url(dict(row) if row else {}, _cached_movie(code, contract))
 
 
 def _refs(contract, connection, kind, names):
@@ -58,9 +68,7 @@ def _source_cache(handler):
     def read(contract, args):
         with public_cache_scope(contract.cover_root.parent / 'jav-public') as reads:
             payload = handler(contract, args)
-            if handler.__name__ == 'q_jav_image':
-                return payload
-            prefix = {'q_jav_reviews': ('reviews:',), 'q_jav_resources': ('reviews:', 'magnets:')}.get(
+            prefix ={'q_jav_reviews': ('reviews:',), 'q_jav_resources': ('reviews:', 'magnets:')}.get(
                 handler.__name__, ('movie:',))
             selected = [row for row in reads if row['key'].startswith(prefix)]
             if selected:
@@ -83,6 +91,7 @@ def q_jav_detail(contract, args) -> dict:
         item = dict(row) if row else {}
     source = None
     message = ""
+    ambiguous = False
     try:
         stored, _ = discovery_metadata(contract).peek(code)
         PUBLIC_API.remember_movie_identity(code, stored or {})
@@ -92,9 +101,10 @@ def q_jav_detail(contract, args) -> dict:
             discovery_metadata(contract).remember(code, error=cache_error('movie:' + code))
     except PublicSourceUnavailable as error:
         message = str(error)
+        ambiguous = isinstance(error, PublicIdentityAmbiguous)
         discovery_metadata(contract).remember(code, error=message)
     if source:
-        item.update(title=source.get("title") or source.get("origin_title") or item.get("title"),
+        item.update(title=source.get("origin_title") or source.get("title") or item.get("title"),
                     release_date=source.get("release_date") or item.get("release_date"),
                     studio=source.get("maker_name") or item.get("studio"))
     payload = {"ok": True, "state": "ready" if source else "partial", "message": message,
@@ -103,7 +113,8 @@ def q_jav_detail(contract, args) -> dict:
     with contract.database.read_connection() as connection:
         decisions = load_genre_decisions(connection)
     payload.update(_source_fields(source or {}, decisions))
-    payload.update(_artwork_fields(contract, code, item, source or {}, refresh=args.get('refresh') == '1'))
+    payload.update(_artwork_fields(contract, code, item, source or {}, refresh=args.get('refresh') == '1',
+                                   ambiguous=ambiguous))
     if payload.get('preview_message'):
         payload['message'] = '；'.join(filter(None, (payload['message'], payload['preview_message'])))
     payload.update(_identity_fields(contract, code, item, source or {}))
@@ -169,15 +180,16 @@ def source_performer_refs(contract, connection, actors):
     return refs
 
 
-def _artwork_fields(contract, code, item, source, *, refresh=False):
+def _artwork_fields(contract, code, item, source, *, refresh=False, ambiguous=False):
     from .jav_cover_fetch import is_javdb_image
     source_cover = (source or {}).get('cover_url') or (source or {}).get('thumb_url')
-    return {"has_cover": contract.has_cover(code), "cover_version": contract.cover_version(code),
-            "cover_url": discovery_cover_url(item, source or {}),
+    return {"has_cover": not ambiguous and contract.has_cover(code), "cover_version": contract.cover_version(code),
+            "cover_url": '' if ambiguous else discovery_cover_url(item, source or {}),
             "source_image": bool(source_cover and not is_javdb_image(source_cover)),
             "preview_count": min(len(source.get("preview_images") or []), 30),
-            **_preview_fields(contract, code, source, refresh=refresh),
-            "source_url": "https://javdb.com/v/" + str(source["id"]) if source else item.get("link") or ""}
+            **({'preview_video_url': '', 'preview_state': 'unavailable'} if ambiguous else
+               _preview_fields(contract, code, source, refresh=refresh)),
+            "source_url": '' if ambiguous else "https://javdb.com/v/" + str(source["id"]) if source else item.get("link") or ""}
 
 
 def _source_fields(source, decisions):
@@ -204,8 +216,10 @@ def q_jav_reviews(contract, args) -> dict:
     page = int(args.get("page") or 1)
     try:
         if args.get('refresh') == '1':
-            PUBLIC_API.movie(code, refresh=True)
-        rows = PUBLIC_API.reviews(code, page, refresh=True) if args.get('refresh') == '1' else PUBLIC_API.reviews(code, page)
+            movie = PUBLIC_API.movie(code, refresh=True)
+            rows = PUBLIC_API.reviews(code, page, refresh=True, movie=movie)
+        else:
+            rows = PUBLIC_API.reviews(code, page)
     except PublicSourceUnavailable as error:
         return {"ok": False, "items": [], "more": False, "message": str(error)}
     items = [{"id": str(row.get("id")), "username": str(row.get("username") or "Anonymous user"),
@@ -216,25 +230,38 @@ def q_jav_reviews(contract, args) -> dict:
             "message": ""}
 
 
-@_source_cache
-def q_jav_image(contract, args) -> dict:
+#: 来源图片在浏览器里留多久。样张与来源封面落盘后不再刷新；来源头像在服务端按
+#: `AVATAR_REFRESH_SECONDS` 换新，浏览器只留一天，换过的图第二天就看得到。
+JAV_IMAGE_MAX_AGE = 30 * 86400
+JAV_ACTOR_IMAGE_MAX_AGE = 86400
+
+
+def jav_image(contract, args) -> tuple[bytes, int]:
+    """来源图片（样张、来源封面、来源头像）的字节，以及浏览器可以缓存的秒数。
+
+    取过一次就落进远程媒体缓存，再取不出网。取不到抛 `PublicSourceUnavailable` 或
+    `RemoteMediaUnavailable`；番号或图号不合法抛 `ValueError`，都在联网之前。
+    """
     code = detail_code(args)
     index = str(args.get("image") or "cover")
     if (index != "cover" and not re.fullmatch(r"actor:[A-Za-z0-9]{1,64}", index)
             and (not index.isdigit() or not 0 <= int(index) < 30)):
-        raise ValueError("Preview image does not exist")
-    try:
-        key = f"jav:actor:{index.removeprefix('actor:')}" if index.startswith("actor:") else f"jav:{code}:image:{index}"
+        raise ValueError("预览图不存在")
+    actor = index.startswith("actor:")
+    with public_cache_scope(contract.cover_root.parent / 'jav-public'):
+        movie = None
+        if not actor:
+            stored, _ = discovery_metadata(contract).peek(code)
+            PUBLIC_API.remember_movie_identity(code, stored or {})
+            movie = PUBLIC_API.movie(code)
+        key = f"jav:actor:{index.removeprefix('actor:')}" if actor else f"jav:{code}:{movie['id']}:image:{index}"
         body = cache_for(contract).bytes(key,
-            lambda: base64.b64decode(_fetch_image(contract, code, index).partition(',')[2], validate=True),
-            ttl=AVATAR_REFRESH_SECONDS if index.startswith("actor:") else None)
-        image = "data:image/jpeg;base64," + base64.b64encode(body).decode("ascii")
-    except (PublicSourceUnavailable, RemoteMediaUnavailable) as error:
-        return {"ok": False, "image": "", "message": str(error)}
-    return {"ok": True, "image": image}
+            lambda: base64.b64decode(_fetch_image(contract, code, index, movie=movie).partition(',')[2], validate=True),
+            ttl=AVATAR_REFRESH_SECONDS if actor else None)
+    return body, JAV_ACTOR_IMAGE_MAX_AGE if actor else JAV_IMAGE_MAX_AGE
 
 
-def _fetch_image(contract, code, index):
+def _fetch_image(contract, code, index, *, movie=None):
     stored, _ = discovery_metadata(contract).peek(code)
     PUBLIC_API.remember_movie_identity(code, stored or {})
     if index.startswith('actor:'):
@@ -242,11 +269,11 @@ def _fetch_image(contract, code, index):
                       if isinstance(person, dict) and str(person.get('id')) == index.removeprefix('actor:')), {})
         if public_image_url(actor.get('avatar_image')):
             return PUBLIC_API.image_from_url(actor['avatar_image'])
-    image = PUBLIC_API.image(code, index)
+    image = PUBLIC_API.image(code, index, movie=movie)
     if index.startswith('actor:'):
         movie = PUBLIC_API.peek_movie(code)
         if movie:
-            discovery_metadata(contract).remember(code, movie, checked_at=cache_checked_at('movie:' + code, exact=True))
+            discovery_metadata(contract).remember(code, movie, checked_at=cache_checked_at('movie:' + code + ':'))
     return image
 
 
@@ -263,7 +290,8 @@ def _preview_fields(contract, code, source, *, refresh=False):
     for provider, fetch in sources:
         try:
             result = PUBLIC_API.official_preview(code, fetch, released=source.get('release_date'),
-                                                 refresh=refresh, provider=provider)
+                                                 refresh=refresh, provider=provider,
+                                                 **({'source_id': source.get('id')} if provider == 'javdb' else {}))
             url = result['url']
             failure = cache_error(f'preview:{provider}:' + code)
             if failure and not url:
@@ -276,7 +304,7 @@ def _preview_fields(contract, code, source, *, refresh=False):
         url = preview_video_url(source)
         if url and '?' in url:
             try:
-                url = preview_video_url(PUBLIC_API.media_movie(code)) or url
+                url = preview_video_url(PUBLIC_API.media_movie(code, movie=source)) or url
             except PublicSourceUnavailable as error:
                 errors.append(str(error))
     if not url:
@@ -303,7 +331,7 @@ def q_jav_resources(contract, args) -> dict:
     warnings = []
     magnet_failed = False
     try:
-        rows = PUBLIC_API.magnets(code, refresh=args.get('refresh') == '1')
+        rows = PUBLIC_API.magnets(code, refresh=args.get('refresh') == '1', movie=movie)
     except PublicSourceUnavailable as error:
         rows = []
         magnet_failed = True
@@ -327,7 +355,7 @@ def q_jav_resources(contract, args) -> dict:
     comments_failed = False
     try:
         for page in range(1, MAX_REVIEW_PAGES + 1):
-            reviews = PUBLIC_API.reviews(code, page, refresh=args.get('refresh') == '1')
+            reviews = PUBLIC_API.reviews(code, page, refresh=args.get('refresh') == '1', movie=movie)
             for review in reviews:
                 origin = source_url + "#review-item-" + str(review.get("id") or "")
                 comments.extend(parse_comment_text(str(review.get("content") or ""), origin,

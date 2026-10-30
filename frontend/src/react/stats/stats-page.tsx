@@ -17,7 +17,8 @@ import { Tab, TabList, TabPanel, Tabs } from 'react-aria-components';
 import { fmtSize, LOC } from '@peach/legacy/core';
 import { MEDIA_SOURCE_ICONS } from '@peach/legacy/ui';
 
-import { Button, ButtonLink } from '@/components/base/buttons/button';
+import { settingsPath } from '@peach/history';
+import { ButtonLink } from '@/components/base/buttons/button';
 
 import { errorMessage } from '../../api';
 import type { StatsProps } from '../bundle';
@@ -28,6 +29,8 @@ import { cardClass } from '../components/card';
 import { EmptyState } from '../components/empty-state';
 import { ExpandableRanking } from '../components/expandable-ranking';
 import { Note } from '../components/note';
+import { ConnectionStatus } from '../components/connection-status';
+import { StatusLabel } from '../components/status-label';
 import { Page } from '../components/page';
 import { Progress } from '../components/progress';
 import { SEGMENT, SEGMENTED_TRACK, SegmentedTabList } from '../components/segmented';
@@ -39,6 +42,9 @@ import {
   type Attribution, type Count, type RecentPlay, type StatsData, type StorageVolume, type TagSource, type TopTag,
 } from './stats';
 
+/** 空馆藏与没有存储来源时「添加媒体」去的那一栏设置。 */
+const MEDIA_SETTINGS = settingsPath('媒体库与入库');
+
 /** 收起时露这么多条排行。三十条一次铺开会把下面两个面板整个顶到屏外。 */
 const RANKING_PREVIEW = 10;
 
@@ -48,16 +54,16 @@ const VIEWING_COLOR = CHART_COLORS[4];
 
 const CARD = `${cardClass()} flex flex-col gap-4`;
 
-const NO_VIDEO_HINT = 'Library stats show up here after you add a media folder or follow a source.';
-const NO_TAG_HINT = 'Content tags in the library show up here after you complete metadata or add tags.';
-const NO_WATCH_HINT = 'Recent real-watch evidence shows up here once you start playing.';
-const NO_TAG_SOURCE_HINT = 'After scraping or manual tagging, this shows how many videos each source covers.';
-const NO_VOLUME_HINT = 'Storage space shows up here after you add a media folder.';
-const NO_LIBRARY_HINT = 'Video counts per library show up here after you assign media folders to a library.';
-const NO_LENGTH_HINT = 'The duration distribution shows up here after durations are probed.';
-const NO_QUALITY_HINT = 'The quality distribution shows up here after quality is probed.';
-const NO_PLAY_TIME_HINT = 'Which times of the week you play show up here once you start playing.';
-const NO_REPLAY_HINT = 'How many times each work was played shows up here once you start playing.';
+const NO_VIDEO_HINT = '添加媒体目录或关注来源后，这里会显示馆藏统计。';
+const NO_TAG_HINT = '补全资料或添加标签后，这里会显示馆藏中的内容标签。';
+const NO_WATCH_HINT = '开始播放后，这里会显示最近的真实观看证据。';
+const NO_TAG_SOURCE_HINT = '补充作品资料或手动添加标签后，这里会显示各个标签来源对应的视频数量。';
+const NO_VOLUME_HINT = '添加媒体目录后，这里会显示存储空间。';
+const NO_LIBRARY_HINT = '把媒体目录归进媒体库后，这里会按库显示视频数。';
+const NO_LENGTH_HINT = '探测时长后，这里会显示时长分布。';
+const NO_QUALITY_HINT = '探测画质后，这里会显示画质分布。';
+const NO_PLAY_TIME_HINT = '开始播放后，这里会显示播放落在一周的哪些时段。';
+const NO_REPLAY_HINT = '开始播放后，这里会显示每个作品播了几次。';
 
 /** 进度条的读数：超出总数时按满格画，读屏值也不越过上限。 */
 const within = (value: number, max: number) => Math.min(Math.max(value, 0), max);
@@ -117,16 +123,14 @@ function Detail({ headline, children }: { headline: ReactNode; children: ReactNo
   );
 }
 
-function InventoryDetail({ data, configurable, openMediaSettings }: { data: StatsData } & StatsProps) {
+function InventoryDetail({ data }: { data: StatsData } & StatsProps) {
   const videos = data.by_loc.reduce((sum, row) => sum + row.videos, 0);
   if (!videos) {
     return (
-      <EmptyState shell="plain" icon={RiVideoLine} title="No videos yet" actions={
+      <EmptyState icon={RiVideoLine} title="还没有视频" actions={
         <>
-          {configurable
-            ? <Button size="small" onClick={openMediaSettings}>Add media folder</Button>
-            : null}
-          <ButtonLink variant="secondary" href="/subscriptions?tab=add" size="small">Add follow</ButtonLink>
+          <ButtonLink variant="secondary" href="/subscriptions?tab=add" size="small">添加关注</ButtonLink>
+          <ButtonLink variant="primary" href={MEDIA_SETTINGS} size="small">添加媒体</ButtonLink>
         </>
       }>{NO_VIDEO_HINT}</EmptyState>
     );
@@ -190,7 +194,7 @@ function VolumeRow({ volume }: { volume: StorageVolume }) {
             {fmtSize(used)}
             <span className="ml-1.5 text-caption-1-regular text-text-secondary">{percentText(used, total)}</span>
           </b>
-        ) : <span className="whitespace-nowrap text-text-secondary">{volume.online ? 'Capacity unavailable' : 'Offline'}</span>}
+        ) : volume.online ? <StatusLabel>容量未取得</StatusLabel> : <ConnectionStatus online={false} />}
       </header>
       {total != null
         ? <Progress label={`${volume.label} space usage`} value={within(used, Math.max(total, 1))} max={Math.max(total, 1)} />
@@ -205,11 +209,11 @@ function VolumeRow({ volume }: { volume: StorageVolume }) {
   );
 }
 
-function StorageDetail({ volumes, configurable, openMediaSettings }: { volumes: StorageVolume[] } & StatsProps) {
+function StorageDetail({ volumes }: { volumes: StorageVolume[] } & StatsProps) {
   if (!volumes.length) {
     return (
-      <EmptyState shell="plain" icon={RiHardDrive2Line} title="No storage sources yet" actions={
-        configurable ? <Button size="small" onClick={openMediaSettings}>Add media folder</Button> : undefined
+      <EmptyState icon={RiHardDrive2Line} title="还没有存储来源" actions={
+        <ButtonLink variant="primary" href={MEDIA_SETTINGS} size="small">添加媒体</ButtonLink>
       }>{NO_VOLUME_HINT}</EmptyState>
     );
   }
@@ -220,11 +224,11 @@ function StorageDetail({ volumes, configurable, openMediaSettings }: { volumes: 
   );
 }
 
-function TagRanking({ tags, tagLabel, onTag }: { tags: TopTag[] } & StatsProps) {
+function TagRanking({ tags, tagLabel, onTag, hasMedia }: { tags: TopTag[]; hasMedia: boolean } & StatsProps) {
   if (!tags.length) {
     return (
-      <EmptyState shell="plain" icon={RiPriceTag3Line} title="No content tags yet"
-        actions={<ButtonLink variant="secondary" href="/data-cleanup" size="small">Complete metadata</ButtonLink>}>{NO_TAG_HINT}</EmptyState>
+      <EmptyState icon={RiPriceTag3Line} title="还没有内容标签"
+        actions={<ButtonLink variant="secondary" href={hasMedia ? '/data-cleanup' : '/settings/library'} size="small">{hasMedia ? '补全资料' : '添加媒体'}</ButtonLink>}>{NO_TAG_HINT}</EmptyState>
     );
   }
   return (
@@ -244,11 +248,11 @@ function TagRanking({ tags, tagLabel, onTag }: { tags: TopTag[] } & StatsProps) 
   );
 }
 
-function RecentWatches({ rows }: { rows: RecentPlay[] }) {
+function RecentWatches({ rows, hasMedia }: { rows: RecentPlay[]; hasMedia: boolean }) {
   if (!rows.length) {
     return (
-      <EmptyState shell="plain" icon={RiHistoryLine} title="No watch history yet"
-        actions={<ButtonLink variant="secondary" href="/" size="small">Browse library</ButtonLink>}>{NO_WATCH_HINT}</EmptyState>
+      <EmptyState icon={RiHistoryLine} title="还没有观看记录"
+        actions={<ButtonLink variant="secondary" href={hasMedia ? '/' : '/settings/library'} size="small">{hasMedia ? '浏览馆藏' : '添加媒体'}</ButtonLink>}>{NO_WATCH_HINT}</EmptyState>
     );
   }
   return (
@@ -283,8 +287,8 @@ function RecentWatches({ rows }: { rows: RecentPlay[] }) {
 function TagSources({ sources, videos }: { sources: TagSource[]; videos: number }) {
   if (!sources.length) {
     return (
-      <EmptyState shell="plain" icon={RiPriceTag3Line} title="No tag sources yet"
-        actions={<ButtonLink variant="secondary" href="/data-cleanup" size="small">Complete metadata</ButtonLink>}>{NO_TAG_SOURCE_HINT}</EmptyState>
+      <EmptyState icon={RiPriceTag3Line} title="还没有标签来源"
+        actions={<ButtonLink variant="secondary" href={videos ? '/data-cleanup' : '/settings/library'} size="small">{videos ? '补全资料' : '添加媒体'}</ButtonLink>}>{NO_TAG_SOURCE_HINT}</EmptyState>
     );
   }
   return (
@@ -388,8 +392,8 @@ export function StatsPage(props: StatsProps) {
             <Tab id="sources" className={SEGMENT}>Tag sources</Tab>
           </SegmentedTabList>
         </div>
-        <TabPanel id="tags" className="px-4 pt-3.5 pb-4"><TagRanking tags={data.top_tags} {...props} /></TabPanel>
-        <TabPanel id="recent" className="px-4 pt-3.5 pb-4"><RecentWatches rows={data.recent} /></TabPanel>
+        <TabPanel id="tags" className="px-4 pt-3.5 pb-4"><TagRanking tags={data.top_tags} hasMedia={videos > 0} {...props} /></TabPanel>
+        <TabPanel id="recent" className="px-4 pt-3.5 pb-4"><RecentWatches rows={data.recent} hasMedia={videos > 0} /></TabPanel>
         <TabPanel id="sources" className="px-4 pt-3.5 pb-4">
           <TagSources sources={data.tag_source} videos={data.attribution.videos} />
         </TabPanel>

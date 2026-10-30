@@ -6,7 +6,7 @@ This page covers the frontend build, the mount contract, and page migration. Ent
 2. Adding a React page: wire it into the route tree following [Migrating the next page](#migrating-the-next-page).
 3. Looking up module responsibilities: see [Directories and outputs](#directories-and-outputs) and [Mount contract](#mount-contract).
 
-Peach adopts React + Tailwind + BoardUI per [ADR-0031](adr/0031-frontend-react-boardui-tailwind.md). The main UI is started by `frontend/src/react/bootstrap.tsx`, which launches `Application`. The application-domain controllers own the skeleton, containers, and page helpers; the React route tree owns client-side navigation, pages, and detail content. The main UI ships only two artifacts, `peach-app.js` and `peach-app.css`, and controllers and components reference the same source graph.
+Peach 按 [ADR-0031](adr/0031-frontend-react-boardui-tailwind.md) 接入 React + Tailwind + BoardUI。主界面由 `frontend/src/react/bootstrap.tsx` 启动 `Application`，应用域控制器负责骨架、容器和页面助手，React 路由树负责客户端导航、页面与详情内容。主界面的入口是 `peach-app.js` 与 `peach-app.css`，低频页面按路由拆成带内容哈希的 chunk（[ADR-0118](adr/0118-main-bundle-route-chunks.md)），控制器与组件引用同一源码图。
 
 There is one immutable constraint: **there is no Node at runtime**. The Python service, the PyInstaller bundle, and the macOS
 checkout all read `web/` directly, so build outputs are committed to Git and no CDN is used.
@@ -15,27 +15,28 @@ checkout all read `web/` directly, so build outputs are committed to Git and no 
 
 | Path | What it is |
 | --- | --- |
-| `frontend/src/react/bootstrap.tsx`, `application.tsx` | Main UI entry point and Application lifecycle; configures shared state, mounts the route tree, starts the application-domain controllers, and cleans up on unmount |
-| `frontend/src/api.ts` | Fetch wrapper with `AbortController` |
-| `frontend/src/management.ts` | First-screen Fieldset of the data management page and show/hide of cloud-drive capabilities |
-| `frontend/src/appearance/` | Appearance and layout settings (`@peach/appearance`): preference store, theme, accent color, density, card layout, and glow palette. The alias resolves directly to this directory, so controllers and components read and write the same instance |
-| `frontend/src/core/` | DOM element lookup, requests, escaping, formatting, and route constants (`index.ts`), tag display names (`tags.ts`), and catalog-number titles (`jav-title.ts`). `@peach/legacy/*` is a source alias; the main bundle includes the single implementation directly |
-| `frontend/src/ui-kit/` | Shared controls and templates: scrollbar, Collapse, anchored menu, Select, source badge, readout animation, skeleton, horizontal scroller, switch, slider, confirm dialog, sound effects, and middle truncation. `@peach/legacy/ui` resolves directly to `index.ts`; standalone page bundles include only the controls they use |
-| `frontend/src/onboarding/` | Post-install tutorial state (`post-setup-tutorial.ts`): local key, signature, and request generation; controllers reference the shared source directly |
-| `frontend/src/application/` | Application adapters split by responsibility: catalog, follow, entity, index, layout, navigation, media, and global actions. `initializeApplication` wires controllers in startup order, and side effects are managed by the lifecycle |
-| `frontend/src/react/pages/` | Standalone page bundle: `index.tsx` is the build entry of `vite.pages.config.ts` and, by the mount point's `data-page`, draws the three pages outside the SPA shell: first-run setup (`setup/`), login (`login/`), and error page (`error/`). `auth-card.tsx` is the outer frame they share |
-| `frontend/src/react/` | Routed pages, resident components, and components; `entry.tsx` is the internal imperative adapter, `application-residents.ts` wires up resident components, `bundle.d.ts` declares internal interfaces, and `boardui/` is a verbatim copy of upstream source |
-| `frontend/src/query/` | The site's single TanStack Query client (`@peach/query`) and shared source queries. Application's `fetchQuery`, page `prefetch`, and Providers read the same instance; `media-sources.ts` declares `/api/sources` and its query key |
-| `frontend/src/react/query.ts` | Entry point for fetching that one client inside a React subtree; re-exports `@peach/query` |
-| `frontend/src/history/` | The site's single browser history (`@peach/history`), sharing React Router's `createBrowserHistory` with the route tree. Addresses are written via `shellNavigate`; overlay entries record the background in `usr`, and startup does not read the background |
-| `frontend/src/shell/` | Shared singletons for catalog scope, selection set, detail origin, and one-shot requests. Controllers and components reference live bindings directly; replace a value wholesale with `writeShell`, and after mutating in place notify subscribers with `notifyShell` |
-| `frontend/src/react/router/` | Client-side navigation: `<Router>` takes over that single history and handles back/forward itself. It draws each path's page (management area, playlists page, follow page, catalog grid, index pages, entity pages, and immersive), the overlay group's detail and queue, and four in-page components (home filter bar, new-releases row, processing banner, and search dropdown) (`managed-routes.tsx`); the page group matches by the background recorded on the entry, and the overlay group matches detail and queue by the real address |
-| `frontend/src/catalog-bars.ts` | The two aggregates for the home filter bar and sidebar: `['facets', scope]` and `['tops', params, scope]`, with continuation pages at `['tops', params]`, reused for 30 seconds, falling back to the whole-library scope when the status-page list is empty; the shell's `getBarsData` only computes the parameter string |
-| `frontend/src/react/components/` | Peach's own composites (note bar, progress, empty state, waiting dots) for which the BoardUI registry has no corresponding entry |
-| `frontend/src/react/taste/` | Taste page: `taste.ts` holds the contract and geometry algorithms, `charts.tsx` holds the radar / rank bars / heatmap / Sankey, and `taste-page.tsx` is the whole page |
-| `frontend/test/` | vitest cases and stubs for legacy modules; `test/react/` mounts components directly, and `*-routes.test.tsx` exercises the open/close contract of the route tree |
-| `web/dist/peach-app.js`, `peach-app.css` | Main UI build outputs, **committed to Git**, with fixed filenames, referenced by `web/index.html`; the server serves them through `/dist/{name}` |
-| `web/dist/peach-pages.js`, `peach-pages.css` | Standalone build outputs for the setup, login, and error pages, **committed to Git**, with fixed filenames. Built as an additional step after the main bundle (`emptyOutDir: false`); only these two outputs may be read without login |
+| `frontend/src/react/bootstrap.tsx`、`application.tsx` | 主界面启动入口与 Application 生命周期；配置共享状态、挂载路由树、启动应用域控制器并在卸载时清理 |
+| `frontend/src/api.ts` | 带 `AbortController` 的取数封装 |
+| `frontend/src/management.ts` | 数据管理首屏 Fieldset 与网盘能力显隐 |
+| `frontend/src/appearance/` | 外观与版式设置（`@peach/appearance`）：偏好 store、主题、强调色、密度、卡片版式与光晕配色。别名直接解析到本目录，控制器与组件读写同一实例 |
+| `frontend/src/core/` | DOM 取元素、请求、转义、格式化与路由常量（`index.ts`）、标签显示名（`tags.ts`）、番号标题（`jav-title.ts`）。`@peach/legacy/*` 是源码别名，主包直接包含唯一实现 |
+| `frontend/src/ui-kit/` | 共享控件与模板：滚动条、Collapse、锚定菜单、Select、来源站标、读数动效、骨架、横滚、开关、拉条、确认框、音效与中段截断。`@peach/legacy/ui` 直接解析到 `index.ts`；独立页面包仅打入用到的控件 |
+| `frontend/src/onboarding/` | 安装后教程状态（`post-setup-tutorial.ts`）：本地键、签名与请求代际，控制器直接引用共享源码 |
+| `frontend/src/application/` | 按职责拆分的应用适配：目录、关注、实体、索引、布局、导航、媒体与全局动作。`initializeApplication` 按启动次序连接控制器，副作用由生命周期管理 |
+| `frontend/src/react/pages/` | 独立页面包：`index.tsx` 是 `vite.pages.config.ts` 的构建入口，按挂载点的 `data-page` 画 SPA 外壳之外的三张页：首启（`setup/`）、登录（`login/`）与错误页（`error/`）。`auth-card.tsx` 是它们共用的外框 |
+| `frontend/src/react/` | 路由页面、常驻组件与组件；`entry.tsx` 是内部命令式适配，`application-residents.ts` 连接常驻组件，`bundle.d.ts` 声明内部接口，`boardui/` 逐字复制上游源码 |
+| `frontend/src/query/` | 全站唯一 TanStack Query 客户端（`@peach/query`）与共享来源查询。Application 的 `fetchQuery`、页面 `prefetch` 和 Providers 读同一实例；`media-sources.ts` 声明 `/api/sources` 与查询键 |
+| `frontend/src/react/query.ts` | React 子树里取那一个客户端的入口，转出 `@peach/query` |
+| `frontend/src/history/` | 全站唯一浏览器历史（`@peach/history`），与路由树共用 React Router 的 `createBrowserHistory`。地址经 `shellNavigate` 写入；覆盖条目在 `usr` 中记录背景，启动不读取背景 |
+| `frontend/src/shell/` | 目录口径、选择集、详情来处与一次性请求的共享单例。控制器与组件直接引用活绑定；整体换值用 `writeShell`，原地修改后用 `notifyShell` 通知订阅者 |
+| `frontend/src/react/router/` | 客户端导航：`<Router>` 接管那一份历史，后退前进由它自己处理；每条路径的页面（管理区、播放列表页、关注页、目录网格、索引页、资料页与沉浸）、覆盖组的详情与队列，以及首页筛选条、新作行、处理横幅与搜索下拉这四个页面内组件由它画（`managed-routes.tsx`）；页面组按条目记的背景匹配，覆盖组按真实地址匹配详情与队列 |
+| `frontend/src/catalog-bars.ts` | 首页筛选栏与侧栏的两份聚合：`['facets', 口径]` 与 `['tops', 参数, 口径]`，续页 `['tops', 参数]`，30 秒复用，状态页名单为空时退回全库口径；壳的 `getBarsData` 只算参数串 |
+| `frontend/src/react/components/` | Peach 自己的组合件（说明条、进度、空态、等待点），BoardUI 注册表里没有对应条目的那些 |
+| `frontend/src/react/taste/` | 口味页：`taste.ts` 是契约与几何算法，`charts.tsx` 是雷达／名次条／热力／桑基，`taste-page.tsx` 是整页 |
+| `frontend/test/` | vitest 用例与遗留模块的桩；`test/react/` 直接挂组件，`*-routes.test.tsx` 走路由树的开收契约 |
+| `web/dist/peach-app.js`、`peach-app.css` | 主界面入口，**进 Git**，固定文件名，由 `web/index.html` 引用；服务端通过 `/dist/{name}` 提供，ETag 复验 |
+| `web/dist/peach-app.<名字>-<哈希>.js` | 低频页面的 chunk，**进 Git**，由入口动态导入；服务端只认这一种形态，按长期不变缓存。每次构建先删上一批，提交时连同删除一起暂存 |
+| `web/dist/peach-pages.js`、`peach-pages.css` | 首启、登录与错误页的独立构建产物，**进 Git**，固定文件名。主包构建后追加构建（`emptyOutDir: false`）；只有这两份产物允许免登录读取 |
 
 The first-run page (`GET /` when unconfigured), the login page (`GET /login`), and the error page hit by browser navigation are
 three standalone pages outside the SPA shell. For all three the server returns the same thin shell (`web_entry.page_shell()`): the theme pre-read
@@ -71,15 +72,15 @@ saving on the configuration page).
 
 The page for changing folders and ports after configuration is entirely React (`frontend/src/react/settings/`, entry `configuration-page.tsx`). `/configuration` is the only editing page and sits in the management menu; the media library picker, the stats page, and first-run configuration guidance all point to it.
 
-- Structure: one narrow column holds five groups, "General / Media / Download / Network and access / Maintenance", each with an `h2.ui-configgroup` heading; a group with no content is omitted together with its heading. The page draws the tab row at the top itself (`.ui-board-local-nav`, `role="tablist"`, arrow keys and Home / End move across the whole row), one tab per group, and only the selected group is shown at a time; the tab bar is drawn in the same commit as the whole page, so it is present on the first frame.
-- The data contract is `/api/configuration` (`src/peach/routes_configuration.py`). The endpoint string is declared only once, in `frontend/src/configuration-endpoints.ts`, and the whole page and the summary card in the settings dialog read the same `queryKey`.
-- The first frame must be synchronous: right after the shell mounts this page it scrolls to that block according to `#peachProxy` in the address, so the route tree draws the first frame with `flushSync`, and later updates are asynchronous as usual. The first level of `.ui-configpage` is, in order, the tab bar, then each group's heading and panel; each group's root node is that tab's `role="tabpanel"`, and the selected group carries `ui-board-group-active`.
-- Jumping to a group: elsewhere (the stats page "Add media directory", the empty-library hint, the media library picker "Manage media libraries", the diagnostics page) the group name is recorded into the shell singleton `configurationRequestedSection` (a page in the route tree goes through `actions.requestConfigurationSection`); when the shell opens this page it hands it in as `open.section` and clears it once the page is drawn; the page uses it only to decide which tab is selected on the first frame.
-- The "This computer" tab of the settings dialog mounts only `configuration-summary` (`configuration-summary.tsx`): library count, port, update status, and "Open configuration page", with no editable controls (ADR-0050). The library count comes from `library_count` of `/api/configuration`, which the server counts by grouping `media_libraries.libraries`; the page does not merge them itself.
-- Two adjacent items are not on this page: media repair is a card inside the React subtree of the data management page (`frontend/src/react/media-repair/`), and the feed sources are the "Feeds" tab of the follow management page (`follow-manage/feed-sources.tsx`, reading `/api/feeds`).
-- The server checks deployment mode and request origin: a desktop service is managed by the tray and the request comes from the local machine; a Docker service is managed by the container entrypoint, allows authenticated local or private-network requests, and rejects management requests carrying proxy forwarding headers. `/healthz` returns `configurable` per caller, and the page shows the configuration entry accordingly; hiding the entry cannot replace the server-side access check.
-- Form validation reasons are given by the server per field (`errors` in a 400), the page writes them back in place, and the front end does not duplicate the logic.
-- When a direct browser navigation hits an `HTTPException`, the handler in `api.py` returns an HTML error page according to `Accept` (`routes_pages.error_page`, with the thin shell drawn by the page bundle); under `/api/` and for non-navigation requests it still returns JSON.
+- 结构：一条窄列里排「通用 / 媒体 / 下载 / 网络与访问 / 维护」五组，每组一个 `h2.ui-configgroup` 小标题，没有内容的组连标题一起省略。页面自己画顶上那排页签（`.ui-board-local-nav`，`role="tablist"`，方向键与 Home／End 在整排里走），一组一格，一次只显示选中的那一组；页签条和整页同一次提交画出，第一帧就在。
+- 数据契约是 `/api/configuration`（`src/peach/routes_configuration.py`）。端点字符串只在 `frontend/src/configuration-endpoints.ts` 声明一次，整页和设置弹层的摘要卡读同一个 `queryKey`。
+- 第一帧必须同步：壳挂完这一页紧接着按地址里的 `#peachProxy` 滚到那一块，所以路由树用 `flushSync` 画第一帧，往后的更新照常异步。`.ui-configpage` 的第一层依次是页签条、各组的小标题与面板；每组的根节点就是那一格 `role="tabpanel"`，选中的那一组带 `ui-board-group-active`。
+- 跳到某一组：React 页面（统计页「添加媒体」、诊断页、关注管理的凭据入口）直接链到这一组的地址 `/settings/<组>`，页面按地址定第一帧选中哪一格；遗留层的空库提示与媒体库选单「管理媒体库」把组名记进壳单例 `configurationRequestedSection`，壳打开这一页时作为 `open.section` 交进去、页面画上之后清空。
+- 设置弹层「这台电脑」一格只挂 `configuration-summary`（`configuration-summary.tsx`）：媒体库数、端口、更新状态和「打开配置页」，不放可编辑的控件（ADR-0050）。媒体库数取 `/api/configuration` 的 `library_count`，由服务端按 `media_libraries.libraries` 分组数好，页面不自己归并。
+- 相邻的两处不在这页：媒体修复是数据管理页 React 子树里的一张卡（`frontend/src/react/media-repair/`），订阅源是关注管理页的「订阅源」页签（`follow-manage/feed-sources.tsx`，读 `/api/feeds`）。
+- 服务端检查部署方式和请求来源：桌面服务由托盘管理且请求来自本机；Docker 服务由容器入口管理，允许经过登录验证的本机或私有网络请求，拒绝携带代理转发头的管理请求。`/healthz` 按调用方返回 `configurable`，页面据此显示配置入口；入口隐藏不能替代服务端访问检查。
+- 表单校验的原因由服务端按字段给（400 的 `errors`），页面写回原位，不在前端复制判定。
+- 浏览器直接导航撞上 `HTTPException` 时，`api.py` 的处理器按 `Accept` 回一张 HTML 错误页（`routes_pages.error_page`，薄壳由页面包画），`/api/` 下和非导航请求仍回 JSON。
 
 ### Index pages
 
@@ -122,15 +123,22 @@ The `/follow` list page is entirely React (`frontend/src/react/follow-feed/`, en
 
 The catalog (`/` and its filtered states, `/trash`), the entity page's works area, and the detail page's "Up next" all draw the same grid (`frontend/src/react/catalog-grid/`). The work card is `components/media-card.tsx`, and the Mix card uses the `components/mix-card.tsx` from the playlists page. The three ways of fetching data are split by `mode`:
 
-- `catalog` is registered in `CATALOG_ROUTES` and drawn into `#grid` by the route tree. Tables are keyed per page: all catalog paths and the trash open with `/`, and the path in the slot says which page is drawn, not the address; `CATALOG_PATHS` goes only into the `<Routes>` declaration, not into `isManagedPath`. The filter state is the shell's `state`, and on open it is handed in whole together with layout, selection state, helpers, and actions; afterward the shell's `paintGridPage` looks at the `managedEntry` of `#grid`: if drawn, it pushes the new filter and `revision` via `updateManagedRoute`, and the query refetches on key change without remounting; if the first screen is still in flight, it reopens once. On cold start `revealRoutedPage` is handed in via `place`, and the skeleton fade-out and the whole page are handed off in the same batch. The structure of the readout row `#count` belongs to the shell, while the readout cell, the auto-continuation of `#loadSentinel`, Mix placement, the portrait strip, and the volume / edition folding are all in the page. The criteria are pinned in `test/react/catalog-routes.test.tsx`.
-- The junk file queue (`/junk-files`, `frontend/src/react/junk-queue/`) is not this grid but another page of `CATALOG_ROUTES`, likewise drawn into `#grid`: it fetches nothing before opening and lays down its own skeleton as soon as it is drawn; category changes, view changes, and re-reads after disposal are pushed in via `updateManagedRoute`. When switching between it and the catalog grid, `clearCatalogGrid` clears first, the cell of the count row that belongs to it is withdrawn in sync, and the shell then lays a skeleton into `#count`.
-- `entity` is rendered by the entity page body `entity-body` (`frontend/src/react/entity-body/`) directly in its works view, without mounting a separate island: the first page is fetched together with the entity page's first screen, and continuation pages are fetched by the entity page by query key. The other two views of the same block are the roster (`PeopleGrid` of the index page) and the photo wall (sample segments first, local images after; it opens the React lightbox (`photo-lightbox/`) directly, and locating the source file calls `actions.revealSource`).
-- `items` is mounted on `#nrow`: the shell already has that batch, and the island only draws cards.
-- Layout, selection state, and fast-forward seconds are pushed in via `updateManagedRoute` (the entity page's works area via `pushEntityPage`): changing layout only redraws, and already-loaded pages are kept as they are. `selected` pushes a new `Set` each time.
-- Hover preview, cover framing, and image shimmer on cards are all in `frontend/src/card-art/`: cards call `wireHover` / `releaseHover` (state written on the card's `data-previewing` / `data-longhover`) and `relayoutCovers` directly, and the shimmer is recognized by the listener installed by `installCardArt` on `[data-media-art]>img` according to `PENDING_IMAGES`; the shell only tells the hover preview about multi-select state, mosaic, and delay via `configureHoverPreview`. The cards' structural hooks are all `data-media-*`; the `video.hv`, `img.ui-hvframes`, and envelope `img.poster` that the hover preview inserts into the cover cell use their own class names; the style of `.ui-hvframes` is in `card-art.css` in the same directory, and the other two are in `12-cards.css`.
-- Leaving: when going to a page other than the catalog, trash, and junk files, `clearCatalogGrid` clears that page of `#grid` (`claimSurface` only clears `#stats` and `#index`); the entity page body is cleared with the entity page by `releaseManagedRoute`; "Up next" is a subcomponent inside the work detail and unmounts with the stage's content.
-- Off-screen cards use `content-visibility` to skip rendering of the cover and metadata area, with no virtual list.
-- Single-card write operations are all triggered by user clicks: Watch Later goes through `actions.watchLater`, restoring a trash card goes through `actions.resourceOperation` and offers undo when done; permanent delete exists only on the batch bar and first goes through the danger tier of `confirmModal`.
+- `catalog` 登记在 `CATALOG_ROUTES`，由路由树画进 `#grid`。表按页面分键：目录各路径与回收站都用 `/` 打开，槽里的路径说的是画着哪一页、不是地址；`CATALOG_PATHS` 只进 `<Routes>` 的声明，不进 `isManagedPath`。筛选态是壳的 `state`，打开时连同版式、选择态、助手与动作整份交进来；之后壳的 `paintGridPage` 看 `#grid` 的 `managedEntry`：画着就经 `updateManagedRoute` 推新筛选与 `revision`，查询换键重取、不重挂；首屏还在途就重开一次。冷启动经 `place` 交 `revealRoutedPage`，骨架淡出与整页同批交接。读数行 `#count` 的结构归壳，读数那一格、`#loadSentinel` 的自动续页、Mix 落位、竖屏带与分卷／版次折叠都在页面里。判据钉在 `test/react/catalog-routes.test.tsx`。
+- 垃圾文件队列（`/junk-files`，`frontend/src/react/junk-queue/`）不是这张网格，是 `CATALOG_ROUTES` 的另一页，同样画进 `#grid`：打开前不取数，画上就铺自己那份骨架；换分类、换视图与处置后重读经 `updateManagedRoute` 推进来。它与目录网格换页时先由 `clearCatalogGrid` 收，计数行里归它的那一格随之同步撤掉，壳再往 `#count` 铺骨架。
+- `entity` 由资料页正文 `entity-body`（`frontend/src/react/entity-body/`）直接渲染在它的作品视图里，不另挂岛：第一页随资料页首屏一起取来，续页由资料页按查询键取。同一块的另两个视图是名册（索引页的 `PeopleGrid`）与照片墙（样张分段在前、本地图片在后；直接打开 React 灯箱（`photo-lightbox/`），定位源文件调 `actions.revealSource`）。
+- `items` 挂在 `#nrow` 上：壳手上已有那一批，岛只画卡。
+- 馆藏表格由 `catalog-list-page.tsx` 渲染，默认依次显示名称、时长、分辨率、体积、星级评分和观看次数。「显示列」可开启番号、高潮计数、观看时间、入库时间和发行时间；全部列按身份、媒体规格、个人记录、时间信息排列。隐藏某列仍可按该字段排序。名称过长时省略显示，悬停可查看全文。拖动表头分隔线调整列宽；键盘操作时聚焦分隔线，按 Enter 进入调整，再用左右方向键改变宽度，按 Enter 或 Tab 结束。列宽与显示选择保存在当前浏览器；「重置列宽」恢复默认宽度，「恢复默认显示」恢复默认列。桌面和手机均在表格内横向滚动，不扩大页面宽度。
+- 表格的表头和行分隔线铺满外框，右侧余量由独立空白列承接，保存的列宽保持不变。鼠标按住非控件区域可左右拖动所有数据表格，滚轮维持浏览器行为。馆藏表格只在手动开启多选后显示勾选框，底部「取消」清空选择并退出多选。评分与详情页共用 `RatingStars`：点击星星保存，再点当前星级取消；保存失败时在原单元格显示原因和「立即重试」（无障碍名称「立即重试评分」），成功回执提供撤销。
+- 所有数据表格共用 `TableColumnControls`、`useTablePreferences` 和 `DataTableFrame`，提供显示列、恢复默认显示、重置列宽及鼠标／键盘调整列宽。各表单独保存浏览器偏好；身份列与勾选列保留，其余列可隐藏，排序菜单继续列出可排序字段。馆藏、关注来源、JAV 订阅源、两张别名表和数据管理表均使用这套组件。
+- 关注来源与 JAV 订阅源的表头提供「全选本页」，再次点击取消本页选择。表格链接只占文字或图标本身的范围；管理表空白处用于选择行。关注卡片每条来源的站点图标放在行首，JAV 订阅源站点复用缓存的 `SiteLabel` 图标。
+- 已保存别名的「修改统一名称」打开改名对话框，可输入名称或直接选用已有别名。`POST /api/follow/author-alias` 接受 `action: "rename"`、`canonical_key` 和 `canonical`；原名称保留为别名，关联的创作者名称及作品创作者字段在同一事务中同步。名称冲突或关联多个创作者档案时返回错误并回滚。
+- 外置按钮控制的正文使用 `CollapseRegion`，原生详情使用 `Disclosure`；两者共用 `ui-kit/collapse.ts` 的高度过渡和反向点击保护。关注卡片、任务通知、教程及侧栏保留正文状态，箭头使用同一元素旋转；详情标题箭头共用 `CollapseChevron`。减少动态效果时遵守全站设置。
+- 排序方向共用 `IconSwap` 的双图标结构与 `--motion-swap`，覆盖数据表、关注管理及实体／关注页排序；键盘操作即时更新。换批按钮保持同一枚 shuffle SVG，等待时继承共享描线参数；首页、实体和关注浮层共用这套忙态。JAV 详情的标题和元信息通过 `data-reveal-line` 接入 Stage 既有逐行揭示与清理。
+- 版式、选中态与快进秒数经 `updateManagedRoute`（资料页作品区经 `pushEntityPage`）推进来：换版式只重画，已载入的分页原样保留。`selected` 每次推一个新的 `Set`。
+- 卡上的悬停预览、封面取景与图片微光都在 `frontend/src/card-art/`：卡片直接调 `wireHover`／`releaseHover`（状态写在卡的 `data-previewing`／`data-longhover` 上）与 `relayoutCovers`，微光由 `installCardArt` 装的监听按 `PENDING_IMAGES` 认 `[data-media-art]>img`；壳只经 `configureHoverPreview` 告诉悬停预览多选态、打码与延迟。卡片的结构钩子全是 `data-media-*`；悬停预览插进封面格的 `video.hv`、`img.ui-hvframes` 与封套 `img.poster` 用自己的类名；`.ui-hvframes` 的样式在同目录的 `card-art.css`，另两样在 `12-cards.css`。
+- 离场：去目录、回收站与垃圾文件以外的页面时由 `clearCatalogGrid` 收 `#grid` 那一页（`claimSurface` 只收 `#stats` 与 `#index`）；资料页正文随资料页由 `releaseManagedRoute` 收起；接着看是作品详情里的子组件，随舞台的内容一起卸。
+- 屏外卡用 `content-visibility` 跳过封面与元信息区的渲染，不做虚拟列表。
+- 单卡写操作都由用户点击触发：稍后看走 `actions.watchLater`，回收站卡的还原走 `actions.resourceOperation`，做完给撤销；彻底删除只在批量条上，先过 `confirmModal` 的危险档。
 
 ### Stage and player
 
@@ -269,8 +277,8 @@ Detailed adds the class and nearby text; Forensic adds the full DOM path with id
 npm --prefix frontend run build:agentation   # build once in the checkout where you want to use it
 ```
 
-Then append `?agentation=on` to the page address (use `?agentation=off` to turn it off); the switch is stored in this device's
-`localStorage`, and afterward every page open carries the toolbar in the bottom right.
+然后在页面地址后加 `?agentation=on`，仅在当前页面加载标注工具。刷新或重新打开页面时不会
+自动加载；`?agentation=off` 也可用于关闭。浏览器中的持久开启标记在页面初始化时清理。
 
 - The output is written to `build/agentation/peach-agentation.js` and served from `/dev/agentation.js`, with the same token as `/dist/`.
   It does not go into Git or the standalone bundles: Agentation is under the PolyForm Shield license, which permits only your own use and is not distributed with Peach,
@@ -510,7 +518,7 @@ Both pin exact versions, and the lockfile goes into Git.
 | `@types/react`, `@types/react-dom` | Type checking for the React subtree |
 | `agentation` | UI annotation toolbar for local development, built separately and not in the outputs or standalone bundles (see "UI annotation") |
 
-The main UI is built by `vite.config.ts` from `src/react/bootstrap.tsx` into `peach-app.js` and `peach-app.css`. Application, the route tree, resident components, and shared state belong to one source graph, `@peach/*` resolves directly to source, and React, Query, history, shell, or UI modules are not externalized. The main UI does no code splitting; the dev diagnostic tool `/dev/agentation.js` is a separate on-demand external module.
+主界面由 `vite.config.ts` 从 `src/react/bootstrap.tsx` 构建为 `peach-app.js` 与 `peach-app.css`。Application、路由树、常驻组件与共享状态同属一份源码图，`@peach/*` 直接解析到源码，不外置 React、Query、历史、shell 或 UI 模块。路由表里的低频页面经 `src/react/router/route-chunk.ts` 的 `routeChunk(() => import(...))` 拆出：首屏取数阶段与接口并行装载，取齐后同步画页，首屏稳定后空闲时预热；首屏用得到的模块由 `codeSplitting.groups` 的 `$initial` 收回入口，chunk 从 `./peach-app.js` 导入它们。新增低频页照这个写法接进路由表；`page()` 只在 `preload()` 落地后调用，组件测试直接读 `page()` 时先等 `loadRouteChunks()`。样式仍合成一份 `peach-app.css`，低频页模块带的样式排在首屏样式之后。开发取证工具 `/dev/agentation.js` 是独立的按需外部模块。
 
 `npm run build` first builds the main UI and empties `web/dist/`, then appends the standalone page bundle with `vite.pages.config.ts`. The browser baseline is Chrome 111, Firefox 128, and Safari 16.4, with oklch emitted as is; values that change with the theme use `.dark` and custom properties, not `light-dark()`, and `react-color-scheme.test.ts` checks the output.
 

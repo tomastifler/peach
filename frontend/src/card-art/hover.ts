@@ -87,6 +87,11 @@ export function wireHover(el: HTMLElement, it: HoverItem): void {
       if (!layer) {
         layer = document.createElement('img');
         layer.className = 'ui-hvframes'; layer.alt = '';
+        const pending = layer;
+        pending.hidden = true;
+        pending.addEventListener('load', () => {
+          if (layer === pending) pending.hidden = false;
+        }, { once: true });
         layer.src = `/poster?id=${it.id}&c=${i}`;
         pic.appendChild(layer);
       }
@@ -120,7 +125,16 @@ export function wireHover(el: HTMLElement, it: HoverItem): void {
       const SEG = [0.08, 0.22, 0.36, 0.50, 0.64, 0.78, 0.90]; let si = 0;
       const seek = () => { try { video.currentTime = (video.duration || 0) * (SEG[si] ?? 0); } catch { /* 元数据还没到 */ } };
       video.addEventListener('loadedmetadata', () => {
-        seek(); video.classList.add('on'); video.dataset.playing = ''; armLong();
+        seek();
+      }, { once: true });
+      video.addEventListener('loadeddata', () => {
+        if (v !== video) return;
+        const reveal = () => {
+          if (v !== video) return;
+          video.classList.add('on'); video.dataset.playing = ''; armLong();
+        };
+        if (video.requestVideoFrameCallback) video.requestVideoFrameCallback(reveal);
+        else video.addEventListener('playing', reveal, { once: true });
         video._hop = setInterval(() => { si = (si + 1) % SEG.length; seek(); }, 1400);
       }, { once: true });
       pic.appendChild(video); video.play().catch(() => {});

@@ -40,7 +40,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import avatar_cover_face, avatar_picker, face_match
+from . import avatar_cover_face, avatar_picker, face_match, gfriends
 from .avatar_provider import (
     MIN_LONG_SIDE, MIN_SHORT_SIDE, AvatarCandidateCache, InspectedAvatar, acceptable_avatar,
 )
@@ -209,11 +209,11 @@ _OFFSITE_COUNT = ("(SELECT count(*) FROM entity_external_ref x WHERE x.entity_id
 MATCH_RULE = 9
 
 
-def _fingerprint(works, aliases, offsite) -> str:
-    return f"{int(works or 0)}:{int(aliases or 0)}:{int(offsite or 0)}:r{MATCH_RULE}"
+def _fingerprint(works, aliases, offsite, gallery: str = "") -> str:
+    return f"{int(works or 0)}:{int(aliases or 0)}:{int(offsite or 0)}:r{MATCH_RULE}" + (f":g{gallery}" if gallery else "")
 
 
-def fingerprint(connection: sqlite3.Connection, entity_id: int) -> str:
+def fingerprint(connection: sqlite3.Connection, entity_id: int, providers_root=None) -> str:
     """会让这条后继结论变的量，写成 `作品数:别名数:avwikidb 编号数:r版本`。
 
     多一部作品就多一张封面可截、可比；多一个别名就多一个名字去图库里找（`神山ももか`
@@ -223,7 +223,8 @@ def fingerprint(connection: sqlite3.Connection, entity_id: int) -> str:
     row = connection.execute(
         f"SELECT {_WORK_COUNT}, {_ALIAS_COUNT}, {_OFFSITE_COUNT} FROM entity e WHERE e.id=?",
         (int(entity_id),)).fetchone()
-    return _fingerprint(*(row if row else (0, 0, 0)))
+    gallery = gfriends.index_revision(Path(providers_root) / avatar_picker.GFRIENDS_CACHE) if providers_root is not None else ""
+    return _fingerprint(*(row if row else (0, 0, 0)), gallery)
 
 
 def stock(connection: sqlite3.Connection, avatar_root, attempts, *, limit: int,
@@ -236,6 +237,9 @@ def stock(connection: sqlite3.Connection, avatar_root, attempts, *, limit: int,
         return []
     skip = set(skip)
     found = []
+    index_dir = attempts.root.parent / "performer-avatars" / avatar_picker.GFRIENDS_CACHE
+    gallery = gfriends.index_revision(index_dir)
+    refresh_needed = gfriends.index_stale(index_dir)
     for row in connection.execute(
             f"SELECT e.id,e.kind,e.canonical_name,{_WORK_COUNT} AS assets,"
             f" {_ALIAS_COUNT} AS aliases, {_OFFSITE_COUNT} AS offsite"
@@ -244,13 +248,16 @@ def stock(connection: sqlite3.Connection, avatar_root, attempts, *, limit: int,
             " ORDER BY assets DESC, e.id"):
         entity_id, kind = int(row["id"]), str(row["kind"])
         key = followup_key(kind, entity_id)
-        current = _fingerprint(row["assets"], row["aliases"], row["offsite"])
+        current = _fingerprint(row["assets"], row["aliases"], row["offsite"], gallery if kind == "performer" else "")
+        refresh = kind == "performer" and refresh_needed
         if (key in skip or not needs_avatar(avatar_root, kind, entity_id)
-                or attempts.settled(key, current)):
+                or (attempts.settled(key, current) and not refresh)):
             continue
         name = str(row["canonical_name"] or "")
         found.append(Followup(key=key, task_key=TASK_KEY,
                               label=f"{TASK_LABEL}：{name}" if name else TASK_LABEL))
+        if kind == "performer":
+            refresh_needed = False
         if len(found) >= limit:
             break
     return found
@@ -264,12 +271,18 @@ def run(contract, key: str, handle) -> dict:
     依据的那一次（`NO_IDENTITY`）同样不记。
     """
     summary = _run(contract, key, handle)
+    _kind, entity_id = parse_key(key)
+    refresher = getattr(contract, "gfriends_index", None)
+    if (_kind == "performer" and refresher is not None and refresher.error
+            and gfriends.index_age(refresher.cache_dir) is None):
+        summary["source_unavailable"] = True
+        summary["outcome"] = "图库索引未取得；" + summary["outcome"]
     if (summary.get("face_match_unavailable") or summary.get("source_unavailable")
             or summary.get("outcome") == NO_IDENTITY):
         return summary
-    _kind, entity_id = parse_key(key)
     with contract.database.read_connection() as connection:
-        current = fingerprint(connection, entity_id)
+        providers_root = contract.candidate_root / "provider-cache" / "performer-avatars"
+        current = fingerprint(connection, entity_id, providers_root if _kind == "performer" else None)
     Attempts(attempts_root(contract.candidate_root)).record(
         key, current, str(summary.get("outcome", "")))
     return summary
@@ -303,7 +316,8 @@ def _run(contract, key: str, handle) -> dict:
             handle.progress(label=f"{TASK_LABEL}：{name}", throttle=0)
             return _install_account_face(contract, connection, providers_root, avatar_root,
                                          entity_id, name, cropped_px)
-        # 图库索引只读本地缓存，这一步不联网；联网只发生在要量、要比、要装那几张的时候。
+        avatar_picker.index_refresher(contract).ensure()
+        # 自动任务等待索引准备完成，再按本地缓存列候选。
         listing = avatar_picker.choices(connection, providers_root, avatar_root,
                                         kind, entity_id, deduplicate=False)
         found = [choice for choice in listing["choices"]
@@ -673,8 +687,10 @@ def _install_cover_face(contract, providers_root, avatar_root, kind: str,
     """
     summary = {"name": name, "matched": matched}
     if not found:
-        reason = f"探针不可用：{probe.unavailable}" if probe.unavailable else "封面上没有能截的脸"
-        return {**summary, "outcome": f"{gallery}，{reason}"}
+        if probe.unavailable:
+            return {**summary, "outcome": f"{gallery}，人脸模型不可用：{probe.unavailable}",
+                    "face_match_unavailable": True}
+        return {**summary, "outcome": f"{gallery}，封面上没有能截的脸"}
     face = found[0]
     # 装的只有脸最宽那一张；其余几张也截好留进候选缓存，挑图弹层里一点就能换，
     # 不必再去整张封面上手框。
@@ -771,7 +787,7 @@ def _install_account_face(contract, connection, providers_root, avatar_root, ent
     faces = avatar_cover_face.sheet_faces(connection, contract.cover_root, entity_id, probe,
                                           contract.snapshot_file)
     if probe.unavailable:
-        return {**summary, "outcome": f"探针不可用：{probe.unavailable}",
+        return {**summary, "outcome": f"人脸模型不可用：{probe.unavailable}",
                 "face_match_unavailable": True}
     if not faces:
         return {**summary, "outcome": "作品画面上没有能截的脸"}

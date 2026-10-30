@@ -8,10 +8,13 @@
  * 取图失败时兜底链（`card-art/image-fallback.ts`）会把 `<img>`
  * 从 DOM 里摘掉、人脸放大（`avatarFrame`）往图上写内联尺寸、等待微光挂在图的父元素上，这几样
  * 都直接改节点，所以那几格用 `dangerouslySetInnerHTML`，React 不拥有里面的节点。 */
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { entityFaceImg, facePos } from '@peach/card-art';
 import { entityPath, esc, firstGrapheme, icon } from '@peach/legacy/core';
+import { textLang } from '../../core/text-lang';
+import { entityDisplayName, nameFallback, nameLanguage } from '../../core/entity-names';
+import { useEntityNames } from '../use-entity-names';
 
 import { Button } from '@/components/base/buttons/button';
 
@@ -38,6 +41,9 @@ function costarImg(person: HeroCostar): string {
 }
 
 export function EntityHeroPage({ kind, name, entity, feedNew, feedHost, actions, helpers }: EntityHeroProps) {
+  useEntityNames();
+  const displayName = entityDisplayName(kind, entity.canonical_name, Number(entity.id));
+  const fallback = nameFallback(kind, entity.canonical_name, Number(entity.id));
   const people = isPeople(kind);
   const company = isCompany(kind);
   const facts = people ? factRows(entity.profile) : company ? companyFactRows(entity.company_profile) : [];
@@ -56,27 +62,28 @@ export function EntityHeroPage({ kind, name, entity, feedNew, feedHost, actions,
       <section data-entity-card="" aria-label="Profile">
         <div data-entity-profile={facts.length ? 'facts' : ''}>
           <div data-entity-portrait-wrap="">
-            <Portrait kind={kind} name={name} helpers={helpers} people={people} company={company} />
+            <Portrait kind={kind} name={displayName} helpers={helpers} people={people} company={company} />
             {people && entity.id ? (
               <span data-avatar-picker="">
-                <AvatarPicker kind={kind} entityId={Number(entity.id)} name={entity.canonical_name || name}
+                <AvatarPicker kind={kind} entityId={Number(entity.id)} name={displayName || name}
                   onPicked={actions.avatarPicked} />
               </span>
             ) : null}
           </div>
           <div data-entity-identity="">
             <div data-entity-title="">
-              <h2>{entity.canonical_name}</h2>
-              {kind !== 'tag' ? <NamePicker current={entity.canonical_name} choices={nameChoices(entity)}
+              <h2 lang={textLang(displayName)} title={fallback || undefined}>{displayName}</h2>
+              {kind !== 'tag' ? <NamePicker current={entity.canonical_name} choices={nameChoices(entity, nameLanguage())}
                 onChoose={actions.chooseName} onAddAlias={actions.addAlias} /> : null}
               {entity.id ? <FavoriteButton item={{ entity_id: Number(entity.id), kind, name: entity.canonical_name || name, favorite: entity.favorite }} /> : null}
             </div>
+            {fallback ? <span data-name-fallback="" data-copy-key={`performer-name-fallback.${nameLanguage()}`} className="text-caption-1-regular text-text-secondary">{fallback}</span> : null}
             <AliasLine kind={kind} entity={entity} actions={actions} />
             {entity.related_identities?.length ? (
               <div className="flex min-w-0 flex-wrap gap-2 text-caption-1-regular text-text-secondary">
                 {/* 账号名常是一长串无空格的英文，窄屏下得能在任意处折行。 */}
                 {entity.related_identities.map((identity) => {
-                  const text = `${identity.relation === 'same_person' ? 'Same person' : 'Linked account'}: ${identity.canonical_name}`;
+                  const text = `${identity.relation === 'same_person' ? '同一人' : '关联账号'}：${entityDisplayName(identity.kind, identity.canonical_name, identity.id)}`;
                   return (
                     <button type="button" key={identity.id} title={text}
                       className="min-w-0 max-w-full text-text-primary underline wrap-anywhere"
@@ -91,7 +98,7 @@ export function EntityHeroPage({ kind, name, entity, feedNew, feedHost, actions,
               <div ref={linkRow} data-entity-links="">{links.map((link, at) => <HeroLinkView key={at} link={link} />)}</div>
             ) : null}
             {marks.length || entity.feed ? <EntryMarks entity={entity} actions={actions} helpers={helpers} /> : null}
-            {entity.follow?.held.length ? <HeldAuthors follow={entity.follow} entity={entity} actions={actions} /> : null}
+            {entity.follow?.held.length ? <HeldAuthors follow={entity.follow} displayName={displayName} actions={actions} /> : null}
           </div>
           {facts.length ? (
             <dl data-entity-facts="">
@@ -115,8 +122,8 @@ export function EntityHeroPage({ kind, name, entity, feedNew, feedHost, actions,
                 <button key={person.k} type="button" data-related-performer={person.k}
                   onClick={() => actions.openEntity('performer', person.k)}>
                   <span data-hero-ring="" dangerouslySetInnerHTML={{
-                    __html: `<span>${esc(firstGrapheme(person.k))}</span>${costarImg(person)}` }} />
-                  <span data-hero-costar-name="">{person.k}</span>
+                    __html: `<span>${esc(firstGrapheme(entityDisplayName('performer', person.k, person.id)))}</span>${costarImg(person)}` }} />
+                  <span data-hero-costar-name="">{entityDisplayName('performer', person.k, person.id)}</span>
                 </button>
               ))}
             </div>
@@ -136,10 +143,18 @@ function Portrait({ kind, name, helpers, people, company }: {
 }) {
   /* 图只拼一次：兜底链摘掉的 `<img>`、人脸放大写进去的尺寸都留在节点上，重画时不能按
      同一段 HTML 再盖回去（`dangerouslySetInnerHTML` 只在字符串变了时才重写）。 */
-  const [html] = useState(() => `${helpers.portraitImg()}<span>${esc(firstGrapheme(name))}</span>`);
+  const portrait = useRef<HTMLDivElement>(null);
+  const [html] = useState(() => `${helpers.portraitImg()}<span data-portrait-initial="">${esc(firstGrapheme(name))}</span>`);
+  useLayoutEffect(() => {
+    const initial = portrait.current?.querySelector('[data-portrait-initial]');
+    if (initial) initial.textContent = firstGrapheme(name);
+    for (const image of portrait.current?.querySelectorAll<HTMLImageElement>('img[alt]') || []) {
+      if (image.alt) image.alt = name;
+    }
+  }, [name]);
   return (
     <div data-entity-portrait={people ? 'round' : 'square'} data-fit-native={company ? 'mark' : 'portrait'}
-      data-entity-kind={kind} dangerouslySetInnerHTML={{ __html: html }} />
+      ref={portrait} data-entity-kind={kind} dangerouslySetInnerHTML={{ __html: html }} />
   );
 }
 
@@ -155,7 +170,8 @@ function AliasLine({ kind, entity, actions }: { kind: string; entity: EntityHero
     : agency.name) : null;
   const count = <><b>{entity.asset_count.toLocaleString()}</b> videos</>;
   if (kind === 'performer' || kind === 'creator') {
-    const line = nameLine(entity.name_groups);
+    const groups = entity.name_display?.groups[nameLanguage()] ?? entity.name_groups;
+    const line = nameLine(groups);
     return (
       <div data-entity-alias="meta">
         <IdentityMeta entity={entity} />
@@ -165,12 +181,12 @@ function AliasLine({ kind, entity, actions }: { kind: string; entity: EntityHero
         {line ? (
           <div data-meta-item="names">
             <Glyph name="id-card" />
-            <span data-alias-names="" title="Aliases">{line.names.map((one, at) => <span key={at}>{one}</span>)}</span>
+            <span data-alias-names="" title="别名">{line.names.map((one, at) => <span key={at} lang={textLang(one)}>{one}</span>)}</span>
             {line.rest > 0 ? (
               <MorePop id="entityAliasPop" hook="alias" rest={line.rest} label={`${line.rest.toLocaleString()} more aliases`}
                 heading={`${line.total.toLocaleString()} aliases`}>
                 <dl>
-                  {(entity.name_groups?.groups || []).map((group, at) => (
+                  {(groups?.groups || []).map((group, at) => (
                     <NameGroup key={at} label={group.label} names={group.names} />
                   ))}
                 </dl>
@@ -233,8 +249,8 @@ function FollowMeta({ follow, actions }: { follow: HeroFollow; actions: EntityHe
 
 /** 关注里有同名作者、还没认是不是同一个人：每组一条提示，认了才把那组来源绑到这位名下。
  *  名字相同不算证据（ADR-0095），所以这里只问，不替人绑。 */
-function HeldAuthors({ follow, entity, actions }: {
-  follow: HeroFollow; entity: EntityHeroData; actions: EntityHeroActions;
+function HeldAuthors({ follow, displayName, actions }: {
+  follow: HeroFollow; displayName: string; actions: EntityHeroActions;
 }) {
   const [busy, setBusy] = useState('');
   const confirm = async (key: string, name: string) => {
@@ -253,9 +269,9 @@ function HeldAuthors({ follow, entity, actions }: {
       {follow.held.map((group) => (
         <Note key={group.key} tone="info" title={`A follow has an author with the same name: ${group.name}`}
           action={<Button size="small" {...busyProps(busy === group.key)}
-            onClick={() => { void confirm(group.key, group.name) }}>Same person</Button>}>
-          {[group.providers.join(' · '), `${group.n.toLocaleString()} updates`].filter(Boolean).join(' · ')}
-          . Is this the same person as {entity.canonical_name}?
+            onClick={() => { void confirm(group.key, group.name) }}>是同一个人</Button>}>
+          {[group.providers.join(' · '), `${group.n.toLocaleString()} 项更新`].filter(Boolean).join(' · ')}
+          。和 {displayName} 是同一个人吗？
         </Note>
       ))}
     </div>
@@ -279,7 +295,7 @@ function NameGroup({ label, names }: { label?: string; names: { name: string; re
       {label ? <dt>{label}</dt> : null}
       <dd data-wide={label ? undefined : ''}>
         {names.map((entry, at) => (
-          <span key={at} data-pop-name="">{entry.name}{entry.reading ? <small>{entry.reading}</small> : null}</span>
+          <span key={at} data-pop-name="" lang={textLang(entry.name)}>{entry.name}{entry.reading ? <small>{entry.reading}</small> : null}</span>
         ))}
       </dd>
     </>
@@ -317,7 +333,7 @@ function FactTags({ tags }: { tags: string[] }) {
 function LinkIcon({ mark }: { mark: LinkMark }) {
   if ('brand' in mark) return <span data-link-icon="brand"><Glyph name={mark.brand} /></span>;
   const html = icon('globe') + ('site' in mark
-    ? `<img src="${esc(mark.site)}" alt="" loading="lazy" referrerpolicy="no-referrer" data-drop="self">` : '');
+    ? `<img src="${esc(mark.site)}" alt="" width="20" height="20" loading="lazy" decoding="async" referrerpolicy="no-referrer" data-drop="self">` : '');
   return <span data-link-icon="" dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
@@ -327,7 +343,7 @@ function HeroLinkView({ link }: { link: LinkView }) {
   switch (link.type) {
     case 'icon':
       return (
-        <a data-link="icon" href={link.url} target="_blank" rel="noreferrer" title={link.title} aria-label={link.title}>
+        <a data-link="icon" href={link.url} target="_blank" rel="noopener noreferrer" title={link.title} aria-label={link.title}>
           <LinkIcon mark={link.mark} />
         </a>
       );
@@ -347,8 +363,9 @@ function HeroLinkView({ link }: { link: LinkView }) {
       );
     default:
       return (
-        <a data-link="url" href={link.url} target="_blank" rel="noreferrer" title={link.title}>
+        <a data-link="url" href={link.url} target="_blank" rel="noopener noreferrer" title={link.title}>
           <LinkIcon mark={link.mark} /><span data-link-label="">{link.text}</span>
+          <svg className="ui-externalmark" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-external-link" /></svg>
         </a>
       );
   }
@@ -388,7 +405,7 @@ function EntryMarks({ entity, actions, helpers }: {
   return (
     <div data-entry-marks="">
       {entryMarks(entity).map((mark, at) => (
-        <a key={at} data-entry-mark="" href={mark.url} target="_blank" rel="noreferrer" title={mark.label} aria-label={mark.label}>
+        <a key={at} data-entry-mark="" href={mark.url} target="_blank" rel="noopener noreferrer" title={mark.label} aria-label={mark.label}>
           {mark.mark ? <Glyph name={mark.mark} /> : <span data-missav-mark=""><span>MISS</span><span>AV</span></span>}
           {mark.ordinal ? <span data-entry-ordinal="">{mark.ordinal}</span> : null}
         </a>

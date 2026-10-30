@@ -19,10 +19,8 @@ case " ${1+$*} " in
     *" --jobs "*) JOBS=() ;;
 esac
 EXTRA=("${@:2}")
-# 展开必须写成 `${EXTRA[@]+...}`。macOS 自带的是 bash 3.2，`set -u` 下它把空数组的
-# `"${EXTRA[@]}"` 当未绑定变量报错（bash 4.4 起才不报），于是不带额外参数直接跑
-# `./scripts/test.sh` 会在最后一行崩掉。CI 每次都附带 `--fresh --base ...`，数组从不为空，
-# 这条路径只有本机会走到。不要改成 `set +u`：其余变量的拼写错误就没人拦了。
+# macOS 自带 bash 3.2；`set -u` 下用 `${EXTRA[@]+...}` 安全展开空数组。
+# CI 传入 `--resume` 或 `--base` 等参数，本机入口也支持不带额外参数。
 
 WORKTREE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 

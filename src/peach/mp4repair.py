@@ -16,8 +16,10 @@ import os
 import struct
 import subprocess
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from .smb_media import input_url
 
 from .mp4index import _iter_boxes
 
@@ -28,7 +30,8 @@ CONTAINERS = frozenset({b"moov", b"trak", b"mdia", b"minf", b"stbl", b"edts"})
 #: 头部盒子加起来的上限；超过这个数就不是我们认识的片源，宁可不修。
 HEADER_LIMIT = 64 << 20
 PROBE_TIMEOUT_SECONDS = 900
-SIDECAR_MAGIC = b"PEACHMP4\x01"
+SIDECAR_MAGIC = b"PEACHMP4\x02"
+LEGACY_SIDECAR_MAGIC = b"PEACHMP4\x01"
 SIDECAR_SUFFIX = ".mp4hdr"
 
 
@@ -149,7 +152,7 @@ def _display_order(ffprobe: Path, source: Path, decode_times: list[int]) -> list
     command = (
         str(ffprobe), "-v", "error", "-threads", "0",
         "-ignore_editlist", "1", "-select_streams", "v:0",
-        "-show_entries", "frame=pts", "-of", "csv=p=0", str(source),
+        "-show_entries", "frame=pts", "-of", "csv=p=0", input_url(source),
     )
     try:
         completed = subprocess.run(command, capture_output=True, timeout=PROBE_TIMEOUT_SECONDS,
@@ -204,14 +207,8 @@ def _ctts(offsets: list[int]) -> bytes:
     return body + b"".join(struct.pack(">II", run, offset) for run, offset in runs)
 
 
-def _retimed_edit_list(elst: bytes | None, shift: int, segment_duration: int) -> bytes:
-    """让编辑列表跟上 ctts 的整体平移。
-
-    平移把每一帧的显示时刻都推后 `shift`，起播点要跟着推同样多，否则音画差这么多。
-    已有的 media_time 正好等于 `shift` 时原样保留：那说明原封装本来就为 ctts 补过这一刀，
-    表丢了而这行留着，加回去就复原了；写成两倍反而会真的切掉两帧。
-    空编辑（media_time 为 -1）是延迟起播，跟显示顺序无关，原样放过。
-    """
+def _edit_times(elst: bytes | None, adjust: Callable[[int], int]) -> bytes | None:
+    """保留编辑段长与播放速率，只映射媒体起点。"""
     if elst is not None and len(elst) >= 8:
         version = elst[0]
         width = 20 if version == 1 else 12
@@ -222,12 +219,30 @@ def _retimed_edit_list(elst: bytes | None, shift: int, segment_duration: int) ->
             for index in range(count):
                 base = 8 + index * width
                 segment, media_time = struct.unpack_from(layout, elst, base)
-                if media_time >= 0 and media_time != shift:
-                    media_time += shift
-                entries.append(struct.pack(layout, segment, media_time)
+                entries.append(struct.pack(layout, segment, adjust(media_time))
                                + elst[base + width - 4:base + width])
             return elst[:8] + b"".join(entries)
-    return struct.pack(">IIIiI", 0, 1, segment_duration, shift, 1 << 16)
+    return None
+
+
+def _retimed_edit_list(elst: bytes | None, shift: int, segment_duration: int,
+                       tolerance: int = 0) -> bytes:
+    """让编辑列表跟上 ctts 的整体平移。
+
+    平移把每一帧的显示时刻都推后 `shift`，起播点要跟着推同样多，否则音画差这么多。
+    已有的 media_time 与 `shift` 差半帧以内时原样保留：原封装已经为 ctts 补过这一刀，
+    表丢了而这行留着，加回去就复原了；写成两倍反而会真的切掉两帧。
+    空编辑（media_time 为 -1）是延迟起播，跟显示顺序无关，原样放过。
+    """
+    payload = _edit_times(elst, lambda value: value + shift
+                          if value >= 0 and abs(value - shift) > tolerance else value)
+    return payload if payload is not None else struct.pack(">IIIiI", 0, 1, segment_duration, shift, 1 << 16)
+
+
+def _half_frame(decode_times: list[int]) -> int:
+    """最短帧长的一半，媒体刻度。"""
+    gaps = [later - earlier for earlier, later in zip(decode_times, decode_times[1:]) if later > earlier]
+    return min(gaps) // 2 if gaps else 0
 
 
 def _timed_field(payload: bytes, short_offset: int, long_offset: int) -> int:
@@ -282,33 +297,67 @@ def _shift_chunk_offsets(box: _Box, delta: int) -> None:
 _Span = tuple[bytes, int, int, int]
 
 
-def _layout(source: Path) -> tuple[bytes, _Span, _Span]:
-    """读出 `mdat` 之前那一整段，并确认这个布局拼得回去。
+@dataclass(frozen=True)
+class _Layout:
+    before: bytes
+    mdat_header: bytes
+    suffix: bytes
+    mdat: _Span
+    moov_box: bytes
+    moov_body: int
+    moov_before_start: int | None
 
-    拼接只换头、原样接上 `mdat`，所以 `mdat` 必须是最后一个盒子，前面的东西也得
-    一次读得完。不满足就抛 `RepairUnavailable`，让调用方回到转码那条路。
+
+def _layout(source: Path) -> _Layout:
+    """读出 `mdat` 和 `moov`，返回拼回虚拟文件所需的几段。
+
+    faststart 文件把 `moov` 放在媒体前面，尾部只允许没有盒子；下载器常见的布局则把
+    `moov` 放在末尾。后一种只多读媒体之后的索引段，媒体仍按原字节流发送，不复制原片。
     """
-    with open(source, "rb") as handle:
+    from .smb_media import SmbResource
+    with (source.open() if isinstance(source, SmbResource) else open(source, 'rb')) as handle:
         boxes = _top_level(handle)
         kinds = {kind for kind, *_ in boxes}
         if not {b"moov", b"mdat"} <= kinds:
-            raise RepairUnavailable("Top level is missing moov or mdat")
+            raise RepairUnavailable("顶层缺 moov 或 mdat")
+        if any(sum(box[0] == kind for box in boxes) != 1 for kind in (b"moov", b"mdat")):
+            raise RepairUnavailable("顶层必须各有一个 moov 和 mdat")
         mdat = next(box for box in boxes if box[0] == b"mdat")
         moov = next(box for box in boxes if box[0] == b"moov")
-        if moov[1] > mdat[1]:
-            raise RepairUnavailable("moov is after mdat; this layout is not supported yet")
-        if any(box[1] > mdat[1] for box in boxes):
-            raise RepairUnavailable("mdat is followed by more boxes; this layout is not supported yet")
         if mdat[3] - mdat[2] <= 0 or moov[3] - moov[1] > HEADER_LIMIT:
-            raise RepairUnavailable("moov is too large or mdat is empty")
+            raise RepairUnavailable("moov 太大或 mdat 是空的")
+        if mdat[2] > HEADER_LIMIT:
+            raise RepairUnavailable("媒体前的索引段太大")
+        if moov[1] < mdat[1]:
+            if any(box[1] > mdat[1] for box in boxes):
+                raise RepairUnavailable("mdat 后面还有盒子，这个布局还没支持")
+            handle.seek(moov[1])
+            moov_box = handle.read(moov[3] - moov[1])
+            handle.seek(0)
+            before = handle.read(mdat[1])
+            handle.seek(mdat[1])
+            mdat_header = handle.read(mdat[2] - mdat[1])
+            return _Layout(before, mdat_header, b"", mdat, moov_box, moov[2] - moov[1], moov[1])
+        after_size = handle.seek(0, 2) - mdat[3]
+        if after_size > HEADER_LIMIT - mdat[2]:
+            raise RepairUnavailable("媒体后的索引段太大")
         handle.seek(0)
-        return handle.read(mdat[2]), moov, mdat
+        before = handle.read(mdat[1])
+        handle.seek(mdat[1])
+        mdat_header = handle.read(mdat[2] - mdat[1])
+        handle.seek(mdat[3])
+        after = handle.read(after_size)
+        start = moov[1] - mdat[3]
+        stop = moov[3] - mdat[3]
+        return _Layout(before, mdat_header, after[:start] + after[stop:], mdat,
+                       after[start:stop], moov[2] - moov[1], None)
 
 
 def repaired_header(source: Path, ffprobe: Path) -> RepairedHeader:
     """算出修好的头。修不了就抛 `RepairUnavailable`。"""
-    head, moov, mdat = _layout(source)
-    tree = _parse(head, moov[2], moov[3])
+    layout = _layout(source)
+    mdat = layout.mdat
+    tree = _parse(layout.moov_box, layout.moov_body, len(layout.moov_box))
     root = _Box(b"moov", None, tree)
     traks = [child for child in root.children if child.kind == b"trak"]
     video = next((trak for trak in traks if _is_video(trak)), None)
@@ -330,8 +379,16 @@ def repaired_header(source: Path, ffprobe: Path) -> RepairedHeader:
     stbl.children.insert(stbl.children.index(stts) + 1, _Box(b"ctts", _ctts(offsets), []))
     edts = video.find(b"edts")
     elst = edts.find(b"elst") if edts else None
+    if layout.moov_before_start is None and elst and elst.payload:
+        def checked_start(value: int) -> int:
+            if value > shift + _half_frame(decode_times):
+                raise RepairUnavailable("尾部索引的编辑起点无法区分预卷与裁剪")
+            return value
+
+        _edit_times(elst.payload, checked_start)
     payload = _retimed_edit_list(
-        elst.payload if elst and elst.payload else None, shift, _track_duration(root, video))
+        elst.payload if elst and elst.payload else None, shift, _track_duration(root, video),
+        _half_frame(decode_times))
     if elst is not None:
         elst.payload = payload
     elif edts is not None:
@@ -339,14 +396,31 @@ def repaired_header(source: Path, ffprobe: Path) -> RepairedHeader:
     else:
         video.children.insert(1, _Box(b"edts", None, [_Box(b"elst", payload, [])]))
 
+    def assemble(rebuilt: bytes) -> bytes:
+        if layout.moov_before_start is not None:
+            stop = layout.moov_before_start + len(layout.moov_box)
+            return (layout.before[:layout.moov_before_start] + rebuilt
+                    + layout.before[stop:] + layout.mdat_header)
+        return layout.before + rebuilt + layout.mdat_header
+
     rebuilt = root.serialize()
-    delta = len(rebuilt) - (moov[3] - moov[1])
+    delta = len(assemble(rebuilt)) - mdat[2]
     _shift_chunk_offsets(root, delta)
     rebuilt = root.serialize()
-    prefix = head[:moov[1]] + rebuilt + head[moov[3]:]
+    prefix = assemble(rebuilt)
     if len(prefix) - mdat[2] != delta:
-        raise RepairUnavailable("Rebuilt header length does not match")
-    return RepairedHeader(prefix=prefix, payload_start=mdat[2], payload_end=mdat[3])
+        raise RepairUnavailable("重建后的头长度对不上")
+    return RepairedHeader(prefix=prefix, payload_start=mdat[2], payload_end=mdat[3], suffix=layout.suffix)
+
+
+def has_tail_moov(source: Path) -> bool:
+    """只读顶层盒子位置，识别旧布局判据会跳过的尾部索引。"""
+    from .smb_media import SmbResource
+    with (source.open() if isinstance(source, SmbResource) else open(source, 'rb')) as handle:
+        boxes = _top_level(handle)
+    moovs = [box for box in boxes if box[0] == b'moov']
+    mdats = [box for box in boxes if box[0] == b'mdat']
+    return len(moovs) == len(mdats) == 1 and moovs[0][1] > mdats[0][1]
 
 
 def write_sidecar(path: Path, header: RepairedHeader) -> None:
@@ -361,20 +435,91 @@ def write_sidecar(path: Path, header: RepairedHeader) -> None:
     temporary.replace(path)
 
 
+def _time_runs(payload: bytes) -> list[tuple[int, int]]:
+    """边车内的 version 0 时间表；保留游程，不展开整片帧时间。"""
+    if len(payload) < 8 or payload[:4] != bytes(4):
+        raise RepairUnavailable("旧边车的时间表版本无效")
+    count = struct.unpack_from(">I", payload, 4)[0]
+    if len(payload) != 8 + count * 8:
+        raise RepairUnavailable("旧边车的时间表长度不符")
+    return [struct.unpack_from(">II", payload, 8 + index * 8) for index in range(count)]
+
+
+def _legacy_timing(stts: bytes, ctts: bytes) -> tuple[int, int]:
+    """从旧边车的游程表还原整体平移与最短半帧，不展开每帧时间。"""
+    times = _time_runs(stts)
+    offsets = _time_runs(ctts)
+    samples = sum(run for run, _ in times)
+    if not samples or sum(run for run, _ in offsets) != samples:
+        raise RepairUnavailable("旧边车的样本数不符")
+    shift, remainder = divmod(sum(run * value for run, value in offsets), samples)
+    if remainder:
+        raise RepairUnavailable("旧边车的整体平移量不完整")
+    # 最后一帧的 duration 不是两个相邻 DTS 的间距，与新头的半帧判据保持一致。
+    remaining, gaps = samples - 1, []
+    for run, delta in times:
+        if remaining and run and delta:
+            gaps.append(delta)
+        remaining -= min(remaining, run)
+    return shift, min(gaps) // 2 if gaps else 0
+
+
+def _upgrade_legacy_header(header: RepairedHeader) -> RepairedHeader:
+    """按旧写入规则撤回重复平移，不读原片或重新解码。
+
+    显示时刻是解码时刻的置换，故旧 ctts 的偏移加权均值就是整体 shift。
+    旧规则将不等于 shift 的起点再加 shift；接近两倍 shift 的存量起点因此减回一份。
+    新版边车单独标识，不能对已经按半帧判据生成的头再次执行这个转换。
+    """
+    span = next(((body, stop) for kind, body, stop in _iter_boxes(
+        header.prefix, 0, len(header.prefix)) if kind == b"moov"), None)
+    if span is None:
+        raise RepairUnavailable("旧边车没有 moov")
+    root = _Box(b"moov", None, _parse(header.prefix, *span))
+    video = next((child for child in root.children if child.kind == b"trak" and _is_video(child)), None)
+    stbl = _sample_table(video) if video else None
+    stts = stbl.find(b"stts") if stbl else None
+    ctts = stbl.find(b"ctts") if stbl else None
+    edts = video.find(b"edts") if video else None
+    elst = edts.find(b"elst") if edts else None
+    if not (stts and stts.payload and ctts and ctts.payload and elst and elst.payload):
+        raise RepairUnavailable("旧边车缺少修复时间表")
+    shift, tolerance = _legacy_timing(stts.payload, ctts.payload)
+    payload = _edit_times(elst.payload, lambda value: value - shift
+                          if value > shift and abs(value - 2 * shift) <= tolerance else value)
+    if payload is None:
+        raise RepairUnavailable("旧边车的编辑列表无效")
+    if payload == elst.payload:
+        return header
+    elst.payload = payload
+    rebuilt = root.serialize()
+    if len(rebuilt) != span[1] - span[0] + 8:
+        raise RepairUnavailable("旧边车的重建头长度不符")
+    return RepairedHeader(header.prefix[:span[0] - 8] + rebuilt + header.prefix[span[1]:],
+                          header.payload_start, header.payload_end, header.suffix)
+
+
 def read_sidecar(path: Path) -> RepairedHeader | None:
     """读不出来就当没有边车：调用方照旧走转码分片。"""
     try:
         blob = path.read_bytes()
     except OSError:
         return None
-    if not blob.startswith(SIDECAR_MAGIC) or len(blob) < len(SIDECAR_MAGIC) + 32:
+    magic = blob[:len(SIDECAR_MAGIC)]
+    if magic not in (SIDECAR_MAGIC, LEGACY_SIDECAR_MAGIC) or len(blob) < len(SIDECAR_MAGIC) + 32:
         return None
     prefix_len, suffix_len, start, end = struct.unpack_from(">QQQQ", blob, len(SIDECAR_MAGIC))
     body = blob[len(SIDECAR_MAGIC) + 32:]
     if len(body) != prefix_len + suffix_len:
         return None
-    return RepairedHeader(prefix=body[:prefix_len], payload_start=start, payload_end=end,
-                          suffix=body[prefix_len:])
+    header = RepairedHeader(prefix=body[:prefix_len], payload_start=start, payload_end=end,
+                            suffix=body[prefix_len:])
+    if magic == LEGACY_SIDECAR_MAGIC:
+        try:
+            return _upgrade_legacy_header(header)
+        except (RepairUnavailable, struct.error):
+            return None
+    return header
 
 
 class HeaderRepairStore:
@@ -423,6 +568,14 @@ class HeaderRepairStore:
                 self._cached[name] = header
         return header
 
+    def has_invalid_sidecar(self, asset_id: int, source: Path) -> bool:
+        """已有损坏边车仍可重建；区别于没有产物的既有解码失败。"""
+        name = self._name(asset_id, source)
+        if not name:
+            return False
+        path = self.root / name
+        return path.is_file() and read_sidecar(path) is None
+
     def request(self, asset_id: int, source: Path) -> None:
         """在后台补一份头。播放请求不能为此等一分钟，所以这里只管开线程。"""
         name = self._name(asset_id, source)
@@ -440,7 +593,7 @@ class HeaderRepairStore:
         """当场算一份头并存下来。已经有、正在算或上次算不出来都返回 False。"""
         name = self._name(asset_id, source)
         ffprobe = self.resolver.ffprobe()
-        if not name or ffprobe is None or (self.root / name).exists():
+        if not name or ffprobe is None or read_sidecar(self.root / name) is not None:
             return False
         with self._guard:
             if name in self._running or name in self._failed:

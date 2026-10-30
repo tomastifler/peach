@@ -16,6 +16,8 @@ import threading
 import time
 import tomllib
 import unittest
+from contextlib import closing
+from dataclasses import replace
 from pathlib import Path, PureWindowsPath
 from types import SimpleNamespace
 from unittest import mock
@@ -164,11 +166,21 @@ class ConfigPagePayloadTests(unittest.TestCase):
         payload = self._payload(self._request(port=8443))
         self.assertEqual(payload["origin"], "https://192.0.2.10:8443")
 
-    def test_without_tls_or_an_address_the_block_is_withheld_rather_than_guessed(self):
-        """HTTP 的地址发出去就是白发：80 口那条服务对写请求回 426，不替它转发。"""
-        for request in (self._request(tls=False), self._request(declared="", port=443)):
-            with self.subTest(request=request):
-                payload = self._payload(request)
+    def test_http_service_uses_its_published_address_and_listening_port(self):
+        for port, origin in ((38473, "http://198.51.100.7:38473"),
+                             (80, "http://198.51.100.7"),
+                             (443, "http://198.51.100.7:443")):
+            with self.subTest(port=port):
+                payload = self._payload(self._request(tls=False, published="198.51.100.7", port=port))
+                self.assertEqual(payload["origin"], origin)
+                config = tomllib.loads(payload["config_toml"])
+                self.assertEqual(config["global_params"]["base_url"], origin)
+                self.assertEqual(config["file_system_watcher"]["headers"][push.SECRET_HEADER], "tok")
+
+    def test_without_an_address_the_block_is_withheld(self):
+        for tls in (True, False):
+            with self.subTest(tls=tls):
+                payload = self._payload(self._request(tls=tls, declared=""))
                 self.assertEqual(payload["origin"], "")
                 self.assertEqual(payload["config_toml"], "")
 
@@ -337,7 +349,39 @@ class _ServiceCase(unittest.TestCase):
 
 
 class IngestPathTests(_ServiceCase):
+    def test_move_event_keeps_upgrade_existing_asset_without_an_identity_cache(self):
+        from contextlib import closing
+        old = self.media / 'old.mp4'
+        old.write_bytes(b'video')
+        path = self.ledger('local','old.mp4')
+        with closing(sqlite3.connect(self.db)) as connection, connection:
+            asset_id = connection.execute("INSERT INTO asset(location,path,name,medium,rating) VALUES(?,?,?,?,?)",
+                ('local',path,'old.mp4','video',5)).lastrowid
+        old.rename(self.media/'renamed.mp4')
+        service = self.service()
+        self.assertTrue(service._ingest('local',self.ledger('local','renamed.mp4'),path))
+        with closing(sqlite3.connect(self.db)) as connection:
+            self.assertEqual(connection.execute("SELECT id,name,rating FROM asset WHERE medium='video'").fetchall(),
+                             [(asset_id,'renamed.mp4',5)])
+
     """单条路径走的是扫描那段登记，不是第二套写法。"""
+
+    def test_new_video_queue_accepts_push_arrivals_without_readding_completed_paths(self):
+        from peach.library_new_assets import pending, remember
+        (self.media / 'new.mp4').write_bytes(b'video')
+        (self.media / 'photo.jpg').write_bytes(b'image')
+        options = dict(declared_roots=self.declared, mounts=self.mounts)
+        with mock.patch('peach.scan.time.strftime', return_value='2026-10-27 12:00:00'):
+            first = scan.ingest_path(self.db, 'local', self.ledger('local', 'new.mp4'), **options)
+            scan.ingest_path(self.db, 'local', self.ledger('local', 'photo.jpg'), **options)
+            self.assertEqual(pending(self.db), [first.asset_id])
+            remember(self.db, completed=[first.asset_id])
+            again = scan.ingest_path(self.db, 'local', self.ledger('local', 'new.mp4'), **options)
+            self.assertFalse(again.new)
+            self.assertEqual(pending(self.db), [])
+        (self.cloud / 'cloud.mp4').write_bytes(b'cloud video')
+        arrival = scan.ingest_path(self.db, '115', self.ledger('115', 'cloud.mp4'), **options)
+        self.assertEqual(pending(self.db), [arrival.asset_id])
 
     def test_one_file_lands_as_one_row_with_the_ledger_shape(self):
         (self.media / "创作者").mkdir()
@@ -356,6 +400,28 @@ class IngestPathTests(_ServiceCase):
         (self.media / "a.mp4").write_bytes(b"0" * 9)
         scan.ingest_path(self.db, "local", path, **kwargs)
         self.assertEqual(self.rows(), {path: ("video", 9)})
+
+    def test_a_conflict_in_the_directory_does_not_block_a_different_new_file(self):
+        (self.media / 'copy.mp4').write_bytes(b'copy')
+        (self.media / 'copy.srt').write_text('subtitle', encoding='utf-8')
+        (self.media / 'new.mp4').write_bytes(b'new')
+        path = self.ledger('local', 'copy.mp4')
+        with closing(sqlite3.connect(self.db)) as connection, connection:
+            for value in (path, path.upper()):
+                connection.execute("INSERT INTO asset(location,path,name,medium,rating,play_count) "
+                                   "VALUES('local',?,'copy.mp4','video',4,7)", (value,))
+        result = scan.ingest_path(self.db, 'local', self.ledger('local', 'new.mp4'),
+                                  declared_roots=self.declared, mounts=self.mounts)
+        self.assertTrue(result.new)
+        self.assertEqual(len(self.rows()), 3)
+        with self.assertRaises(scan.ScanPathConflict) as caught:
+            scan.ingest_path(self.db, 'local', path,
+                             declared_roots=self.declared, mounts=self.mounts)
+        self.assertEqual(caught.exception.asset_ids, (1, 2))
+        with closing(sqlite3.connect(self.db)) as connection:
+            self.assertEqual(list(connection.execute(
+                'SELECT rating,play_count FROM asset WHERE id<=2 ORDER BY id')), [(4, 7), (4, 7)])
+            self.assertEqual(connection.execute('SELECT count(*) FROM asset_subtitle').fetchone()[0], 0)
 
     def test_a_subtitle_next_to_its_video_is_paired_in_the_same_pass(self):
         (self.media / "a.mp4").write_bytes(b"0" * 4)
@@ -376,13 +442,27 @@ class IngestPathTests(_ServiceCase):
     def test_a_scraper_sidecar_is_found_but_not_registered(self):
         folder = self.media / "ABC-123"
         (folder / "extrafanart").mkdir(parents=True)
-        for name in ("ABC-123.mp4", "ABC-123.nfo", "poster.jpg", "extrafanart/1.jpg"):
+        for name in ("ABC-123.mp4", "ABC-123.nfo", "poster.jpg", "extrafanart/1.jpg", "ABC-123-trailer.mp4"):
             (folder / name).write_bytes(b"0" * 4)
         kwargs = {"declared_roots": self.declared, "mounts": self.mounts}
-        for parts in (("ABC-123.nfo",), ("poster.jpg",), ("extrafanart", "1.jpg")):
+        for parts in (("ABC-123.nfo",), ("poster.jpg",), ("extrafanart", "1.jpg"), ("ABC-123-trailer.mp4",)):
             result = scan.ingest_path(self.db, "local", self.ledger("local", "ABC-123", *parts),
                                       **kwargs)
             self.assertEqual((result.found, result.sidecar), (True, True), parts)
+        self.assertEqual(self.rows(), {})
+
+    def test_extra_suffixes_and_nested_folders_are_found_without_ledger_writes(self):
+        relative = ('Film/Interview-interview2.mkv', 'Film/Extras/Trailers/Teaser.mp4',
+                    'Film/deleted scenes/Ending.mp4', 'Film/backdrops/Menu.mkv',
+                    'Film/theme-music/Score.flac')
+        for value in relative:
+            target = self.media / value
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b'clip')
+        for value in relative:
+            result = scan.ingest_path(self.db, 'local', self.ledger('local', *value.split('/')),
+                                     declared_roots=self.declared, mounts=self.mounts)
+            self.assertEqual((result.found, result.sidecar, result.asset_id), (True, True, None), value)
         self.assertEqual(self.rows(), {})
 
     def test_a_slow_directory_listing_does_not_hold_the_ledger_write_lock(self):
@@ -460,11 +540,19 @@ class IngestNotifiesTests(_ServiceCase):
 
 
 class SettingsTests(_ServiceCase):
+    def test_unsaved_settings_enable_only_local_discovery_and_preserve_saved_off(self):
+        service = self.service()
+        self.assertTrue(service.config.enabled)
+        self.assertTrue(service.config.watch_local)
+        self.assertFalse(service.config.cloud)
+        service.settings.save({'enabled':False,'cloud':False}, self.declared)
+        self.assertFalse(self.service().config.enabled)
+
     def test_a_prefix_pointing_at_an_unknown_root_is_refused_on_save(self):
         service = self.service()
         with self.assertRaisesRegex(ValueError, "is not a declared media root"):
             service.save({"enabled": True, "prefixes": [{"prefix": "/115", "root": "Z:\\"}]})
-        self.assertFalse(service.config.enabled)
+        self.assertTrue(service.config.enabled)
 
     def test_the_same_prefix_cannot_be_registered_twice(self):
         service = self.service()
@@ -528,6 +616,52 @@ class CloudChannelTests(_ServiceCase):
 
 
 class LocalChannelTests(_ServiceCase):
+    def test_historic_macos_events_do_not_enter_the_queue(self):
+        service = mock.Mock()
+        with mock.patch.object(push.time, 'time_ns', return_value=100):
+            handler = push._LocalEventHandler(service)
+        handler.register('local', self.declared['local'][0], self.media)
+        event = SimpleNamespace(event_type='created', src_path=str(self.media/'old.mp4'), is_directory=False)
+        with mock.patch.object(push, 'sys', SimpleNamespace(platform='darwin')), \
+                mock.patch.object(Path, 'stat', return_value=SimpleNamespace(st_ctime_ns=99)):
+            handler.dispatch(event)
+        service.submit.assert_not_called()
+        event.src_path = str(self.media/'new.mp4')
+        with mock.patch.object(push, 'sys', SimpleNamespace(platform='darwin')), \
+                mock.patch.object(Path, 'stat', return_value=SimpleNamespace(st_ctime_ns=100)):
+            handler.dispatch(event)
+        service.submit.assert_called_once_with('local', self.ledger('local', 'new.mp4'))
+        service.submit.reset_mock()
+        event.event_type, event.dest_path = 'moved', str(self.media/'renamed.mp4')
+        with mock.patch.object(push, 'sys', SimpleNamespace(platform='darwin')), \
+                mock.patch.object(Path, 'stat', return_value=SimpleNamespace(st_ctime_ns=101)):
+            handler.dispatch(event)
+        service.submit_move.assert_called_once_with('local', self.ledger('local', 'new.mp4'),
+                                                   self.ledger('local', 'renamed.mp4'), directory=False)
+
+    def test_default_native_watcher_is_idle_until_new_files_arrive(self):
+        (self.media/'existing.mp4').write_bytes(b'old')
+        service = self.service()
+        probe = mock.Mock(wraps=service.queue.probe)
+        service.queue.probe = probe
+        service.start()
+        if not service.local_channel.running:
+            self.skipTest(f'本机起不了文件监视：{service.local_channel.message}')
+        started, cpu = time.monotonic(), time.process_time()
+        time.sleep(0.3)
+        elapsed, used = time.monotonic()-started, time.process_time()-cpu
+        self.assertEqual(self.rows(),{})
+        probe.assert_not_called()
+        started = time.monotonic()
+        for index in range(20):
+            (self.media/f'new-{index}.mp4').write_bytes(b'new')
+        _wait_for(lambda: len(self.rows())==20)
+        self.assertEqual(len(self.rows()),20)
+        self.assertNotIn(self.ledger('local','existing.mp4'),self.rows())
+        self.assertEqual(service.snapshot()['queue']['failed'],0)
+        print(f'原生发现：空闲 {elapsed:.3f}s / CPU {used:.3f}s / 媒体探测0次；'
+              f'20个新增文件登记 {time.monotonic()-started:.3f}s')
+
     def test_a_file_landing_in_a_watched_root_reaches_the_ledger(self):
         service = self.service()
         service.save({"enabled": True, "watch_local": True, "cloud": False, "prefixes": []})
@@ -577,6 +711,36 @@ class WebhookRouteTests(_ServiceCase):
 
     def test_a_request_with_the_shared_secret_is_accepted(self):
         self.assertEqual(self.post(secret=self.secret).status_code, 204)
+        path = self.ledger("115", "a.mp4")
+        _wait_for(lambda: path in self.rows())
+        self.assertEqual(self.rows().get(path), ("video", 5))
+
+    def test_http_configuration_saves_rotates_and_delivers_a_notification(self):
+        from fastapi.testclient import TestClient
+        origin = "http://127.0.0.1:38473"
+        self.app.state.settings = replace(
+            self.app.state.settings, mdns_address="127.0.0.1", mdns_port=38473, tls_enabled=False)
+        client = TestClient(self.app, base_url=origin, client=("127.0.0.1", 9000))
+        saved = client.post("/api/configuration/push-discovery", json={
+            "enabled": True, "watch_local": False, "cloud": True,
+            "prefixes": [{"prefix": "/115", "root": self.declared["115"][0]}]})
+        self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(saved.json()["origin"], origin)
+        rotated = client.post("/api/configuration/push-discovery/secret")
+        self.assertEqual(rotated.status_code, 200, rotated.text)
+        payload = rotated.json()
+        config = tomllib.loads(payload["config_toml"])
+        self.assertEqual(config["global_params"]["base_url"], origin)
+        self.assertNotEqual(payload["secret"], saved.json()["secret"])
+        self.assertEqual(self.post(secret=saved.json()["secret"]).status_code, 404)
+        watcher = config["file_system_watcher"]
+        body = watcher["body"]
+        for placeholder, value in (("{action}", "create"), ("{is_dir}", "false"),
+                                   ("{source_file}", "/115/a.mp4"), ("{destination_file}", "")):
+            body = body.replace(placeholder, value)
+        response = client.post(watcher["url"].replace("{base_url}", origin),
+                               headers=watcher["headers"], json=json.loads(body))
+        self.assertEqual(response.status_code, 204)
         path = self.ledger("115", "a.mp4")
         _wait_for(lambda: path in self.rows())
         self.assertEqual(self.rows().get(path), ("video", 5))

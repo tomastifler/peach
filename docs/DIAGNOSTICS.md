@@ -2,28 +2,73 @@
 
 This page describes the boundaries of exception logging, browser error reporting, diagnostic export and optional remote diagnostics. Normal cancellation, cache fallback, source misses and task mutual exclusion each keep their own state.
 
-Desktop artifact acceptance explicitly turns off version statistics and error upload in a temporary Peach data directory and keeps them off in the first-launch commit, so synthetic tests never enter production telemetry.
+环境与故障证据按同一套采集和分类函数产生，各输出入口按用途取字段：`reporting_identity` 提供程序、构建与主机量级，`diagnostic_exceptions` 提供异常链的结构化错误码和媒体故障类别，`diagnostic_context` 规范浏览器、播放和运行状态。输出入口不自行重新识别同一故障。
+
+| 输出 | 使用范围 |
+| --- | --- |
+| 本机日志 | 脱敏异常链、错误码、浏览器与播放现场、请求到达和响应媒体类型 |
+| 诊断 ZIP | 从本机日志和当前运行状态汇总有界证据；保留采集失败与未取得状态 |
+| 远程技术诊断 | 仅投影已声明的代码位置、构建身份、结构化错误码与固定故障类别；详细浏览器和播放现场只在本机 |
+| 版本统计、群体研究 | 复用程序和构建身份，分别遵守既有字段、开关与频率契约 |
+
+桌面制品验收在临时 Peach 数据目录显式关闭版本统计与错误上传，并在首启提交中保持关闭，避免合成测试进入正式遥测。
 
 ## Feedback channels
 
-When library processing fails, retry the failed items, then get the ZIP from the tray "Export diagnostic report" or from the system diagnostics page "Download diagnostic report". The user only needs to provide a single ZIP. Download is limited to the machine running Peach; a logged-in same-origin device can report browser errors; open-access mode does not provide anonymous remote reporting.
+馆藏处理失败时，重试失败项，再从托盘「导出诊断报告」或系统诊断页「下载诊断报告」取得 ZIP。用户只需提供一个 ZIP。桌面部署下载限运行 Peach 的本机；Docker 部署允许已登录的私有网络客户端下载，拒绝代理转发。网页不可用时，可按 [Docker 诊断导出](DOCKER.md#导出诊断报告) 在容器内生成 ZIP。已登录的同源设备可以上报浏览器错误；开放访问模式不提供匿名远程上报。
 
 The underlying evidence must actually be recorded when an error occurs. The full issue list is at `state/library-processing-<job_id>.issues.jsonl`. The generic issue list cannot reconstruct a discarded FFmpeg error; historical failures without a raw record must be retried to collect evidence.
 
-## Evidence chain
+诊断 ZIP 对 JSON 状态文件最多读取完整的 16 MiB，解析后按字段脱敏。每个状态文件的导出内容最多 96 KiB；需要缩减时，先保留任务标识、状态、阶段和计数，再纳入步骤、问题预览与其他字段。缩减后的集合最多保留前 20 项，文本最多保留 4000 字符，嵌套最多 8 层；字段放不下时继续减少集合项数。JSONL 问题清单读取尾部 96 KiB，只导出可完整解析的近期记录；截断的首条记录、损坏记录和超出脱敏后大小上限的记录不导出。媒体名称、路径及凭据沿用字段脱敏。
+
+`report.json` 的 `logs` 清单记录各文件的 `source_bytes`、`exported_bytes`、`status` 与 `truncated`。JSON 字段缩减会标记 `projected`，并记录未纳入的顶层字段数 `omitted_fields`、前 64 个顶层字段中集合的原始数量 `collection_counts`；顶层数组使用 `collection_count`。JSONL 使用 `skipped_records` 记录读取范围内未导出的记录数，截断的首条记录不计入该数。空 JSON、损坏 JSON、超出读取上限、无有效记录等情况只记录清单状态，不生成空文件。
+
+| 清单状态 | 含义 |
+| --- | --- |
+| `included` | 已导出有效内容；是否缩减另见 `truncated` 和 `projected` |
+| `empty_json` / `empty_jsonl` | JSON 为空白内容，或 JSONL 为零字节 |
+| `unreadable_json` / `invalid_json_shape` | JSON 无法解析，或顶层不是对象、数组 |
+| `json_size_limit` / `json_depth_limit` | JSON 超出完整读取上限，或解析、脱敏时嵌套过深 |
+| `json_projection_limit` | JSON 字段缩减后仍无法在大小上限内保留有效内容 |
+| `no_complete_records` | JSONL 读取范围内没有可导出的完整记录 |
+
+## 证据链
 
 | Path | Persistent evidence and verification |
 | --- | --- |
-| Startup, CLI, tray | The exception hook is installed before configuration and optional dependencies load; main-thread, background-thread, unraisable, asyncio and warning/error logs are written to `errors-*.log`, and native faults to `crash-*.log`; a fallback directory is used when the primary one is not writable |
-| HTTP requests | Unhandled exceptions and HTTP 5xx record the traceback, method, route template, status code and `error_id`; the response header `X-Peach-Error-ID` is tied to the record; request parameters, body and auth headers are not collected as context |
-| Background tasks | Exceptions record the task key, job/run number, thread and traceback; operations that explicitly return failure record the failure message; pause, mutual exclusion and cancellation follow the task protocol |
-| Frame capture, tile sheets, probing | Exit code, timeout, sampling position, duration, tool source, color retry and bounded stderr are kept; `media-probe`, `preview`, `frame-capture`, `frame-tile` and `library-preview` cover each entry point |
-| Image validity | Pillow full decoding confirms an image; a small solid-color JPEG is usable, while fragments, non-zero exits and stale output do not count as successful generation |
-| External sources, downloads | Source authorization, rate limiting, cooldown and misses use domain state; unexpected failures use the existing exception log and task receipts; the ZIP contains source health state and times, while raw source responses stay on this machine |
-| Update and rollback | Install and rollback failures keep the traceback; the ZIP contains startup preparation, update state, the source update log, the tray restart log and recent migration logs |
-| Tunnel | The ZIP contains `cloudflare-tunnel.log` and redacted runtime state |
-| Browser | Message, stack, script file name, line and column, page and browser identifier are saved; query parameters do not enter page fields; same-origin, valid login, per-minute count and request-size gates have regression tests |
-| Media tools | The diagnostic report and ZIP check the actual version, executability and the AV1 software decoder; `/healthz` uses only lightweight path checks and does not run external tools |
+| 启动、CLI、托盘 | 配置及可选依赖加载前安装异常钩子；主线程、后台线程、unraisable、asyncio 和 warning/error 日志写入 `errors-*.log`，原生故障写入 `crash-*.log`；不可写时使用备用目录 |
+| HTTP 请求 | 未处理异常与 HTTP 5xx 记录 traceback、方法、路由模板、状态码和 `error_id`；响应头 `X-Peach-Error-ID` 与记录关联；请求参数、正文和鉴权头不作为上下文采集 |
+| 后台任务 | 异常记录任务键、job/run 编号、线程与 traceback；显式返回失败的操作记录失败消息；暂停、互斥和取消沿用任务协议 |
+| 抽帧、拼图、探测 | 保留退出码、超时、采样位置、时长、工具来源、色彩重试和有界 stderr；`media-probe`、`preview`、`frame-capture`、`frame-tile` 与 `library-preview` 覆盖各入口 |
+| 图片有效性 | Pillow 完整解码确认图片；纯色小 JPEG 可用，残片、非零退出和陈旧输出不能算生成成功 |
+| 外部来源、下载 | 来源授权、限流、冷却与未命中使用领域状态；意外失败使用现有异常日志和任务回执；ZIP 包含来源健康状态与时间，来源响应原文留在本机 |
+| 关注检查、媒体代理 | `follow-check` 与 `follow-media` 本机事件记录来源、来源及条目编号、失败阶段、操作和可用的上游状态码；媒体事件区分帖子来源与资源来源，异常链与代码位置随支持包导出。地址、凭据和私人路径统一脱敏，不记录上游响应正文，不扩大远程诊断字段 |
+| 更新与回滚 | 安装、回滚失败保留 traceback；ZIP 包含启动准备、更新状态、源码更新日志、托盘重启日志及近期迁移日志 |
+| 隧道 | ZIP 包含 `cloudflare-tunnel.log` 与脱敏运行状态 |
+| 浏览器 | 保存消息、堆栈、脚本文件名、行列、页面与浏览器标识；查询参数不进入页面字段；同源、有效登录、每分钟条数和请求体积门槛有回归 |
+| 媒体工具 | 诊断报告与 ZIP 检查实际版本、可执行性及 AV1 软件解码器；工具失败在本机保留既有错误分类，包括缺失媒体、权限、磁盘余量、无效媒体与解码器不可用，完整路径脱敏不影响该分类；`/healthz` 只使用轻量路径检查，不执行外部工具 |
+
+## 本机诊断快照
+
+`report.json` 汇总以下技术证据。系统诊断页下载时携带当前浏览器快照；托盘和 CLI 导出从近期本机错误日志提取已记录的浏览器与播放上下文。未记录的浏览器环境标为 `unavailable`，不能据此判断浏览器或编码不受支持。
+
+| 范围 | 字段与来源 |
+| --- | --- |
+| 程序与系统 | 程序版本、分发方式、冻结构建提交与时间、源码检出的提交、Python、操作系统版本与 Windows 版本类型、架构、进程关系、逻辑核数、内存档位、活动线程数、SQLite 和关键运行依赖版本；源码提交不证明运行中的进程已加载该版本 |
+| 配置与存储 | 监听地址类别与端口、托管方式、同步和隧道开关、代理环境是否存在、数据盘总量与余量、运行目录存在状态、媒体预览和播放加速偏好 |
+| 浏览器 | User-Agent、客户端提示中的品牌、完整版本、平台版本与架构、语言、时区、安全上下文、联网状态、Cookie 与本地存储可用性、视口、像素比、触控点、逻辑核数、浏览器提供的内存档位和可读取的 WebGL 图形厂商与渲染器；详细客户端提示最多等待一秒，受限或不支持时保留原因 |
+| 播放能力 | 原生 `canPlayType()` 和 MSE 对 H.264、HEVC、AV1、VP9、AAC、AC-3、Opus 的能力声明；MediaSource 和 MediaCapabilities 是否存在。能力声明不能证明具体媒体已成功解码 |
+| 播放失败 | 原生错误码与原因、网络和就绪状态、播放位置、时长、尺寸、缓冲区、播放设置、源协议、同源状态，以及最近八次媒体请求的状态、耗时与字节数 |
+| 服务端播放 | 媒体请求到达记录、Range、播放方案、文件响应实际声明的媒体类型、已缓存的编码与像素格式、时长、文件世代及硬件策略和已有探测结果；诊断不另读媒体或触发转码 |
+| 检查与任务 | 数据库及迁移详细状态、访问保护、端口状态、近期失败任务编号与时间、脱敏挂载状态、来源健康状态及既有处理、更新和交付回执 |
+
+浏览器和播放上下文只写本机日志，不进入远程上报入口。分享包不包含账号、Cookie、凭据、完整媒体地址、URL 查询串、媒体名称或馆藏清单。记录有字段白名单和大小上限；日志按既有尾部上限导出，汇总最多八份浏览器快照和二十条播放记录。没有完成的请求不会出现在 Resource Timing 中，应结合服务端到达记录判断。工具不可用、存储读取失败、能力 API 不支持与尚未探测分别保留状态或原因。
+
+同一份浏览器环境每分钟记录一次，环境快照独立于每分钟二十条错误的预算；频繁刷新不会占用错误记录名额。显式下载保留当前客户端的快照。
+
+项目日志与 ZIP 的 `server_timezone` 记录服务主机的实际时区名称、UTC 偏移及带偏移的本地时间；浏览器的 `timezone` 和 `utc_offset_minutes` 独立记录访问设备的实际环境。偏移以 UTC 以东为正，例如 UTC+8 为 `480`。日志 `at` 使用 UTC 便于排序，`server_timezone.local_time` 表示对应本地时间；不能用服务主机时区代替客户端时区。时区名称未取得时保留偏移、本地时间和读取失败状态，不能填入推测时区。任务恢复调度器使用 UTC 仅用于固定间隔调度，不决定诊断环境的时区。
+
+访问日志保留已知媒体路由、API 路由、HTTP 版本与响应状态码；URL 查询串整体移除，未知路径继续隐藏。`206` 只表示范围响应已发出，不能证明浏览器完成了解码。
 
 ## Optional remote diagnostics
 
@@ -31,21 +76,37 @@ The installer, first-run setup and the settings page "App and maintenance" offer
 
 | Category | What is sent and how it is filtered |
 | --- | --- |
-| Version statistics | Peach version and operating system type, at most once per machine per UTC calendar day; attempted at process start, with no installation identifier, so independent users cannot be counted from it |
-| Python errors | Version, platform, Python, CPU architecture, failure stage, exception type chain, Peach file name / function name / line number, integer error code; error text, variables, source context and user directories are not sent |
-| HTTP 5xx | Adds method, route template and correlated error ID; no instance parameters, query parameters, body, auth headers or user URLs |
-| Media tools | Exit code, plus a definitely matched category of missing AV1 decoder, invalid media, permission, disk space or unknown decoder; stderr and media names stay on this machine |
-| Browser errors | Only the line and column position in official Peach scripts is sent; errors without a locatable stack and extension scripts are not sent |
+| 版本统计 | Peach 版本、分发方式（`windows-app`、`macos-app`、`docker`、`wheel`、`source`）、操作系统类型与版本、CPU 架构与逻辑核数、内存档位、Python 版本、运行环境、源码／独立包形态与公开构建提交号，每机 UTC 自然日最多一次；在进程启动时尝试，没有安装标识，不能据此统计独立用户。内存取最近的常见容量档；Docker 内的系统版本是宿主内核，Docker Desktop 的宿主系统由内核名称区分 |
+| Python 错误 | 版本、分发方式、平台、Python、CPU 架构、故障环节、分层异常链、Peach 与白名单框架文件名／函数名／行号、结构化错误码；错误文本、变量、源码上下文与用户目录不发送 |
+| HTTP 5xx | 追加方法、路由模板与关联错误编号；不含实例参数、查询参数、正文、鉴权头或用户网址 |
+| 媒体工具 | 退出码，以及确定匹配的 AV1 解码器缺失、非法媒体、权限、磁盘空间或未知解码器类别；stderr 与媒体名称留在本机 |
+| 浏览器错误 | 白名单异常类型、Peach 正式脚本的行列位置与公开构建映射 ID；没有可定位堆栈的错误与扩展脚本不发送 |
+
+SQLite 错误复用本机与远程的结构化错误码；能够确定时附缺表、缺列、锁定、只读、损坏或无法打开的固定类别，不发送表名、列名或 SQL。媒体故障在路径脱敏前提取固定类别，子进程异常本身携带的 stderr 也参与分类。系统不支持文件夹对话框时保留本机状态；支持的平台上对话框启动失败仍进入技术诊断。
+
+远程事件数表示接收端存储的上报批次，`occurrence_count` 表示该批代表的发生次数。每日预算、关闭上传、断网和筛选会造成观测缺失；未收到事件不能解释为没有故障。版本统计每日一次且不含安装标识，不能当作独立用户数、日活或故障率分母。错误事件附带的是服务主机环境，不能据此推断访问页面的客户端系统或浏览器。研究快照与版本统计均是普通事件，仍占用接收平台的事件配额；分项目不隔离组织配额。
+
+事件的 `purpose` 区分 `version-statistics`、`technical-diagnostics` 与独立研究通道的 `population-research`。故障视图使用 `level:error purpose:technical-diagnostics`，生产故障可再加 `environment:production`。没有用途标签的历史事件须单独审阅，不按缺失字段推断来源。启动统计是普通 info 事件，应排除在故障视图与告警条件之外。
+
+`environment` 只接受 `production`、`development`、`test`；独立包与普通源码部署默认 `production`，Git 隔离工作树默认 `development`，可用 `PEACH_REPORTING_ENVIRONMENT` 明确指定。`runtime` 为 `packaged` 或 `source`；`dist` 使用构建提交号，不发送本机目录、主机名或自由文本标识。标准测试入口关闭本进程遥测，并向子进程传递 `PEACH_REPORTING_TEST_MODE=1`，在最终 HTTP 请求边界阻止两条通道真实外发；内存接收端仍可验证最终载荷。
+
+异常链按 Sentry 的原因在前、外层在后保存，每层保留自己的帧。框架帧只接受 `asyncio`、`anyio`、`starlette`、`httpx`、`sqlite3`、`urllib3`，只投影模块与代码位置；日志入口仍要求包含 Peach 帧。SQLite 故障附带整数错误码与 `SQLITE_*` 错误名，不含 SQL、表名或错误原文。
+
+同一异常实例及同一 traceback 被多个取证入口观察时只计一次；同一实例重新抛出形成新的 traceback 时仍计数。浏览器没有 stack 但提供正式包文件名和正整数行列时，也可定位；缺少这些证据的泛化错误留在本机。
+
+正式前端构建在 `build/sentry/browser/` 生成匹配的 JavaScript、source maps 与确定性 Debug ID，公开 `web/dist` 只包含正式 JS/CSS，页面路由不分发 maps。构建插件禁用遥测和自动上传。维护者在项目根运行 `npm --prefix frontend run build` 生成本次构建映射；只有显式配置 `SENTRY_AUTH_TOKEN`、`SENTRY_ORG` 和 `SENTRY_PROJECT` 后运行 `npm --prefix frontend run sentry:upload` 才上传。上传前核对私有 JS 与分发 JS 逐字节一致、map 与 Debug ID 对应。映射包含应用及依赖的构建源码，不包含运行日志、馆藏或本机绝对路径。Windows/macOS Release 在各自构建后执行相同上传入口；凭据只进入上传步骤，配置缺失时明确跳过。实际映射是否可用于 Sentry 定位须以接收端的新事件验收，构建成功不等于线上符号化成功。
 
 Normal cancellation, source misses / temporarily unavailable, HTTP 4xx, mutual exclusion, ordinary warnings and generic logs without a stack are not sent and do not count toward failure counts. Plain-text failure receipts of background tasks stay on this machine; unexpected failures with an exception chain may be sent. SDK-internal logs do not enter the remote hook.
 
 A failure of a given kind is uploaded immediately the first time within quota, and repeat counts are merged and submitted hourly or on normal exit. `occurrence_count` is the incremental count of this batch; for example, after uploading 1 and then 9 more occurrences, the next batch uploads 9, for a total of 10. `occurrence_day` is the UTC date on which it actually occurred, and `diagnostic_key` is computed from redacted technical fields; it includes the version but excludes the per-occurrence HTTP error ID, so the same code fault can be matched across machines, and it is not an installation identifier. Sentry's event count represents upload batches; for frequency, sum `occurrence_count` by statistics date rather than treating the latest batch as the cumulative total. Ordinary tags do not offer Sentry's native numeric summation; totals must be computed from the event fields, and Sentry's native event trend chart must not be taken as the true trend of occurrences.
 
-Each machine accepts local counts for at most 20 failure kinds per day, and at most 20 batches are submitted remotely per day; repeat reports and first-time diagnostics share the batch cap. The tray and child services use the same file lock and the aggregate file `state/remote-reporting-frequency.json`, which keeps technical samples, cumulative counts and submitted counts for at most 7 UTC dates; historical logs are not read. Counts pending because quota ran out can be submitted at a later startup or scheduled check, and expire after the retention period. The submitted count is updated after the SDK accepts a queued item; connection failure, server drop, forced exit, lock contention, or exceeding the kind and retention caps can all cause gaps, so this is a best-effort count of accepted occurrences and not a complete runtime audit. Counts the SDK has not yet accepted stay in the aggregate file.
+每机每天最多接收 20 类故障的本机计数，远程每天最多提交 20 批，重复补报与首次诊断共用批次上限。托盘与子服务使用同一文件锁及聚合文件 `state/remote-reporting-frequency.json`，保留至多 7 个 UTC 日期的技术样本、累计数和已入队数；不读取历史日志。额度不足的待提交次数可在后续启动或定时检查时继续提交，超过保留期失效。SDK 接受入队后更新已入队数；连接失败、服务端丢弃、强制退出、锁争用或超过种类及保留上限均可能造成缺口，因此这是尽力交付的故障计数，不是完整运行审计。SDK 尚未接受的次数保留在聚合文件中。
+
+`state/remote-reporting-delivery.json` 保存各技术用途最后一批的本机回执，配置 API 的 `remote_reporting.delivery` 提供相同的脱敏状态。`queued` 仅表示准备入队；`accepted` 表示传输取得 HTTP 2xx，不保证接收端长期保留；`failed` 表示明确拒绝或本机队列／限流阻断；`unknown` 表示未取得可靠结果，网络异常也可能发生在接收之后。HTTP 2xx 同时带限流头时按未知处理。回执不保存服务端正文、请求网址或载荷；旧事件与旧同意版本的回执不能覆盖当前记录。传输回执不把入队计数改写成接收计数，也不触发补传。
 
 Both are sent through a public DSN to the Sentry-hosted service, and the receiving service sees the connection IP. The client does not send an IP field, user identity, device identifier, watch history, media information, credentials, full logs or the diagnostic ZIP. The SDK send queue is not persisted to disk, and the local aggregate file stores only the technical projection and counts; the local consent version is rechecked before background sending. Turning it off or re-selecting clears unsubmitted aggregates and invalidates queued old events; requests already in flight or already received cannot be withdrawn. The local ZIP export works independently.
 
-The receiving endpoint is configured by the maintainer: source and Docker use `PEACH_SENTRY_DSN`; Windows release builds write the same-named environment variable into the bundled `sentry.json`, and GitHub Release uses the repository variable `PEACH_SENTRY_DSN`. Only Sentry public HTTPS DSNs are accepted (including the US / DE regions), and no API token is needed. Without a DSN no SDK client is created. The SDK's automatic framework integrations, logging, performance tracing and metrics are all off; version statistics count toward the Sentry error event quota as ordinary events. The account plan and totals are as shown on the [Sentry subscription page](https://sentry.io/settings/).
+接收端由维护者配置：源码运行使用 `PEACH_SENTRY_DSN` 或检出根的 `sentry.json`；Windows、macOS 打包与 Docker 镜像由 `scripts/write_reporting_config.py` 从同名环境变量（Docker 为同名构建参数）写入包根 `sentry.json`，镜像里位于 wheel 的 `peach/_resources/`，容器运行时设置的同名环境变量优先。发行流水线从 GitGud 项目 CI/CD 变量 `PEACH_SENTRY_DSN` 与 `PEACH_LIBRARY_SENTRY_DSN` 读取，两者为受保护变量、环境作用域 `release`；缺失或不合法时发行构建失败，本地构建写空值，安装后显示上传服务未配置。只接受 Sentry 的公开 HTTPS DSN（含 US / DE 区域），不需要 API token。没有 DSN 时不会创建 SDK 客户端。SDK 自动框架集成、日志、性能追踪和指标均关闭；版本统计作为普通事件计入 Sentry 错误事件额度。账号套餐和总量以 [Sentry 订阅页](https://sentry.io/settings/) 为准。
 
 Regression acceptance uses a temporary Peach data directory and an in-memory SDK receiver. Acceptance records of actual receipt and of release artifacts are kept outside the repository. For the technical diagnostics choice see [ADR-0110](adr/0110-recommended-diagnostics-choice.md). The installer helper process collects evidence only locally; it does not initialize a remote client or send events, and the application process sends according to the user's choice.
 
@@ -57,21 +118,25 @@ The local record keeps the exception and standard library frames and adds the ca
 
 The review covers the exception hook, logging, background tasks, sources, HTTP, media, browser, startup and update entry points. Filtering is based on structured state and the actual exception inheritance, not on error text, arbitrary same-named classes, or a blanket filter of all network exceptions.
 
-| State | Local and remote handling |
+整片转码的 `TranscodeUnavailable` 携带最后一次尝试的有界工具证据与退出码，并保留进程启动异常链。日志入口使用相同的媒体投影规则，只发送结构化退出码与已识别的 `media_failure` 类别；工具原文、媒体路径和尝试参数不进入远程事件。主动取消、超时和已识别的媒体输入条件仅保留本机记录。
+
+| 状态 | 本机与远程处理 |
 | --- | --- |
-| Task cancellation, pause, mutual exclusion, billing and disk-policy gates | The local exception and task receipt are kept and do not consume the error upload quota |
-| Source cooldown, action budget, authorization, misses, explicit transient failures | Reuse source exceptions and classification and keep local state; source parse errors and unknown failures are still reported |
-| HTTP client errors | Direct status codes, httpx responses and urllib HTTPError are recognized; 4xx stays local, unclassified 5xx is still reported; `0` is not treated as an HTTP status code |
-| Warning and retry logs | Logs below error stay local; error / critical carrying a Peach stack is reported |
-| Media input and environment conditions | Bad media, missing input, permission, space and media tool timeouts stay local; missing tool executables, missing decoder capability and unknown technical errors are still reported; preview preconditions keep the hint and a retryable issue item |
-| Browser cancellation and extensions | An AbortError from an intentionally cancelled request does not issue a record request; if the backend receives that type it is still written locally only; extension URL frames are not uploaded, and Peach script frames with build parameters keep their line and column |
-| Client disconnect mid-request | Starlette's ClientDisconnect stays local and is not treated as a server program fault |
-| Startup, CLI, tray, update and rollback | Unhandled technical faults are still reported; the installer helper process keeps the local-only diagnostic boundary |
-| SDK, stackless logs and opaque browser errors | The SDK's own problems are not reported recursively; logs and browser errors with no obtainable Peach code location stay local |
+| 任务取消、暂停、互斥、计费与磁盘策略门槛 | 保留本机异常和任务回执，不占用错误上传额度 |
+| 来源冷却、动作预算、授权、未命中、明确的临时故障 | 复用来源异常与分类，保留本机状态；来源解析错误和未知失败继续上报 |
+| HTTP 客户端错误 | 识别直接状态码、httpx 响应及 urllib HTTPError；4xx 留在本机，未分类的 5xx 继续上报；`0` 不作为 HTTP 状态码 |
+| warning 与重试日志 | 低于 error 的日志留在本机；error／critical 携带 Peach 栈时上报 |
+| 媒体输入与环境条件 | 坏媒体、输入缺失、权限、空间与媒体工具超时留在本机；工具执行文件缺失、解码器能力缺失和未知技术错误继续上报；预览前置条件保留提示和可重试问题项 |
+| 浏览器取消与扩展 | 主动取消请求的 AbortError 不发起记录请求；后端收到该类型仍仅写本机；扩展 URL 帧不上传，Peach 带构建参数的脚本帧保留行列位置 |
+| 客户端中途断开 | 响应头策略直接处理 ASGI 消息，文件响应收到断连后停止发送；服务器异常原样交给故障处理器。Starlette 的 ClientDisconnect 留在本机，不当作服务端程序故障 |
+| 启动、CLI、托盘、更新与回滚 | 未处理的技术故障继续上报；安装辅助进程沿用仅本机诊断边界 |
+| SDK、无堆栈日志与不透明浏览器错误 | 不递归上报 SDK 自身问题；无法取得 Peach 代码位置的日志和浏览器错误仅保留本机 |
 
 The local policy does not clear existing Sentry events and does not control email; email digests and instant notifications are configured separately on the receiving side.
 
-### Library and taste cohort research
+两条通道都禁止底层 HTTP 重试与重定向，保持有限发送次数和 DSN 接收范围。传输回执随用户主动导出的 ZIP 提供；ZIP 不包含本机故障聚合样本或研究明细。
+
+### 馆藏与口味群体研究
 
 "Upload library and taste details" is a separate option, off by default, located at "App and maintenance → Data upload", with its own switch distinct from technical diagnostics. The switch is always visible. In settings the user generates a local preview, reviews the actual fields and content, and then consents explicitly; the preview count, size and excluded personal data are combined into one description. The server requires a one-time preview credential generated by the current process and valid for 10 minutes, the consent value and the field version. Flipping the switch on its own or enabling error diagnostics does not constitute library upload consent, and turning it off does not require a preview. The installer offers a separate option that is unchecked by default, with a short label summarizing the content and risk; after the user actively checks it, a scrollable page with the complete fields, purpose and risk description is shown, continuing means consent, and going back cancels the selection. The helper process only saves the choice; it does not read the library or initialize the SDK. Silent installation keeps an existing choice. The field version is `4`; consent for any other version is invalid.
 
@@ -88,22 +153,36 @@ No account, device or installation identifier, file name, path, media, URL, sear
 
 The preview and background collection only read the ledger; they do not read browsing history, bookmarks or write preference caches. A large preview shows the first 24,000 characters in a code block, and the complete local JSON can be copied or downloaded. A preview is not a send and does not turn on upload; consent covers sending the latest snapshot with the same fields every week. After consent, the preview description, data preview and consent box collapse; the preview entry can still be reopened, and when already on, consent is not requested again. When the contract changes, `SCHEMA` must be advanced and consent obtained again.
 
-The background reads the details and initializes the SDK only when valid consent and a separate receiving endpoint both exist. At most one snapshot is attempted per machine per UTC calendar week, with an attempt record carrying the field version shared across processes; historical snapshots are not backfilled. The raw JSON is capped at 100 MiB and the gzip attachment at 18 MiB; exceeding either rejects the whole snapshot, and truncated data is never sent. The gzip header contains no source file name or generation time. The transport accepts only a fixed-purpose event, a fixed-file-name attachment and the field allowlist, and the consent version is rechecked just before background sending. Turning it off invalidates queued records; data already sent cannot be withdrawn through the local switch. A send attempt does not mean the server received it.
+后台只有在有效同意和独立接收端同时存在时才读取明细并初始化 SDK。快照须至少包含一部公共编号作品或一个偏好分组；没有可分析内容时记为 `waiting-data`，每小时重新检查，不占周传输机会。收集、压缩或入队前失败可以重新准备。每机每 UTC 自然周最多通过一次最终发送门槛，跨进程使用同一文件锁预约；重新选择同意不重置周限次。实际发送后无论明确失败还是结果未知，本周均不再发送，不补传历史快照。空快照不会进入研究样本，分析结果须披露这个筛选口径。
 
-The maintainer sets a separate `PEACH_LIBRARY_SENTRY_DSN`; Windows Release reads the same-named repository variable and writes it into the bundled `library_dsn`. The project of this DSN must differ from the error diagnostics project; a same-project configuration is treated as unconfigured. Research snapshots are received as Sentry attachments and each also produces an event; event and attachment quotas within the organization are still shared. See the [Sentry attachments documentation](https://docs.sentry.io/platforms/python/enriching-events/attachments/).
+`state/library-sharing-attempt.json` 区分 `waiting-data`、`queued`、`accepted`、`failed`、`unknown` 与 `blocked`，`attempted` 表示是否已通过最终发送门槛。设置 API 的 `last_attempt` 只提供当前 UTC 周的回执，跨周不改写原记录。`accepted` 仅证明取得 HTTP 2xx；未取得 HTTP 回执、网络中断和历史无回执记录均不解释为接收成功。旧字段版本、旧 UTC 周与旧同意版本的队列不能发送；旧尝试回执不能覆盖新尝试。
+
+原始 JSON 上限 100 MiB，gzip 附件上限 18 MiB；任一超限均整份拒绝，不发送截断数据。gzip 头不含源文件名和生成时间。传输只接受固定用途事件、固定文件名附件与字段白名单，后台真正发送前复查同意版本。关闭让排队记录失效，已发送数据无法经本机开关撤回。
+
+维护者另设 `PEACH_LIBRARY_SENTRY_DSN`，两端打包按上文写入包内 `library_dsn`。该 DSN 的项目必须与错误诊断项目不同，同项目配置视为未配置。研究快照作为 Sentry 附件接收，每次也产生一条事件；组织内的事件和附件额度仍共享。见 [Sentry 附件说明](https://docs.sentry.io/platforms/python/enriching-events/attachments/)。
 
 Cohort analysis aggregates, separately by `period`, work ownership rate, work rating distribution, performer and series preferences and manual tags; each snapshot contributes ownership once per work, and an entity's `favorite` means actively favorited while `collected` means owning related works, so they must not be mixed. Ratings use the number of valid raters or ratings as the denominator; unrated must not be treated as a 0 score, and file counts must not be treated as user counts. A weekly snapshot is a cumulative state and cannot be summed across weeks into new collections or plays. There is no cross-period identifier, but this does not justify claiming the details cannot be linked; once per machine per week also cannot identify the same person across multiple installations. Results represent only the voluntarily participating sample, and installation coverage and selection bias must be stated. The receiving-side analysis dashboard is not part of the client upload feature.
 
 ## ZIP contents
 
-- `report.json`: system and version information, check results, media tool capabilities, source health summary and the file collection receipt.
-- `logs/<directory index>/`: tray, service, restart, first scan, source update, tunnel, error and crash logs; fixed logs include recent calendar-month segments.
-- `processing/`: library processing state and recent issue lists, startup preparation, automatic update, standalone package update and tunnel state.
-- `updates/`: recent update migration logs.
+系统诊断页的诊断报告和刮削记录均在后台生成，进度按实际读取的候选与来源快照显示；可以取消，刷新页面后可继续查看同一服务中的任务。完成后通过下载链接读取文件。生成与 ZIP 合并分块写入临时文件，取消时清理未完成产物；重新生成会回收该管理器上一份产物。服务重启后需要重新生成。
 
-At most the last 96 KiB of each file is read; at most 8 error logs, 4 crash logs, 8 processing issue lists and 2 migration logs are included. Truncation and read failures go into the collection receipt, and a single unreadable file does not affect other evidence. JSON and JSONL are parsed separately, and partial lines still being written do not enter the shared report. Log retention follows the half-year and calendar-month segmentation policy.
+普通诊断报告自动合并压缩后不超过 100 MiB 的详细刮削记录，超限时保留摘要并提示按番号单独导出。刮削记录可填写最多 20 个番号，留空读取近期作品，包含来源字段、候选、当前归属与复核决定；只读现存资料。自动错误取证只附刮削摘要，不后台生成完整刮削记录。
 
-The ZIP does not contain the ledger, configuration files, private keys, login cookies or media files. Paths, URLs, addresses, credential fields and command-line credential values are redacted; media names in processing records are hidden. Default logs from fault injection land in the test process's temporary directory.
+后台导出接口为 `GET/POST /api/diagnostics/exports`、`POST /api/diagnostics/exports/{job_id}/cancel` 与 `GET /api/diagnostics/exports/{job_id}/download`，均沿用登录与本机管理检查，写请求核对同源。状态为 `idle`、`running`、`cancelling`、`complete`、`cancelled` 或 `failed`；下载只接受当前已完成任务的标识。
+
+`GET /api/diagnostics/bundle` 直接返回常规日志与诊断摘要；详细刮削记录通过后台导出生成。
+
+- `report.json`：系统和版本信息、检查结果、媒体工具能力、来源健康摘要及文件收集回执。
+- `logs/<目录序号>/`：托盘、服务、重启、首次扫描、源码更新、隧道、错误及崩溃日志；固定日志包含近期自然月分段。页面操作被接口以 400 拒收时（例如手动取封面时馆藏未找到番号），拒收原因写入 `errors-*.log` 的 `http-request` 记录，只留本机，不远程上报。
+- `processing/`：馆藏处理状态与近期问题清单、启动准备、自动更新、独立包更新及隧道状态。
+- `updates/`：近期更新迁移日志。
+- `covers/`：发现页逐番号的封面处理结果（`feed-cover-attempts/<番号>.json`）与资料任务状态；资料缓存本身留在本机。
+- `scraping/`：来源摘要，以及符合合并上限的字段候选、归属和来源快照；凭据与媒体路径经过脱敏。
+
+每个文件读取尾部最多 96 KiB；错误日志最多 8 份、崩溃日志最多 4 份、处理问题清单最多 8 份、迁移日志最多 2 份、封面处理结果按修改时间取最近 500 份。截断和读取失败进入收集回执，单个不可读文件不影响其他证据。JSON 与 JSONL 分别解析，正在写入的残行不进入共享报告。日志保留周期沿用半年及自然月分段策略。
+
+ZIP 不包含 ledger、配置文件、私钥、登录 Cookie 或媒体文件。路径、网址、地址、凭据字段及命令行凭据值脱敏，字典键同样脱敏：`<资产编号>:<路径>` 形态的键保留编号前缀，脱敏后同名的键追加 `#2` 等序号；处理记录中的媒体名称与 `path` 字段整值隐藏，只保留资产编号，不带出库清单。故障注入的默认日志落在测试进程临时目录。
 
 ## Media tools
 

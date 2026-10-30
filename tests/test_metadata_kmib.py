@@ -103,7 +103,9 @@ class KmibCatalogRuleTests(unittest.TestCase):
             self.assertEqual(release_code_from_filename(name), code, name)
 
     def test_the_mib_filename_rule_stays_inside_mib_prefixes(self):
-        self.assertIsNone(release_code_from_filename("ABC-123 some title.mp4"))
+        # 下划线写法只对 MIB 前缀开放；「厂牌-序号 + 片名」的通用形态归片名规则。
+        self.assertEqual(release_code_from_filename("YUJ_103 some title.mp4"), "YUJ-103")
+        self.assertIsNone(release_code_from_filename("ABC_123 some title.mp4"))
         self.assertIsNone(release_code_from_filename("MIB.mp4"))
 
     def test_official_catalogue_prefixes_are_korean_mib(self):

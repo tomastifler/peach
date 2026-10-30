@@ -1,6 +1,7 @@
 /* 骨架：整块占位、索引占位、配置页占位，落进 DOM 后按实际尺寸补齐，过了显示门槛才露面，
    到货时把占位换成真内容。由共享源码直接引用，随 `peach-app.js` 发出。 */
 import { esc } from '../core';
+import { tagSkeletonHtml } from '../tag-skeleton';
 
 /**
  * 占位换成真内容：旧的那一屏抬成盖在容器上的一层淡出，新内容同时从模糊里清晰起来。
@@ -69,20 +70,12 @@ export function skeletonHtml(label='Loading content',{className='',variant='pane
 /** 索引占位复用最终网格、头像和词表的尺寸。 */
 /** 索引页的占位：名册网格、字母表或标签云，尺寸取最终那一副。首屏和页内换档共用这一份。 */
 export function indexSkeletonHtml({kind,layout='big',mode='alphabet'}:{kind?:string;layout?:string;mode?:string}={}):string{
-  const people=kind!=='tags',company=kind==='studios'||kind==='agencies';
-  const cell=people
-    ?'<span class="icell"><span class="ring skeleton"></span><span class="nm skeleton">&nbsp;</span><span class="n skeleton">&nbsp;</span></span>'
-    :'<span class="alphatag"><span class="skeleton"></span><span class="n skeleton"></span></span>';
-  const grid=people?`igrid" data-cells="${company?'company':'people'}" data-layout="${esc(layout)}`:'ui-alphalist';
-  /* 字母表是一组一张卡：每组两行占位，铺三组，形状同页面落地后开头那几组；
-     它不走 `data-fill`——那条补的是单张网格，一组补到视口下沿反而不像。 */
-  const body=!people&&mode==='cloud'
-    ?`<div class="tagwall index-tags">${Array.from({length:60},(_,i)=>
-      `<span class="tg skeleton" style="width:${[92,128,76,108,144][i%5]}px">&nbsp;</span>`).join('')}</div>`
-    :people?`<div class="${grid}">${cell.repeat(12)}</div>`
-    :`<section class="ui-alphagroup"><span class="indexletterskeleton skeleton"></span><div class="${grid}">${cell.repeat(10)}</div></section>`.repeat(3);
-  const label='Loading index';
-  return `<div class="skeletonpanel index-skeleton" data-skeleton="index/${esc(kind)}/${esc(layout)}/${esc(mode)}"${people?' data-fill=""':''}
+  if(kind==='tags')return tagSkeletonHtml({ mode });
+  const company=kind==='studios'||kind==='agencies'||kind==='series';
+  const cell='<span class="icell"><span class="ring skeleton"></span><span class="nm skeleton">&nbsp;</span><span class="n skeleton">&nbsp;</span></span>';
+  const body=`<div class="igrid" data-cells="${company?'company':'people'}" data-layout="${esc(layout)}">${cell.repeat(12)}</div>`;
+  const label='正在读取索引';
+  return `<div class="skeletonpanel index-skeleton" data-skeleton="index/${esc(kind)}/${esc(layout)}/${esc(mode)}" data-fill=""
     role="status" aria-label="${label}"><span class="sr-only">${label}</span><section aria-hidden="true">${body}</section></div>`;
 }
 
@@ -93,11 +86,13 @@ const SKELETON_SLOT:Record<string,(width:number)=>string>={
   av:()=>`<span class="av avskeleton"><span class="ring"></span><span class="nm">&nbsp;</span></span>`,
   brandpill:width=>`<span class="brandpill brandskeleton" style="width:${width}px"><span class="mk"></span></span>`,
   pill:width=>`<span class="pill tagskeleton" style="width:${width}px"></span>`,
+  'filter-pill':width=>`<span class="skeleton" style="width:${width}px;height:var(--control-h-compact);border-radius:8px;flex:none"></span>`,
 };
 const SKELETON_SLOT_WIDTHS:Record<string,number[]>={
   av:[0],
   brandpill:[132,158,118,146,124,164,138],
   pill:[92,68,104,76,88,64,96,72,100,80,68,92,76,84],
+  'filter-pill':[92,68,104,76,88,64,96,72,100,80,68,92,76,84],
 };
 
 /* 低于这一段的请求直接显示内容。Peach 的数据多在本机，立即把占位画出来会让几十毫秒的

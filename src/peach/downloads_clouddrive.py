@@ -1,15 +1,15 @@
-"""115 云下载：经 CloudDrive2 的 gRPC 接口提交与跟踪 115 离线任务。
+"""CloudDrive2 云下载：通过官方 gRPC 接口提交并跟踪任务。
 
 Peach 不另申请 115 应用，复用 CloudDrive2 已有的 115open 授权：一个应用最多授权两次，第三次
 会顶掉第一次。CloudDrive2 的 API 令牌由用户在设置页填一次，存本机 `CredentialStore`，
 只放进 gRPC 的 `authorization` 元数据，不进 URL、日志与 ledger。
 
-用到的八个方法见 `downloads_clouddrive.proto`。流程参照 JavBoss
+接口子集见 `downloads_clouddrive.proto`。流程参照 JavBoss
 `internal/clouddrive/client.go` 与 `internal/service/download.go`：提交前确认目标目录
 `canOfflineDownload` 并查配额，提交时让 CloudDrive2 10 秒后自己看一眼目录，之后按 infohash
 在目录的离线列表里对账；列表里找不到时看目录里有没有那个文件。
 
-每个任务扣一条 115 离线配额（年费会员每月 1500 条、月费 200 条，月底清零）。提交前先查
+115 每个任务扣一条离线配额（年费会员每月 1500 条、月费 200 条，月底清零）。提交前先查
 目录里是否已有同一 infohash 的离线任务，有就接管，不再扣。
 
 115 目标目录留空时，检查从推送发现的云端路径前缀里推一个（「检查」键、打开设置页与保存配置
@@ -30,7 +30,7 @@ from google.protobuf import empty_pb2
 from . import downloads_clouddrive_pb2 as pb
 from .downloads import (
     DONE, ERROR, MISSING, RUNNING, DownloadError, DownloadTask, Magnet, RemoteStatus,
-    classify_remote_message, magnet_info_hash,
+    classify_remote_message, clean_address, magnet_info_hash,
 )
 from .push_discovery import CloudPrefix, normalise_prefix
 
@@ -61,6 +61,10 @@ SUGGESTED_FOLDER = "云下载"
 _METHODS = {
     "GetSystemInfo": (empty_pb2.Empty, pb.CloudDriveSystemInfo),
     "GetApiTokenInfo": (pb.StringValue, pb.TokenInfo),
+    "GetAllCloudApis": (empty_pb2.Empty, pb.CloudAPIList),
+    "GetCloudAPIConfig": (pb.GetCloudAPIConfigRequest, pb.CloudAPIConfig),
+    "SetCloudAPIConfig": (pb.SetCloudAPIConfigRequest, empty_pb2.Empty),
+    "GetMountPoints": (empty_pb2.Empty, pb.GetMountPointsResult),
     "FindFileByPath": (pb.FindFileByPathRequest, pb.CloudDriveFile),
     "CreateFolder": (pb.CreateFolderRequest, pb.CreateFolderResult),
     "AddOfflineFiles": (pb.AddOfflineFileRequest, pb.FileOperationResult),
@@ -76,8 +80,12 @@ _AUTH_CODES = {grpc.StatusCode.UNAUTHENTICATED, grpc.StatusCode.PERMISSION_DENIE
 
 
 def channel_target(address: str) -> tuple[str, bool]:
-    """`http://host:port` → (`host:port`, 不加密)。设置层已经校验过形态。"""
-    parts = urlsplit(address if "://" in address else "http://" + address)
+    """校验服务地址并生成 gRPC 目标；非法地址使用下载领域错误。"""
+    try:
+        address = clean_address(address)
+    except ValueError as error:
+        raise DownloadError("config", str(error)) from error
+    parts = urlsplit(address)
     if not parts.hostname:
         raise DownloadError("config", "CloudDrive2 address is not set")
     port = parts.port or (443 if parts.scheme == "https" else 19798)
@@ -108,11 +116,15 @@ def answers(address: str, *, timeout: float = PROBE_TIMEOUT) -> bool:
 def discover(addresses: tuple[str, ...] = LOCAL_ADDRESSES) -> str:
     """按顺序试，返回第一个应答的地址；都不应答时报错并原样列出试过的地址。"""
     for address in addresses:
-        if answers(address):
-            return address
-    tried = ", ".join(addresses)
-    raise DownloadError("network", f"No CloudDrive2 address is set, and nothing on this machine ({tried}) answered. "
-                                   "Make sure CloudDrive2 is running, or enter its actual address in the address field")
+        try:
+            normalized = clean_address(address)
+        except ValueError:
+            continue
+        if normalized and answers(normalized):
+            return normalized
+    tried = "、".join(addresses)
+    raise DownloadError("network", f"没有填 CloudDrive2 地址，本机 {tried} 都没有应答。"
+                                   "确认 CloudDrive2 已启动，或在地址栏填上它的实际地址")
 
 
 def _translate(error: grpc.RpcError, action: str) -> DownloadError:
@@ -139,15 +151,17 @@ class Folder:
     can_offline: bool
     cloud_name: str
     cloud_account: str
+    can_manage: bool = True
 
 
 class CloudDriveClient:
-    """要令牌的那七个方法的薄封装。"""
+    """带令牌调用官方 gRPC 接口。"""
 
     def __init__(self, address: str, token: str, *, timeout: float = CALL_TIMEOUT):
         if not token:
             raise DownloadError("config", "The CloudDrive2 API token is not set")
         self.token = token
+        self.address = address
         self.timeout = timeout
         self.channel = open_channel(address)
 
@@ -192,7 +206,7 @@ class CloudDriveClient:
         if found is None or not found.isDirectory:
             raise DownloadError("config", f"CloudDrive2 has no folder {path}")
         return Folder(path, bool(found.canOfflineDownload), found.CloudAPI.name,
-                      found.CloudAPI.userName)
+                      found.CloudAPI.userName, bool(found.supportOfflineDownloadManagement))
 
     def quota(self, folder: Folder) -> pb.OfflineQuotaInfo:
         return self.call("GetOfflineQuotaInfo", pb.OfflineQuotaRequest(
@@ -254,7 +268,7 @@ def offline_status(item: pb.OfflineFile | None) -> RemoteStatus:
 
 
 class CloudDriveProvider:
-    """`downloads.OfflineProvider` 的 115 实现。每次调用新开一条通道，用完就关。"""
+    """按网盘能力查询任务列表或确认文件落地。每次调用新开通道，用完就关。"""
 
     key = "115"
 
@@ -271,38 +285,45 @@ class CloudDriveProvider:
         with self.client() as client:
             folder = client.folder(target)
             if not folder.can_offline:
-                raise DownloadError("config", f"The cloud drive containing {target} does not support offline download")
-            existing = match_offline(client.offline_files(target), magnet.info_hash)
+                raise DownloadError("config", f"{target} 所在的网盘不支持离线下载")
+            existing = match_offline(client.offline_files(target), magnet.info_hash) if folder.can_manage else None
             if existing is not None:
                 status = offline_status(existing)
                 return RemoteStatus(status.state, status.remote_id, status.name, status.progress,
                                     status.message, adopted=True)
             try:
-                quota = client.quota(folder)
+                quota = client.quota(folder) if folder.can_manage else None
             except DownloadError as error:
                 if error.failure != "rejected":
                     raise
                 quota = None  # 这一侧不支持查配额时照常提交，由提交接口自己拒。
             if quota is not None and quota.total > 0 and quota.left <= 0:
-                raise DownloadError("quota", f"115 offline quota used up (this month {quota.used}/{quota.total})")
+                raise DownloadError("quota", f"云下载配额已用完（{quota.used}/{quota.total}）")
             client.add(magnet.uri, target)
         return RemoteStatus(RUNNING, name=magnet.name)
 
     def status(self, task: DownloadTask) -> RemoteStatus:
         with self.client() as client:
+            if not client.folder(task.target).can_manage:
+                return RemoteStatus(DONE if self._landed(client, task) else RUNNING, name=task.remote_name or task.display_name)
             return offline_status(match_offline(client.offline_files(task.target), task.info_hash or ""))
 
     def landed(self, task: DownloadTask) -> bool:
-        names = [name for name in (task.remote_name, task.display_name) if name]
-        if not names:
-            return False
         with self.client() as client:
-            return any(client.find(f"{task.target.rstrip('/')}/{name}", "check files in the target directory")
-                       is not None for name in names)
+            return self._landed(client, task)
+
+    @staticmethod
+    def _landed(client: CloudDriveClient, task: DownloadTask) -> bool:
+        names = [name for name in (task.remote_name, task.display_name) if name]
+        return any(client.find(f"{task.target.rstrip('/')}/{name}", "查目标目录里的文件")
+                   is not None for name in names)
 
     def cancel(self, task: DownloadTask) -> None:
         with self.client() as client:
-            client.remove(client.folder(task.target), task.info_hash or "")
+            folder = client.folder(task.target)
+            if not folder.can_manage:
+                raise DownloadError("config", "这个网盘不支持从 Peach 取消云下载，请到网盘中处理")
+            client.remove(folder, task.info_hash or "")
 
 
 @dataclass(frozen=True)
@@ -315,6 +336,7 @@ class Hints:
     declared_roots: dict = field(default_factory=dict)
     pikpak_root: str = ""
     pikpak_account: bool = False
+    target_enabled: bool = True
 
 
 def empty_report(address: str, problems: list[str] | None = None) -> dict:
@@ -362,7 +384,8 @@ def _inspect(report: dict, client: CloudDriveClient, target: str, hints: Hints) 
             if not granted:
                 report["missing"].append(label)
         probe = _PrefixProbe(client, hints.prefixes)
-        _inspect_target(report, client, probe, target, hints)
+        if hints.target_enabled:
+            _inspect_target(report, client, probe, target, hints)
         if hints.pikpak_account and not hints.pikpak_root:
             try:
                 _suggest_pikpak_root(report, probe, hints)

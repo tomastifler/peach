@@ -4,11 +4,10 @@
  *
  * 版式照 `boardPageSkeleton` 画的那几页之外，数据管理、复核、诊断与采集来源各有一张，其余路径落到通用面板。 */
 import { esc } from '@peach/legacy/core';
-import { configurationSkeletonHtml, fitSkeleton, skeletonHtml } from '@peach/legacy/ui';
+import { fitSkeleton, skeletonHtml } from '@peach/legacy/ui';
 
 import { boardPageSkeleton } from './board-skeleton';
 import { cleanupSkeletonHtml } from './management';
-import { CONFIGURATION_SECTIONS } from './history/settings-route';
 
 export interface PageSkeletonOptions {
   cards?: boolean;
@@ -46,7 +45,6 @@ const reviewSkeletonHtml = (label = 'Loading review queue'): string => `<div cla
     '<div class="skeletoncard" aria-hidden="true"><i></i><b></b><em></em></div>'.repeat(6)}</div></section></div>`;
 
 const PLACEHOLDERS: Record<string, () => string> = {
-  ...Object.fromEntries(Object.keys(CONFIGURATION_SECTIONS).map(key => [`/settings/${key}`, () => configurationSkeletonHtml()])),
   '/data-cleanup': () => cleanupSkeletonHtml(),
   // /resource-sync 只是数据管理页上的一个锚点，占位也该是数据管理那张。
   '/resource-sync': () => cleanupSkeletonHtml(),

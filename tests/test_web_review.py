@@ -10,8 +10,6 @@ import importlib.util
 import io
 import json
 import os
-import re
-import pathlib
 import sqlite3
 import tempfile
 import unittest
@@ -40,6 +38,30 @@ from support.ledger import fresh_ledger
 class ReviewQueueTests(unittest.TestCase):
     """复核队列：候选来源、稳定主键、批准的权威值与写入边界。"""
 
+    def test_old_damaged_official_candidate_cannot_win_over_readable_evidence(self):
+        self._asset(400, 'EXM-001', 'EXM-001.mp4')
+        self.write_metadata_rows([{'item_key':'EXM-001:title', 'code':'EXM-001',
+            'field':'title', 'current':'', 'candidates':[
+                {'source':'makers','value':'壊\ufffdれた題名'},
+                {'source':'dmm','value':'元の題名'}]}])
+        self._auto()
+        with contextlib.closing(sqlite3.connect(self.db_path)) as connection:
+            self.assertEqual(connection.execute('SELECT catalog_title FROM asset WHERE id=400').fetchone()[0],
+                             '元の題名')
+
+    def test_direct_approval_rejects_damaged_legacy_candidate_before_writing(self):
+        from peach.metadata_auto_apply import _apply_metadata_candidate
+        self._asset(400, 'EXM-001', 'EXM-001.mp4')
+        group = {'item_key':'asset:400:title','asset_id':400,'asset_path':'/x/EXM-001.mp4',
+                 'code':'EXM-001','field':'title'}
+        candidate = {'candidate_key':'old','source':'makers','provider_id':'EXM-001',
+                     'value':'壊\ufffdれた題名','confidence':.75}
+        with contextlib.closing(sqlite3.connect(self.db_path)) as connection:
+            connection.row_factory = sqlite3.Row
+            with self.assertRaisesRegex(ValueError, '无法解码'):
+                _apply_metadata_candidate(connection, group, candidate, 'now', 'review:makers')
+            self.assertIsNone(connection.execute('SELECT catalog_title FROM asset WHERE id=400').fetchone()[0])
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         root = Path(self.tmp.name)
@@ -67,6 +89,61 @@ class ReviewQueueTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def test_large_metadata_queue_reuses_identity_lookups_only_within_one_snapshot(self):
+        self.write_metadata_rows([
+            {'item_key': f'EXM-{index:03d}:studio', 'code': f'EXM-{index:03d}',
+             'field': 'studio', 'current': 'Example Studio',
+             'candidates': ['Example Alias']}
+            for index in range(100)
+        ])
+        with mock.patch.object(rm_review, '_entity_identity_key', wraps=rm_review._entity_identity_key) as identity:
+            rows, _, _ = rm_review._review_rows(self.contract, 'metadata_fields')
+            self.assertEqual(len(rows), 100)
+            self.assertEqual(identity.call_count, 2)
+        with self.contract.write_transaction() as connection:
+            connection.execute("INSERT INTO entity(id,kind,canonical_name,normalized_name,created_at,updated_at) "
+                               "VALUES(900,'studio','Example Studio','example studio','now','now')")
+            connection.execute("INSERT INTO entity_alias(entity_id,alias,normalized_alias,source,confidence) "
+                               "VALUES(900,'Example Alias','example alias','manual',1)")
+        self.assertEqual(self.queue_keys('metadata_fields'), [])
+
+    def test_settled_creator_rows_do_not_load_asset_previews(self):
+        self.write_candidates('creator-tags-candidate-20260818.csv', [
+            {'board': str(index), 'creator': 'ukiru', 'tags': 'x', 'status': 'candidate'}
+            for index in range(100)
+        ])
+        with self.contract.write_transaction() as connection:
+            connection.executemany("INSERT INTO review_decision(category,item_key,status,reviewer,note,updated_at) "
+                                   "VALUES('creator_tags',?,'approved','本人','','now')",
+                                   [(str(index),) for index in range(99)])
+        with mock.patch.object(rm_review, '_creator_previews', wraps=rm_review._creator_previews) as previews:
+            rows, _, _ = rm_review._review_rows(self.contract, 'creator_tags', queue=None)
+        self.assertEqual([row['item_key'] for row in rows], ['99'])
+        self.assertEqual(previews.call_args.args[1], ['ukiru'])
+
+    def test_review_response_carries_structured_candidates_without_duplicate_csv_json(self):
+        self.write_metadata_rows([{'item_key': 'EXM-001:title', 'code': 'EXM-001',
+                                   'field': 'title', 'current': '', 'candidates': ['新标题']}])
+        row = rm_review.q_review(self.contract)['sections']['metadata_fields'][0]
+        self.assertNotIn('candidates_json', row)
+        self.assertEqual(row['candidates'][0]['display_value'], '新标题')
+        self.assertTrue(row['candidates'][0]['candidate_key'])
+        self.assertIn('candidates_json', rm_candidates.read_candidates('metadata_fields', self.candidates)[0][0])
+
+    def test_review_cover_presence_uses_the_served_file_without_loading_crop_indexes(self):
+        self._asset(400, 'EXM-001', 'EXM-001.mp4')
+        self.contract.cover_root = Path(self.tmp.name) / 'covers'
+        self.contract.cover_root.mkdir()
+        cover = self.contract.cover_root / 'EXM-001.jpg'
+        cover.write_bytes(b'cached image')
+        self.write_metadata_rows([{'item_key': 'EXM-001:title', 'code': 'EXM-001',
+                                   'field': 'title', 'current': '', 'candidates': ['新标题']}])
+        with mock.patch.object(self.contract, 'cover_index', side_effect=AssertionError('无需全库取景')):
+            row = self.queue_row('metadata_fields', 'EXM-001:title')
+            self.assertEqual(row['asset_preview_url'], '/cover?code=EXM-001')
+            cover.with_suffix('.scraping.json').write_text(json.dumps({'source': 'javdb'}), encoding='utf-8')
+            self.assertEqual(self.queue_row('metadata_fields', 'EXM-001:title')['asset_preview_url'], '')
 
     def write_candidates(self, name, rows):
         path = self.candidates / name
@@ -136,7 +213,8 @@ class ReviewQueueTests(unittest.TestCase):
             extra = {key: item for key, item in value.items()
                      if key not in {"source", "display", "value"}}
             value = value["value"]
-        return {**extra, "candidate_key": f"{item['item_key']}:{index}", "source": source,
+        return {**({'javdb_rule': 2, 'source_id': 'FixtureWork'} if source == 'javdb' else {}),
+                **extra, "candidate_key": f"{item['item_key']}:{index}", "source": source,
                 "display_value": display, "value": value, "confidence": 0.9,
                 # 来源自报的番号。落库前要和这一行的番号对得上，所以默认取同一个值；
                 # 用例给 `provider_id` 就能造出「来源返回的是别的作品」那一半。
@@ -151,6 +229,28 @@ class ReviewQueueTests(unittest.TestCase):
 
     def _auto(self):
         return auto_apply_metadata(self.contract.database, self.candidates)
+
+    def test_old_javdb_candidate_replay_cannot_fill_fields_but_current_identity_can(self):
+        self._asset(801, 'MIKR-023', 'MIKR-023.mp4')
+        for marker, identity, expected in ((None, '', 0), (2, '', 0), (2, 'XeYkdb', 1)):
+            with self.subTest(marker=marker, identity=identity):
+                path = self.write_metadata_rows([{'item_key': 'old-javdb-title', 'code': 'MIKR-023',
+                    'field': 'title', 'current': '', 'candidates': [{'source': 'javdb',
+                    'value': '原题', 'javdb_rule': marker, 'source_id': identity}]}])
+                before = path.read_bytes()
+                self.assertEqual(self._auto()['applied'], expected)
+                self.assertEqual(path.read_bytes(), before)
+
+    def test_human_can_approve_old_javdb_evidence_explicitly(self):
+        self._asset(802, 'MIKR-024', 'MIKR-024.mp4')
+        self.write_metadata_rows([{'item_key': 'old-human-title', 'code': 'MIKR-024',
+            'field': 'title', 'current': '', 'candidates': [{'source': 'javdb',
+            'value': '人工核对标题', 'javdb_rule': None, 'source_id': ''}]}])
+        candidate = self.queue_row('metadata_fields', 'old-human-title')['candidates'][0]
+        rm_review.w_review_decision(self.contract, {'category': 'metadata_fields', 'item_key': 'old-human-title',
+                                  'status': 'approved', 'candidate_key': candidate['candidate_key']})
+        with self.contract.database.read_connection() as connection:
+            self.assertEqual(connection.execute('SELECT catalog_title FROM asset WHERE id=802').fetchone()[0], '人工核对标题')
 
     def test_auto_batch_reads_only_its_metadata_decisions_across_query_chunks(self):
         keys = [f"batch-{index}" for index in range(205)]
@@ -793,7 +893,7 @@ class ReviewQueueTests(unittest.TestCase):
             {"item_key": "ABW", "field": "title", "current": "",
              "candidates": ["涼森れむ流 HOW TO SEX！！"], "code": "ABW-358", "source": "local_nfo"},
             {"item_key": "ABX", "field": "title", "current": "",
-             "candidates": ["涼森れむ流", {"value": "Remu Style", "source": "r18dev"}],
+             "candidates": ["涼森れむ流", {"value": "涼森れむスタイル", "source": "r18dev"}],
              "code": "ABW-359", "source": "local_nfo"},
         ])
         self.assertEqual(self._auto()["applied"], 2)
@@ -814,7 +914,7 @@ class ReviewQueueTests(unittest.TestCase):
         # 被压下的说法要留痕：事后得答得出当时还有哪个值、为什么没选它。
         self.assertEqual(json.loads(notes["ABX"])["rule"], "adr-0038-chain-local_nfo")
         self.assertEqual(json.loads(notes["ABX"])["overruled"],
-                         [{"source": "r18dev", "value": "Remu Style"}])
+                         [{"source": "r18dev", "value": "涼森れむスタイル"}])
         self.assertEqual(self.queue_keys("metadata_fields"), [])
 
     def test_the_chain_settles_a_disagreement_between_two_official_sources(self):
@@ -2422,14 +2522,8 @@ class ReviewQueueTests(unittest.TestCase):
         # 来源写法不能丢，降为副标题。
         self.assertEqual(rows[0]["source_name"], "Alice Shaku")
 
-    def test_decided_rows_leave_the_queue_and_skipped_ones_sink(self):
-        """判过的不能一刷新又回来。
-
-        `_review_rows` 原样返回全部候选、只挂一个 `decision`、靠前端在本地 splice
-        的话，点「通过」当场消失、刷新全回来（厂牌 logo 上最明显）。
-        `跳过` 是「稍后再看」，仍留在队列但排到最后——否则一次跳过等于永久隐藏，
-        而界面上没有任何入口能把它找回来。
-        """
+    def test_review_states_survive_reload_and_restore_preserves_the_prior_decision(self):
+        """待处理、稍后处理、忽略独立计数，恢复保留原判定与时间。"""
         self.write_candidates("creator-tags-candidate-20260818.csv", [
             {"board": "a", "creator": "ukiru", "tags": "x", "status": "candidate"},
             {"board": "b", "creator": "ukiru", "tags": "y", "status": "candidate"},
@@ -2439,7 +2533,36 @@ class ReviewQueueTests(unittest.TestCase):
         self.decide("creator_tags", "b", "rejected")
         self.assertEqual(self.queue_keys("creator_tags"), ["a", "c"])
         self.decide("creator_tags", "a", "skipped")
-        self.assertEqual(self.queue_keys("creator_tags"), ["c", "a"])
+        self.assertEqual(self.queue_keys("creator_tags"), ["c"])
+        snapshot = rm_review.q_review(self.contract)
+        self.assertEqual(snapshot['counts']['creator_tags'], 1)
+        for state, key in [('later', 'a'), ('ignored', 'b')]:
+            self.assertEqual([row['item_key'] for row in snapshot['queues'][state]['sections']['creator_tags']], [key])
+            self.assertEqual(snapshot['queues'][state]['counts']['creator_tags'], 1)
+        with contextlib.closing(sqlite3.connect(self.db_path)) as connection:
+            connection.execute("UPDATE review_decision SET reviewer='本人',note='留待确认' WHERE item_key='a'")
+            connection.commit()
+            prior = connection.execute("SELECT status,reviewer,note,updated_at FROM review_decision WHERE item_key='a'").fetchone()
+        self.assertEqual(self.decide('creator_tags', 'a', 'restore')['applied_assets'], 0)
+        self.assertEqual(self.queue_keys('creator_tags'), ['a', 'c'])
+        self.assertEqual(rm_review.q_review(self.contract)['queues']['later']['counts']['creator_tags'], 0)
+        with contextlib.closing(sqlite3.connect(self.db_path)) as connection:
+            self.assertEqual(connection.execute('SELECT status,reviewer,note,decided_at FROM review_decision_history').fetchone(), prior)
+            self.assertTrue(connection.execute('SELECT restored_at FROM review_decision_history').fetchone()[0])
+
+    def test_restore_rejects_approved_or_missing_candidates_without_changing_decisions(self):
+        with contextlib.closing(sqlite3.connect(self.db_path)) as connection:
+            connection.executemany('INSERT INTO review_decision(category,item_key,status,updated_at) VALUES(?,?,?,?)',
+                [('creator_tags', 'approved', 'approved', 'old'), ('creator_tags', 'gone', 'skipped', 'old')])
+            connection.commit()
+            connection.execute("INSERT INTO review_decision(category,item_key,status,note,updated_at) VALUES('creator_tags','automatic','rejected','{\"auto_rejected\":true}','old')")
+            connection.commit()
+        for key in ('approved', 'gone', 'automatic'):
+            with self.assertRaises(ValueError):
+                self.decide('creator_tags', key, 'restore')
+        with contextlib.closing(sqlite3.connect(self.db_path)) as connection:
+            self.assertEqual(connection.execute('SELECT COUNT(*) FROM review_decision').fetchone()[0], 3)
+            self.assertEqual(connection.execute('SELECT COUNT(*) FROM review_decision_history').fetchone()[0], 0)
 
     def test_approving_a_studio_logo_actually_installs_it(self):
         """批准必须真的把图装进 `/logo` 读的目录。
@@ -2735,6 +2858,21 @@ class ReviewQueueTests(unittest.TestCase):
             "SELECT catalog_title FROM asset WHERE id=1"
         ).fetchone()[0], "正式作品标题")
         con.close()
+
+    def test_r18_english_title_without_original_evidence_is_not_written(self):
+        self._asset(890, 'PCH-890', 'PCH-890.mp4')
+        candidate = {'candidate_key':'PCH-890:title:r18dev:old', 'source':'r18dev',
+                     'source_url':'https://r18.dev/example','provider_id':'PCH-890',
+                     'confidence':0.9,'value':'English translated title','display_value':'English translated title'}
+        self.write_metadata_candidates([{'item_key':'PCH-890:title','code':'PCH-890','query':'PCH-890',
+            'field':'title','field_label':'标题','current_value':'','candidates_json':json.dumps([candidate]),
+            'source_count':'1','status':'candidate','size_gb':'1','videos':'1','fetched_at':'now'}])
+        self.assertEqual(self._auto()['applied'], 0)
+        with self.assertRaisesRegex(ValueError, '原文证据未取得'):
+            rm_review.w_review_decision(self.contract, {'category':'metadata_fields','item_key':'PCH-890:title',
+                'candidate_key':candidate['candidate_key'],'status':'approved'})
+        with contextlib.closing(sqlite3.connect(self.db_path)) as connection:
+            self.assertFalse(connection.execute('SELECT catalog_title FROM asset WHERE id=890').fetchone()[0])
 
     def test_metadata_approval_rejects_repeated_name_even_if_csv_is_tampered(self):
         con = sqlite3.connect(self.db_path)
@@ -3271,23 +3409,22 @@ class PerformerAvatarApplyTests(ReviewQueueTests):
         self.assertEqual(result["applied_assets"], 0)
         self.assertFalse((self.avatar_root / "performer-9.img").exists())
 
-    def test_every_approvable_category_can_land(self):
-        """每个能被批准的类别，要么有落地分支，要么明确声明只记决定。
-
-        `w_review_decision` 的落地分支是一条条手写的，把类别加进白名单却忘了写分支，
-        表现就是「点通过、什么也没发生」——这个组合最糟：留痕说通过、实际没写。
-        已经犯过三次，所以这里不再靠人记。
-        """
-        source = pathlib.Path(rm_review.__file__).read_text(encoding="utf-8")
-        block = source.split("if category not in {", 1)[1].split("}", 1)[0]
-        whitelist = set(re.findall(r'"(\w+)"', block))
-        self.assertGreaterEqual(len(whitelist), 10, "没解析到分类白名单，门槛会空转")
-        lands = set(re.findall(r'elif category == "(\w+)" and status == "approved"', source))
-        lands |= set(re.findall(r'if category == "(\w+)" and status == "approved"', source))
-        declared = set(rm_review.DECISION_ONLY_CATEGORIES)
-        missing = sorted(whitelist - lands - declared)
-        self.assertEqual(
-            missing, [],
-            "这些类别能被批准却既没有落地分支、也没声明只记决定："
-            "补一个 _install_* 分支，或把它写进 DECISION_ONLY_CATEGORIES 并说明原因",
-        )
+    def test_each_approval_category_validates_evidence_or_explicitly_records_only(self):
+        """需落库的分类拒绝缺失候选并回滚；声明只记决定的分类保存批准。"""
+        for category in rm_review.REVIEW_CATEGORIES:
+            with self.subTest(category=category):
+                payload = {'category': category, 'item_key': 'missing-candidate',
+                           'status': 'approved', 'candidate_key': 'missing-source'}
+                if category in rm_review.DECISION_ONLY_CATEGORIES:
+                    result = rm_review.w_review_decision(self.contract, payload)
+                    self.assertEqual(result['applied_assets'], 0)
+                    expected = ('approved',)
+                else:
+                    with self.assertRaisesRegex(ValueError, '所选.*不在当前批次'):
+                        rm_review.w_review_decision(self.contract, payload)
+                    expected = None
+                with self.contract.read_connection() as connection:
+                    decision = connection.execute(
+                        'SELECT status FROM review_decision WHERE category=? AND item_key=?',
+                        (category, 'missing-candidate')).fetchone()
+                self.assertEqual(tuple(decision) if decision else None, expected)

@@ -36,13 +36,23 @@ MAX_SOURCES_PER_RUN = 20
 _NOT_MODIFIED = 304
 
 
+def _parse_source(kind: str, body: bytes, url: str):
+    """演员页受登录限制时返回可操作的原因。"""
+    if kind == feeds.KIND_JAVDB_ACTOR and javdb.LOGIN.search(body.decode("utf-8", "replace")):
+        raise ValueError("JavDB 返回登入页，请在「来源和凭证」为 JavDB 配置有效 Cookie 后重试")
+    parsed = feeds.parse(kind, body, url)
+    if parsed is None:
+        raise ValueError("这一页解不出任何条目")
+    return parsed
+
+
 def _transport(contract):
     from .jav_cover_fetch import HostLimitedTransport
-    from .library_processing import SOURCE_INTERVALS
+    from .library_processing import SOURCE_LIMITER
     from .scraping_access import SourceTransport
 
     return HostLimitedTransport(
-        SourceTransport(contract.follow_secrets_root), 2.0, intervals=SOURCE_INTERVALS)
+        SourceTransport(contract.follow_secrets_root), 2.0, limiter=SOURCE_LIMITER)
 
 
 def fetch(transport, url: str, *, etag: str | None = None,
@@ -91,11 +101,10 @@ def poll_source(contract, transport, source) -> dict:
         with contract.database.write_transaction() as connection:
             feeds.settle(connection, source_id, error=message, interval_minutes=interval)
         return report
-    parsed = feeds.parse(source["kind"], response.body, source["url"])
-    if parsed is None:
-        # 解不出不等于「这次没有新作」：JavDB 那种回了一份不含作品的页面也是这条路。
-        # 当成安静的源会让一个坏掉的订阅永远不报错。
-        message = "No entries could be parsed from this page"
+    try:
+        parsed = _parse_source(source["kind"], response.body, source["url"])
+    except ValueError as error:
+        message = str(error)
         report.update(ok=False, error=message)
         with contract.database.write_transaction() as connection:
             feeds.settle(connection, source_id, error=message, interval_minutes=interval)
@@ -142,10 +151,8 @@ def _backfill_solo_works(contract, transport, source, report: dict) -> None:
     try:
         response = fetch(transport, url)
         if response.status != 200:
-            raise ValueError(f"Source returned HTTP {response.status}")
-        parsed = feeds.parse(source["kind"], response.body, url)
-        if parsed is None:
-            raise ValueError("No entries could be parsed from this page")
+            raise ValueError(f"来源回了 HTTP {response.status}")
+        parsed = _parse_source(source["kind"], response.body, url)
     except Exception as error:  # noqa: BLE001 - 主页已经落库，补拉只记原因
         report["backfill_error"] = str(error)
         return
@@ -201,15 +208,19 @@ def _execute_check(contract, body, job_id: str) -> dict:
         if close:
             close()
     contract.cache_bust()
-    # 新发现的先排，余下名额给还缺资料或封面的旧壳：同一批一条后继。定时那一轮只带
-    # 到了重试时间的，手动点的那一轮全带。
+    # 取资料：新发现的先排，没取到资料的旧壳留着保底名额，同一批一条后继。只缺封面的另成一批
+    # 补封面。定时那一轮只带到了重试时间的，手动点的那一轮全带；已在队里的番号都不再带。
     retry_after = feed_followup.RETRY_AFTER if body.get("automatic") else timedelta(0)
     hidden = web_settings.hidden_compilations(contract.database)
+    busy = feed_followup.in_flight(contract.task_runs)
+    fresh = [code for code in dict.fromkeys(codes) if normalise_code_key(code) not in busy]
     with contract.database.read_connection() as connection:
-        batch = codes + feed_followup.backlog(
-            connection, contract.cover_root, exclude=codes, retry_after=retry_after,
-            limit=max(0, feed_followup.MAX_BATCH - len(codes)), hidden=hidden)
-        planned = feed_followup.plan(batch)
+        batch = feed_followup.scrape_batch(
+            connection, fresh, exclude=[*codes, *busy], retry_after=retry_after, hidden=hidden)
+        covers = feed_followup.cover_backlog(
+            connection, contract.cover_root, exclude=[*codes, *batch, *busy],
+            retry_after=retry_after, hidden=hidden)
+        planned = feed_followup.plan(batch) + feed_followup.plan_covers(covers)
         # 余下的名额给缺头像的存量女优（ADR-0097）。资料处理收尾也派这一份，但没有新片
         # 入库的日子它一轮都不跑，存量就一直停在原地；定时拉取每天都跑。
         planned += avatar_followup.stock(
@@ -253,6 +264,23 @@ def w_feed_check(contract, body) -> dict:
 
 def q_feed_check(contract, args) -> dict:
     return contract.feed_job.snapshot() or {"status": "idle"}
+
+
+def q_feed_schedule(contract, _args) -> dict:
+    """订阅源定时拉取的档位与上次运行状态，形状与 `/api/follow/schedule` 相同。"""
+    scheduler = contract.feed_scheduler
+    if scheduler is None:
+        return {"ok": True, "available": False, "enabled": False,
+                "interval_minutes": feeds.DEFAULT_INTERVAL_MINUTES, "running": False, "next_run_at": None}
+    return scheduler.status()
+
+
+def w_feed_schedule_run(contract, _body) -> dict:
+    """让订阅源定时拉取立刻跑一轮，结果照常记进调度状态。"""
+    scheduler = contract.feed_scheduler
+    if scheduler is None:
+        raise ValueError("订阅源拉取没有启用")
+    return scheduler.run_now()
 
 
 def q_feeds(contract, args) -> dict:
@@ -556,16 +584,13 @@ def q_feed_discoveries(contract, args) -> dict:
         wanted = wants.wanted_keys(connection, (normalise_code_key(row["code"]) for row in rows[:limit]))
         performers = _discovery_performers(connection, contract, rows[:limit])
     more = len(rows) > limit
-    # 最近一轮取新作资料里封面断在连接上的部数。只看最近这一轮：换了线路之后下一轮取到，
-    # 提示就该跟着消失，而不是让一次旧故障一直挂在页面上。
-    last = contract.task_runs.query(status="succeeded", task_key=feed_followup.TASK_KEY, limit=1)
-    cover_network = int(last[0].result_summary.get("cover_network") or 0) if last else 0
-    fetching = set()
-    for run in contract.task_runs.query(status="active", task_key=feed_followup.TASK_KEY, limit=500):
-        try:
-            fetching.update(normalise_code_key(code) for code in feed_followup.parse_key(run.followup_key))
-        except ValueError:
-            continue
+    # 最近一轮取新作资料或补新作封面里封面断在连接上的部数。只看最近这一轮：换了线路之后
+    # 下一轮取到，提示就该跟着消失，而不是让一次旧故障一直挂在页面上。
+    last = [run for task_key in (feed_followup.TASK_KEY, feed_followup.COVER_TASK_KEY)
+            for run in contract.task_runs.query(status="succeeded", task_key=task_key, limit=1)]
+    latest = max(last, key=lambda run: run.finished_at or "", default=None)
+    cover_network = int(latest.result_summary.get("cover_network") or 0) if latest else 0
+    fetching = feed_followup.in_flight(contract.task_runs)
     return {"ok": True, "more": more, "cover_network": cover_network, "items": [{
         "id": int(row["id"]),
         "code": row["code"],

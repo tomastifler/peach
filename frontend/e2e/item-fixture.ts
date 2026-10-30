@@ -7,6 +7,7 @@
 import type { Browser, Page, Request } from 'playwright-core';
 
 import { settle, visit, type Viewport, type Visit } from './harness.ts';
+import { mockSubtitleMemory } from './subtitle-fixture.ts';
 
 export const NAMES = ['七海ひな', '桜井まい', '白石りん', '水瀬ゆい', '藤原あや', '早川なな', '森下えみ', '高橋さき',
   '小野みお', '石原かな', '青木ゆず', '中村はる'];
@@ -62,13 +63,13 @@ const DETAILS = new Map<number, Row>([
 ]);
 
 /** 列表与队列里的那一份：没有 `entity_refs`，标签只是字符串，同 `/api/items`。 */
-const card = (id: number) => {
+export const card = (id: number) => {
   const { entity_refs: _refs, ...rest } = DETAILS.get(id)!;
   return { ...rest, tags: (rest.tags as { k: string }[]).map((tag) => tag.k) };
 };
 export const CATALOG = [11, 12, 13, 14, 15, 16];
 export const RELATED = [14, 15, 16, 12];
-const PARTS = { title: 'PCH-021', items: [21, 22, 23].map((id, at) => ({
+export const PARTS = { title: 'PCH-021', items: [21, 22, 23].map((id, at) => ({
   ...DETAILS.get(id), part_label: String(at + 1), performer_entities: undefined,
   performers: NAMES.slice(0, 2),
   entity_refs: { performer: NAMES.slice(0, 2).map((name, index) => ref(name, index + 1, { has_image: true })) },
@@ -92,12 +93,15 @@ export interface ItemStub {
   writes: { url: string; body: Record<string, unknown> }[];
   /** 各读接口被请求了几次，按路径计。 */
   reads: Map<string, number>;
+  /** 空片源的预期解码错误，独立于真实诊断服务的限流预算。 */
+  mediaErrors: Record<string, unknown>[];
 }
 
 const body = (request: Request) => JSON.parse(request.postData() || '{}') as Record<string, unknown>;
 
 async function stub(page: Page, catalogIds: readonly number[] = CATALOG): Promise<ItemStub> {
-  const state: ItemStub = { writes: [], reads: new Map() };
+  await mockSubtitleMemory(page);
+  const state: ItemStub = { writes: [], reads: new Map(), mediaErrors: [] };
   const read = (path: string) => state.reads.set(path, (state.reads.get(path) || 0) + 1);
   const playlists = new Map<number, { id: number; name: string; ids: number[]; current: number | null }>([
     [PLAYLIST.id, { id: PLAYLIST.id, name: PLAYLIST.name, ids: [...PLAYLIST.items], current: 11 }],
@@ -169,6 +173,13 @@ async function stub(page: Page, catalogIds: readonly number[] = CATALOG): Promis
     (route) => route.request().method() === 'GET' ? route.fallback() : route.fulfill({ json: { ok: true } }));
   await page.route((url) => url.pathname === '/api/stream-plan',(route) => route.fulfill({ json: { protocol: 'direct' } }));
   await page.route((url) => url.pathname === '/stream', (route) => route.fulfill({ status: 204, body: '' }));
+  await page.route((url) => url.pathname === '/api/diagnostics/client-error', (route) => {
+    const sent = body(route.request());
+    const playback = sent.playback as { source_route?: string } | undefined;
+    if (sent.kind !== 'media' || playback?.source_route !== '/stream') return route.fallback();
+    state.mediaErrors.push(sent);
+    return route.fulfill({ json: { recorded: true } });
+  });
   await page.route((url) => ['/poster', '/cover', '/logo', '/entity-image', '/avatar'].includes(url.pathname), (route) => {
     const url = new URL(route.request().url());
     const cover = url.pathname === '/cover';
@@ -181,19 +192,20 @@ export interface ItemVisit extends Visit {
   stub: ItemStub;
 }
 
-/** 打开一页：桩与设置装好之后重新载入，等到 `ready` 出现、等待态结束。 */
+/** 打开一页：导航前装好桩与设置，等到 `ready` 出现、等待态结束。 */
 export async function openItemPage(browser: Browser, path: string, viewport: Viewport,
   { settings = {}, ready = '#stage[open] [data-item-side]', catalogIds }: {
     settings?: Record<string, unknown>; ready?: string; catalogIds?: readonly number[];
   } = {},
 ): Promise<ItemVisit> {
-  const opened = await visit(browser, '/', viewport);
+  let stubbed!: ItemStub;
+  const opened = await visit(browser, path, viewport, async page => {
+    await page.context().addInitScript((value) => {
+      localStorage.setItem('peach.settings.v1', JSON.stringify(value));
+    }, { detailAutoplay: false, relatedLimit: 12, ...settings });
+    stubbed = await stub(page, catalogIds);
+  });
   const page = opened.page;
-  await page.context().addInitScript((value) => {
-    localStorage.setItem('peach.settings.v1', JSON.stringify(value));
-  }, { detailAutoplay: false, relatedLimit: 12, ...settings });
-  const stubbed = await stub(page, catalogIds);
-  await page.goto(new URL(path, page.url()).toString(), { waitUntil: 'load' });
   await page.locator(ready).first().waitFor({ timeout: 15_000 });
   await settle(page);
   return { ...opened, stub: stubbed };

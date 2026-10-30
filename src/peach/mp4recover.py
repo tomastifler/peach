@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
 from .mp4repair import RepairUnavailable, _top_level
+from .ffmpeg import bundled_tools_root
 
 UNTRUNC_ENV = "PEACH_UNTRUNC"
 #: 一部坏片最多试几个参照。每试一个都要把坏片完整读一遍，网盘上是实打实的流量。
@@ -51,7 +52,7 @@ def untrunc_path(tools_root: Path) -> Path | None:
         return Path(configured).expanduser().resolve()
     name = f"untrunc{'.exe' if os.name == 'nt' else ''}"
     if getattr(sys, 'frozen', False):
-        bundled = Path(sys.executable).resolve().parent / 'tools' / 'untrunc' / name
+        bundled = bundled_tools_root() / 'untrunc' / name
         if bundled.is_file():
             return bundled.resolve()
     managed = Path(tools_root) / "untrunc" / name

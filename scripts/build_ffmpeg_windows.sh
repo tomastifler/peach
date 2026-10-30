@@ -3,7 +3,8 @@
 set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 output="$(realpath -m -- "${1:?用法: build_ffmpeg_windows.sh <输出目录>}")"
-for tool in python3 make nasm pkg-config clang meson ninja x86_64-w64-mingw32-gcc x86_64-w64-mingw32-strip; do
+for tool in python3 make nasm pkg-config clang meson ninja cmake \
+        x86_64-w64-mingw32-gcc x86_64-w64-mingw32-g++ x86_64-w64-mingw32-strip; do
     command -v "$tool" >/dev/null || { echo "缺少构建工具: $tool" >&2; exit 1; }
 done
 python3 "$script_dir/fetch_ffmpeg_sources.py" prepare "$output"
@@ -16,6 +17,7 @@ prefix="$work/prefix"
     make --version
     meson --version
     ninja --version
+    cmake --version
     python3 --version
     uname -a
 } > "$output/build-environment.txt"
@@ -35,6 +37,16 @@ cd "$work/x264"
 make -j"$(nproc)"
 make install
 make -C "$work/nv-codec-headers" PREFIX="$prefix" install
+mkdir -p "$prefix/include"
+cp -r "$work/amf-headers/AMF" "$prefix/include/AMF"
+# libvpl 未定义 CXX_LIB；静态链接 C++ 调度器时由 vpl.pc 带上 libstdc++。
+cmake -S "$work/libvpl" -B "$work/libvpl-build" -G Ninja -DCMAKE_SYSTEM_NAME=Windows \
+    -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
+    -DCMAKE_RC_COMPILER=x86_64-w64-mingw32-windres -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX="$prefix" -DCMAKE_INSTALL_LIBDIR=lib \
+    -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTS=OFF -DINSTALL_EXAMPLES=OFF -DCXX_LIB=-lstdc++
+cmake --build "$work/libvpl-build"
+cmake --install "$work/libvpl-build"
 cd "$work/ffmpeg"
 ./configure --prefix="$output/ffmpeg" --target-os=mingw32 --arch=x86_64 \
     --cross-prefix=x86_64-w64-mingw32- --enable-cross-compile \
@@ -43,6 +55,7 @@ cd "$work/ffmpeg"
     --enable-gpl --enable-version3 --disable-nonfree --enable-libx264 --enable-libdav1d \
     --enable-cuda-llvm \
     --enable-ffnvcodec --enable-cuda --enable-cuvid --enable-nvenc --enable-nvdec \
+    --enable-amf --enable-libvpl \
     --enable-d3d11va --enable-dxva2 --enable-schannel \
     --extra-cflags="-I$prefix/include" --extra-ldflags="-L$prefix/lib -static" \
     --pkg-config=pkg-config --pkg-config-flags=--static

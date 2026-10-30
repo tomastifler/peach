@@ -25,6 +25,41 @@ describe('本地与在线艺人共用名册布局', () => {
   let browser: Browser;
   before(async () => { browser = await launch() });
   after(async () => { await browser?.close() });
+  for (const path of ['/tags', '/tags?scope=online', '/performers', '/performers?scope=online', '/creators', '/studios', '/agencies', '/series']) {
+    it(`索引标题和操作同排，搜索框按可用空间收缩（${path}）`, { timeout: 60_000 }, async () => {
+      const opened = await visit(browser, path, VIEWPORTS[0]);
+      try {
+        const page = opened.page;
+        await settle(page);
+        if (await page.locator('#drawer.open').count()) await page.locator('#filterBtn').click();
+        for (const width of [1280, 761, 760, 640, 390, 320]) {
+          await page.setViewportSize({ width, height: 844 });
+          await settle(page);
+          const read = () => page.locator('[data-index-head]').evaluate(head => {
+            const title = head.querySelector('h2')!.getBoundingClientRect();
+            const search = head.querySelector('[data-index-search]')!.getBoundingClientRect();
+            const controls = [...head.querySelectorAll('[data-shortcuts-trigger],[data-tag-mode],[data-index-layout]')];
+            return {
+              searchWidth: search.width,
+              centers: [search, ...controls.map(node => node.getBoundingClientRect())].map(box => (box.top + box.bottom - title.top - title.bottom) / 2),
+              contained: controls.every(node => { const box = node.getBoundingClientRect(); return box.left >= 0 && box.right <= innerWidth }),
+              overflow: document.documentElement.scrollWidth > innerWidth,
+            };
+          });
+          for (const managing of path.startsWith('/tags') ? [false, true] : [false]) {
+            if (managing) await page.locator('[data-tag-mode]').click();
+            await settle(page);
+            const shown = await read();
+            assert.ok(shown.centers.every(delta => Math.abs(delta) < 1), `${width}px 操作或搜索框没有和标题同排：${JSON.stringify(shown)}`);
+            assert.ok(shown.searchWidth >= 64 && shown.searchWidth <= 320, `${width}px 搜索框没有保持可输入宽度：${shown.searchWidth}`);
+            assert.equal(shown.contained, true);assert.equal(shown.overflow, false);
+            if (managing) await page.locator('[data-tag-mode]').click();
+          }
+        }
+        assert.deepEqual(opened.problems, []);
+      } finally { await opened.close() }
+    });
+  }
   for (const viewport of VIEWPORTS) {
     it(`订阅标记在两种名册版式中可见（${viewport.name}）`, { timeout: 60_000 }, async () => {
       const opened = await visit(browser, '/performers', viewport);
@@ -52,6 +87,21 @@ describe('本地与在线艺人共用名册布局', () => {
             return image?.complete && image.naturalWidth > 0;
           });
           assert.equal(await page.locator('#index [data-index-feed]').count(), 1);
+          for (const dark of [false, true]) {
+            await page.evaluate(dark => {
+              document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+              document.documentElement.classList.toggle('dark', dark);
+            }, dark);
+            const tone = await marker.evaluate(node => {
+              const badge = node.firstElementChild!;
+              const probe = document.createElement('span');
+              probe.style.color = 'var(--feed-mark)'; node.append(probe);
+              const orange = getComputedStyle(probe).color; probe.remove();
+              return { foreground: getComputedStyle(badge).color, orange, background: getComputedStyle(badge).backgroundColor };
+            });
+            assert.equal(tone.foreground, tone.orange);
+            assert.notEqual(tone.background, 'rgba(0, 0, 0, 0)');
+          }
           assert.equal(await marker.evaluate(node => {
             const a = node.getBoundingClientRect(), b = node.closest('[data-index-cell]')!.getBoundingClientRect();
             return a.width >= 16 && a.height >= 16 && a.left >= b.left && a.right <= b.right && a.top >= b.top && a.bottom <= b.bottom;

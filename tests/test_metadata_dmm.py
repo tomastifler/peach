@@ -9,7 +9,7 @@ from peach.library_processing import LibraryMetadataProvider
 from peach.scraping_access import SourcePaused
 from peach.sources import DMM, DmmSource, FailureReason, Page, Session, SourceFailure
 from peach.sources.dmm import (DETAIL_ATTEMPTS, DETAIL_QUERY, SEARCH_LIMIT, SEARCH_QUERY, code_parts,
-                               guessed_cid, matching_cids, release_date)
+                               code_from_cid, guessed_cid, matching_cids, release_date)
 
 ENDPOINT = "https://api.video.dmm.co.jp/graphql"
 PAGE_URL = "https://video.dmm.co.jp/av/content/?id=ssis00057"
@@ -64,11 +64,19 @@ def asked(transport):
 
 
 class CodeMappingTests(unittest.TestCase):
+    def test_dmm_product_identity_keeps_the_release_suffix_and_uses_the_dmm_namespace(self):
+        for product, expected in {"1dandy00899": "DANDY-899", "118abw00220": "ABW-220",
+                                  "h_086iqqq00026": "IQQQ-026", "1dandy00851c": "DANDY-851C",
+                                  "48midv00012ai": "MIDV-012AI"}.items():
+            self.assertEqual(code_from_cid(product), expected)
+        self.assertEqual(code_from_cid("opaque_cid"), "")
+
     def test_code_parts_keep_the_numeric_prefix_and_the_digits_as_written(self):
         self.assertEqual(code_parts("SSIS-057"), ("", "SSIS", "057"))
         self.assertEqual(code_parts("ssis057"), ("", "SSIS", "057"))
         self.assertEqual(code_parts("300MIUM-1239"), ("300", "MIUM", "1239"))
-        for code in ("", None, "FC2-PPV-1812235", "092415_001", "n0780", "MIDV-012ai"):
+        self.assertEqual(code_parts("MIDV-012ai"), ("", "MIDV", "012AI"))
+        for code in ("", None, "FC2-PPV-1812235", "092415_001", "n0780"):
             with self.subTest(code=code):
                 self.assertIsNone(code_parts(code))
 
@@ -76,6 +84,7 @@ class CodeMappingTests(unittest.TestCase):
         self.assertEqual(guessed_cid("SSIS-057"), "ssis00057")
         self.assertEqual(guessed_cid("START-640"), "start00640")
         self.assertEqual(guessed_cid("300MIUM-1239"), "300mium01239")
+        self.assertEqual(guessed_cid("DANDY-851C"), "dandy00851c")
         self.assertEqual(guessed_cid("092415_001"), "")
 
     def test_matching_cids_compare_the_letters_and_the_number_not_the_substring(self):
@@ -90,6 +99,7 @@ class CodeMappingTests(unittest.TestCase):
         """`MIDV 012` 同时命中原版与 AI 重制版，原版先核。"""
         self.assertEqual(matching_cids("MIDV-012", ["48midv00012ai", "midv00127", "midv00012", "48midv00012"]),
                          ["midv00012", "48midv00012", "48midv00012ai"])
+        self.assertEqual(matching_cids("DANDY-851C", ["1dandy00851", "1dandy00851c", "1dandy00851ai"]), ["1dandy00851c"])
 
     def test_a_numeric_prefix_in_the_code_must_lead_the_cid(self):
         self.assertEqual(matching_cids("300MIUM-1239", ["300mium01239", "mium01239", "259mium01239"]), ["300mium01239"])

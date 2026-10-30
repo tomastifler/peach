@@ -1463,7 +1463,7 @@ class RunTests(unittest.TestCase):
         MODULE.WORDMARK_SOURCES_BY_SAFE.clear()
         # `run` 自己造 Fetcher，替身挡不到它：站点自己那两条后手会真的去敲 fitch-av.com。
         self.assets = MODULE.site_assets
-        MODULE.site_assets = lambda url, fetch: ([], [])
+        MODULE.site_assets = lambda url, fetch, **kwargs: ([], [])
 
     def tearDown(self):
         MODULE.LOGO_SOURCES_BY_SAFE.clear()
@@ -1835,6 +1835,22 @@ class SiteOwnAssetTests(unittest.TestCase):
         self.assertEqual(icon["verdict"], MODULE.OK)
         self.assertEqual(icon["url"], self.AVATAR)
         self.assertIn("的头像", icon["evidence"])
+
+    def test_a_shared_maker_page_selects_its_named_mark_without_following_other_accounts(self):
+        url = self.HOME + 'makers/bambi/'
+        own = self.HOME + 'images/bambi-logo.png'
+        other = self.HOME + 'images/other-logo.png'
+        self.links['Bambi_Promotion'][0]['url'] = url
+        html = (f'<img src="{other}" alt="Other Company">'
+                f'<img src="{own}" alt="Bambi Promotion">'
+                f'<a href="{self.PROFILE}">Other Company X</a>')
+        fetch = Fetch({url: html.encode(), own: block_png((256, 256)),
+                       other: block_png((512, 512)), self.PROFILE: b''})
+        icon = self.harvest(fetch=fetch)[0]
+        self.assertEqual(icon['url'], own)
+        self.assertEqual(icon['verdict'], MODULE.OK)
+        self.assertNotIn(other, fetch.asked)
+        self.assertNotIn(self.PROFILE, fetch.asked)
 
     def test_the_site_mark_is_preferred_over_the_avatar(self):
         """站点自己那张更正式。同样合格时用它，头像只是后手。"""

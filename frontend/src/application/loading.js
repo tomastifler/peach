@@ -3,7 +3,7 @@ import { followState } from './follow.js';
 import { managementSkeletonHtml, pageSkeletonHtml, skeletonKeyOf } from './../management-placeholder';
 import { photoSize } from './../appearance/layout';
 import { $, ROUTE_ENTITIES } from '../core';
-import { fitSkeleton, loadingDotsHtml, revealSkeleton } from '../ui-kit';
+import { fitSkeleton, LOAD_MORE_STATUS, loadingDotsHtml, revealSkeleton } from '../ui-kit';
 import { junkCountSkeletonHtml, junkRoute } from './../junk-queue';
 import { state } from './../shell/index';
 import { catalogCardRatio, catalogHeadProps, catalogSkeletonHtml, clearCatalogGrid, gridTaken, paintCatalogFilter, syncCatalogFilterScreen } from './catalog.js';
@@ -139,7 +139,7 @@ followState.followSkeletonHtml = (label='Loading follows')=>`<div class="peach-r
     <div class="tagbar followfilters" data-filter-row="top" data-skeleton-tier="pill"></div>
     <div class="count followcount" data-filter-row="bottom"><span class="mono"><span class="countskeleton"></span></span></div></div>
   ${followState.followContentSkeletonHtml(undefined,label)}</div></div>`;
-$('#loadSentinel').innerHTML=loadingDotsHtml('Loading more…');
+$('#loadSentinel').innerHTML=loadingDotsHtml(LOAD_MORE_STATUS);
 loadingState.setGridCards = html=>revealSkeleton($('#grid'),()=>{$('#grid').innerHTML=`<div class="grid">${html}</div>`});
 loadingState.gridCards = ()=>document.querySelectorAll(
     ':is(#grid,#index [data-entity-grid]) :is([data-media-grid] > [data-media-card][data-id],[data-catalog-row][data-id])');

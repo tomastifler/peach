@@ -11,3 +11,9 @@ web/vendor/videojs/** -text
 # 摘要对不上。PNG 和 JPEG 靠 `text=auto` 自己就能躲过，SVG 躲不过——它是文本，一次
 # 签出就被改字节，而校验失败的表现是「仓库里的图明明没动却报摘要不符」。
 resources/marks/** -text
+resources/browser-icons/** -text
+
+# 构建产物与第三方自托管文件标成生成文件：GitHub 的 PR 与提交页默认折叠它们的 diff，
+# 评审先看到源码。只影响 GitHub 展示，本地 `git diff` 照常显示，dist 与源码不一致时仍看得见。
+web/dist/** linguist-generated=true
+web/vendor/** linguist-generated=true

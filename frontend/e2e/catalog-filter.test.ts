@@ -133,11 +133,14 @@ describe('首页筛选条', () => {
               color: style.color, border: style.border, shadow: style.boxShadow, radius: style.borderRadius };
           });
           return { heights: candidates.map(node => ({ label: node.getAttribute('aria-label') || node.textContent,
-            height: node.getBoundingClientRect().height })), actions };
+            height: node.getBoundingClientRect().height })), actions,
+            compact: parseFloat(getComputedStyle(frame).getPropertyValue('--control-h-compact')) };
         });
-        for (const control of controls.heights) assert.equal(control.height, 30, JSON.stringify(control));
+        // 筛选条整条取紧凑档：页签、药丸、分段与两枚动作键同高。
+        assert.equal(controls.compact, 32);
+        for (const control of controls.heights) assert.equal(control.height, controls.compact, JSON.stringify(control));
         assert.deepEqual(controls.actions[0], controls.actions[1]);
-        assert.equal(controls.actions[0].width, 30);
+        assert.equal(controls.actions[0].width, controls.compact);
         assert.equal(controls.actions[0].color, 'rgb(255, 255, 255)');
         assert.match(controls.actions[0].background, /^linear-gradient\(/);
         const gap = await opened.page.evaluate(() => document.querySelector('#grid [data-media-card]')!.getBoundingClientRect().top
@@ -478,6 +481,41 @@ describe('首页筛选条', () => {
       }
       const measured = await layout(page);
       assert.deepEqual(measured.offenders, [], `筛选条把页面撑宽了：${measured.offenders.join('、')}`);
+      assert.deepEqual(withoutPlayer(opened.problems), []);
+    } finally {
+      await opened.close();
+    }
+  });
+
+  it('上次两排都没人：再进首页时取回之前不铺两排占位，浮层不随取回移位', { timeout: 60_000 }, async () => {
+    const opened = await openHome(browser);
+    try {
+      const { page } = opened;
+      let delay = 0;
+      // 后注册的先拦：这一组两排都没人，第二次进页拖住三秒，量的就是取回之前那一刻。
+      await page.route((url) => url.pathname === '/api/tops', async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        await route.fulfill({ json: { performers: [], studios: [] } });
+      });
+      await page.reload();
+      await page.locator(`${FILTER} [data-catalog-root]:not([data-loading])`).waitFor();
+      await settle(page);
+      delay = 3_000;
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      const frame = page.locator(`${FILTER} [data-catalog-frame]`);
+      await frame.waitFor();
+      const read = () => page.evaluate((filter) => ({
+        rows: document.querySelectorAll(`${filter} [data-catalog-tier]`).length,
+        loading: !!document.querySelector(`${filter} [data-catalog-root][data-loading]`),
+        top: Math.round(document.querySelector(`${filter} [data-catalog-frame]`)!.getBoundingClientRect().top),
+      }), FILTER);
+      const waiting = await read();
+      assert.deepEqual({ rows: waiting.rows, loading: waiting.loading }, { rows: 0, loading: true }, JSON.stringify(waiting));
+      await page.locator(`${FILTER} [data-catalog-root]:not([data-loading])`).waitFor({ timeout: 10_000 });
+      await settle(page);
+      const done = await read();
+      assert.equal(done.rows, 0);
+      assert.ok(Math.abs(done.top - waiting.top) <= 1, `取回后浮层移位：${waiting.top} → ${done.top}`);
       assert.deepEqual(withoutPlayer(opened.problems), []);
     } finally {
       await opened.close();

@@ -50,7 +50,9 @@
   cursor: pointer;
 }
 .peach-react [data-search-option]:is(:hover, [data-active]) { background: var(--hover); }
-.peach-react [data-search-option] svg { width: 18px; height: 18px; stroke: var(--muted); fill: none; flex: none; }
+.peach-react [data-search-option] svg { width: var(--icon-inline); height: var(--icon-inline); stroke: var(--muted); fill: none; flex: none; }
+/* 删除历史是一枚纯图标键，字形跟键走，不随这一行的字号。 */
+.peach-react [data-search-option] [data-remove-history] svg { width: 18px; height: 18px; }
 .peach-react [data-search-option="more"] { margin-top: 7px; justify-content: space-between; }
 .peach-react [data-search-option] span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .peach-react [data-remove-history] {

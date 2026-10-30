@@ -5,6 +5,7 @@
  * tag_type 着色，点开去「关注 · 这个标签」，并且不进多选——多选拼的是目录筛选，拿在线标签
  * 去筛目录必然一条不中。 */
 import { Radio, RadioGroup } from 'react-aria-components';
+import type { ReactNode } from 'react';
 
 import { Button } from '@/components/base/buttons/button';
 import { Checkbox } from '@/components/base/checkbox/checkbox';
@@ -16,7 +17,8 @@ import { SEGMENTED_GLASS_TRACK, SEGMENT_GLASS } from '../components/segmented';
 import { SelectionDock } from '../components/selection-dock';
 import { spriteGlyph } from '../components/sprite-glyph';
 import { useHorizontalScroller } from '../components/use-horizontal-scroller';
-import { FavoriteButton } from '../library-shortcuts/shortcut-controls';
+import { EntityActionButton, FavoriteButton } from '../library-shortcuts/shortcut-controls';
+import type { Favorite } from '../library-shortcuts/library-shortcuts';
 import { tagColorKey, type IndexTag, type TagView } from './index-data';
 
 export interface TagEntry extends IndexTag {
@@ -26,11 +28,16 @@ export interface TagEntry extends IndexTag {
 /** 一枚标签的交互：选择模式下切换选中，否则直接打开。 */
 export interface TagActions {
   online: boolean;
+  favorites?: boolean;
+  edit?(tag: string): void;
   picked: ReadonlySet<string>;
   press(tag: string): void;
 }
 
 const Dot = () => <span aria-hidden data-tag-dot="" className="size-1.75 flex-none rounded-full" />;
+const Pencil = spriteGlyph('pencil');
+const tagFavorite = (tag: TagEntry, online: boolean): Favorite => ({ kind: 'tag', name: tag.k, favorite: tag.favorite,
+  ...(online ? { scope: 'online', tag_id: tag.id || tag.k } : { entity_id: tag.entity_id }) });
 
 /* 一行一枚标签：36px 高、8px 圆角，取的是 Board 排名行那一档身量。nowrap 是省略号的前提，
    少了它长标签改成折行，同一行里的其它标签跟着被拉高，几列各行高度也对不齐。 */
@@ -45,7 +52,8 @@ function AlphaTag({ tag, actions }: { tag: TagEntry; actions: TagActions }) {
       <span className="min-w-0 flex-1 truncate">{tag.label}</span>
       <span className="flex-none text-caption-1-regular text-text-secondary">{tag.n.toLocaleString()}</span>
     </button>
-    {!actions.online ? <FavoriteButton item={{ kind: 'tag', name: tag.k, entity_id: tag.entity_id, favorite: tag.favorite }} /> : null}
+    {actions.favorites !== false ? <FavoriteButton item={tagFavorite(tag, actions.online)} /> : null}
+    {actions.edit ? <EntityActionButton label={`编辑标签 ${tag.label}`} onClick={() => actions.edit?.(tag.k)}><Pencil /></EntityActionButton> : null}
     </div>
   );
 }
@@ -79,15 +87,19 @@ export function TagCloud({ tags, actions }: { tags: TagEntry[]; actions: TagActi
   return (
     <div data-tag-cloud="" className="flex flex-wrap gap-1.75">
       {tags.map((tag) => (
-        <span key={tag.k} className="inline-flex min-w-0 items-center gap-1">
+        <span key={tag.k} data-tag-token="" data-tag-cat={tagColorKey(actions.online, tag.cat)}
+          className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-lg border p-1">
         <button type="button" data-tag-chip="" data-k={tag.k}
           data-tag-cat={tagColorKey(actions.online, tag.cat)} aria-pressed={actions.picked.has(tag.k)}
           onClick={() => actions.press(tag.k)}
-          className="inline-flex cursor-pointer items-center rounded-lg border px-3 py-1.25 text-body-2-regular text-text-secondary outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring">
-          {tag.label + NBSP}
+          className="inline-flex max-w-full min-w-0 cursor-pointer items-center rounded-lg px-2 py-0.5 text-body-2-regular text-text-secondary outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring">
+          <span className="min-w-0 truncate">{tag.label + NBSP}</span>
           <span data-tag-n="" className="text-caption-1-regular opacity-60">{tag.n.toLocaleString()}</span>
         </button>
-        {!actions.online ? <FavoriteButton item={{ kind: 'tag', name: tag.k, entity_id: tag.entity_id, favorite: tag.favorite }} /> : null}
+        {actions.favorites !== false || actions.edit ? <span data-tag-actions="" className="inline-flex flex-none items-center gap-1">
+          {actions.favorites !== false ? <FavoriteButton item={tagFavorite(tag, actions.online)} /> : null}
+          {actions.edit ? <EntityActionButton label={`编辑标签 ${tag.label}`} onClick={() => actions.edit?.(tag.k)}><Pencil /></EntityActionButton> : null}
+        </span> : null}
         </span>
       ))}
     </div>
@@ -100,7 +112,7 @@ const VIEWS: readonly (readonly [TagView, string, string])[] = [
 
 /** 筛选浮层：上排类型药丸，下排读数、按首字跳转与视图切换。只摆数得到的那几类。 */
 export function TagFilters(
-  { categories, category, online, readout, letters, view, onCategory, onJump, onView }: {
+  { categories, category, online, readout, letters, view, onCategory, onJump, onView, status, actions }: {
     categories: readonly (readonly [string, string])[];
     category: string;
     online: boolean;
@@ -110,27 +122,37 @@ export function TagFilters(
     onCategory(key: string): void;
     onJump(at: number): void;
     onView(view: TagView): void;
+    status?: { hidden: boolean; blocked?: boolean; onChange(hidden: boolean): void; onBlocked?(): void };
+    actions?: ReactNode;
   },
 ) {
   const alphaScroll = useHorizontalScroller<HTMLElement>();
   return (
-    <FilterGlassRows label="Tag filters" topLabel="Tag type"
-      top={categories.map(([key, label]) => (
+    <FilterGlassRows label="标签筛选" topLabel="标签类型"
+      top={<>
+        {status ? <div role="group" aria-label="标签状态" className="flex flex-none items-center gap-1.75 border-r border-(--glass-low) pr-3">
+          {[[false, '使用中'], [true, '已隐藏']].map(([hidden, label]) => <FilterPill key={String(hidden)}
+            data-tag-pill="" data-tag-cat="all" pressed={!status.blocked && status.hidden === hidden} onPress={() => status.onChange(Boolean(hidden))}>{label}</FilterPill>)}
+          {status.onBlocked ? <FilterPill data-tag-pill="" data-tag-cat="all" pressed={!!status.blocked}
+            onPress={status.onBlocked}>已屏蔽内容</FilterPill> : null}
+        </div> : null}
+        {categories.map(([key, label]) => (
         <FilterPill key={key} data-tag-pill="" data-tag-cat={key === 'all' ? 'all' : tagColorKey(online, key)}
           pressed={category === key} onPress={() => onCategory(key)}>
           <Dot />{label}
         </FilterPill>
-      ))}
+      ))}</>}
       bottom={<>
         <span data-index-readout="" className="flex-none text-caption-1-regular leading-5 whitespace-nowrap text-text-secondary tabular-nums">
           {readout}
         </span>
+        {actions}
         {letters.length > 1 ? (
           <nav ref={alphaScroll} aria-label="Jump by first letter" data-alpha-jump=""
             className="flex min-w-0 gap-0.5 overflow-x-auto overscroll-x-contain">
             {letters.map((letter, at) => (
               <button key={letter} type="button" onClick={() => onJump(at)}
-                className="h-7.5 min-w-7.5 flex-none cursor-pointer rounded-glass-key px-1.5 text-caption-1-regular leading-5 text-(--glass-text)/60 outline-none hover:text-(--glass-text) focus-visible:ring-2 focus-visible:ring-border-focus-ring">
+                className="h-8 min-w-8 flex-none cursor-pointer rounded-glass-key px-1.5 text-caption-1-regular leading-5 text-(--glass-text)/60 outline-none hover:text-(--glass-text) focus-visible:ring-2 focus-visible:ring-border-focus-ring">
                 {letter}
               </button>
             ))}

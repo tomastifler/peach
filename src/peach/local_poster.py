@@ -16,17 +16,24 @@ MAX_BYTES = 32 * 1024 * 1024
 
 
 def read_jpeg(source: Path, *, isolated=True) -> tuple[bytes, tuple[int, int]]:
-    if not isolated:
+    from .smb_media import SmbResource
+    if not isolated or isinstance(source, SmbResource):
         return _decode(source)
     from .images import measure_image_size
+    from .processing_traffic import CURRENT, record_media_read
 
     command = ([sys.executable, 'local-image'] if getattr(sys, 'frozen', False)
                else [sys.executable, '-m', 'peach.local_poster'])
     with tempfile.TemporaryDirectory(prefix='peach-local-poster-') as temporary:
         output = Path(temporary).resolve() / 'poster.jpg'
         result = subprocess.run([*command, str(source), str(output)], stdin=subprocess.DEVNULL,
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=TIMEOUT_SECONDS,
+                                stdout=subprocess.PIPE if CURRENT.get() is not None else subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, timeout=TIMEOUT_SECONDS,
                                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+        if CURRENT.get() is not None:
+            for line in (getattr(result, 'stdout', None) or b'').splitlines():
+                if line.isdigit():
+                    record_media_read(source, int(line))
         if result.returncode:
             raise ValueError('The companion image cannot be read')
         data = output.read_bytes()
@@ -36,11 +43,17 @@ def read_jpeg(source: Path, *, isolated=True) -> tuple[bytes, tuple[int, int]]:
     return data, size
 
 
-def _decode(source):
+def _decode(source, *, report=None):
     try:
         if source.stat().st_size > MAX_BYTES:
-            raise ValueError('The companion image size is out of range')
-        with Image.open(source) as image:
+            raise ValueError('配套图片体积超出范围')
+        with source.open('rb') as handle:
+            raw = handle.read(MAX_BYTES + 1)
+        from .processing_traffic import record_media_read
+        (report or (lambda size: record_media_read(source, size)))(len(raw))
+        if len(raw) > MAX_BYTES:
+            raise ValueError('配套图片体积超出范围')
+        with Image.open(io.BytesIO(raw)) as image:
             image.load()
             output = io.BytesIO()
             image.convert('RGB').save(output, format='JPEG', quality=95)
@@ -55,7 +68,7 @@ def main(argv=None):
     parser.add_argument('output', type=Path)
     args = parser.parse_args(argv)
     try:
-        data, _ = _decode(args.source)
+        data, _ = _decode(args.source, report=lambda size: print(size, flush=True))
         args.output.write_bytes(data)
         return 0
     except (OSError, ValueError, Image.DecompressionBombError):

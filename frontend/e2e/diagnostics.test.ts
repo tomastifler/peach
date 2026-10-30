@@ -3,6 +3,7 @@ import { describe, it } from 'node:test';
 import type { Browser } from 'playwright-core';
 import { installDesignBrowser } from './design-fixture.ts';
 import { layout, settle, visit, VIEWPORTS } from './harness.ts';
+import { verifyColumnContentWidth } from './table-preferences-fixture.ts';
 
 describe('配置中的系统诊断', () => {
   let browser: Browser;
@@ -35,8 +36,9 @@ describe('配置中的系统诊断', () => {
         assert.equal(await table.getByRole('row').count(), 21);
         assert.ok((await table.innerText()).includes('演示文件 1.mp4'));
         assert.ok((await table.innerText()).includes('R:\\Media\\演示文件 1.mp4'));
-        const pagination = page.getByRole('navigation', { name: 'Missing covers pagination' });
-        await pagination.getByRole('button', { name: 'Next', exact: true }).click();
+        await verifyColumnContentWidth(table, 'path', '[data-middle-truncate]');
+        const pagination = page.getByRole('navigation', { name: '缺封面分页' });
+        await pagination.getByRole('button', { name: '下一页', exact: true }).click();
         assert.equal(await table.getByRole('row').count(), 12);
         assert.ok((await table.innerText()).includes('演示条目 21'));
         assert.ok((await layout(page)).scrollWidth <= viewport.width);
@@ -78,8 +80,8 @@ describe('配置中的系统诊断', () => {
         await page.goto(new URL('/settings/diagnostics', page.url()).href);
         const skeleton = page.locator('[data-skeleton="board/settings/diagnostics"]');
         await skeleton.waitFor();
-        assert.equal(await skeleton.locator('.ui-board-local-nav [aria-selected="true"]').textContent(), 'System diagnostics');
-        assert.equal(await skeleton.locator('section[aria-label="Media folders"]').count(), 0);
+        assert.equal(await skeleton.locator('.ui-board-local-nav [aria-selected="true"]').textContent(), '系统诊断');
+        assert.equal(await skeleton.locator('section[aria-label="媒体库与目录"]').count(), 0);
         assert.equal(await skeleton.locator('[data-skeleton="diagnostics"]').count(), 1);
         const pending = await skeleton.locator('.ui-configpage').evaluate(element => {
           const body = element.lastElementChild!.getBoundingClientRect();
@@ -124,7 +126,7 @@ describe('配置中的系统诊断', () => {
           const shown = await row.evaluate(element => {
             const title = element.querySelector('h3')!;
             const reason = element.querySelector('[data-check-reason]')!;
-            const button = element.querySelector('button')!;
+            const button = element.querySelector('a[href]')!;
             const box = element.getBoundingClientRect();
             const action = button.getBoundingClientRect();
             return { titleWeight: getComputedStyle(title).fontWeight, reasonWeight: getComputedStyle(reason).fontWeight,

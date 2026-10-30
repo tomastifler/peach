@@ -15,10 +15,13 @@
 """
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import os
 import sys
+import threading
+from collections import OrderedDict
 from collections.abc import Mapping, Sequence
 import re
 
@@ -37,7 +40,9 @@ from fastapi.responses import (
 
 from . import distribution, onboarding, settings_file
 from .config import PROJECT_ROOT
+from .diagnostic_browser import BUNDLE_CHUNK_NAME
 from .entities import resolve_entity, resolve_entity_id
+from .media_libraries import LIBRARY_ICONS
 from .routes_auth import query_auth_redirect, require_asset_auth, require_page_auth, set_auth_cookie
 from .web_entry import page_shell, runtime_fact_entries
 from .web_state import FAVICON
@@ -52,17 +57,19 @@ ROBOTS_TXT = "User-agent: *\nDisallow: /\n"
 #: 回环地址的三种写法。既用来判提交端点的调用方，也用来判「只有这台电脑」那个监听选择。
 _LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost"})
 
-#: 首启页从主界面雪碧图里借的字形：「选择文件夹」与媒体来源的站标兜底。
-_SETUP_SYMBOLS = re.compile(r'<symbol id="i-(?:folder-search|hard-drive|database)"[^>]*>.*?</symbol>')
+#: 首启页共用的文件夹与媒体库图标。
+_SETUP_SYMBOLS = re.compile(r'<symbol id="i-(?:' + '|'.join(sorted({"folder-search", *LIBRARY_ICONS}))
+                           + r')"[^>]*>.*?</symbol>')
 
 #: 键 -> 页面上的题目与一句说明。顺序、默认值与校验仍然来自 `onboarding.questions()`，
 #: 这里只决定同一道题在浏览器里怎么称呼：命令行那份题面要把可选值写进去，页面用控件表达。
 _SETUP_COPY = {
-    "data_root": ("Data directory", "The Peach database, cache and settings files are stored here."),
-    "media_dir": ("Media library", "Peach reads videos and images from the media library. Choose an existing folder; an external drive also works."),
-    "host": ("Who can access", ""),
-    "port": ("Port", "The number after the colon in the browser address; usually no need to change it."),
-    "mdns_name": ("LAN access address", "After choosing 'Devices on the same local network', other devices can open Peach by entering this address in a browser."),
+    "data_root": ("数据目录", "Peach 数据库、封面、预览图和缓存都放在这里，馆藏较大时会占用数十 GB。"
+                              "系统盘空间紧张时，请选择其他磁盘上的文件夹；之后也可在设置页迁移。"),
+    "media_dir": ("媒体目录", "选择存放视频和图片的现有文件夹，也可以使用外置硬盘。"),
+    "host": ("谁可以访问", ""),
+    "port": ("端口", "浏览器地址里冒号后面的数字，一般不用改。"),
+    "mdns_name": ("局域网访问地址", "选了「同一局域网的设备」之后，其他设备在浏览器里输入这个地址就能打开 Peach。"),
 }
 #: 「谁可以访问」在页面上的顺序：局域网在左边，也是默认选项——Peach 的本意就是给
 #: 同一局域网里的设备看。命令行问答按 `HOST_OPTIONS` 的编号顺序念，两边取值一致。
@@ -122,6 +129,8 @@ def _question_view(question) -> dict[str, str]:
     view = {"label": title, "help": help_text, "input": "text", "prefix": "", "suffix": ""}
     if question.key == "media_dir":
         view["input"] = "folders"
+    elif question.key == "data_root":
+        view["input"] = "folder"
     elif question.key == "host":
         view["input"] = "choice"
     elif question.key == "port":
@@ -158,7 +167,7 @@ def _normal_url(config) -> str:
     return f"https://{config.server.mdns_name}.local/"
 
 
-def asset_response(request: Request, path: Path, media: str) -> Response:
+def asset_response(request: Request, path: Path, media: str, *, immutable: bool = False) -> Response:
     """页面资产与图标用 ETag 复验，`/board.css`、`/dist/`、图标共用。
 
     `/app.css` 拼多份分区，ETag 口径见 `stylesheet_response()`，其余照这里。
@@ -167,19 +176,78 @@ def asset_response(request: Request, path: Path, media: str) -> Response:
 
     ETag 取 mtime_ns 加字节数，不读文件内容：这几个文件都由 Git 检出或 `frontend/`
     构建产生，改一次就换一次 mtime，不需要为了强校验去算全文哈希。
+
+    文本类资产在浏览器接受 gzip 时发压缩体，压缩结果按文件版本记住，见 `_gzipped()`。
+    压缩体与原文是两个表示，ETag 各不相同。
+
+    `immutable` 给名字里带内容哈希的主包 chunk（ADR-0118）：内容一变名字就变，浏览器一年内
+    不再回源。它们要会话才能取，所以只许浏览器自己缓存（`private`），不许共享缓存转给别人。
     """
     stat = path.stat()
-    etag = f'"peach-{stat.st_mtime_ns:x}-{stat.st_size:x}"'
+    compress = (media.startswith(_COMPRESSIBLE_MEDIA) and stat.st_size >= _GZIP_MINIMUM
+                and _accepts_gzip(request.headers.get("accept-encoding", "")))
+    etag = f'"peach-{stat.st_mtime_ns:x}-{stat.st_size:x}{"-gz" if compress else ""}"'
+    # charset 只对文本类型成立。图标是字节流，声明里挂一个字符集，在全站的
+    # `X-Content-Type-Options: nosniff` 之下就是让浏览器照一个自相矛盾的类型解码。
+    media_type = f"{media}; charset=utf-8" if media.startswith("text/") else media
     if request.headers.get("if-none-match") == etag:
         response: Response = Response(status_code=304)
+    elif compress:
+        body = _gzipped(path, stat)
+        response = Response(b"" if request.method == "HEAD" else body, media_type=media_type,
+                            headers={"Content-Encoding": "gzip"})
+        response.headers["Content-Length"] = str(len(body))
     else:
-        # charset 只对文本类型成立。图标是字节流，声明里挂一个字符集，在全站的
-        # `X-Content-Type-Options: nosniff` 之下就是让浏览器照一个自相矛盾的类型解码。
-        media_type = f"{media}; charset=utf-8" if media.startswith("text/") else media
         response = FileResponse(path, media_type=media_type)
+    if media.startswith(_COMPRESSIBLE_MEDIA):
+        response.headers["Vary"] = "Accept-Encoding"
     response.headers["ETag"] = etag
-    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Cache-Control"] = "private, max-age=31536000, immutable" if immutable else "no-cache"
     return response
+
+
+#: 值得压缩的页面资产类型；图标等位图本身已压缩。
+_COMPRESSIBLE_MEDIA = ("text/", "image/svg+xml")
+#: 小于它的文件压缩后省不下几个字节，与 `GZipMiddleware` 的默认门槛相同。
+_GZIP_MINIMUM = 500
+#: 路径 → (修改时间, 字节数, 压缩体)。主包 3.8 MB，每次冷请求现压要一百多毫秒；同一版本只压一次。
+#: 每个路径只留当前版本，换了版本就替换；路径数按最近使用限界，带哈希的分包每次构建都换名。
+_GZIPPED: OrderedDict[str, tuple[int, int, bytes]] = OrderedDict()
+_GZIPPED_PATHS = 64
+_GZIP_LOCK = threading.Lock()
+
+
+def _accepts_gzip(header: str) -> bool:
+    """`Accept-Encoding` 里有没有 gzip（或 `*`），且没有用 `q=0` 拒绝。"""
+    for item in header.split(","):
+        token, _, params = item.strip().partition(";")
+        if token.strip().lower() not in ("gzip", "*"):
+            continue
+        quality = params.strip().lower()
+        if quality.startswith("q="):
+            try:
+                return float(quality[2:]) > 0
+            except ValueError:
+                return False
+        return True
+    return False
+
+
+def _gzipped(path: Path, stat: os.stat_result) -> bytes:
+    """这一版文件的 gzip 压缩体。压缩在锁外做：并发的首个请求各压一次，结果相同。"""
+    key = str(path)
+    with _GZIP_LOCK:
+        hit = _GZIPPED.get(key)
+        if hit and hit[:2] == (stat.st_mtime_ns, stat.st_size):
+            _GZIPPED.move_to_end(key)
+            return hit[2]
+    body = gzip.compress(path.read_bytes(), compresslevel=9, mtime=0)
+    with _GZIP_LOCK:
+        _GZIPPED[key] = (stat.st_mtime_ns, stat.st_size, body)
+        _GZIPPED.move_to_end(key)
+        while len(_GZIPPED) > _GZIPPED_PATHS:
+            _GZIPPED.popitem(last=False)
+    return body
 
 
 #: 拆分后的样式表分区。层叠顺序就是文件名顺序，所以每份都带两位数前缀；
@@ -231,32 +299,41 @@ def index(request: Request, args: dict[str, str] = Depends(require_page_auth)):
         return response
     if not settings.configured:
         # 未配置不是错误状态：服务照常起，首页（和任何前端路由的深链）变成首次运行页。
-        response = HTMLResponse(setup_shell())
+        html = setup_shell()
+        if "edit" in request.query_params and _copy_editor_available():
+            html = _with_copy_editor(html)
+        response = HTMLResponse(html)
         response.headers["Cache-Control"] = "no-store"
         return response
     if not settings.page_path.is_file():
         return PlainTextResponse("Peach page missing", status_code=500)
     shape = getattr(request.state, "entity_shape", None)
     editor = "edit" in request.query_params and _copy_editor_available()
-    if shape is not None or editor:
-        html = settings.page_path.read_text(encoding="utf-8")
-        if shape is not None:
-            payload = json.dumps(shape, ensure_ascii=False).replace("<", "\\u003c")
-            script = f'<script type="application/json" id="peach-entity-shape">{payload}</script>'
-            html = html.replace("</head>", script + "</head>", 1) if "</head>" in html else html + script
-        if editor:
-            html = html.replace("<body", '<body data-peach-copy-mode="source"', 1)
-            html = html.replace("</body>", '<script src="/dev/copy-editor.js" defer></script></body>')
-        response = HTMLResponse(html)
-    else:
-        response = FileResponse(settings.page_path, media_type="text/html")
+    from .client_updates import runtime_identity
+    html = settings.page_path.read_text(encoding="utf-8")
+    entries = {'peach-client-runtime': runtime_identity()}
+    if shape is not None:
+        entries['peach-entity-shape'] = shape
+    for name, entry in entries.items():
+        payload = json.dumps(entry, ensure_ascii=False).replace("<", "\\u003c")
+        script = f'<script type="application/json" id="{name}">{payload}</script>'
+        html = html.replace("</head>", script + "</head>", 1) if "</head>" in html else html + script
+    if editor:
+        html = _with_copy_editor(html)
+    response = HTMLResponse(html)
     response.headers["Cache-Control"] = "no-store"
     set_auth_cookie(response, request)
     return response
 
 
 def _copy_editor_available() -> bool:
-    return not getattr(sys, "frozen", False) and (PROJECT_ROOT / "scripts/dev/copy-editor.js").is_file()
+    return not getattr(sys, "frozen", False) and all((PROJECT_ROOT / path).is_file() for path in (
+        "scripts/dev/copy-editor.js", "frontend/src/copy-editor-core.js"))
+
+
+def _with_copy_editor(html: str) -> str:
+    html = html.replace("<body", '<body data-peach-copy-mode="source"', 1)
+    return html.replace("</body>", '<script src="/dev/copy-editor-core.js" defer></script><script src="/dev/copy-editor.js" defer></script></body>')
 
 
 def _require_copy_editor():
@@ -268,6 +345,12 @@ def _require_copy_editor():
 def copy_editor_script(request: Request, args: dict[str, str] = Depends(require_asset_auth)):
     _require_copy_editor()
     return asset_response(request, PROJECT_ROOT / "scripts/dev/copy-editor.js", "text/javascript")
+
+
+@router.get("/dev/copy-editor-core.js")
+def copy_editor_core(request: Request, args: dict[str, str] = Depends(require_asset_auth)):
+    _require_copy_editor()
+    return asset_response(request, PROJECT_ROOT / "frontend/src/copy-editor-core.js", "text/javascript")
 
 
 @router.get("/dev/copy-edits")
@@ -295,11 +378,32 @@ async def copy_editor_save(request: Request, args: dict[str, str] = Depends(requ
         raise HTTPException(403, "same origin required")
     if len(await request.body()) > 32768:
         raise HTTPException(413, "too large")
-    from . import dev_copy
     try:
-        return JSONResponse(dev_copy.save(PROJECT_ROOT, await request.json()))
+        from . import dev_copy_runtime
+        return JSONResponse(dev_copy_runtime.submit(PROJECT_ROOT, await request.json()))
     except (ValueError, TypeError, KeyError) as error:
         return JSONResponse({"error": str(error)}, status_code=409)
+
+
+@router.get('/dev/copy-apply')
+def copy_editor_apply_status(args: dict[str, str] = Depends(require_asset_auth)):
+    _require_copy_editor()
+    from . import dev_copy_runtime
+    return JSONResponse(dev_copy_runtime.status(PROJECT_ROOT), headers={'Cache-Control': 'no-store'})
+
+
+@router.post('/dev/copy-apply')
+async def copy_editor_apply_retry(request: Request, args: dict[str, str] = Depends(require_asset_auth)):
+    _require_copy_editor()
+    if request.headers.get('origin') != str(request.base_url).rstrip('/'):
+        raise HTTPException(403, 'same origin required')
+    if len(await request.body()) > 32768:
+        raise HTTPException(413, 'too large')
+    from . import dev_copy_runtime
+    try:
+        return JSONResponse(dev_copy_runtime.submit(PROJECT_ROOT, await request.json(), retry=True))
+    except (ValueError, TypeError, KeyError) as error:
+        return JSONResponse({'error': str(error)}, status_code=409)
 
 
 def _setup_guard(request: Request, *, submit: bool) -> None:
@@ -334,7 +438,7 @@ def setup_questions(request: Request):
     只是不看 Origin：配置完成后这里 404，运行事实不再对外。
     """
     _setup_guard(request, submit=False)
-    from . import remote_reporting
+    from . import peach_proxy, remote_reporting
     windows = os.name == "nt"
     asked = onboarding.questions(settings_file.active(), windows=windows)
     host_labels = dict(onboarding.HOST_OPTIONS)
@@ -346,11 +450,11 @@ def setup_questions(request: Request):
         item: dict[str, object] = {
             "key": question.key, "label": view["label"],
             "help": [line for line in (view["help"], note) if line],
-            "default": question.default,
+            "default": "" if question.key == "media_dir" else question.default,
             # 星号与 `required` 跟着输入框走：两段式单选总有一项选中，不标。
             "required": question.key != "host",
-            # 只有媒体库露在外面，其余四项都有能直接用的默认值，折进「高级设置」。
-            "advanced": question.key != "media_dir",
+            # 目录和访问范围属于首次设置主流程，端口与局域网名称按需展开。
+            "advanced": question.key not in {"media_dir", "data_root", "host"},
             "input": view["input"], "prefix": view["prefix"], "suffix": view["suffix"],
         }
         if question.key == "host":
@@ -371,12 +475,28 @@ def setup_questions(request: Request):
         "access_enabled": _access_on_by_default(asked),
         "scan_now": True,
         "history_guide": False,
+        "peach_proxy": peach_proxy.describe(settings_file.active().directory("secrets")),
+        "docker": os.environ.get("PEACH_DISTRIBUTION") == "docker",
         "remote_reporting": remote_reporting.snapshot(),
     })
 
 
 def _json_text(value: object) -> str:
     return "" if value is None else str(value)
+
+
+def _submitted_media_rows(rows: object) -> dict[str, list]:
+    """JSON 媒体行拆成与表单相同的逐列列表；身份字段按行原样带给配置校验。"""
+    rows = [row if isinstance(row, dict) else {} for row in rows] if isinstance(rows, list) else []
+    return {
+        "media_dir": [_json_text(row.get("path")) for row in rows],
+        "media_location": [_json_text(row.get("location", "local")) for row in rows],
+        "media_root": [_json_text(row.get("root")) for row in rows],
+        "media_cost": [row.get("cost") for row in rows],
+        "media_identity": [{key: row[key] for key in ("root_id", "library_id", "library", "library_icon", "change_mode",
+                                                     "library_color", "library_policy", "library_stages")
+                            if key in row} for row in rows],
+    }
 
 
 @router.post("/api/setup")
@@ -403,17 +523,13 @@ async def setup_submit_json(request: Request):
         reporting = remote_reporting.parse_choices(body.get("remote_reporting", {}), partial=True)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    rows = body.get("media_dir")
-    rows = [row if isinstance(row, dict) else {} for row in rows] if isinstance(rows, list) else []
     submitted: dict[str, object] = {
         key: _json_text(body[key])
         for key in ("data_root", "host", "port", "mdns_name", "access_password", "access_confirm")
         if body.get(key) is not None}
-    submitted["media_dir"] = [_json_text(row.get("path")) for row in rows]
-    submitted["media_location"] = [_json_text(row.get("location", "local")) for row in rows]
-    submitted["media_root"] = [_json_text(row.get("root")) for row in rows]
-    submitted["media_cost"] = [row.get("cost") for row in rows]
-    scan_now = body.get("scan_now") is True
+    submitted.update(_submitted_media_rows(body.get("media_dir")))
+    submitted["skip_media"] = body.get("skip_media") is True
+    scan_now = body.get("scan_now") is True and not submitted["skip_media"]
     history_guide = body.get("history_guide") is True
     windows = os.name == "nt"
     answers, errors = _read_answers(settings_file.active(), submitted, windows=windows)
@@ -428,6 +544,16 @@ async def setup_submit_json(request: Request):
     except ValueError as exc:
         errors["access_password"] = str(exc)
     standalone = distribution.standalone()
+    from . import peach_proxy
+    proxy_values = None
+    proxy_root = settings_file.active().directory("secrets")
+    if answers is not None:
+        resolved, _broken = onboarding.resolve_config(answers.data_root)
+        proxy_root = resolved.directory("secrets")
+    try:
+        proxy_values = peach_proxy.validate(proxy_root, body.get("peach_proxy", {"mode": "environment"}))
+    except ValueError as exc:
+        errors["peach_proxy"] = str(exc)
     if standalone and answers is not None:
         try:
             onboarding.check_available_port(answers.port, request.url.port or 80)
@@ -440,7 +566,8 @@ async def setup_submit_json(request: Request):
         if resolved.path.exists():
             raise HTTPException(status_code=409, detail="settings file already exists")
         try:
-            applied = onboarding.apply(resolved, answers, windows=windows, access_password=password)
+            applied = onboarding.apply(resolved, answers, windows=windows, access_password=password,
+                                       peach_proxy_values=proxy_values)
             settings_file.remember_data_root(settings_file.active(), applied.config)
         except (OSError, RuntimeError) as exc:
             errors = {"data_root": str(exc)}
@@ -449,14 +576,17 @@ async def setup_submit_json(request: Request):
     remote_reporting.save(reporting, applied.config)
     if scan_now:
         onboarding.request_first_scan(applied.config, "configured" if answers.media_sources is not None else "local")
-    return _setup_done(applied.config, scan_now=scan_now, history_guide=history_guide)
+    return _setup_done(applied.config, scan_now=scan_now, history_guide=history_guide,
+                       skip_media=submitted["skip_media"])
 
 
-def _setup_done(config, *, scan_now: bool = False, history_guide: bool = False, restored: bool = False):
-    destination = _setup_destination(config, history_guide=history_guide)
+def _setup_done(config, *, scan_now: bool = False, history_guide: bool = False, restored: bool = False,
+                skip_media: bool = False):
+    destination = _normal_url(config) if restored else _setup_destination(config, history_guide=history_guide)
     return JSONResponse({
         "url": destination,
         "scan_requested": scan_now,
+        "skip_media": skip_media,
         "history_guide": history_guide,
         "restored": restored,
         "standalone": distribution.standalone(),
@@ -524,8 +654,11 @@ def _read_answers(
     errors: dict[str, object] = {}
     for question in onboarding.questions(config, windows=windows):
         if question.key == "media_dir":
+            if submitted.get("skip_media") is True:
+                values.update(media_dirs=(), media_sources=[])
+                continue
             from . import media_configuration
-            dirs = _media_dir_values(submitted, question.default)
+            dirs = _media_dir_values(submitted, "")
             kinds = submitted.get("media_location", [])
             roots = submitted.get("media_root", [])
             costs = submitted.get("media_cost", [])
@@ -534,8 +667,17 @@ def _read_answers(
             for index, row in enumerate(sources):
                 if index < len(costs) and costs[index] is not None:
                     row["cost"] = costs[index]
+                identities = submitted.get("media_identity", [])
+                if isinstance(identities, list) and index < len(identities) and isinstance(identities[index], dict):
+                    row.update(identities[index])
             sources = media_configuration.prepare_sources(sources, windows=windows, config=config)
             _, _, problems = media_configuration.validate(sources, windows=windows, config=config)
+            if not problems:
+                from . import media_identity
+                try:
+                    media_identity.configure_sources(config, sources, windows=windows)
+                except ValueError as exc:
+                    problems = [str(exc)] * len(sources)
             problems = _setup_media_source_errors(dirs, kinds, problems, question.validate)
             if problems:
                 errors["media_dir"] = problems
@@ -569,14 +711,19 @@ _BUNDLE_NAMES = frozenset({"peach-app.js", "peach-app.css", "peach-pages.js", "p
 
 
 def _bundle_response(request: Request, name: str) -> Response:
-    """`web/dist/` 下的一份产物。名字不合法或文件不在都是 404，浏览器直接打开时由错误页说。"""
-    if name not in _BUNDLE_NAMES:
+    """`web/dist/` 下的一份产物。名字不合法或文件不在都是 404，浏览器直接打开时由错误页说。
+
+    固定名的入口每次复验；带哈希的 chunk 内容不变，长期缓存。压缩协商若要按文件挑预压缩副本，
+    包在这里返回的响应外面即可，名字校验与缓存头不随之改变。
+    """
+    chunk = BUNDLE_CHUNK_NAME.fullmatch(name) is not None
+    if name not in _BUNDLE_NAMES and not chunk:
         raise HTTPException(404)
     path = request.app.state.settings.page_path.parent / "dist" / name
     if not path.is_file():
         raise HTTPException(404)
     media = "text/css" if name.endswith(".css") else "text/javascript"
-    return asset_response(request, path, media)
+    return asset_response(request, path, media, immutable=chunk)
 
 
 # 两条字面量路由必须注册在 `/dist/{name}` 之前：路由按注册顺序匹配。
@@ -594,9 +741,9 @@ def page_bundle(request: Request):
 @router.api_route("/dist/{name}", methods=["GET", "HEAD"])
 def app_bundle(request: Request, name: str,
                args: dict[str, str] = Depends(require_asset_auth)):
-    """`frontend/` 的主包使用固定文件名、会话认证与 ETag 复验。
+    """`frontend/` 的主包入口使用固定文件名、会话认证与 ETag 复验，按页拆出的 chunk 带内容哈希、长期缓存。
 
-    产物提交进 Git；只提供主包与页面包的 JS/CSS，文件名不接受路径分隔符或附带扩展名。
+    产物提交进 Git；只提供主包、主包 chunk 与页面包的 JS/CSS，文件名不接受路径分隔符或附带扩展名。
     """
     return _bundle_response(request, name)
 
@@ -624,6 +771,17 @@ def bundled_site_icon(request: Request, name: str,
     if not path.is_file():
         return PlainTextResponse("missing", status_code=404)
     return asset_response(request, path, "image/png")
+
+
+@router.api_route('/browser-icon/{key}', methods=['GET','HEAD'])
+def bundled_browser_icon(request: Request, key: str,
+                         args: dict[str,str] = Depends(require_asset_auth)):
+    from .browser_icons import resolve
+    target = resolve(key)
+    if target is None:
+        return PlainTextResponse('missing',status_code=404)
+    path, content_type = target
+    return asset_response(request,path,content_type)
 
 
 @router.api_route("/robots.txt", methods=["GET", "HEAD"])
@@ -661,10 +819,23 @@ def peach_logo(request: Request):
     return asset_response(request, PROJECT_ROOT / "resources" / "peach-logo.png", "image/png")
 
 
+@router.api_route("/peach-logo-64.png", methods=["GET", "HEAD"])
+@router.api_route("/peach-logo-128.png", methods=["GET", "HEAD"])
+def peach_logo_small(request: Request):
+    """侧栏与登录卡那枚站标：页面按 `srcset` 挑 64 或 128 px，不为 24 px 的图标下 1024 px 的原图。
+
+    和原图一样不设防：登录页在拿到会话之前就要画它。文件由
+    `scripts/generate_brand_assets.py` 从同一张原图缩出。
+    """
+    name = request.url.path.rsplit("/", 1)[-1]
+    return asset_response(request, PROJECT_ROOT / "resources" / name, "image/png")
+
+
 @router.api_route("/performers/", methods=["GET", "HEAD"])
 @router.api_route("/creators/", methods=["GET", "HEAD"])
 @router.api_route("/studios/", methods=["GET", "HEAD"])
 @router.api_route("/agencies/", methods=["GET", "HEAD"])
+@router.api_route("/series/", methods=["GET", "HEAD"])
 @router.api_route("/tags/", methods=["GET", "HEAD"])
 def index_directory_redirect(request: Request, args: dict[str, str] = Depends(require_page_auth)):
     """索引页使用规范路径，查询参数保持原样。"""
@@ -786,6 +957,7 @@ def entity_route(request: Request, name: str,
 @router.api_route("/creators", methods=["GET", "HEAD"])
 @router.api_route("/studios", methods=["GET", "HEAD"])
 @router.api_route("/agencies", methods=["GET", "HEAD"])
+@router.api_route("/series", methods=["GET", "HEAD"])
 @router.api_route("/tags", methods=["GET", "HEAD"])
 @router.api_route("/jav", methods=["GET", "HEAD"])
 @router.api_route("/unseen", methods=["GET", "HEAD"])

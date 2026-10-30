@@ -60,6 +60,19 @@ def _media_process(commands, profile, fail=None, duration=None):
 
 
 class TranscodeServiceTests(unittest.TestCase):
+    def test_diagnostic_profile_reads_cached_evidence_without_touching_media(self):
+        from peach.transcodes import _MediaProfile
+        service = TranscodeService(_Resolver(None), Path('cache'))
+        source = Path('unavailable.mp4')
+        with patch.object(Path, 'stat', side_effect=AssertionError('diagnostics must not read media')):
+            self.assertEqual(service.diagnostic_profile(source)['status'], 'unavailable')
+            service._native_profiles[(str(source), 2048, 12)] = _MediaProfile('h264', 'yuv420p', 'aac', 60)
+            report = service.diagnostic_profile(source)
+            self.assertEqual(report['video_codec'], 'h264')
+            self.assertEqual(report['size_bytes'], 2048)
+            self.assertNotIn(str(source), str(report))
+            self.assertEqual(service.hardware.diagnostic_snapshot()['probe_status'], 'not-probed')
+
     def setUp(self):
         candidates = patch("peach.hardware_transcode.HardwareTranscoder._candidates",
                            return_value=(HardwareEncoder("nvenc"),))

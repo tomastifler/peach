@@ -5,10 +5,55 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* React Aria 的隐藏输入框绝对定位在所属选项内，随选项一起滚动。
+ * 浏览器聚焦原生输入框时，坐标必须仍在可见标签里。定位工具类可覆盖这条基线。 */
+:where(.peach-react label[data-rac]:has(> span > input:is([type='radio'], [type='checkbox']))) {
+  position: relative;
+}
+
 /* 上游 `--font-sans` 引用 Next.js 字体加载器注入的 `--font-inter`；Peach 的 Inter 由
- * board.css 引入的 `/vendor/inter/` 提供。 */
+ * board.css 引入的 `/vendor/inter/` 提供。
+ *
+ * 上游那串在 Inter 之后直接落到 `system-ui` 与 `sans-serif`，汉字交给系统按区域补字：繁体 Windows
+ * 补的是正黑体，缺的简体字形再由别的字体补上，同一行里混着几套字体。界面文字是简体（`lang="zh-CN"`），
+ * 所以在通用族之前按平台列出简体字体：Windows 雅黑，macOS 苹方，Linux 思源黑体（Noto CJK）。
+ * 与遗留壳的 `--board-font`（`web/board.css`）同一串。 */
 :root {
   --font-inter: "Inter Variable", "Inter";
+  --font-sans: var(--font-inter), "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Hiragino Sans GB",
+    "Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+/* 日文片名、简介与别名（`core/text-lang.ts` 按假名标 `lang="ja"`）换日文字体，汉字按日文字形显示。
+ * Windows 用 Yu Gothic UI 与 Meiryo UI：不带 UI 的 Yu Gothic 在 Chrome 里常规字重画成细体。 */
+:lang(ja) {
+  font-family: var(--font-inter), "Yu Gothic UI", "Meiryo UI", "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+    "Noto Sans CJK JP", "Noto Sans JP", "Source Han Sans JP", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* 简介、评论、关注摘要这类成段的馆藏文本：行高放宽，末行不留孤字；中日文两端对齐，英文段落
+ * 不对齐，免得词间拉出大空隙。 */
+.peach-react [data-long-text] {
+  line-height: 1.75;
+  text-wrap: pretty;
+  hanging-punctuation: allow-end;
+}
+.peach-react [data-long-text]:not(:lang(en)) { text-align: justify; }
+
+/* 与文字同行的图标画框，按所在文字字号缩放。雪碧图字形在 24 画框里笔画约占 75%，1.2em 让它和
+ * 同排汉字的墨迹一样大。遗留壳 `web/css/01-base.css` 的 `:root` 同名同值。写在这里而不进
+ * `styles.css` 的 `@theme`：独立页面包也用 `SourceMark` 与带字按键，而 `@theme` 变量按用量裁剪。 */
+:root {
+  --icon-inline: 1.2em;
+}
+
+/* 控件高度四档，用法见 `docs/DESIGN_GUIDELINES.md` 第 11 节；遗留壳 `web/css/01-base.css` 的 `:root` 同名同值。 */
+:root {
+  --control-h-inline: 28px; /* 行内档：标签、标签删除、标题旁的小工具 */
+  --control-h-compact: 32px; /* 紧凑档：行操作、卡片悬浮动作、卡内次级操作、筛选条 */
+  --control-h: 36px; /* 默认档：表单字段与同组按钮、页面与分区操作、页签外框、导航 */
+  --control-h-large: 40px; /* 大档：顶栏搜索与图标键、播放器控制条、首页厂牌胶囊 */
 }
 
 /* 阴影 token 改由 `--elevation-*` 给值。Tailwind v4 为了让 `shadow-<颜色>` 能换色，把
@@ -72,6 +117,8 @@
   -moz-osx-font-smoothing: grayscale;
   font-variant-ligatures: contextual;
   font-kerning: normal;
+  /* 独立页面包不带遗留壳的 `html` 规则（`web/css/01-base.css`），中西文间距在这里再给一次。 */
+  text-autospace: normal;
 }
 
 /* `web/board.css` 在 `:root` 上给同名 token 另定了值，旧样式表排在后面会盖过 theme.css。

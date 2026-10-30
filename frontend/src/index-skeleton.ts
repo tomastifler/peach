@@ -9,9 +9,9 @@
  * 版式偏好由调用方读好交进来：这个模块壳与 React 包各带一份，设置 store 只能有一份。 */
 import { boardTabsHtml, fitSkeleton, iconSwitchHtml, indexSkeletonHtml } from '@peach/legacy/ui';
 import { identityFilterSkeletonHtml } from './identity-filter';
-import { islandShortcutsEntry, islandSearchInput } from './island-skeleton';
+import { islandButton, islandShortcutsEntry, islandSearchInput } from './island-skeleton';
 
-export type IndexPageKind = 'performers' | 'creators' | 'studios' | 'agencies' | 'tags';
+export type IndexPageKind = 'performers' | 'creators' | 'studios' | 'agencies' | 'series' | 'tags';
 
 /** 地址栏上的那几项。 */
 export interface IndexParams {
@@ -23,18 +23,19 @@ export interface IndexParams {
 }
 
 export const INDEX_TITLES: Readonly<Record<IndexPageKind, string>> = {
-  performers: 'Performers', creators: 'Creators', studios: 'Studios', agencies: 'Agencies', tags: 'Tags',
+  performers: '艺人', creators: '卖家', studios: '厂牌', agencies: '事务所', series: '系列', tags: '标签',
 };
 
 /* 艺人索引版式，思路同 JAV 大图：列宽不变、只把图从圆框拉成竖幅，一屏里的人数不变而每张脸更大；紧凑就是
    圆头像那一屏。资料页的名册读的是同一个设置值。 */
 const PEOPLE_LAYOUTS =[['big', 'Large · portrait avatars', 'maximize'], ['compact', 'Compact · round avatars', 'layout-grid']] as const;
 /* 公司那一格摆的是方形标识而不是脸，说法跟着换；档位仍是同一个设置值。 */
-const COMPANY_LAYOUTS = [['big', 'Large · full logos', 'maximize'], ['compact', 'Compact · round logos', 'layout-grid']] as const;
-const MAKER_INDEX_KINDS = [['studios', 'Studios', 'clapperboard'], ['agencies', 'Agencies', 'briefcase']] as const;
-const INDEX_SCOPES = [['local', 'Local', 'hard-drive'], ['online', 'Online', 'rss']] as const;
-const PEOPLE_INDEX_TABS = [['performers', 'Performers', 'user-round'], ['creators', 'Creators', 'user-round'], ['online', 'Online', 'rss']] as const;
-const TAG_VIEWS = [['cloud', 'Tag cloud', 'tags'], ['alphabet', 'Alphabet', 'text-aa']] as const;
+const COMPANY_LAYOUTS = [['big', '大图 · 完整标识', 'maximize'], ['compact', '紧凑 · 圆形标识', 'layout-grid']] as const;
+const SERIES_LAYOUTS = [['big', '大图 · 系列图片', 'maximize'], ['compact', '紧凑 · 系列图片', 'layout-grid']] as const;
+const MAKER_INDEX_KINDS = [['studios', '厂牌', 'clapperboard'], ['agencies', '事务所', 'briefcase'], ['series', '系列', 'file-stack']] as const;
+const INDEX_SCOPES = [['local', '本地', 'hard-drive'], ['online', '在线', 'rss']] as const;
+const PEOPLE_INDEX_TABS = [['performers', '艺人', 'user-round'], ['creators', '卖家', 'user-round'], ['online', '在线', 'rss']] as const;
+const TAG_VIEWS = [['cloud', '标签云', 'tags'], ['alphabet', '字母表', 'text-aa']] as const;
 
 /** 存着的版式偏好，认不出的回到大图。 */
 export const peopleLayoutOf = (saved: unknown): 'big' | 'compact' => (saved === 'compact' ? 'compact' : 'big');
@@ -55,24 +56,25 @@ const tabs = (items: Choices, active: string, label: string) => boardTabsHtml(
 /* 标签页 Tabs 下面还有一块两排的筛选玻璃（React 的 `FilterGlassRows`）：上排是类型药丸，下排是读数、按首字
    跳转和视图切换。药丸有哪几枚、读数多少、有哪些首字都要等数据，视图切换此刻就是最终那一档；块高与下边距同
    旧 `.board-filter-frame`，页面落地时它原地换成真的那一块，下面的内容不下跳。 */
-const tagFilterSkeletonHtml = (view: string) => `<div class="board-filter-frame" data-filter-frame>
-    <div class="tagbar" data-filter-row="top" data-skeleton-tier="pill" aria-label="Tag type"></div>
-    <div class="count" data-filter-row="bottom"><span class="mono"><span class="countskeleton"></span></span>
-      ${iconSwitchHtml('tag-view', 'Tag view', TAG_VIEWS, view)}</div></div>`;
+const tagFilterSkeletonHtml = (view: string) => `<div class="peach-react contents"><div data-filter-glass data-glass-pane class="sticky top-topbar z-10 mb-5.5 flex flex-col">
+    <div class="flex h-12 min-w-0 items-center gap-1.75 overflow-x-auto overscroll-x-contain px-3 py-2" data-filter-row="top" data-skeleton-tier="filter-pill" aria-label="标签类型"></div>
+    <div class="flex min-h-11.5 min-w-0 items-center gap-3 px-3 py-2" data-filter-row="bottom"><span class="countskeleton"></span>
+      <span class="ml-auto">${iconSwitchHtml('tag-view', '标签视图', TAG_VIEWS, view, { className:'tag-skeleton-view' })}</span></div></div></div>`;
 
 export function indexPlaceholderHtml({ kind, q, scope, view, category }: IndexParams, layout: 'big' | 'compact'): string {
-  const title = INDEX_TITLES[kind] || 'Tags', people = kind !== 'tags', company = kind === 'studios' || kind === 'agencies';
+  const title = INDEX_TITLES[kind] || '标签', people = kind !== 'tags', company = kind === 'studios' || kind === 'agencies' || kind === 'series';
   const switcher = people
-    ? iconSwitchHtml('people-layout', title + ' index layout', company ? COMPANY_LAYOUTS : PEOPLE_LAYOUTS, layout) : '';
+    ? iconSwitchHtml('people-layout', title + '索引版式', kind === 'series' ? SERIES_LAYOUTS : company ? COMPANY_LAYOUTS : PEOPLE_LAYOUTS, layout) : '';
   return `<div class="ihead peach-react" data-index-head>
       <h2 class="disp indexheading">${title}</h2>
       ${people ? '<span class="mono" id="indexCount"><span class="countskeleton"></span></span>' : ''}${switcher}
-      ${islandShortcutsEntry()}
-      <div data-index-search class="ml-auto min-w-35 max-w-80 flex-1 max-board-narrow:order-1 max-board-narrow:basis-40">${islandSearchInput('', q, 'Filter ' + title)}</div>
+      ${islandShortcutsEntry('default')}
+      ${kind === 'tags' ? islandButton({variant: 'ghost', glyph: 'pencil', attrs: 'data-tag-mode data-skeleton-action disabled tabindex="-1" aria-label="管理标签"'}) : ''}
+      <div data-index-search class="ml-auto min-w-0 max-w-80 flex-1">${islandSearchInput('', q, '过滤' + title)}</div>
     </div>
-    ${kind === 'tags' ? tabs(INDEX_SCOPES, scope, 'Vocabulary') : kind === 'performers' || kind === 'creators'
-      ? tabs(PEOPLE_INDEX_TABS, kind === 'performers' && scope === 'online' ? 'online' : kind, 'People directory')
-      : company ? tabs(MAKER_INDEX_KINDS, kind, 'Company type') : ''}
+    ${kind === 'tags' ? tabs(INDEX_SCOPES, scope, '词表') : kind === 'performers' || kind === 'creators'
+      ? tabs(PEOPLE_INDEX_TABS, kind === 'performers' && scope === 'online' ? 'online' : kind, '人物名册')
+      : company ? tabs(MAKER_INDEX_KINDS, kind, '资料类型') : ''}
     ${kind === 'tags' ? tagFilterSkeletonHtml(view) : ''}
     ${kind === 'performers' && scope !== 'online' ? identityFilterSkeletonHtml(category) : ''}
     ${indexSkeletonHtml({ kind, layout, mode: view })}`;

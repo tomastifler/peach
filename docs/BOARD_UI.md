@@ -1,6 +1,30 @@
 # BoardUI Adaptation
 
-## Directory Browsing
+## 无图头像与浮卡子页
+
+2026-10-27 复核：无图头像的圆盘、首字母和默认人像按同一组件检查。背景使用主文字色 10% 混入承载面的中性色，不能直接取与行背景相同的 `background-primary-default` 或 `background-tertiary-default`；前景使用 `text-primary`，不套用禁用色、三级文字色或整体透明度。24px 头像复用 Avatar `sm` 的 12/16、600 字阶，默认人像图形为 16px；照片、首字母和缺省图标保持相同外框。此处取代下文历史参考中无图头像的「次文字色首字」采用项。
+
+正常、悬停和选中行中的无图头像都需检查深浅主题：首字母与头像底色至少 4.5:1，承载身份含义的人像图形至少 3:1；圆盘也应能从承载面辨认。规则依据 [WCAG 文字对比度](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html) 与[非文字对比度](https://www.w3.org/WAI/WCAG22/Understanding/non-text-contrast.html)。尺寸相同、使用了语义 token 或背景有色差均不能代替前景对比度核对。复用源组件时须同时带入 Peach 的暗色适配，不只复制组件结构和上游默认值。
+
+表格默认采用 Body Medium 14/20、500，状态文字采用 Body Regular 14/20、400；单元格内边距为 10px 12px。只有明确选择紧凑档才使用完整的 Body 2 字阶 13/18，不能拼出 13/20 等混合档。小型浮卡的标题为 Title 2 Medium 20/26，正文 14/20，辅助说明 12/16；正文内边距 20px，分组间距 16px，图文和操作组间距 8px。字阶包含字号、行高和字重，不能只核字号。表头与「待加入」等正常状态均需可读，不能按禁用文字处理；用户脚本的表头使用主文字色，状态使用次文字色，历史取证中的三级文字色不直接套入暗色小浮卡。
+
+同一浮卡内的设置、批量选择属于子页：标题左侧返回，恢复进入前的主界面状态与焦点；关闭整个浮卡的 `×` 只留在主界面。返回设置不保存草稿，返回批量选择停止后续提交，已提交任务继续处理。原生 Escape 与返回保持相同语义。
+
+## 设置分组与页签选中层
+
+侧栏底部按明暗、配色、设置排列，展开时横排、收起时竖排，视觉顺序与键盘焦点顺序一致。
+
+设置弹层的外观选项、光晕配色、自定义颜色与导航顺序各有独立卡片。设置行保留 BoardUI 的左侧 12px 内缩、右侧通栏分隔线；配置页的相邻行组由共享样式补齐边界。
+
+JAV 与索引页、顶部管理导航、关注管理、复核分类、配置分区和搜索补全类别共享上游 `PillTabList` 的选中层，同时保留 Peach 的路由、tab 语义和方向键。React Aria 的装饰层通过 Portal 挂在集合宿主内，普通按钮直接使用同一组件。减少动态效果时关闭选中层过渡。当前源码、适配差异、实时几何与注册表核对结果见[设置与页签取证](reference-snapshots/boardui-settings-tabs.md)。
+
+任务问题列表默认收起，展开后使用与 CodeBlock 同色的限高容器及共享覆盖式滚动条。来源列表的单条错误保留原位文本展开；详情动作用常规字重。光晕颜色行使用中性行状悬停面，色板复用同一份覆盖式滚动条。
+
+框内分组标题保留上下留白；框外标题的紧凑间距仅用于独立卡片布局。颜色行的悬停与展开反馈面横向铺满卡片、纵向覆盖相邻分隔线，内容与分隔线仍从左侧 12px 起算。边框保持占位，状态切换不改变行高。关注来源与 JAV 订阅源的暂停状态使用 `Chip` 的 `gray` 变体，主文字色随主题切换；创作者卡片末行的反馈面使用 8px 底部圆角，与外框 16px 圆角及 8px 留白保持同心。
+
+设置弹层的玻璃导航投影裁在左栏内。右栏标题的阴影只在正文滚过顶部留白后显示，回到顶部、切换分区或重新打开时收起；减少动态效果时立即切换。
+
+## 目录浏览
 
 On 2026-10-17 the public [Tree View](https://www.boardui.com/components/tree-view), [Breadcrumb](https://www.boardui.com/components/breadcrumb), and Direction registry sources were obtained. The SHA-256 and per-file verification of the three entries are recorded in `frontend/src/react/boardui/ORIGIN.md` and `UPSTREAM.sha256`; the raw JSON is kept in this working tree's `build/boardui-registry/`. The source is MIT-licensed, with no new runtime dependencies.
 
@@ -18,11 +42,17 @@ Filter bar buttons are unified to the 30px height of the viewglide segmented con
 
 ## Task Records, Diagnostics, and Follow Overview
 
-Each round of tasks in the task center uses its own card surface; on failure the card border uses the error color, and the end reason keeps the body text color. Run progress, follow-up task details, routine-task collapsing, history pagination, and polling share the existing data state.
+数据表、订阅源和别名表共享工具栏分组：标题与计数同组，列设置、排序与业务动作整组换行。列设置的两枚按钮、排序框与方向键各自保持成组。分页范围与分页操作分组排列，操作组在独占一行仍放不下时继续换行；页码可在中间列折行，上一页与下一页保持同行。作品列表与关注卡片复用相同的分组原则，全选与收起保持成组。
+
+批量操作浮窗通过 ResizeObserver 测量高度，页面滚动区按浮窗高度、底部间距与控件间隔预留空间；浮窗换行后，底部分页与下拉仍可滚到可点击的位置，关闭浮窗后释放预留空间。
+
+任务中心的一轮任务使用独立卡面，失败时卡框使用错误色，结束原因保留正文色。运行进度、后继任务明细、例行任务折叠、历史分页和轮询共用现有数据状态。
 
 System diagnostics first presents warning, failed, and unknown checks, while normal and unconfigured items stay in the "Other checks" collapsed area. The library health list and the source sessions are each kept. Recovery buttons name the media library, network and access, maintenance and updates, or task center, and use the targets provided by the diagnostic report.
 
-The six overview items of follow management use filled cards, and the follow list uses an outer filled card, creator cards, and a bottom summary bar. Source checkbox, expand, check, sort, pagination, table view, and bulk actions reuse the shared components. When adding a follow, no suggestions are requested and no lookup is started during input-method composition; if a lookup fails, the input and the reason are kept and a retry is possible directly. Fonts, colors, and controls all reuse BoardUI tokens.
+追更与订阅源检查的问题详情保留本轮来源名称、站点和失败原因，并提供来源管理入口。旧记录只在任务号匹配时读取完成检查点补齐详情；未取得明细时明确说明。媒体修复只为本次跟踪完成的任务发送回执，成功使用短暂通知，缺少工具的提示可以关闭。
+
+关注管理的六项概览使用填充卡，关注列表使用外层填充卡、创作者卡与底部汇总条。标题与读数组合排列，操作区按实际可用宽度整组换行；操作区独占一行仍放不下时，内部控件继续换行，骨架复用同一布局。来源勾选、展开、检查、排序、分页、表格视图与批量操作沿用共用组件。添加关注时，输入法合成期间不请求建议或发起查找；查找失败保留输入和原因，可直接重试。字体、颜色与控件均复用 BoardUI token。
 
 These pages are checked against the [design guidelines](DESIGN_GUIDELINES.md) for independent objects, input, and real status feedback. Desktop and phone were accepted using the actual build output; the layout and interaction evidence archive is at `<private verification records>`.
 
@@ -66,7 +96,9 @@ The follow list's default view paginates by whole creator groups, and the table 
 
 Scan and collection reuse the Split Button appearance and shared menu positioning. The scan entry of `ProcessingActions` defaults to "Scan and complete metadata", and its menu includes the same primary action, complete metadata and previews, scan only, generate local previews only, and collect online metadata only; the missing-image entry defaults to "Complete metadata and previews" with a dropdown offering the two sub-items. Icons use the existing Remix Icon `RiDatabase2Line`, `RiHardDrive2Line`, `RiGlobalLine`, standing for metadata, local disk, and external source respectively, with no new dependency.
 
-The isolated in-memory sample verified merge all, source filtering, manual add, and menu keyboard focus. The 1280px desktop and 390×844 phone pages have no horizontal overflow; the pending-merge table scrolls horizontally within its own area, and the saved table and add form wrap on phones.
+新入库范围在「扫描与采集」卡片内使用独立任务行：标题、BoardUI `Chip` 数量、范围说明与处理按钮同组，与概述之间用分隔线区分。待处理数量大于零时使用蓝色状态标记，零部时保持中性并说明下一步。桌面操作靠右，手机操作独占一行；运行中保留数量，处理入口等待当前任务结束。
+
+隔离内存样例已验证全部合并、来源筛选、手动添加与菜单键盘焦点。1280px 桌面和 390×844 手机页面无横向溢出；待合并表格在自身区域横向滚动，已保存表格与添加表单在手机换行。
 
 ## Narrow-Screen Filter Box Scrolling
 
@@ -210,7 +242,9 @@ Additional public reference file SHA-256:
 
 ### Follow List Table View (2026-09-08)
 
-The evidence source is the live DOM and stylesheet of https://www.boardui.com/components/data-table: the `.bui-table` rules in `_next/static/chunks/0n0ugaibgw__p.css` (SHA-256 `a856db5e9e1a58b2e32b7bfa6d7f1cab69dd09e4bd7ac22fc455dd10b525cf27`), plus the public registry `r/table.json` (`fc12a8f2f4012d9e983e0b9bbb10f9fe3288d74046566d2623d60e7056c50d88`) and `r/data-table.json` (`613299eca0f448460a546f7959feab8dab19fbfd6e18670f7216ff304a1e3574`).
+共享数据表的主要名称列默认承接剩余宽度；馆藏、关注来源、JAV 订阅、创作者别名、文件已丢失的记录、链接检查与诊断清单共用这套列宽偏好。手动调整后保存像素宽度，重置列宽恢复自适应，列显示独立保存。名称、路径、地址与结果正文以单元格可用宽度折行或省略；路径与地址随列宽重算中间省略，完整原文保留在提示和无障碍名称中。文件已丢失的记录根据有无替代文件给操作列分配默认宽度；窄屏在表格内横向滚动。
+
+取证来源是 https://www.boardui.com/components/data-table 的实时 DOM 与样式表：`_next/static/chunks/0n0ugaibgw__p.css`（SHA-256 `a856db5e9e1a58b2e32b7bfa6d7f1cab69dd09e4bd7ac22fc455dd10b525cf27`）里的 `.bui-table` 规则，以及公开注册表 `r/table.json`（`fc12a8f2f4012d9e983e0b9bbb10f9fe3288d74046566d2623d60e7056c50d88`）和 `r/data-table.json`（`613299eca0f448460a546f7959feab8dab19fbfd6e18670f7216ff304a1e3574`）。
 
 On 2026-09-16 these three were re-fetched: `r/table.json` and `r/pagination.json` are byte-for-byte unchanged, and `r/data-table.json` is now `7bb73a6cd099b9b16390e5fe00f8ba2d55b5ef96c1e8f90a056168cd2e3235e6` (24531 bytes), the upstream having changed it itself. What Peach copied into the tree is the `table` entry, while `data-table` is only read, not copied (reason in `frontend/src/react/boardui/ORIGIN.md`), so this drift does not affect the hashes of the copied files.
 
@@ -279,22 +313,22 @@ New evidence: the public registry `r/tabs.json` (SHA-256 `feab9789b17008436597b5
 
 | Location | Upstream | Peach |
 | --- | --- | --- |
-| Tab strips for taste dimensions and review categories | Tabs: 1px baseline, 2px blue line slides with the selected item over 200ms each for `transform`/`width`; option px 10 / py 8, Body 1, selected blue text Medium; count badge Caption Medium, px 4 / py 1, 4px radius | The review page's `.reviewtabs` is wired into the same `wireBoardTabs`; both are re-laid out to upstream font size and spacing, and the count badge keeps the upstream's two states |
-| Taste page "Browser history / Peach internal" | Segmented Control: tertiary track p 4 / r 10, option px 10 / py 4 / r 6, thumb 200ms | `.insightswitch` is wired into `wireBoardSegments`, native radio unchanged |
-| Layout switch in the sort row | Same as above, 36px high | Pressed down to 30px to line up with the sort key and shuffle key on the same row: a deliberately kept difference |
-| Segmented thumb in dark mode | `segmented-control-selected` dark value not obtained | Main text color 14% mixed into the track color; in dark the track and primary have the same value, so the thumb must be one step brighter than the track |
-| Ranking bars, radar chart | Upstream Pro chart source not obtained | The React version shows the final value directly with no entry animation: the whole block is mounted asynchronously by the island, and at the moment it mounts it is already in the viewport, so growing from zero would begin only after the page has been read |
-| Ranking row hover and expand key | PillTab hover `background-primary-hover` 200ms | Hover changed to a thin 6% main-text-color background + 200ms: dark primary-hover is too jumpy, in light it is invisible; the expand key is the same layer |
-| Three panel titles (taste summary, browser profile, data sources) | Heading 20/26 | The same tier, the React version uses `text-title-2-medium`; padding unified to 20 (card surfaces go through `cardClass()`'s `p-5`, three padding tiers collapsed to one) |
-| Review "Skip" | Chip blue: light 200/800, dark 950@60%/300 | Adopted; `error`/`primary` unchanged |
-| Active filters on the intersection bar | Chip subtle + neutral: `px-1.5 py-1`, Body 1 Medium, tertiary background with secondary text color, no outline | Deliberate deviation: tags site-wide are unified on the detail panel's chip, so this one also uses `--tag-radius` (8px in this set) + a `--line` ring + a 28px remove key, and only the fill takes `--picked` to show it is active. The upstream Chip only marks state, while every Peach chip must be removable in place, and the same word must be recognizable as the same thing on cards, the detail panel, and the filter bar |
-| Expand key of the sidebar list | No counterpart (the upstream sidebar does not truncate lists) | Takes the size of the expand pill on the ranking card; pressing again collapses the whole group, not retreating the list to another breakpoint |
-| Sidebar collapse key | 36px, `rounded-2lg`, `foreground-icon-secondary`, 10px from the brand when collapsed | Adopted, the icon keeps Peach's `panel-left` |
-| Detail page door | No counterpart | Fills the player cell with no black; the player cell rounds only the top-left corner (right edge against the sidebar, bottom joined to "Continue watching"), and on narrow screens and in cinema mode rounds the top two corners |
-| Identity avatar without an image | Avatar initials disc `avatar-neutral-background` value not obtained | Main text color 10% mixed into the background, secondary text color for the initial |
-| Home performers and studios rows | No Avatar Group; PillTab gray + Avatar sm (24px) | See the 2026-09-09 section: performers as vertical portrait cells, studios as 40px gray Pills |
-| Management page title | No counterpart | Centered only on 812px narrow-column pages, elsewhere on the same left line as the breadcrumb |
-| Immersive mode | No counterpart | The random stream filters out titles from detached sources at the entry |
+| 口味维度、复核分类的标签条 | Tabs：1px 基线、2px 蓝线随选中项 `transform`／`width` 各 200ms 滑动；选项 px 10 / py 8、Body 1，选中蓝字 Medium；计数徽标 Caption Medium、px 4 / py 1、4px 圆角 | 复核页的 `.reviewtabs` 接进同一份 `wireBoardTabs`；两处按上游字号与间距重排，计数徽标沿用上游两态 |
+| 口味页「浏览器记录／Peach 内部」 | Segmented Control：tertiary 轨道 p 4 / r 10、选项 px 10 / py 4 / r 6、滑块 200ms | `.insightswitch` 接进 `wireBoardSegments`，原生 radio 不变 |
+| 排序行的版式切换 | 同上，高度 36px | 压到 30px 与同一行的排序键、换批键齐平：主动保留的差异 |
+| 分段滑块的暗色 | `segmented-control-selected` 暗色值未取得 | 主文字色 14% 混进轨道色；暗色里轨道与 primary 同值，滑块必须比轨道亮一档 |
+| 排名条、雷达图 | 上游 Pro 图表源码未取得 | React 版直接显示终值，没有入场动画：整块由 island 异步挂载，挂上的那一刻已经在视口里，从零长一遍变成页面读完之后才开始动 |
+| 排名行悬停与展开键 | PillTab 悬停 `background-primary-hover` 200ms | 悬停改为主文字色 6% 薄底 + 200ms：暗色 primary-hover 太跳、亮色看不见；展开键同一层 |
+| 三个面板标题（口味总结、浏览器画像、数据源） | Heading 20/26 | 同一档，React 版用 `text-title-2-medium`；内边距统一 20（卡面走 `cardClass()` 的 `p-5`，三档内边距收成一档） |
+| 复核「跳过」 | Chip blue：亮 200/800、暗 950@60%/300 | 采用；`error`／`primary` 不变 |
+| 交集条上已生效的筛选 | Chip subtle + neutral：`px-1.5 py-1`、Body 1 Medium、tertiary 底配次文字色，不描边 | 主动偏离：全站标签以详情面板那颗为基底统一，所以这一颗也走 `--tag-radius`（这套里是 8px）+ 一圈 `--line` + 28px 移除键，只有填充取 `--picked` 说明它已生效。上游 Chip 只标状态，Peach 的每一颗都要能就地撤掉，同一个词还要在卡片、详情面板、筛选条上认得出是同一样东西 |
+| 侧栏名单的展开键 | 无对应（上游侧栏不截断名单） | 取排名卡那枚展开药丸的身量；再按一下收的是整组，不是把名单退回另一个断点 |
+| 侧栏收起键 | 36px、`rounded-2lg`、`foreground-icon-secondary`，收起时与品牌相隔 10px | 采用，图标沿用 Peach 的 `panel-left` |
+| 详情页门挡 | 无对应 | 铺满播放器格不留黑；播放器格只圆左上角（右贴侧栏、下接「接着看」），窄屏与影院模式圆上面两角 |
+| 没有图的身份头像 | Avatar neutral 的暗色默认背景与 primary 面相同 | 采用范围与前景对比度见「无图头像与浮卡子页」，不能仅复用上游默认背景 |
+| 首页女优与厂牌两排 | 无 Avatar Group；PillTab gray + Avatar sm（24px） | 见 2026-09-09 那一节：女优竖排人像格、厂牌 40px 灰 Pill |
+| 管理页标题 | 无对应 | 只在 812px 窄列页面居中，别处与面包屑同一左边线 |
+| 沉浸模式 | 无对应 | 随机流在入口筛掉脱盘来源的片子 |
 
 ### Ranking List, Review Floating Box, Bulk Bar, and Sidebar Switcher (2026-09-08)
 
@@ -345,7 +379,13 @@ the upstream has only CheckboxCard, and the Radio version is the same card with 
 | Review skeleton | Skeleton is only a placeholder shape | The skeleton uses the class names of the final containers directly (`.review-workspace`, `.reviewcontrols`, `.reviewbulktoolbar`, `.reviewlist`), with columns, column widths, and card height all given by the review page's own rules; `renderInitialSurfaceLoading()` writes `data-surface` before drawing, otherwise a deep-link cold start would first lay out the default layout and then jump. Category names are static text shown directly, and only the counts and the three toolbar controls are placeholders |
 | Floating frame in the skeleton | No counterpart | The skeleton has no group bar to connect to, so the toolbar seals itself: all four corners rounded, all four edges outlined, and not sticky, because `updateReviewSticky` has nothing to measure until the data arrives |
 
-### Artist / Studio Profile Pages and Follow Page (2026-09-12)
+### 复核卡片现行组合（2026-10-27）
+
+资料字段使用独立的 BoardUI Select，不要求先按字段分组。来源依据为中性 secondary Button 与 CollapseRegion，不使用带悬停下划线的 LinkButton。文本差异使用 mark，并复用黄色背景及文字语义 token；共同文字保持原样，来源选择与写入值不受高亮影响。
+
+复核候选已改用官方 `RadioCard` 与 `RadioGroup`，替代前述基于 CheckboxCard 的早期组合。源码摘要、复用与差异见[复核卡片取证](reference-snapshots/boardui-review-cards.md)。外层使用管理页填充卡，字段徽章保持中性；当前值、来源选择及可展开依据共用一个正文滚动区。底部复用 Fieldset 操作带，忽略为中性文字键，通过保留蓝色主动作。来源依据的展开独立于单选和资料提交。
+
+### 艺人／厂牌资料页与关注页（2026-09-12）
 
 Evidence is in `<private verification records>`: `tabs.json` (SHA-256
 `feab9789b17008436597b51e52b90de5cff6180924f2a7c8bef14a2136d3a240`, 13612 B), `avatar.json`
@@ -528,8 +568,10 @@ Internal body navigation reuses `LinkButton`, with the right arrow using the loc
 
 Search glass uses native `blur(22px)`, keeping the base color, glow, and outline. During the theme spread snapshot, each glass surface takes the glow with the current theme's solid color, and after the animation ends or is skipped, live background sampling resumes; the media library top-level popover uses the same rule. After leaving the page, the SVG filters and size observers of removed panels are cleaned up. Browser visual acceptance was not obtained.
 
-Tasks with a known total show only one set of progress and processed count, and only unknown totals show loading dots. Scan, follow check, link check, and resource scan share this rule.
-Review cards initialize scrollbars when near the viewport, and off-screen cards defer layout; on a page with 819 records scrolled to 2400px only 6 cards are initialized.
+已知总量的任务只显示一套进度与处理数量，未知总量才显示加载圆点。扫描、关注检查、链接检查和资源扫描共用这一规则。
+骨架的显示门槛同时约束容器、后代与伪元素；隐藏阶段不单独绘制微光。筛选骨架复用就绪控件的尺寸、间距、图标与当前选项，等待接管时使用 `inert`，数据操作按钮保留原生禁用状态。
+媒体库入口与侧栏按钮在主包加载前按保存的状态就位；组件接管时复用这些原生节点。
+复核卡片在接近视口时初始化滚动条，屏幕外卡片暂缓布局；819 条记录的页面滚动至 2400px 时只初始化 6 张卡片。
 
 The follow list's right toolbar is arranged as check all, view, sort, expand state, with the expand state shown only in the default view. In table view each row has a checkbox at its start, the default view's "Select this page" sits above the list, and cross-page selection is kept. Select-all uses the stacked check, and deselect uses the hollow stacked check; review grouping and this-page selection reuse this set of state icons. The review group button sits to the right when sticky, with spacing kept between type and title.
 When a collection source explicitly has no metadata or cover entry, a neutral record is kept and it is not counted as a failure or an automatic retry set; timeouts, network, and read errors keep error feedback. Collection details use the shared Collapse, and resource links use the normal text color.

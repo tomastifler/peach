@@ -72,7 +72,7 @@ describe('页面等待态的结构', () => {
         assert.ok(await root.locator('[data-entity-facts]').count(), '数字地址漏了资料表');
         assert.ok(await root.locator('[data-entity-state]').count(), '观看状态被画成了占位');
         assert.ok(await root.locator('[data-entity-sort]').count(), '排序控件被画成了占位');
-        assert.equal(await root.locator('[data-entity-layout]').count() > 0, jav, '卡片版式开关误用了艺人类型');
+        assert.equal(await root.locator('[aria-label="JAV 卡片版式"]').count() > 0, jav, '卡片版式开关误用了艺人类型');
         const ratio = await root.locator('[style*="--skeleton-card-ratio"]').first().evaluate(node =>
           Number((node as HTMLElement).style.getPropertyValue('--skeleton-card-ratio')));
         assert.equal(ratio, jav ? .75 : 16 / 9, '等待态封面比例与作品语境不一致');

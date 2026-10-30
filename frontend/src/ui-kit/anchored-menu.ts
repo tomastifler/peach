@@ -67,9 +67,11 @@ export function wireAnchoredMenu(
   mount: HTMLElement, toggle: HTMLElement, menu: HTMLElement,
   { side = false, align = 'end' }: { side?: boolean; align?: 'start' | 'end' } = {},
 ): { setOpen(next: boolean): void; isOpen(): boolean; dispose(): void } {
+  let anchorPosition: { left:number; top:number } | null = null;
   const position=()=>{
     // 宽度读 offsetWidth：进场动画起手是 scale(.95)，getBoundingClientRect 量到的是缩过的框。
     const anchor=toggle.getBoundingClientRect(),width=menu.offsetWidth;
+    anchorPosition={left:anchor.left,top:anchor.top};
     if(side&&innerWidth>=640){
       menu.dataset.placement='right';
       menu.style.maxHeight=Math.max(0,innerHeight-32)+'px';
@@ -94,7 +96,13 @@ export function wireAnchoredMenu(
   /* 触发钮被滚走了就关掉：菜单固定在视口里，锚点跟着内容跑，留着就悬在半空。
      菜单自己的滚动不算——它装不下时本来就要在内部滚，滚一下就关等于底下那几项
      根本够不着；别处那一排横滚也不算，判据见 `scrollMovesAnchor`。 */
-  const closeFromViewport=(event:Event)=>{if(scrollMovesAnchor(event,toggle))setOpen(false)};
+  const closeFromViewport=(event:Event)=>{
+    // 整页滚动直接收起；局部滚动核对锚点位置，避开菜单打开前已排队的事件。
+    if(!scrollMovesAnchor(event,toggle)||!anchorPosition)return;
+    const anchor=toggle.getBoundingClientRect();
+    if(event.target===document||event.target===window
+      ||Math.abs(anchor.left-anchorPosition.left)>.5||Math.abs(anchor.top-anchorPosition.top)>.5)setOpen(false);
+  };
   /* 带 popover 的菜单进顶层。`position:fixed` 只在没有被祖先接管时才相对视口：祖先上
      一个 transform、filter 或 backdrop-filter 就会成为它的包含块，算好的视口坐标于是
      整体偏移，还要被那个祖先的 overflow 裁掉。设置面板的卡片正是这种祖先——入场动画的
@@ -121,7 +129,7 @@ export function wireAnchoredMenu(
     openedMenu=next?{mount,menu,toggle,setOpen}:(openedMenu&&openedMenu.mount===mount?null:openedMenu)};
   const click=(event:MouseEvent)=>{event.stopPropagation();setOpen(!open)};
   const keydown=(event:KeyboardEvent)=>{
-    if(event.key==='Escape'&&open){event.stopPropagation();setOpen(false);toggle.focus()}};
+    if(event.key==='Escape'&&open){event.preventDefault();event.stopPropagation();setOpen(false);toggle.focus()}};
   toggle.addEventListener('click',click);
   mount.addEventListener('keydown',keydown);
   const dispose=()=>{

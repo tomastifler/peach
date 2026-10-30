@@ -8,6 +8,7 @@ import { resolve } from 'node:path';
 import { expect, it } from 'vitest';
 
 import { indexParams, indexPlaceholderHtml, type IndexPageKind } from '../src/index-skeleton';
+import { tagSkeletonHtml } from '../src/tag-skeleton';
 
 const sprite = new Set(
   [...readFileSync(resolve(__dirname, '../../web/index.html'), 'utf8').matchAll(/<symbol id="i-([^"]+)"/g)]
@@ -15,8 +16,18 @@ const sprite = new Set(
 
 const PAGES: [IndexPageKind, string][] = [
   ['performers', ''], ['performers', '?scope=online'], ['creators', ''],
-  ['studios', ''], ['agencies', ''], ['tags', ''], ['tags', '?scope=online&view=cloud'],
+  ['studios', ''], ['agencies', ''], ['series', ''], ['tags', ''], ['tags', '?scope=online&view=cloud'],
 ];
+
+it.each(['cloud', 'alphabet'])('%s 标签占位按页大小预留正文与分页', mode => {
+  for (const pageSize of [50, 100, 200]) {
+    const host = document.createElement('div');
+    host.innerHTML = tagSkeletonHtml({ mode, pageSize });
+    expect(host.querySelectorAll('[data-tag-skeleton-cell]')).toHaveLength(pageSize);
+    expect(host.querySelector('[data-tag-pagination-skeleton]')).not.toBeNull();
+    expect(host.querySelector('[aria-busy="true"]')?.getAttribute('role')).toBe('status');
+  }
+});
 
 it.each(PAGES)('%s%s 骨架里的每个字形都在 sprite 里', (kind, search) => {
   for (const layout of ['big', 'compact'] as const) {

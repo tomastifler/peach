@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { Browser } from 'playwright-core';
-import { launch, layout, requiredEnv, settle, VIEWPORTS } from './harness.ts';
+import { launch, layout, requiredEnv, settle, VIEWPORTS, withPageDiagnostics } from './harness.ts';
 import { JAV_DETAIL, mockJavDetail } from './jav-detail-fixture.ts';
 
 describe('库外 JAV 作品详情', () => {
@@ -58,6 +58,76 @@ describe('库外 JAV 作品详情', () => {
       assert.ok((await snapshot()).titleVisible);
       assert.deepEqual(errors, []);
       await page.screenshot({ path: '../build/jav-comments-expanded.png' });
+    } finally { await context.close() }
+  });
+  /* 详情浮窗是 `showModal()` 开的顶层 dialog：挂在 body 上的弹层和 Toast 再大的 z-index 也压不过它，
+     看起来就是「点了没反应」。命中测试取弹层与回执自己的中心点。 */
+  it('查找资源弹层与操作回执盖在详情浮窗之上', { timeout: 60000 }, async () => {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
+    try {
+      const page = await context.newPage();
+      await mockJavDetail(page);
+      await page.goto(requiredEnv('PEACH_E2E_ORIGIN') + '/works/EXM-001');
+      await page.locator('[data-jav-info] h1').waitFor();
+      const hit = (selector: string) => page.locator(selector).first().evaluate(node => {
+        const box = node.getBoundingClientRect();
+        const target = document.elementFromPoint(box.left + box.width / 2, box.top + Math.min(24, box.height / 2));
+        return { onTop: !!target && node.contains(target), inStage: !!node.closest('#stage') };
+      });
+      await page.locator('[data-jav-actions]').getByRole('button', { name: '查找资源', exact: true }).click();
+      await page.getByRole('heading', { name: '查找资源', exact: true }).waitFor();
+      assert.deepEqual(await hit('[data-modal-surface]'), { onTop: true, inStage: true }, '查找资源弹层被详情浮窗盖住');
+      /* 表单里通栏的下拉：展开的选项面板与触发框同宽，不是共用菜单的 266px。 */
+      const goal = page.locator('[data-modal-surface]').getByRole('button', { name: /优先寻找/ });
+      await goal.click();
+      const panel = page.locator('[data-trigger="Select"]');
+      await panel.waitFor();
+      const [goalBox, panelBox] = [await goal.boundingBox(), await panel.boundingBox()];
+      assert.ok(goalBox && panelBox && goalBox.width > 266 && Math.abs(goalBox.width - panelBox.width) <= 1,
+        `选项面板 ${panelBox?.width}px，触发框 ${goalBox?.width}px`);
+      await panel.getByRole('option', { name: '高清', exact: true }).click();
+      await panel.waitFor({ state: 'detached' });
+      await page.keyboard.press('Escape');
+      await page.locator('[data-modal-surface]').waitFor({ state: 'detached' });
+      await withPageDiagnostics(page, 'Escape 只关掉里层弹层', async () => {
+        assert.equal(await page.locator('#stage[open]').count(), 1, 'Escape 只关掉里层弹层');
+      });
+      /* 下拉卸掉后焦点要等下一帧才回到触发框，这一帧里焦点在 body，Escape 不经过浮窗。弹层容器里
+         这时还留着焦点范围的哨兵，最后一个子元素不是弹层。 */
+      await page.locator('[data-jav-actions]').getByRole('button', { name: '查找资源', exact: true }).click();
+      await goal.click();
+      await panel.getByRole('option', { name: '高清', exact: true }).click();
+      await panel.waitFor({ state: 'detached' });
+      await page.evaluate(() => (document.activeElement as HTMLElement).blur());
+      const layers = await page.evaluate(() => [...document.querySelectorAll('#stage > [data-react-overlays] > *')]
+        .map(node => `${node.tagName}${Object.keys((node as HTMLElement).dataset).map(key => `[${key}]`).join('')}`).join(' '));
+      await page.keyboard.press('Escape');
+      await page.locator('[data-modal-surface]').waitFor({ state: 'detached' });
+      await withPageDiagnostics(page, `焦点在 body 时 Escape 关掉了整个详情；弹层容器：${layers}`, async () => {
+        assert.equal(await page.locator('#stage[open]').count(), 1, '焦点在 body 时 Escape 关掉了整个详情');
+      });
+      /* 固定从 body 发出键盘事件，焦点恢复不能把它变成弹层内的按键。 */
+      await page.locator('[data-jav-actions]').getByRole('button', { name: '查找资源', exact: true }).click();
+      await page.getByRole('heading', { name: '查找资源', exact: true }).waitFor();
+      await page.locator('body').evaluate(node => node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+      await page.locator('[data-modal-surface]').waitFor({ state: 'detached' });
+      await withPageDiagnostics(page, '全局 Escape 只关里层弹层', async () => {
+        assert.equal(await page.locator('#stage[open]').count(), 1, '全局键盘入口关掉了整个详情');
+      });
+      /* 直接触发原生关闭请求，使焦点恢复的快慢不能绕过 cancel 分支。 */
+      await page.locator('[data-jav-actions]').getByRole('button', { name: '查找资源', exact: true }).click();
+      await page.getByRole('heading', { name: '查找资源', exact: true }).waitFor();
+      await page.locator('#stage').evaluate(node => node.dispatchEvent(new Event('cancel', { cancelable: true })));
+      await page.locator('[data-modal-surface]').waitFor({ state: 'detached' });
+      await withPageDiagnostics(page, '原生 cancel 只关里层弹层', async () => {
+        assert.equal(await page.locator('#stage[open]').count(), 1, '原生 cancel 关掉了整个详情');
+      });
+      await page.locator('[data-jav-actions]').getByRole('button', { name: '想要', exact: true }).click();
+      await page.locator('#toasts [data-sonner-toast]').filter({ hasText: '已加入想要' }).waitFor();
+      assert.deepEqual(await hit('#toasts [data-sonner-toast]'), { onTop: true, inStage: true }, '操作回执被详情浮窗盖住');
+      await page.locator('#closeStage').click();
+      await page.locator('#stage').waitFor({ state: 'detached' });
+      assert.equal(await page.locator('#toasts').evaluate(node => node.parentElement?.tagName), 'BODY', '浮窗收起后 Toast 栈没回到 body');
     } finally { await context.close() }
   });
   for (const viewport of VIEWPORTS) {
@@ -153,12 +223,12 @@ describe('库外 JAV 作品详情', () => {
         const errors: string[] = [];
         page.on('pageerror', error => errors.push(error.message));
         await mockJavDetail(page);
-        await page.route(/\/api\/jav\/image\?/, async route => {
+        await page.route(/\/jav-image\?/, async route => {
           const portrait = new URL(route.request().url()).searchParams.get('image') === '1';
           if (portrait) await new Promise(resolve => setTimeout(resolve, 350));
           const [width, height] = portrait ? [600, 900] : [900, 600];
-          await route.fulfill({ json: { ok: true, image: 'data:image/svg+xml,' + encodeURIComponent(
-            `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="#777"/></svg>`) } });
+          await route.fulfill({ contentType: 'image/svg+xml',
+            body: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><rect width="100%" height="100%" fill="#777"/></svg>` });
         });
         await page.route(/\/api\/entity\/shapes/, route => route.fulfill({ json: { home: { feed: true }, entities: [] } }));
         await page.route(/\/api\/feeds\/discoveries\?/, route => route.fulfill({ json: { ok: true, items: [
@@ -179,14 +249,20 @@ describe('库外 JAV 作品详情', () => {
           });
           const stars = [...el.querySelectorAll('[data-jav-rating] [data-rate]')];
           const code = el.querySelector('[data-detail-title] b')!.getBoundingClientRect();
+          const tag = el.querySelector('[data-jav-tags] [data-detail-tag]')!;
+          const tagStyle = getComputedStyle(tag), detailStyle = getComputedStyle(el);
           const range = document.createRange();
-          const text = el.querySelector('[data-detail-title]')!.lastChild!;
-          range.setStart(text, 1); range.setEnd(text, 2);
+          // 标题文字在带语言标记的 span 里：量它的第一个字。
+          const text = el.querySelector('[data-detail-title] > span')!.firstChild!;
+          range.setStart(text, 0); range.setEnd(text, 1);
           return { faces, stars: stars.length, filled: stars.filter(star => star.getAttribute('data-on') === 'true').length,
             icons: el.querySelectorAll('[data-stage-meta] [data-spec-item] svg').length,
             codeY: code.y, titleY: range.getBoundingClientRect().y,
             tag: el.querySelector('[data-jav-tags] [data-tag]')?.textContent,
-            tagCat: el.querySelector('[data-jav-tags] [data-tag-cat]')?.getAttribute('data-tag-cat') };
+            tagCat: el.querySelector('[data-jav-tags] [data-tag-cat]')?.getAttribute('data-tag-cat'),
+            tagShape: { height: parseFloat(tagStyle.height), radius: parseFloat(tagStyle.borderRadius), border: parseFloat(tagStyle.borderTopWidth) },
+            tagTokens: { height: parseFloat(detailStyle.getPropertyValue('--control-h-inline')),
+              radius: parseFloat(detailStyle.getPropertyValue('--tag-radius')), border: 1 } };
         });
         assert.equal(shared.faces.length, 3, '女优、未知出演者与厂牌各有独立身份格');
         assert.equal(await page.locator('[data-id-gender="male"]').count(), 0);
@@ -212,6 +288,7 @@ describe('库外 JAV 作品详情', () => {
         assert.equal(shared.icons, 2);
         assert.ok(Math.abs(shared.codeY - shared.titleY) < 2, '番号与标题在同一行开始');
         assert.equal(shared.tag, '痴女'); assert.equal(shared.tagCat, 'role');
+        assert.deepEqual(shared.tagShape, shared.tagTokens, '新作标签沿用本地详情的高度、圆角与边框');
         await page.locator('[data-id-gender="female"] [data-id-face] img').waitFor({ state: 'visible' });
         assert.equal(await page.locator('[data-id-cell="studio"]').evaluate(node => node.tagName), 'SPAN', '未登记厂牌只显示名称');
         assert.equal(await page.locator('[data-follow-image-dots] button').count(), 13);
@@ -288,8 +365,8 @@ describe('库外 JAV 作品详情', () => {
           assert.equal(await toggle.getAttribute('aria-expanded'), 'false');
           assert.equal(await toggle.locator('svg').count(), 2, '对象图标和展开箭头齐备');
         }
-        const sourceButton = page.getByRole('button', { name: 'Work source', exact: true });
-        assert.deepEqual(await page.locator('[data-jav-actions] button').allTextContents(), ['Find resources', 'Want', 'Work source']);
+        const sourceButton = page.getByRole('link', { name: '作品来源', exact: true });
+        assert.deepEqual(await page.locator('[data-jav-actions] :is(button, a)').allTextContents(), ['作品来源', '想要', '查找资源']);
         assert.ok(await sourceButton.evaluate(el => parseFloat(getComputedStyle(el).borderWidth) > 0));
         const side = page.locator('[data-jav-info]');
         const before = await page.locator('#stage').boundingBox();
@@ -340,8 +417,10 @@ describe('库外 JAV 作品详情', () => {
           const values = commentFrames.map(frame => frame[field]);
           assert.ok(Math.max(...values) - Math.min(...values) < 1, `评论切换 ${field} 保持一致：${JSON.stringify(values)}`);
         }
-        await resourcesToggle.click();
-        await page.getByText('EXM-001 示例资源 1', { exact: false }).waitFor({ state: 'visible' });
+        await withPageDiagnostics(page, '展开作品资源列表', async () => {
+          await resourcesToggle.click();
+          await page.getByText('EXM-001 示例资源 1', { exact: false }).waitFor({ state: 'visible' });
+        });
         assert.equal(await page.locator('[data-jav-resources] [data-resource-protocol]:visible').count(), 3);
         await page.getByText('More resources (3)', { exact: true }).click();
         await page.getByText('EXM-001 示例资源 6', { exact: true }).waitFor({ state: 'visible' });
@@ -358,8 +437,8 @@ describe('库外 JAV 作品详情', () => {
             expected: getComputedStyle(row.closest('[data-want-magnets]')!).borderTopColor };
         }));
         assert.ok(lines.every(line => line.width === '1px' && line.color === line.expected), JSON.stringify(lines));
-        assert.ok(await page.locator('[data-jav-resources]').getByRole('button', { name: 'Add download', exact: true }).first().isDisabled());
-        assert.deepEqual(await page.locator('[data-resource-actions]').first().locator('button, a').allTextContents(), ['Add download', 'Copy link', 'Link source']);
+        assert.ok(await page.locator('[data-jav-resources]').getByRole('button', { name: '添加下载', exact: true }).first().isDisabled());
+        assert.deepEqual(await page.locator('[data-resource-actions]').first().locator('button, a').allTextContents(), ['链接来源', '复制链接', '添加下载']);
         assert.equal(await page.locator('[data-resource-facts]').first().getByText('高清', { exact: true }).count(), 0);
         const facts = await page.locator('[data-resource-facts]').first().evaluate(node => {
           const boxes = [...node.children].map(child => child.getBoundingClientRect());
@@ -468,7 +547,10 @@ describe('库外 JAV 作品详情', () => {
           assert.equal(submitted?.provider, '115');
           assert.equal(submitted?.code, 'EXM-001');
         }
-      } finally { await context.close() }
+      } finally {
+        await Promise.all(context.pages().map(page => page.unrouteAll({ behavior: 'wait' })));
+        await context.close();
+      }
     });
   }
 });

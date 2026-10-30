@@ -1,0 +1,11 @@
+/* 选中面复用 BoardUI PillTabList；导航保留 Peach 的灰色面、行高与文字样式。 */
+[data-pill-thumb]{transform:translate(var(--pill-left),var(--pill-top));width:var(--pill-width);height:var(--pill-height);transition:transform 300ms cubic-bezier(.34,1.2,.64,1),width 300ms cubic-bezier(.34,1.2,.64,1),height 300ms cubic-bezier(.34,1.2,.64,1)}
+[data-pill-nav]{position:relative;isolation:isolate}
+[data-pill-nav]>[data-pill-thumb]{position:absolute;left:0;top:0;pointer-events:none;z-index:0;background:var(--hover);border-radius:var(--control-radius);transition:transform 300ms cubic-bezier(.34,1.2,.64,1),width 300ms cubic-bezier(.34,1.2,.64,1),height 300ms cubic-bezier(.34,1.2,.64,1)}
+[data-pill-nav]>:is(button,[role="tab"]){position:relative;z-index:1}
+[data-pill-nav]:has(>[data-pill-thumb])>[data-pill-selected],
+body #stats [data-section-items][data-pill-nav]:has(>[data-pill-thumb])>[data-pill-selected],
+[data-manage-menu][data-pill-nav]:has(>[data-pill-thumb])>button[aria-pressed="true"]{background:transparent}
+.peach-react [data-search-tabs][data-pill-nav]>[data-pill-thumb]{background:var(--picked)}
+.peach-react [data-search-tabs][data-pill-nav]:has(>[data-pill-thumb])>button[data-pill-selected]{background:transparent}
+@media(prefers-reduced-motion:reduce){[data-pill-nav]>[data-pill-thumb]{transition:none}}

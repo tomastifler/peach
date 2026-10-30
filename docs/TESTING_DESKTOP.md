@@ -56,9 +56,11 @@ Data is stored in `%LOCALAPPDATA%\Peach\peach-data`, separate from the program f
 
 The full installer and the full portable ZIP both include FFmpeg and ffprobe, located in `tools\ffmpeg\bin` in the program directory; the lite installer gathers the tools during installation. Transcoding, media information probing and thumbnails need no extra configuration. `*-update.zip` is verified and installed by the Peach updater and has no manual import entry; for a first installation use either installer or the full portable package. `tools-*.zip` is handled on demand by the updater or the lite installer.
 
-Repair of MP4 files missing an index uses the bundled `tools\untrunc\untrunc.exe`, and requires an intact reference file with the same encoding parameters. This tool and its compatible FFmpeg libraries are built independently and distributed under GPL-2.0-or-later; the complete corresponding source artifact is `untrunc-corresponding-source.zip` in the same Release. An explicit `PEACH_UNTRUNC` takes priority over the bundled tool, followed by the data directory and PATH.
+完整安装包和完整免安装 ZIP 还包含头像取景与比对用的人脸模型，位于 `tools\face-models`，连同两个模型的许可证（YuNet 为 MIT，SFace 为 Apache-2.0）；没有网络也能用。这份模型被删除、被安全软件隔离或校验不符时，Peach 会改为联网下载到数据目录，失败时在活动中心「需要处理」里提示并可立即重试。
 
-The tools are invoked as separate processes and distributed under GPL-3.0-or-later; the tools directory contains the licenses, build configuration, source manifest and SHA-256. The complete corresponding source artifact `ffmpeg-corresponding-source.zip` sits in the same Release as the application and contains pinned sources and build scripts for FFmpeg, x264 and nv-codec-headers. The release build verifies the tools and the corresponding source, and stops packaging if any item is missing or its hash does not match.
+缺索引 MP4 修复使用随包的 `tools\untrunc\untrunc.exe`，需要同编码参数的完整片作为参照。该工具与其兼容的 FFmpeg 库独立构建，按 GPL-2.0-or-later 分发；完整对应源码制品为同一 Release 中的 `untrunc-corresponding-source.zip`。显式 `PEACH_UNTRUNC` 优先于随包工具，其后查数据目录与 PATH。
+
+工具以独立进程调用，按 GPL-3.0-or-later 分发；工具目录包含许可证、构建配置、来源清单和 SHA-256。完整对应源码制品 `ffmpeg-corresponding-source.zip` 与应用放在同一个 Release，包含 FFmpeg、x264、dav1d、nv-codec-headers、AMF 头文件与 libvpl 的固定源码和构建脚本。发行构建会校验工具及对应源码，任何一项缺失或哈希不符都停止打包。
 
 When running from source, put FFmpeg and ffprobe on PATH, or place them in `tools\ffmpeg\bin` in the data directory. An explicitly set `PEACH_FFMPEG` or `PEACH_FFPROBE` takes priority; a standalone package then uses the bundled tools, followed by the data directory and PATH.
 
@@ -81,11 +83,15 @@ Notes:
 
 ## Collection sources
 
-1. After scanning finishes, open the "Data management" page and click "Sources and credentials" on the "Scan and collection" card.
-2. Each source can use a connection mode: "Peach proxy" or "Direct connection". HD sources usually need the proxy; "Peach proxy" uses the settings under "Network and access → Peach proxy" on the configuration page (system proxy, direct connection or a custom address; the system proxy does not support PAC).
-3. Click "Check connection". DMM checks the page and the HD image server separately, and the image check shows the actual pixel size.
-4. Under "HD cover", enter a code already in the library and click "Fetch cover". The existing cover is replaced only when the new image decodes fully and has more pixels than the current cover; on failure the existing image is kept. If the same code was fetched successfully within 24 hours, the file already on this machine is used directly.
-5. For sources that need a cookie (such as FC2), choose either "Paste cookie" or "Import file"; the file supports Netscape-format `.txt`. Cookies are stored only on this computer and are not shared between computers.
+Windows 完整安装包、免安装包、轻量安装包与应用更新包均随附锁文件固定版本的 amane 独立 console 桥，使用者无需安装 Python、uv 或 Git。运行目录位于程序资源中的 `_internal\tools\amane-runtime`；桥属于应用必需资源，不随可选媒体工具拆分。macOS 独立应用在 `Contents/Frameworks/tools/amane-runtime` 携带对应架构的桥，数据资源通过应用内链接映射到 `Contents/Resources`。
+
+桌面构建调用 `scripts/build_amane_runtime.py`，按桥的 `uv.lock` 安装独立构建环境，再复用主锁固定的 PyInstaller 生成运行目录。构建会执行 `--self-check`，离线载入运行时与全部 Peach 开放站点类；站点连接检查仍需实际网络。目录中的 `manifest.json` 记录版本、完整 revision 和可执行文件相对路径。GPL-3.0 许可证、来源说明、amane 完整对应源码，以及 zhconv 和 certifi 的固定源码随运行目录一起分发。
+
+1. 扫描完成后，打开「数据管理」页，在「扫描与采集」卡片上点「来源和凭证」。
+2. 每个来源可以选连接方式：「Peach 代理」或「直接连接」。高清来源通常需要代理；「Peach 代理」用的是配置页「网络与访问 → Peach 代理」里的设置（系统代理、直连或自定义地址，系统代理不支持 PAC）。
+3. 点「检查连接」。DMM 会分别检查页面和高清图片服务器，图片检查会显示实际像素尺寸。
+4. 在「高清封面」里填一个馆藏里已有的番号，点「抓取封面」。只有新图能完整解码、而且像素比现有封面大时才替换；失败时保留已有的图。同一个番号 24 小时内抓成功过，会直接用本机已有的文件。
+5. 需要 Cookie 的来源（例如 FC2）选「粘贴 Cookie」或「导入文件」其中一种，文件支持 Netscape 格式的 `.txt`。Cookie 只保存在这台电脑上，不同电脑之间不共享。
 
 "Saved" only means the cookie was stored, not that the login is still valid. After revoking, collection from that source that needs a login requires the cookie to be provided again. Cookies in the browser cannot be imported directly; they can only be pasted or imported from a file. For more on sources see [Source collection](https://github.com/peach-mitao/peach/blob/master/docs/SOURCING.md).
 

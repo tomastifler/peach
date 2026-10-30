@@ -1,7 +1,7 @@
 /* 媒体目录的行：配置页「这台电脑」与首启页共用。
  *
- * 一行是一块描边卡：路径框、「选择文件夹」、多行时的移除键，下面一排放这一行的其余字段
- * （媒体来源与读取策略，配置页另有媒体库名称与图标），宽度够时并成一行。行的增删、
+ * 一行是一块描边卡：路径框、「选择文件夹」、多行时的移除键，下面按含义分两排、每格上方一行标签：
+ * 先是这个目录怎么读（来源、读取策略），再是它显示成哪个媒体库（所属、名称，配置页另有图标）。行的增删、
  * 按行错误、新行接焦点与选择文件夹的忙态归 `useFolderRows`；弹系统对话框那一请求由调用方注入，这里不认识任何端点，首启页的独立
  * 页面包因此不必带上主界面的请求封装。 */
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -11,7 +11,9 @@ import { MEDIA_SOURCE_ICONS } from '@peach/legacy/ui';
 import { IconButton } from '@/components/base/buttons/icon-button';
 import { Button } from '@/components/base/buttons/button';
 import { Input } from '@/components/base/input/input';
+import { Label } from '@/components/base/input/label';
 import { Select, SelectItem } from '@/components/base/select/select';
+import { cx } from '@/utils/cx';
 
 import { ErrorText, Help, SourceMark } from './section';
 import { busyProps } from './busy-props';
@@ -35,22 +37,39 @@ export const MEDIA_SOURCES: readonly SourceOption[] = MEDIA_SOURCE_OPTIONS;
 export const sourceMark = (location: string) => MEDIA_SOURCE_ICONS[location] || 'database';
 export const isCloudSource = (location: string) => CLOUD_LOCATIONS.includes(location);
 
+/** 行内一格：上方块级标签，下面是控件。标签只写给看的人；控件的无障碍名由各自带序号的
+ *  `aria-label` 给，标签文字是它的一段，读屏与语音输入按看到的字也找得到。 */
+export function FolderField({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
+  return (
+    <div className={cx('flex min-w-0 flex-col gap-1', className)}>
+      <Label elementType="span" aria-hidden>{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+/** 一排字段。宽度够时并排，窄了逐格换行；按顶端对齐，标签同高所以控件也齐，某格下面多一句报错只往下长。 */
+export function FolderFieldLine({ children }: { children: ReactNode }) {
+  return <div className="flex w-full flex-wrap items-start gap-2">{children}</div>;
+}
+
 export function MediaReadPolicy({ index, cost, error, onChange }: {
   index: number; cost: SourceCost | ''; error?: string; onChange(cost: SourceCost): void;
 }) {
-  return <div data-media-read-policy={index} className="flex w-full flex-col gap-1.5 @lg:w-48">
-    <Select aria-label={`Media read policy ${index + 1}`} placeholder="Choose a read policy" isRequired
+  return <div data-media-read-policy={index} className="flex w-full flex-col gap-1 @lg:w-32">
+    <Label elementType="span" aria-hidden>读取策略</Label>
+    <Select aria-label={`媒体读取策略 ${index + 1}`} placeholder="选择读取策略" isRequired
       validationBehavior="aria" isInvalid={Boolean(error)} selectedKey={cost || null}
       onSelectionChange={(key) => { if (key === 'free' || key === 'metered') onChange(key); }}>
-      <SelectItem id="free">Normal reads</SelectItem>
-      <SelectItem id="metered">Proxy traffic protection</SelectItem>
+      <SelectItem id="free">正常读取</SelectItem>
+      <SelectItem id="metered">代理保护</SelectItem>
     </Select>
     {error ? <ErrorText>{error}</ErrorText> : null}
   </div>;
 }
 
 export function MediaReadPolicyHelp() {
-  return <Help>Choose to match your mount tool's actual setup; proxy traffic protection limits automatic media reads.</Help>;
+  return <Help>读取策略选「代理保护」时，会限制自动读取视频。</Help>;
 }
 
 export interface FolderRowValue { path: string; location: string }
@@ -168,8 +187,8 @@ export function FolderRow({ label, path, onPath, error, inputRef, picking, onPic
   );
 }
 
-/** 媒体来源下拉，每项带站标；本地磁盘是雪碧图的 `hard-drive`。选中项的站标就是它的标签，
- * 框上不再挂文字名，无障碍名称由 `aria-label` 给。 */
+/** 媒体来源下拉，每项带站标；本地磁盘是雪碧图的 `hard-drive`。上方标「来源」，
+ * 无障碍名称由带序号的 `aria-label` 给。 */
 export function SourceSelect({ index, value, onChange, options = MEDIA_SOURCES }: {
   index: number;
   value: string;
@@ -177,11 +196,13 @@ export function SourceSelect({ index, value, onChange, options = MEDIA_SOURCES }
   options?: readonly SourceOption[];
 }) {
   return (
-    <Select className="w-full @lg:w-60" aria-label={`Media source ${index + 1}`} selectedKey={value}
-      onSelectionChange={(key) => { if (key !== null) onChange(String(key)); }}>
-      {options.map(([kind, name]) => (
-        <SelectItem key={kind} id={kind} textValue={name}><SourceMark mark={sourceMark(kind)} />{name}</SelectItem>
-      ))}
-    </Select>
+    <FolderField label="来源" className="w-full @lg:w-60">
+      <Select className="w-full" aria-label={`媒体来源 ${index + 1}`} selectedKey={value}
+        onSelectionChange={(key) => { if (key !== null) onChange(String(key)); }}>
+        {options.map(([kind, name]) => (
+          <SelectItem key={kind} id={kind} textValue={name}><SourceMark mark={sourceMark(kind)} />{name}</SelectItem>
+        ))}
+      </Select>
+    </FolderField>
   );
 }

@@ -16,6 +16,7 @@ import { pageSkeletonHtml } from '../../management-placeholder';
 import { Button } from '@/components/base/buttons/button';
 
 import { ApiError, apiSend } from '../../api';
+import { textLang } from '../../core/text-lang';
 import { RetryNote } from '../components/grid-reveal';
 import { MixGroupLabel, MixQueue, MixQueueRow } from '../components/mix-queue';
 import { RelatedSection } from '../components/related-section';
@@ -35,11 +36,12 @@ import { queryClient } from '../query';
 import { addWant, fetchFollowWant, invalidateWants, removeWants, wantFollowKey, type Want } from '../wants/wants';
 import {
   FOLLOW_MEDIA_HIDE_URL, FOLLOW_SAVE_URL, FollowItemGone, authorSources, collectionCopy, detailContext, detailMedia, detailSlides,
-  detailTags, fetchFollowItem, followItemKey, groupedMediaOwner, mediaName, resourceLabel, statusReceipt, tagCategory,
+  fetchFollowItem, followItemKey, groupedMediaOwner, mediaName, resourceLabel, statusReceipt,
   type DetailMedia, type FollowDetailActions, type FollowDetailData, type FollowDetailItem, type FollowDetailMedia,
   type FollowDetailProps,
 } from './follow-detail';
 import { fetchFollowRelated, followRelatedGroups, followRelatedKey } from './follow-related';
+import { FollowTags } from './follow-tags';
 
 const realDuration = (value: unknown) => Number(value) > 0;
 
@@ -153,7 +155,7 @@ function Related({ data, media, limit, context, helpers, actions }: {
   const groups = followRelatedGroups(result.data?.pages || [], data, media, limit);
   const sources = result.data?.pages.at(-1)?.sources || data.sources;
   const relatedContext = { ...context, sources, aliases: result.data?.pages.at(-1)?.author_aliases || context.aliases };
-  return <RelatedSection data-follow-related="" wireDrag={helpers.wireDrag} busy={result.isPending}
+  return <RelatedSection online data-follow-related="" wireDrag={helpers.wireDrag} busy={result.isPending}
     empty={!!result.data && !groups.length}
     error={result.isError ? `Could not load up next: ${requestErrorMessage(result.error)}` : undefined}
     onRetry={() => { void result.refetch() }}>
@@ -321,7 +323,6 @@ function Side({ item, data, context, media, write, issue, helpers, actions }: {
   const postedBy = identity.credited ? ''
     : item.author && foldName(item.author) !== foldName(identity.author) ? item.author : '';
   const mediaIssue = followMediaIssue(item, context);
-  const tags = detailTags(item, helpers.tagLabel);
   const saved = item.status === 'saved';
   const { busy } = write;
   const busyAttrs = (key: string) => (busy.has(key) ? { 'aria-busy': true, 'aria-disabled': true } as const : {});
@@ -427,14 +428,7 @@ function Side({ item, data, context, media, write, issue, helpers, actions }: {
           </div>
         ) : null}
         <span data-follow-state="" aria-live="polite">{write.failure}</span>
-        {tags.length ? (
-          <div data-stage-tags="" data-follow-detail-tags="">
-            {tags.map((tag) => (
-              <button type="button" key={tag} data-tag-cat={tagCategory(item, tag)} data-follow-tag={tag}
-                onClick={() => actions.openTag(tag)}>{helpers.tagLabel(tag)}</button>
-            ))}
-          </div>
-        ) : null}
+        <FollowTags key={item.id} item={item} label={helpers.tagLabel} actions={actions} />
       </div>
     </div>
   );
@@ -456,7 +450,7 @@ function Summary({ text }: { text: string }) {
   }, [text, open]);
   return (
     <>
-      <p ref={node} data-follow-detail-summary="" data-clamped={open ? undefined : ''}>{text}</p>
+      <p ref={node} data-follow-detail-summary="" data-long-text="" lang={textLang(text)} data-clamped={open ? undefined : ''}>{text}</p>
       {overflows || open ? (
         <Button variant="ghost" size="small" data-follow-summary-toggle="" aria-expanded={open} onClick={() => setOpen(!open)}>
           {open ? 'Collapse' : 'Expand'}

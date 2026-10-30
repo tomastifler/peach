@@ -1,5 +1,10 @@
+import os
+import shutil
+import socket
+import ssl
 import subprocess
 import tempfile
+import threading
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -8,6 +13,7 @@ from unittest import mock
 from peach.certs import (
     CERT_DAYS,
     CertificateFiles,
+    create_local_ca,
     ensure_certificate,
     not_after,
     reissue,
@@ -42,7 +48,7 @@ class CertificateTests(unittest.TestCase):
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
-        self.tls = Path(self._tmp.name) / "tls"
+        self.tls = (Path(self._tmp.name) / "tls").resolve()
         self.files = make_ca(self.tls)
         self.addCleanup(self._tmp.cleanup)
 
@@ -81,6 +87,112 @@ class CertificateTests(unittest.TestCase):
             reissue_reason(self.files, {"peach.local"}, {"127.0.0.1", "192.0.2.10"}))
         reason = reissue_reason(self.files, {"peach.local"}, {"127.0.0.1", "198.51.100.7"})
         self.assertIn("198.51.100.7", reason or "")
+
+    def test_reissue_writes_key_identifiers_for_strict_verification(self):
+        """叶子证书携带密钥标识，满足严格链验证。"""
+        files = CertificateFiles.under((Path(self._tmp.name) / "strict").resolve())
+        create_local_ca(files)
+        reissue(files, "peach.local", {"peach.local", "localhost"}, {"127.0.0.1"})
+        text = subprocess.run(["openssl", "x509", "-in", str(files.cert), "-noout", "-text"],
+                              check=True, capture_output=True, text=True, encoding="utf-8").stdout
+        self.assertIn("Authority Key Identifier", text)
+        self.assertIn("Subject Key Identifier", text)
+        self.assert_strict_tls(files)
+
+    def test_a_certificate_without_key_identifier_triggers_reissue(self):
+        """缺少颁发者密钥标识的存量叶子按现有 CA 自动补签。"""
+        work = Path(self._tmp.name).resolve()
+        files = CertificateFiles.under(work / "legacy")
+        create_local_ca(files)
+        version = subprocess.run(["openssl", "version"], check=True, capture_output=True,
+                                 text=True, encoding="utf-8").stdout
+        identifiers = "" if "LibreSSL" in version else (
+            "subjectKeyIdentifier = none\nauthorityKeyIdentifier = none\n")
+        (work / "leaf.cnf").write_text(
+            "[req]\ndistinguished_name = dn\nprompt = no\n[dn]\nCN = peach.local\n"
+            "[ext]\nsubjectAltName = DNS:peach.local,DNS:localhost,IP:127.0.0.1\n"
+            "basicConstraints = critical, CA:FALSE\nkeyUsage = critical,digitalSignature,keyEncipherment\n"
+            "extendedKeyUsage = serverAuth\n" + identifiers, encoding="utf-8")
+        subprocess.run(["openssl", "req", "-new", "-newkey", "rsa:2048", "-nodes",
+                        "-keyout", str(files.key), "-out", str(work / "leaf.csr"),
+                        "-config", str(work / "leaf.cnf")], check=True, capture_output=True)
+        subprocess.run(["openssl", "x509", "-req", "-in", str(work / "leaf.csr"),
+                        "-CA", str(files.ca_cert), "-CAkey", str(files.ca_key), "-CAcreateserial",
+                        "-out", str(files.cert), "-days", "397", "-extfile", str(work / "leaf.cnf"),
+                        "-extensions", "ext"], check=True, capture_output=True)
+        text = subprocess.run(["openssl", "x509", "-in", str(files.cert), "-noout", "-text"],
+                              check=True, capture_output=True, text=True, encoding="utf-8").stdout
+        self.assertNotIn("Authority Key Identifier", text)
+        original_ca = (files.ca_cert.read_bytes(), files.ca_key.read_bytes())
+        original_leaf = files.cert.read_bytes()
+        self.assertEqual(reissue_reason(files, {"peach.local", "localhost"}, {"127.0.0.1"}),
+                         "证书缺少颁发者密钥标识")
+        self.assertEqual(ensure_certificate(files.cert.parent, "peach.local", set()),
+                         "证书缺少颁发者密钥标识")
+        self.assertEqual((files.ca_cert.read_bytes(), files.ca_key.read_bytes()), original_ca)
+        self.assertNotEqual(files.cert.read_bytes(), original_leaf)
+        self.assertEqual(next(files.cert.parent.glob("peach.crt.bak.*")).read_bytes(), original_leaf)
+        self.assert_strict_tls(files)
+        refreshed = (files.cert.read_bytes(), files.key.read_bytes())
+        self.assertIsNone(ensure_certificate(files.cert.parent, "peach.local", set()))
+        self.assertEqual((files.cert.read_bytes(), files.key.read_bytes()), refreshed)
+
+    def assert_strict_tls(self, files):
+        """通过回环握手验证项目 CA、主机名与严格 X.509 校验。"""
+        server = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        server.load_cert_chain(files.cert, files.key)
+        client = ssl.create_default_context(cafile=str(files.ca_cert))
+        client.verify_flags |= ssl.VERIFY_X509_STRICT
+        failures = []
+        with socket.socket() as listener:
+            listener.bind(("127.0.0.1", 0))
+            listener.listen(1)
+            listener.settimeout(5)
+
+            def accept():
+                try:
+                    connection, _ = listener.accept()
+                    with connection, server.wrap_socket(connection, server_side=True) as secured:
+                        secured.sendall(b"verified")
+                except Exception as exc:
+                    failures.append(exc)
+
+            worker = threading.Thread(target=accept)
+            worker.start()
+            try:
+                with socket.create_connection(listener.getsockname(), timeout=5) as connection:
+                    with client.wrap_socket(connection, server_hostname="peach.local") as secured:
+                        self.assertEqual(secured.recv(8), b"verified")
+            finally:
+                worker.join(6)
+            self.assertFalse(worker.is_alive())
+            self.assertEqual(failures, [])
+
+    @unittest.skipUnless(os.name == "nt", "需要 Windows PowerShell 签发入口")
+    def test_powershell_setup_issues_a_strict_leaf(self):
+        tls = (Path(self._tmp.name) / "powershell").resolve()
+        script = Path(__file__).resolve().parents[1] / "scripts" / "setup_local_tls.ps1"
+        result = subprocess.run(
+            [shutil.which("pwsh"), "-NoProfile", "-File", str(script), "-Address", "127.0.0.1",
+             "-DnsName", "peach.local", "-OutDir", str(tls)],
+            capture_output=True, text=True, encoding="utf-8", timeout=30)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assert_strict_tls(CertificateFiles.under(tls))
+
+    @unittest.skipIf(os.name == "nt", "需要 POSIX 签发入口")
+    def test_shell_setup_preserves_ca_and_issues_a_strict_leaf(self):
+        tls = (Path(self._tmp.name) / "shell").resolve()
+        files = CertificateFiles.under(tls)
+        create_local_ca(files)
+        ca = (files.ca_cert.read_bytes(), files.ca_key.read_bytes())
+        script = Path(__file__).resolve().parents[1] / "scripts" / "setup_local_tls.sh"
+        result = subprocess.run(
+            ["/bin/sh", str(script)], env={**os.environ, "PEACH_TLS_DIR": str(tls),
+                "PEACH_LAN_IP": "none", "PEACH_MDNS_NAME": "peach"},
+            capture_output=True, text=True, encoding="utf-8", timeout=30)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual((files.ca_cert.read_bytes(), files.ca_key.read_bytes()), ca)
+        self.assert_strict_tls(files)
 
     def test_near_expiry_triggers_reissue(self):
         reissue(self.files, "peach.local", {"peach.local"}, {"127.0.0.1"})

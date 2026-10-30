@@ -28,7 +28,11 @@
 .peach-react [data-item-gallery] { display: flex; flex-direction: column; justify-content: center; align-items: center; }
 .peach-react [data-item-gallery] > [class~="video-js"] { order: 0; flex: none; }
 .peach-react [data-item-gallery] > [data-carousel-below] { order: 1; flex: none; }
-.peach-react [data-item-gallery]:not([data-item-picture]) > [data-jav-preview-toggle] { left: 64px; }
+.peach-react [data-item-media] > [data-player-toolbar] { position: absolute; z-index: 8; top: 11px; left: 11px; right: 59px; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; pointer-events: none; }
+.peach-react [data-player-toolbar] > :is([data-player-stats-slot], [data-player-net-slot]) { display: contents; }
+.peach-react [data-player-toolbar] :is([data-player-stats-button], [data-player-net], [data-jav-preview-toggle]) { position: relative; top: auto; left: auto; flex: none; }
+.peach-react [data-player-toolbar] button { pointer-events: auto; }
+.peach-react [data-item-gallery][data-item-picture] [data-player-toolbar] > :is([data-player-stats-slot], [data-player-net-slot]) { display: none; }
 .peach-react [data-item-gallery][data-item-picture] > :is([class~="video-js"], video, [data-item-gate], #playerStatsBtn, #playerStats, #playerNet, [data-ambient-canvas]) { display: none; }
 .peach-react [data-catalog-picture] { display: block; width: 100%; height: auto; max-height: calc(76vh - 112px); object-fit: contain; min-height: 0; }
 .peach-react [data-item-gallery][data-item-picture] > [role="note"] { margin: 24px; }
@@ -133,14 +137,14 @@
 }
 .peach-react [data-item-detail] [data-detail-title][data-expanded] { display: block; -webkit-line-clamp: unset; line-clamp: unset; }
 .peach-react [data-item-detail] [data-detail-title][data-foldable] { cursor: pointer; }
-/* 展开、取景与两枚文件键：26px 的纯图标方键。图标必须显式写 stroke/fill，Lucide 是描边路径，
+/* 展开、取景与两枚文件键：行内档的纯图标方键。图标必须显式写 stroke/fill，Lucide 是描边路径，
    缺了就被按默认 fill:black 画成黑块。在线条目没有那两枚文件键，标题又没溢出时这一排里一枚
    可见的键都没有，整行连边距一起收掉。 */
 .peach-react [data-item-detail] [data-title-tools] { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; flex-wrap: nowrap; }
 .peach-react [data-item-detail] [data-title-tools]:not(:has(button:not([hidden]))) { display: none; }
 .peach-react [data-item-detail] [data-title-tools] button {
-  width: 26px;
-  height: 26px;
+  width: var(--control-h-inline);
+  height: var(--control-h-inline);
   display: inline-grid;
   place-items: center;
   flex: none;
@@ -191,33 +195,7 @@
    空心，再把指针那一颗和它左边的填上。`:has(~ …:hover)` 是这里唯一需要的「前一个兄弟」——把 DOM
    倒过来写也能做到，代价是读屏和 Tab 顺序跟着倒过来。 */
 .peach-react [data-item-detail] [data-item-rating] { display: flex; align-items: center; gap: 8px; margin: -6px 0 10px; }
-.peach-react [data-item-detail] [data-rating-stars] { display: inline-flex; align-items: center; gap: 2px; margin-left: -4px; }
-.peach-react [data-item-detail] [data-rate] {
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: 0;
-  border-radius: var(--control-radius);
-  background: transparent;
-  color: var(--rating);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-.peach-react [data-item-detail] [data-rate] svg {
-  width: 19px;
-  height: 19px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-.peach-react [data-item-detail] [data-rate][data-on="true"] svg { fill: currentColor; }
-.peach-react [data-item-detail] [data-rating-stars]:hover button[data-rate] svg { fill: none; }
-.peach-react [data-item-detail] [data-rating-stars]:hover button[data-rate]:hover svg,
-.peach-react [data-item-detail] [data-rating-stars]:hover button[data-rate]:has(~ [data-rate]:hover) svg { fill: currentColor; }
-.peach-react [data-item-detail] [data-rate]:focus-visible { outline: 2px solid var(--tungsten); outline-offset: 2px; }
+.peach-react [data-item-detail] [data-rating-stars] { margin-left: -4px; }
 .peach-react [data-item-detail] [data-rating-value] { color: var(--muted); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
 
 /* ── 规格行 ──
@@ -225,8 +203,8 @@
    同一套，两者在同一行上不能高低不齐。 */
 .peach-react [data-item-detail] [data-spec-item] { display: inline-flex; align-items: center; gap: 5px; }
 .peach-react [data-item-detail] [data-spec-item] svg {
-  width: 15px;
-  height: 15px;
+  width: var(--icon-inline);
+  height: var(--icon-inline);
   flex: none;
   stroke: currentColor;
   fill: none;
@@ -342,8 +320,8 @@
   cursor: default;
 }
 .peach-react [data-item-detail] [data-series-link] svg {
-  width: 16px;
-  height: 16px;
+  width: var(--icon-inline);
+  height: var(--icon-inline);
   margin-top: 1px;
   flex: none;
   stroke: currentColor;
@@ -353,126 +331,6 @@
 .peach-react [data-item-detail] button[data-series-link] { cursor: pointer; }
 .peach-react [data-item-detail] button[data-series-link]:hover { color: var(--tungsten); }
 
-/* ── 标签 ──
-   左半边点下去是按这个标签筛选，右半边是删除；两边都有悬停反馈，筛选那边没有选中态，照孤立按钮
-   的写法抬填充。 */
-.peach-react [data-item-detail] [data-detail-tag] {
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--line);
-  border-radius: var(--tag-radius);
-  background: var(--tag-fill);
-  overflow: hidden;
-  min-height: 30px;
-  max-width: 100%;
-}
-.peach-react [data-item-detail] [data-detail-tag] button { border: 0; background: transparent; color: var(--ink-2); cursor: pointer; height: 28px; }
-/* 长标签单行省略：按钮高度定死 28px，折成两行时第二行会被切掉一半。全名在 title 上。 */
-.peach-react [data-item-detail] [data-detail-tag] [data-tag] { min-width: 0; padding: 3px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.peach-react [data-item-detail] [data-detail-tag] [data-remove-tag] { width: 28px; padding: 0; display: grid; place-items: center; color: var(--muted); }
-.peach-react [data-item-detail] [data-detail-tag] [data-tag]:hover { background: var(--hover); color: var(--ink); }
-.peach-react [data-item-detail] [data-detail-tag] [data-remove-tag]:hover {
-  color: var(--drop);
-  background: color-mix(in srgb, var(--drop) 12%, transparent);
-}
-.peach-react [data-item-detail] [data-detail-tag] svg,
-.peach-react [data-item-detail] [data-tag-plus] svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; }
-.peach-react [data-item-detail] [data-tag-plus] {
-  width: 30px;
-  height: 30px;
-  border: 1px dashed var(--line);
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-}
-.peach-react [data-item-detail] [data-tag-plus]:hover { background: var(--hover); color: var(--ink); }
-
-/* 标签选择器：挂在标签行下面的磨砂浮层；进出场与全站菜单同一对关键帧（`board.css` 的
-   `board-menu-in` / `board-menu-out`），`leaving` 由 `dismissMenu` 挂上。手机上贴底、单列。 */
-.peach-react [data-item-detail] [data-tag-picker] {
-  position: absolute;
-  z-index: 120;
-  left: 12px;
-  right: 12px;
-  top: calc(100% + 8px);
-  max-height: min(480px, 70vh);
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--ink) 15%, transparent);
-  border-radius: var(--floating-radius);
-  background: var(--frost-panel);
-  box-shadow: 0 24px 70px -24px #000;
-  backdrop-filter: saturate(1.8) blur(20px);
-  -webkit-backdrop-filter: saturate(1.8) blur(20px);
-}
-.peach-react [data-item-detail] [data-tag-picker][hidden] { display: none; }
-.peach-react [data-item-detail] [data-tag-picker]:not([hidden]) { animation: board-menu-in .15s ease-out backwards; transform-origin: top left; }
-.peach-react [data-item-detail] [data-tag-picker][class~="leaving"] { animation: board-menu-out .15s ease-out forwards; }
-.peach-react [data-item-detail] [data-tag-search] {
-  height: 54px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
-}
-.peach-react [data-item-detail] [data-tag-search] svg {
-  width: 20px;
-  height: 20px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-  color: var(--muted);
-}
-/* 内边距与占位字色用浏览器默认值：岛的 Preflight 把它们清成 0 与半透明 currentColor，`revert` 退回 UA 值。 */
-.peach-react [data-item-detail] [data-tag-search] input {
-  min-width: 0;
-  flex: 1;
-  padding: revert;
-  border: 0;
-  background: transparent;
-  outline: 0;
-  font-size: var(--fs-lg);
-}
-.peach-react [data-item-detail] [data-tag-search] input::placeholder { color: revert; }
-.peach-react [data-item-detail] [data-tag-body] { max-height: calc(min(480px, 70vh) - 54px); overflow: auto; padding: 12px; }
-.peach-react [data-item-detail] [data-tag-section] + [data-tag-section] {
-  border-top: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
-  margin-top: 12px;
-  padding-top: 12px;
-}
-.peach-react [data-item-detail] [data-tag-section] h4 {
-  margin: 0 0 8px;
-  color: var(--muted);
-  font-size: var(--fs-xs);
-  letter-spacing: .12em;
-  font-weight: 600;
-}
-.peach-react [data-item-detail] [data-tag-grid] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 12px; }
-.peach-react [data-item-detail] [data-pick] {
-  min-width: 0;
-  height: 34px;
-  border: 0;
-  border-radius: var(--control-radius);
-  background: transparent;
-  color: var(--ink-2);
-  padding: 0 9px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  text-align: left;
-  cursor: pointer;
-}
-.peach-react [data-item-detail] [data-pick]:is(:hover, [data-active], [aria-pressed="true"]) { background: var(--hover); color: var(--ink); }
-.peach-react [data-item-detail] [data-pick-name] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.peach-react [data-item-detail] [data-pick-count] { margin-left: auto; color: var(--muted); font-size: var(--fs-xs); }
-.peach-react [data-item-detail] [data-pick] svg { width: 14px; height: 14px; flex: none; }
-@media (max-width: 760px) {
-  .peach-react [data-item-detail] [data-tag-picker] { position: fixed; left: 12px; right: 12px; top: auto; bottom: 12px; }
-  .peach-react [data-item-detail] [data-tag-grid] { grid-template-columns: 1fr; }
-}
 
 /* ── 观看轨迹 ──
    两格读数并排，各自一张浅底卡：上面一行名称与百分比，下面一条 4px 的轨。离开位置那条画看过的
@@ -586,7 +444,7 @@
   cursor: pointer;
   transition: background-color .14s ease;
 }
-.peach-react [data-item-detail] [data-kind="o"] svg { width: 20px; height: 20px; fill: currentColor; color: #ff669d; }
+.peach-react [data-item-detail] [data-kind="o"] svg { width: var(--icon-inline); height: var(--icon-inline); fill: currentColor; color: #ff669d; }
 .peach-react [data-item-detail] [data-kind="o"] b {
   font-size: 12px;
   line-height: 18px;
@@ -602,9 +460,13 @@
    一档，整幅宽度上于是有一道深浅不匀的色差。分界靠 `--line-soft` 那条明确的线画出来——「接着看」
    是另一件事，同色的两块之间只留白读不出边界。横排竖向不滚，滑到头也不把手势交给外面那层浮窗，
    不画滚动条：拖动与滚轮靠壳的 `wireDrag`。 */
-.peach-react [data-item-related] { border-top: 1px solid var(--line-soft); padding: 11px 15px 12px; background: var(--detail-surface); }
+.peach-react [data-item-related] { border-top: 1px solid var(--line-soft); padding: 10px 15px 8px; background: var(--detail-surface); }
 .peach-react [data-item-related] > h3 {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
+  line-height: 20px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: var(--fs-xs);
   letter-spacing: .1em;
   color: var(--muted);
@@ -616,9 +478,11 @@
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-inline: contain;
-  padding: 32px 16px 16px;
-  margin: -24px -16px -4px;
+  padding: 12px 16px;
+  margin: -4px -16px 0;
+  min-height: calc(var(--detail-card-height) + 24px);
+  height: calc(var(--detail-card-height) + 24px);
   scrollbar-width: none;
 }
 .peach-react [data-item-related] [data-related-row]::-webkit-scrollbar { display: none; }
-.peach-react [data-item-related] [data-related-state] { min-width: 0; }
+.peach-react [data-item-related] [data-related-state] { min-width: 0; height: calc(var(--detail-card-height) + 20px); }

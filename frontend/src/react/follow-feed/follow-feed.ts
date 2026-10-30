@@ -135,6 +135,8 @@ export interface FollowSource {
   provider: string;
   provider_label?: string;
   author_key?: string;
+  entity_id?: number | null;
+  entity_name?: string;
   last_status?: string;
   can_backfill?: boolean;
   backfill_page?: number;
@@ -470,7 +472,6 @@ export interface FollowFeedActions {
   loaded(drawer: FollowDrawer): void;
   openDetail(id: number): void;
   openAuthor(name: string): void;
-  openManage(): void;
   /** 多选里的一张：`range` 是 Shift 连选。 */
   toggleSelection(id: number, range: boolean): void;
   /** 照片墙「仅显示图片」与图片布局两样偏好，壳存起来再推回。 */

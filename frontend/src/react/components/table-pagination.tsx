@@ -6,9 +6,9 @@ export function Pagination({ page, pages, onPage, label = 'Follow list paginatio
 }) {
   if (pages <= 1) return null;
   return (
-    <nav aria-label={label} className="flex flex-wrap items-center justify-center gap-2">
-      <Button variant="secondary" size="small" disabled={page <= 1} onClick={() => onPage(page - 1)}>Previous</Button>
-      <ul className="flex flex-wrap items-center gap-1">
+    <nav aria-label={label} data-pagination-layout="" className="inline-grid min-w-0 max-w-full items-center gap-2">
+      <Button variant="secondary" size="small" disabled={page <= 1} onClick={() => onPage(page - 1)}>上一页</Button>
+      <ul className="flex min-w-0 flex-wrap items-center justify-center gap-1">
         {paginationRange(page, pages).map((item, at) => (
           <li key={item === DOTS ? `dots-${at}` : item}>
             {item === DOTS ? <span aria-hidden className="px-1 text-body-2-regular text-text-tertiary">{DOTS}</span>

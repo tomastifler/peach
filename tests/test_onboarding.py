@@ -1,8 +1,9 @@
 """`peach.onboarding`：首次运行问答的题目、校验与落盘，纯逻辑、可注入。
 
 CLI 与将来的托盘设置页共用这一层，所以这里只用脚本化答案驱动，不碰 stdin；平台由
-`windows=` 注入。只有一处例外：媒体目录题要收一个真实存在的目录，而那个目录是不是盘符
-路径由测试机决定，所以走到这道题的用例按 `NATIVE_WINDOWS` 用本机形态。
+`windows=` 注入。例外是真实目录：媒体目录题要收一个真实存在的目录，写回设置文件的
+真实目录要配上账本口径的声明根，而那个目录是不是盘符路径由测试机决定，所以这些用例
+按 `NATIVE_WINDOWS` 用本机形态。
 """
 from __future__ import annotations
 
@@ -21,6 +22,18 @@ from peach import distribution, onboarding, settings_file
 
 NATIVE_WINDOWS = os.name == "nt"
 HAS_HTTP_DEPS = all(importlib.util.find_spec(name) for name in ("fastapi", "httpx"))
+
+
+def local_media(*directories: Path) -> tuple[dict, dict]:
+    """本机真实目录对应的 `[media.locations]` 与 `[media.mounts]`。
+
+    声明根在所有系统上都是账本口径的 Windows 路径：Windows 直接用这些目录；
+    其他系统按 `peach init` 的写法用 `R:\\media` 起的声明根，真实目录按顺序进 `[media.mounts]`。
+    """
+    actual = tuple(str(directory) for directory in directories)
+    if NATIVE_WINDOWS:
+        return {"local": actual}, {}
+    return {"local": onboarding.posix_declared_roots(len(actual))}, {"local": actual}
 
 
 def scripted(*answers: str):
@@ -245,13 +258,12 @@ class ConfigureTests(_Case):
 
     def test_the_written_file_reads_back_with_only_the_declared_source(self):
         """`[media.locations]` 里只有 local：内建默认的示例盘符不得从旁边混进来。"""
-        prepared = onboarding.configure(self.config, self._answers(), windows=True)
+        prepared = onboarding.configure(self.config, self._answers(), windows=NATIVE_WINDOWS)
         settings_file.write(prepared)
         loaded = settings_file.load_config(
             project_root=self.root / "app", environ={"PEACH_DATA_ROOT": str(self.root / "peach-data")})
         self.assertTrue(loaded.present)
-        self.assertEqual(loaded.locations, {"local": (str(self.media),)})
-        self.assertEqual(loaded.mounts, {})
+        self.assertEqual((loaded.locations, loaded.mounts), local_media(self.media))
         self.assertFalse(loaded.replication.enabled)
 
 
@@ -493,6 +505,70 @@ class SetupJsonContractTests(_SetupHttpCase):
             self.assertEqual(response.status_code, 400)
             self.assertFalse((self.data_root / "config.toml").exists())
 
+    def test_proxy_questions_expose_status_without_credentials_and_detect_docker(self):
+        from peach import peach_proxy
+        peach_proxy.save(self.config.directory("secrets"), {
+            "mode": "proxy", "proxy": "http://user:private-password@127.0.0.1:7890"})
+        with mock.patch.dict(os.environ, {"PEACH_DISTRIBUTION": "docker"}):
+            response = self._send("GET", self.QUESTIONS)
+        self.assertEqual(response.json()["peach_proxy"], {
+            "mode": "proxy", "proxy_saved": True, "needs_selection": False})
+        self.assertTrue(response.json()["docker"])
+        self.assertNotIn("private-password", response.text)
+        with mock.patch.dict(os.environ, {"PEACH_DISTRIBUTION": "source"}):
+            self.assertFalse(self._send("GET", self.QUESTIONS).json()["docker"])
+
+    def test_proxy_validation_collects_field_errors_without_creating_data(self):
+        for proxy in ([], {"mode": []}, {"mode": "unknown"}, {"mode": "proxy", "proxy": "http://user:secret@host"},
+                      {"mode": "proxy", "proxy": "ftp://host:1234"}):
+            with self.subTest(proxy=proxy):
+                errors = self._errors(self._body(peach_proxy=proxy, port="0"))
+                self.assertEqual(set(errors), {"peach_proxy", "port"})
+                self.assertNotIn("secret", str(errors))
+                self.assertFalse(self.data_root.exists())
+
+    def test_proxy_is_saved_in_the_selected_data_root_before_settings_and_first_scan(self):
+        from peach import peach_proxy
+        selected = self.root / "selected-data"
+        address = "socks5h://user:private-password@127.0.0.1:7890"
+        original_write = settings_file.write
+        original_scan = onboarding.request_first_scan
+        seen = []
+
+        def write(config, **kwargs):
+            self.assertEqual(peach_proxy.client_options(config.directory("secrets")), {
+                "trust_env": False, "proxy": address})
+            seen.append("settings")
+            return original_write(config, **kwargs)
+
+        def scan(config, location):
+            self.assertEqual(peach_proxy.client_options(config.directory("secrets")), {
+                "trust_env": False, "proxy": address})
+            seen.append("scan")
+            return original_scan(config, location)
+
+        with mock.patch.object(settings_file, "write", side_effect=write), \
+                mock.patch.object(onboarding, "request_first_scan", side_effect=scan):
+            result = self._submit(data_root=str(selected), peach_proxy={"mode": "proxy", "proxy": address})
+        self.assertEqual(seen, ["settings", "scan"])
+        self.assertNotIn("private-password", str(result))
+        self.assertFalse((self.config.directory("secrets") / "follow/peach-proxy.json").exists())
+
+    def test_proxy_modes_and_omitted_choice_are_saved_without_an_address(self):
+        from peach import peach_proxy
+        for mode in ("environment", "direct", None):
+            with self.subTest(mode=mode):
+                selected = self.root / str(mode)
+                self._submit(data_root=str(selected), scan_now=False,
+                             peach_proxy={"mode": mode, "proxy": "http://user:unused@127.0.0.1:7890"} if mode else None)
+                self.assertEqual(peach_proxy.values(selected / "secrets"), {"mode": mode or "environment", "proxy": ""})
+
+    def test_proxy_save_failure_does_not_publish_settings_or_scan_request(self):
+        with mock.patch("peach.peach_proxy.save", side_effect=OSError("代理配置写入失败")):
+            self.assertEqual(self._errors(self._body(peach_proxy={"mode": "direct"})), {
+                "data_root": "代理配置写入失败"})
+        self.assertFalse((self.data_root / "state" / onboarding.SCAN_REQUEST_NAME).exists())
+
     def test_the_first_run_page_is_a_shell_around_the_standalone_page_bundle(self):
         """首次运行页由独立页面包画：薄壳只带主题预读、样式、脚本、借来的字形与挂载点。"""
         response = self._get("/")
@@ -507,9 +583,18 @@ class SetupJsonContractTests(_SetupHttpCase):
         self.assertNotIn("<form", body)
         # 首启服务没有口令，页面包、Inter 与站标得放行。
         for path in ("/dist/peach-pages.js", "/dist/peach-pages.css", "/vendor/inter/5.3.0/index.css",
-                     "/peach-logo.png"):
+                     "/peach-logo.png", "/peach-logo-64.png", "/peach-logo-128.png"):
             with self.subTest(path):
                 self.assertEqual(self._get(path).status_code, 200)
+
+    def test_the_setup_edit_preview_uses_the_shared_source_editor(self):
+        plain = self._get("/").text
+        editable = self._get("/?edit").text
+        self.assertNotIn('data-peach-copy-mode="source"', plain)
+        self.assertIn('data-peach-copy-mode="source"', editable)
+        for path in ("/dev/copy-editor.js", "/dev/copy-editor-core.js"):
+            self.assertIn(path, editable)
+            self.assertEqual(self._get(path).status_code, 200)
 
     def test_invalid_values_are_reported_without_creating_anything(self):
         missing = self.root / "nope"
@@ -626,13 +711,15 @@ class SetupJsonContractTests(_SetupHttpCase):
         asked = onboarding.questions(self.config, windows=NATIVE_WINDOWS)
         questions = data["questions"]
         self.assertEqual([item["key"] for item in questions], [question.key for question in asked])
-        self.assertEqual([item["default"] for item in questions], [question.default for question in asked])
-        self.assertEqual([item["label"] for item in questions], ["Data directory", "Media library", "Who can access", "Port", "LAN access address"])
+        self.assertEqual([item["default"] for item in questions],
+                         ["" if question.key == "media_dir" else question.default for question in asked])
+        self.assertEqual([item["label"] for item in questions], ["数据目录", "媒体目录", "谁可以访问", "端口", "局域网访问地址"])
         by_key = {item["key"]: item for item in questions}
         self.assertEqual([key for key, item in by_key.items() if not item["required"]], ["host"])
-        self.assertEqual([key for key, item in by_key.items() if not item["advanced"]], ["media_dir"])
-        self.assertEqual(by_key["host"]["options"], [{"value": "2", "label": "Devices on the same local network"},
-                                                     {"value": "1", "label": "This computer only"}])
+        self.assertEqual([key for key, item in by_key.items() if not item["advanced"]], ["data_root", "media_dir", "host"])
+        self.assertEqual(by_key["data_root"]["input"], "folder")
+        self.assertEqual(by_key["host"]["options"], [{"value": "2", "label": "同一局域网的设备"},
+                                                     {"value": "1", "label": "只有这台电脑"}])
         self.assertEqual((by_key["port"]["input"], by_key["port"]["prefix"]), ("number", "localhost:"))
         self.assertEqual((by_key["mdns_name"]["prefix"], by_key["mdns_name"]["suffix"]), ("https://", ".local"))
         self.assertEqual(by_key["mdns_name"]["visible_when"], {"host": "2"})
@@ -647,7 +734,8 @@ class SetupJsonContractTests(_SetupHttpCase):
             self.assertEqual(len(by_key["media_dir"]["help"]), 1)
         else:
             self.assertIsNone(data["media_root"])
-            self.assertIn("Enter the folder this device actually reads media from", by_key["media_dir"]["help"][-1])
+            self.assertEqual(by_key["media_dir"]["help"][-1],
+                             "填写这台设备实际读取媒体的文件夹；Docker 部署填写容器内目录，例如 /media。")
         self.assertEqual(data["cloud"]["link"]["url"], "https://www.clouddrive2.com/help.html")
         # 默认对局域网开放，所以访问密码开关第一次出现就开着；扫描默认勾上，导入历史默认不勾。
         self.assertEqual((data["access_enabled"], data["scan_now"], data["history_guide"]), (True, True, False))
@@ -660,6 +748,61 @@ class SetupJsonContractTests(_SetupHttpCase):
         self.assertEqual(set(loaded.locations), {"onedrive"})
         self.assertEqual(set(loaded.media_costs.values()), {"free"})
         self.assertEqual(loaded.media_costs[next(iter(loaded.locations["onedrive"]))], "free")
+
+    def test_setup_saves_local_processing_for_the_first_scan(self):
+        rows = self._rows(self.media)
+        rows[0].update(library="我的媒体库", library_policy="local")
+        self._submit(media_dir=rows)
+        loaded = self._loaded()
+        self.assertEqual(next(iter(loaded.library_catalog.values()))["policy"], "local")
+        self.assertEqual(onboarding.take_first_scan_request(loaded), "configured")
+
+    def test_setup_saves_library_icon_color_and_processing_policy(self):
+        row = self._rows(self.media)[0]
+        library_id = "1637b835-a627-4c1e-a667-52f9276cbe18"
+        row.update(library_id=library_id, library="电影", library_icon="film", library_color="emerald",
+                   library_policy="custom", library_stages="probe,metadata")
+        self._submit(media_dir=[row], scan_now=False)
+        self.assertEqual(self._loaded().library_catalog[library_id], {
+            "name": "电影", "icon": "film", "color": "emerald", "policy": "custom", "stages": "probe,metadata"})
+
+    def test_setup_can_skip_media_without_registering_roots_or_requesting_a_scan(self):
+        done = self._submit(media_dir=[], skip_media=True, scan_now=True)
+        saved = self._loaded()
+        self.assertEqual(saved.locations, {})
+        self.assertEqual(saved.storage_roots, {})
+        self.assertEqual(saved.library_catalog, {})
+        self.assertFalse(done["scan_requested"])
+        self.assertTrue(done["skip_media"])
+        self.assertIsNone(onboarding.take_first_scan_request(saved))
+
+    def test_setup_requires_a_media_path_unless_explicitly_skipped(self):
+        for rows in ([], self._rows("")):
+            with self.subTest(rows=rows):
+                self.assertIn("media_dir", self._errors(self._body(media_dir=rows)))
+
+    def test_setup_only_accepts_boolean_true_as_explicit_media_skip(self):
+        for skipped in (False, "true", 1, None):
+            with self.subTest(skipped=skipped):
+                self.assertIn("media_dir", self._errors(self._body(media_dir=[], skip_media=skipped)))
+
+    def test_setup_saves_custom_processing_without_starting_a_scan(self):
+        rows = self._rows(self.media)
+        rows[0].update(library_policy="custom", library_stages="cover,probe")
+        self._submit(media_dir=rows, scan_now=False)
+        loaded = self._loaded()
+        library = next(iter(loaded.library_catalog.values()))
+        self.assertEqual(library["policy"], "custom")
+        self.assertEqual(library["stages"], "probe,cover")
+        self.assertIsNone(onboarding.take_first_scan_request(loaded))
+
+    def test_setup_rejects_invalid_processing_choices_before_writing(self):
+        for policy, stages in (("unknown", ""), ("custom", "download")):
+            with self.subTest(policy=policy, stages=stages):
+                rows = self._rows(self.media)
+                rows[0].update(library_policy=policy, library_stages=stages)
+                errors = self._errors(self._body(media_dir=rows))
+                self.assertTrue(errors["media_dir"])
 
     def test_the_questions_list_missing_mount_software_with_download_links(self):
         rows = [{"name": "CloudDrive", "available": True, "download_url": "https://www.clouddrive2.com/download.html"},
@@ -730,6 +873,8 @@ class SetupJsonContractTests(_SetupHttpCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertTrue(response.json()["restored"])
         self.assertFalse(response.json()["scan_requested"])
+        self.assertEqual(response.json()["url"], "http://127.0.0.1:8900/")
+        self.assertFalse(response.json()["history_guide"])
         self.assertEqual(self._loaded().data_root, selected)
         self.assertEqual(before, {path: path.read_bytes() for path in selected.rglob("*") if path.is_file()})
 
@@ -908,8 +1053,9 @@ class StandaloneConfigurationTests(_Case):
     def setUp(self):
         super().setUp()
         from dataclasses import replace
-        self.config = replace(self.config, locations={"local": (str(self.media),)},
-                              mounts={}, server=settings_file.ServerSettings(port=9123))
+        locations, mounts = local_media(self.media)
+        self.config = replace(self.config, locations=locations, mounts=mounts,
+                              server=settings_file.ServerSettings(port=9123))
         settings_file.write(self.config)
         self.config = settings_file.load_config(environ={"PEACH_DATA_ROOT": str(self.config.data_root)})
         self.addCleanup(mock.patch.stopall)
@@ -1044,9 +1190,11 @@ class StandaloneConfigurationTests(_Case):
         """摘要卡的媒体库数量由服务端给出：库名相同的目录算一个库，跨来源也一样。"""
         from dataclasses import replace
         from peach import media_libraries
-        first, second, third = (str(self.media / name) for name in ("a", "b", "c"))
-        self.config = replace(self.config, locations={"local": (first, second), "115": (third,)},
-                              library_names={first: "电影", third: "电影"})
+        # 只数媒体库，声明根不必有实际目录；非 Windows 照样用账本口径的 Windows 路径。
+        first, second, third = (str(self.media / name) if NATIVE_WINDOWS else ntpath.join("R:\\media", name)
+                                for name in ("a", "b", "c"))
+        self.config = replace(self.config, locations={"local": (first, second), "115": (third,)}, mounts={},
+                              library_names={first: "电影", third: "电影"}, library_catalog={}, storage_roots={})
         settings_file.write(self.config, force=True)
         with self.client() as client:
             snapshot = client.get("/api/configuration", headers={"X-Token": "test-token"}).json()

@@ -153,6 +153,8 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+/* 菜单项的字形与名字同行。 */
+.peach-react [data-namepick-menu] svg { width: var(--icon-inline); height: var(--icon-inline); }
 
 /* 名字下面那一行。分类在最左侧，各项带图标；装不下就整项换行。 */
 .peach-react [data-entity-alias] {
@@ -174,8 +176,8 @@
 .peach-react [data-meta-item="names"] { flex-wrap: wrap; }
 .peach-react [data-meta-item] > svg,
 .peach-react [data-entity-facts] dt svg {
-  width: 16px;
-  height: 16px;
+  width: var(--icon-inline);
+  height: var(--icon-inline);
   flex: none;
   color: var(--muted);
   fill: none;

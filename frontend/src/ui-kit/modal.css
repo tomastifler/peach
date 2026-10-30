@@ -8,7 +8,7 @@
      窄屏上它比 Geist 的 calc(100vw - 20px) 更小，卡片会莫名再窄十几像素。 */
   max-width:min(540px,calc(100vw - 20px));max-height:min(800px,80vh);
   padding:0;border:0;border-radius:var(--floating-radius);
-  background:var(--surface);color:var(--ink);overflow:hidden auto;overscroll-behavior:contain;
+  background:var(--surface);color:var(--ink);overflow:hidden;overscroll-behavior:contain;
   box-shadow:0 0 0 1px var(--border-15),0 32px 72px -12px #0009,0 8px 32px -12px #0009;
   opacity:0;transition:opacity .3s cubic-bezier(.175,.885,.32,1.1),
     overlay .3s allow-discrete,display .3s allow-discrete}
@@ -16,10 +16,15 @@
   transition:opacity .3s cubic-bezier(.175,.885,.32,1.1),
     overlay .3s allow-discrete,display .3s allow-discrete}
 .ui-geist-modal[open],.ui-geist-modal[open]::backdrop{opacity:1}
+.ui-geist-modal[open]{display:flex;flex-direction:column}
 @starting-style{.ui-geist-modal[open],.ui-geist-modal[open]::backdrop{opacity:0}}
-.ui-geist-modal-body{padding:20px;font-size:var(--fs-md);line-height:20px;color:var(--ink-2)}
-.ui-geist-modal-body h3{margin:0;font-size:var(--fs-xl);line-height:26px;font-weight:600;color:var(--ink)}
+.ui-geist-modal-header{flex:none;padding:20px 20px 0}
+.ui-geist-modal-header h3{margin:0;font-size:var(--fs-xl);line-height:26px;font-weight:600;color:var(--ink)}
+.ui-geist-modal-scroll{position:relative;display:flex;flex:1;min-height:0;min-width:0}
+.ui-geist-modal-body{flex:1;min-height:0;min-width:0;overflow:auto;overscroll-behavior:contain;padding:8px 20px 20px;font-size:var(--fs-md);line-height:20px;color:var(--ink-2)}
+.ui-geist-modal footer{flex:none}
 .ui-geist-modal-body p{margin:8px 0 0;line-height:20px;overflow-wrap:anywhere}
+.ui-geist-modal-body>p:first-child{margin-top:0}
 .ui-geist-modal-body [data-modal-error]:not(:empty){margin-top:12px}
 .ui-geist-modal-list{position:relative;margin-top:12px;min-width:0}
 .ui-geist-modal-list>ul{box-sizing:border-box;max-height:min(320px,32dvh);margin:0;padding:4px 16px 4px 20px;

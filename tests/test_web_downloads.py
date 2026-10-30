@@ -13,7 +13,7 @@ from unittest import mock
 import httpx
 from fastapi.testclient import TestClient
 
-from peach import download_postprocess
+from peach import download_postprocess, entities
 from peach import downloads as dl
 from peach import downloads_clouddrive, web_downloads
 from peach.api import create_app
@@ -84,6 +84,9 @@ class _App(unittest.TestCase):
         self.service = self.app.state.downloads
         self.provider = FakeProvider()
         self.service.providers = lambda key: self.provider
+        self.service.channel_catalog = lambda: {"providers": [
+            {"key": key, "label": label, "configured": True, "target": self.service.config.targets.get(key, "")}
+            for key, label in dl.PROVIDER_LABELS.items()], "problems": []}
         self.client = TestClient(self.app)
 
     def secrets(self) -> dict:
@@ -92,6 +95,39 @@ class _App(unittest.TestCase):
 
 
 class RouteTests(_App):
+    def test_download_artwork_uses_local_library_images_after_ingestion(self):
+        from PIL import Image
+
+        contract = self.app.state.web_contract
+        contract.cover_root = self.root / "covers"
+        contract.avatar_root = self.root / "avatars"
+        contract.cover_root.mkdir()
+        contract.avatar_root.mkdir()
+        Image.new("RGB", (640, 360), "white").save(contract.cover_root / "ABC-123.jpg")
+        with self.service.store.database.write_transaction() as connection:
+            asset_id = connection.execute(
+                "INSERT INTO asset(location,path,name,medium,code) VALUES(?,?,?,?,?)",
+                ("115", "B:\\云下载\\ABC-123.mp4", "ABC-123.mp4", "video", "ABC-123"),
+            ).lastrowid
+            performer_id = entities.upsert_asset_entity(
+                connection, kind="performer", name="测试女优", asset_id=asset_id,
+                role="performer", source="test:downloads")
+        Image.new("RGB", (128, 128), "white").save(
+            contract.avatar_root / f"performer-{performer_id}.img", format="JPEG")
+        task = self.service.store.save(dl.DownloadTask(
+            id=0, info_hash="d" * 40, provider="115", source_uri="magnet:?xt=urn:btih:" + HASH,
+            display_name="ABC-123", code="ABC-123", target="/云下载", state=dl.REMOTE_RUNNING,
+            asset_id=asset_id))
+        self.assertIsNone(self.client.get("/api/downloads").json()["tasks"][0]["artwork"])
+        task.state = dl.INGESTED
+        self.service.store.save(task)
+        artwork = self.client.get("/api/downloads").json()["tasks"][0]["artwork"]
+        self.assertTrue(artwork["has_cover"])
+        self.assertEqual(artwork["cover_key"], "ABC-123")
+        self.assertEqual([(ref["name"], ref["has_image"]) for ref in artwork["performer_entities"]],
+                         [("测试女优", True)])
+        self.assertEqual(self.provider.submitted, [])
+
     def test_the_contract_and_the_app_share_one_service(self):
         self.assertIs(self.app.state.web_contract.downloads, self.service)
 
@@ -115,6 +151,50 @@ class RouteTests(_App):
         self.assertEqual(response.status_code, 400)
         self.assertIn("infohash", response.text)
         self.assertEqual(self.client.post("/api/downloads/cancel", json={}).status_code, 400)
+
+    def test_download_pages_return_a_cursor_and_reject_invalid_positions(self):
+        for number in range(3):
+            self.service.store.save(dl.DownloadTask(
+                id=0, info_hash=f"{number:040x}", provider="115", source_uri="magnet:?xt=urn:btih:" + HASH,
+                display_name="ABC-123.mp4", target="/115/云下载", state=dl.SUBMITTED))
+        first = self.client.get("/api/downloads?limit=2").json()
+        self.assertTrue(first["has_more"])
+        self.assertEqual(first["tasks"][0]["display_code"], "ABC-123")
+        last = self.client.get(f"/api/downloads?limit=2&before_id={first['next_before_id']}").json()
+        self.assertEqual(len(last["tasks"]), 1)
+        self.assertFalse(last["has_more"])
+        for position in ("nope", "0", "-1"):
+            self.assertEqual(self.client.get(f"/api/downloads?before_id={position}").status_code, 400)
+
+    def test_download_titles_use_bound_work_metadata_without_changing_saved_tasks(self):
+        with self.service.store.database.write_transaction() as connection:
+            asset_id = connection.execute(
+                "INSERT INTO asset(location,path,name,medium,code,catalog_title) VALUES(?,?,?,?,?,?)",
+                ("115", "B:\\云下载\\ABC-123.mp4", "ABC-123.mp4", "video", "ABC-123", "制作记录与访谈"),
+            ).lastrowid
+        bound = self.service.store.save(dl.DownloadTask(
+            id=0, info_hash="a" * 40, provider="115", source_uri="magnet:?xt=urn:btih:" + HASH,
+            display_name="ABC-123", target="/云下载", state=dl.INGESTED,
+            title="ABC-123", asset_id=asset_id))
+        named = self.service.store.save(dl.DownloadTask(
+            id=0, info_hash="b" * 40, provider="115", source_uri="magnet:?xt=urn:btih:" + HASH,
+            display_name="XYZ-456 制作花絮.mp4", target="/云下载", state=dl.FAILED, code="XYZ-456"))
+        listed = {task["id"]: task for task in self.client.get("/api/downloads").json()["tasks"]}
+        self.assertEqual((listed[bound.id]["display_code"], listed[bound.id]["display_title"]),
+                         ("ABC-123", "制作记录与访谈"))
+        self.assertEqual((listed[named.id]["display_code"], listed[named.id]["display_title"]),
+                         ("XYZ-456", "制作花絮"))
+        self.assertEqual(self.service.store.get(bound.id).title, "ABC-123")
+        self.assertIsNone(self.service.store.get(bound.id).code)
+        with self.service.store.database.write_transaction() as connection:
+            connection.execute("UPDATE asset SET catalog_title=NULL,original_title=? WHERE id=?",
+                               ("原始作品标题", asset_id))
+        self.assertEqual(self.client.get("/api/downloads").json()["tasks"][1]["display_title"], "原始作品标题")
+        bound.code = "DEF-456"
+        bound.title = "提交时的标题"
+        self.service.store.save(bound)
+        conflicted = self.client.get("/api/downloads").json()["tasks"][1]
+        self.assertEqual((conflicted["display_code"], conflicted["display_title"]), ("DEF-456", "提交时的标题"))
 
     def test_failed_postprocess_can_be_requeued_without_resubmitting(self):
         result = self.service.submit(
@@ -153,6 +233,45 @@ class RouteTests(_App):
 
 class SettingsBlockTests(_App):
     """CloudDrive2 那一侧换成 `self.answer`；没有令牌时走真的 `check`，它在连网之前就停。"""
+
+    def test_invalid_service_address_is_refused_before_settings_or_token_are_saved(self):
+        self.service.save_settings({"clouddrive_address": "localhost:19798", "wait_hours": 48}, self.roots())
+        before = self.service.settings.path.read_bytes()
+        stored_secrets = self.secrets()
+        client = TestClient(self.app, client=("127.0.0.1", 50000), base_url="http://127.0.0.1")
+        response = client.post("/api/configuration/downloads", json={
+            "clouddrive_address": "http://localhost:bad-port", "token": "test-only-new-token"})
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertIn("端口", response.text)
+        self.assertEqual(self.service.settings.path.read_bytes(), before)
+        self.assertEqual(self.secrets(), stored_secrets)
+
+    def test_saved_invalid_address_and_token_keep_configuration_readable_and_repairable(self):
+        from peach import routes_configuration, settings_file
+        from peach.downloads_channels import LibraryChannels
+
+        self.service.settings.path.parent.mkdir(parents=True, exist_ok=True)
+        raw = {"clouddrive_address": "http://localhost:bad-port", "targets": {"115": "/115/Movies"},
+               "pikpak_root": "", "wait_hours": 48}
+        self.service.settings.path.write_text(json.dumps(raw), encoding="utf-8")
+        before = self.service.settings.path.read_bytes()
+        self.service.config = self.service.settings.load()
+        self.service.credentials.save(dl.CLOUDDRIVE_CREDENTIAL, {"token": "test-only-token"})
+        self.service.landing.declared_roots = {"115": ("R:\\Media",)}
+        self.service.channel_catalog = LibraryChannels(self.service, lambda: {})
+        config = settings_file.PeachConfig(self.root, self.root / "config.toml", present=True)
+        client = TestClient(self.app, client=("127.0.0.1", 50000), base_url="http://127.0.0.1")
+        with mock.patch.object(settings_file, "load_config", return_value=config), \
+                mock.patch.object(routes_configuration, "snapshot", return_value={"port": 8900, "media_dirs": []}):
+            response = client.get("/api/configuration")
+        self.assertEqual(response.status_code, 200, response.text)
+        state = response.json()["downloads"]
+        self.assertEqual(state["config"], raw)
+        self.assertTrue(state["token_set"])
+        self.assertTrue(any("端口" in problem for problem in state["problems"]))
+        self.assertEqual(state["providers"], [])
+        self.assertNotIn("test-only-token", response.text)
+        self.assertEqual(self.service.settings.path.read_bytes(), before)
 
     def setUp(self):
         super().setUp()
@@ -207,6 +326,7 @@ class SettingsBlockTests(_App):
         self.assertEqual(payload["report"]["suggested_target"], {"path": "/115open/云下载", "exists": False})
 
     def test_saving_checks_the_folder_the_user_filled_in_and_keeps_it(self):
+        self.service.landing.declared_roots = self.roots()
         self.suggest("/115open/云下载", True)
         payload = web_downloads.save_settings(self.service, {
             "clouddrive_address": "127.0.0.1:19798", "token": "cd2-secret",
@@ -267,6 +387,7 @@ class SettingsBlockTests(_App):
         self.assertEqual((report["suggested_target"], report["suggested_pikpak_root"]), (None, ""))
 
     def test_the_check_takes_the_push_prefixes_and_the_blanks_on_the_form(self):
+        self.service.landing.declared_roots = self.roots()
         web_downloads.save_settings(self.service, {"targets": {"115": "/115open/已保存"}}, self.roots())
         prefixes = (CloudPrefix("/115open", "B:\\"),)
         self.service.landing.push_discovery.config = PushDiscoveryConfig(prefixes=prefixes)
@@ -405,6 +526,21 @@ class ResourceIndexerRoutes(_App):
         self.assertEqual((args[0][0]["key"], args[1], args[2].goal), ("one", "ABC-123", "chinese"))
         self.assertEqual(direct.call_args.kwargs["goal"], "chinese")
         self.assertEqual(self.client.get("/api/resources/search?code=ABC-123&min_size=-1").status_code, 400)
+
+    def test_switching_magnets_searches_every_source_and_drops_skipped_hashes(self):
+        from peach.web_resource_search import q_resource_search
+        failed, other = "a" * 40, "b" * 40
+        hd = {"source": "manko.fun", "resolution": 1080, "info_hash": failed, "name": "ABC-123"}
+        fallback = {"source": "sukebei", "resolution": 1080, "info_hash": other, "name": "ABC-123 FHD"}
+        with mock.patch("peach.web_resource_search.direct_search", return_value={
+                "items": [hd, fallback], "warnings": [], "trace": [], "next_sources": [], "reference_only": []}) as direct,              mock.patch("peach.web_resource_search._SEARCH.run", return_value={
+                "ok": True, "state": "ready", "items": [], "warnings": [], "error": ""}) as search,              mock.patch("peach.web_resource_search.rank_candidates", side_effect=lambda rows, goal: rows):
+            result = q_resource_search(self.app.state.web_contract, {"code": "ABC-123", "skip": [failed]})
+            self.assertFalse(direct.call_args.kwargs["stop_on_preferred"])
+            self.assertIn(failed, search.call_args.args[3])
+            self.assertEqual([row["info_hash"] for row in result["items"]], [other])
+            q_resource_search(self.app.state.web_contract, {"code": "ABC-123", "skip": "not-a-list"})
+            self.assertTrue(direct.call_args.kwargs["stop_on_preferred"])
 
 
 if __name__ == "__main__":

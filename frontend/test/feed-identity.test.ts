@@ -12,7 +12,7 @@ it('新作人物头像携带版本与取景并进入规范身份页', () => {
   const host = render({ performers: '来源名字', performer_refs: [{ id: 42, name: '规范名字', has_image: true,
     image_version: 'v7', avatar_focus: { axis: 'y', pct: 20 } }] });
   expect(host.querySelector('a')?.getAttribute('href')).toBe('/performers/42');
-  expect(host.querySelector('img')?.getAttribute('src')).toBe('/entity-image?kind=performer&id=42&v=v7');
+  expect(host.querySelector('img')?.getAttribute('src')).toBe('/entity-image?kind=performer&id=42&thumb=1&v=v7');
   expect(host.querySelector('img')?.style.objectPosition).toBe('50% 20%');
 });
 

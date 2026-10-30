@@ -3,6 +3,10 @@
 保留规则在 `peach.ledger_backups`：最近几份、还没满 24 小时、比当前账本更新的都留；
 当前账本 `integrity_check` 不是 ok 时拒绝清退。主文件已经不在的 `-wal`／`-shm` 一并扫掉。
 托盘每次启动按同一规则自动跑一遍，这个脚本给手动与排障用。
+
+`--organize` 改看 `<generated>/organize-backups/` 里的整理备份，只认
+`ledger.pre-download-*` 与 `ledger.pre-organize-*`，缺省只留最近几份、不按年龄保留；
+每次整理写备份时也按这套规则清一遍。
 """
 from __future__ import annotations
 
@@ -15,24 +19,35 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from peach import ledger_backups  # noqa: E402
-from peach.config import DATABASE_PATH  # noqa: E402
+from peach.config import DATABASE_PATH, GENERATED_DIR  # noqa: E402
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--db", type=Path, default=DATABASE_PATH, help="当前账本路径")
-    parser.add_argument("--keep", type=int, default=ledger_backups.KEEP_RECENT,
+    parser.add_argument("--organize", type=Path, nargs="?", const=GENERATED_DIR, default=None,
+                        metavar="GENERATED",
+                        help="改清整理备份；可给 generated 目录，缺省取当前配置")
+    parser.add_argument("--keep", type=int, default=None,
                         help="无论多旧都保留的最近份数")
-    parser.add_argument("--min-age-hours", type=float,
-                        default=ledger_backups.MIN_AGE.total_seconds() / 3600,
+    parser.add_argument("--min-age-hours", type=float, default=None,
                         help="不满这个小时数的备份一律保留")
     parser.add_argument("--apply", action="store_true", help="真的删除；缺省只打印计划")
     parser.add_argument("--json", action="store_true", help="机器可读输出")
     args = parser.parse_args(argv)
 
+    if args.organize is not None:
+        scope = {"directory": ledger_backups.organize_dir(args.organize.resolve()),
+                 "pattern": ledger_backups.ORGANIZE_PATTERN}
+        keep, min_age = ledger_backups.ORGANIZE_KEEP_RECENT, ledger_backups.ORGANIZE_MIN_AGE
+    else:
+        scope = {}
+        keep, min_age = ledger_backups.KEEP_RECENT, ledger_backups.MIN_AGE
     decided = ledger_backups.prune(
-        args.db.resolve(), apply=args.apply, keep_recent=args.keep,
-        min_age=timedelta(hours=args.min_age_hours),
+        args.db.resolve(), apply=args.apply,
+        keep_recent=keep if args.keep is None else args.keep,
+        min_age=min_age if args.min_age_hours is None else timedelta(hours=args.min_age_hours),
+        **scope,
     )
     if args.json:
         print(json.dumps({

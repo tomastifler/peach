@@ -1,4 +1,5 @@
 /* Peach 播放会话：Video.js 10 的媒体、原生事件与自有控制条共用同一枚 video。 */
+import { randomId } from '../core/random-id';
 import type { PlayerEvents, PlayerSource, QualityLevelList, VideojsFactory, VjsPlayer } from './types';
 
 interface HlsEngine {
@@ -21,7 +22,7 @@ export const createV10Player: VideojsFactory = (video, options) => {
   const root = document.createElement('div');
   const provider = document.createElement('video-player');
   root.className = 'video-js vjs-paused vjs-user-active';
-  root.id = video.id || `peach-player-${crypto.randomUUID()}`;
+  root.id = video.id || `peach-player-${randomId()}`;
   root.setAttribute('lang', 'zh-CN');
   const container = document.createElement('media-container');
   let media = document.createElement('hlsjs-video') as MediaElement;
@@ -181,6 +182,8 @@ export const createV10Player: VideojsFactory = (video, options) => {
     bandwidth: () => media.engine?.bandwidthEstimate || 0,
     addRemoteTextTrack: (track: Record<string, unknown>) => {
       const node = document.createElement('track');
+      node.id = String(track.id || '');
+      if (track.legacyId) node.dataset.subtitleAlias = String(track.legacyId);
       node.kind = String(track.kind || 'subtitles'); node.src = String(track.src || '');
       node.srclang = String(track.srclang || ''); node.label = String(track.label || ''); video.append(node);
     },

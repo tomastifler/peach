@@ -253,6 +253,7 @@ class CommunityCatalogTests(unittest.TestCase):
     def test_javdb_payload_equals_the_snapshot_shape_field_for_field(self):
         expected = {
             "id": "ABW-358", "source_url": "https://javdb.com/v/Zb7mX", "title": TITLE,
+            "origin_title": "", "display_title": TITLE, "source_id": "Zb7mX", "javdb_rule": 2,
             "actresses": [{"japanese_name": "涼森れむ", "profile_source": "javdb", "external_id": "a"}],
             "maker": "プレステージ", "label": "", "series": "", "director": "", "release_date": "2023-05-23",
             "runtime": 210, "genres": [], "cover_urls": [JAVDB_COVER], "cover_url": JAVDB_COVER}

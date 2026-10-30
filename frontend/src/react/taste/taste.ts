@@ -114,7 +114,26 @@ export interface TasteData {
   storage?: { exports?: number; bytes?: number };
   window?: string;
   updated_at?: string | null;
+  /** 这一份看板算出的时刻。 */
+  computed_at?: string | null;
+  /** 服务端正在后台重算，这一份是上一次的结果。 */
+  stale?: boolean;
+  /** 和 `stale` 同时出现：这一次重算失败了，服务端暂不再算，等「立即重试」。 */
+  error?: string;
 }
+
+/** 看板在后台重算时隔这么久再问一次，算完换上新结果。 */
+export const STALE_POLL_MS = 2_000;
+
+/** `stale` 时的轮询间隔：只在服务端说「这是旧的」时才问，算完或算失败就停。 */
+export const tasteRefetchInterval = (data: TasteData | undefined): number | false =>
+  (data?.stale && !data.error ? STALE_POLL_MS : false);
+
+/** 快照时刻，精确到分钟：重算通常几秒内完成，只写日期看不出是哪一份。 */
+export const tasteTime = (value: string | null | undefined): string =>
+  (value ? new Date(value).toLocaleString('zh-CN', {
+    month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  }) : '—');
 
 export interface BrowserSource {
   id: string;
@@ -141,8 +160,9 @@ export interface TasteJob {
   warnings?: string[];
 }
 
-export const fetchTaste = (window: string, signal?: AbortSignal) =>
-  apiGet<TasteData>(`${TASTE_URL}?window=${window}`, signal);
+/** `retry` 让服务端跳过失败后的等待，立刻重算一次。 */
+export const fetchTaste = (window: string, signal?: AbortSignal, retry = false) =>
+  apiGet<TasteData>(`${TASTE_URL}?window=${window}${retry ? '&retry=1' : ''}`, signal);
 
 export const fetchTasteJob = (signal?: AbortSignal) =>
   apiGet<TasteJob>(TASTE_REFRESH_URL, signal);

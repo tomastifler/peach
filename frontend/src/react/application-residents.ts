@@ -2,6 +2,7 @@
 import { configureBatchDock, configureGlowPicker, configureImmerse, configureManageHeader,
   configureSettingsPanel, configureSidebar, configureStage } from '../react/entry';
 import { prefetchManagedRoute } from '../react/router/managed-routes';
+import { warmRouteChunks } from '../react/router/route-chunk';
 import { mountToaster, showToast as emitToast, unmountToaster } from '../react/toaster';
 export { mountToaster } from '../react/toaster';
 import { connectManagedRoutes, openManagedRoute } from '../history';
@@ -22,6 +23,7 @@ export function loadRouter(actions: ShellActions): Promise<void> {
   publishedActions = actions;
   publish(actions);
   connectManagedRoutes(Promise.resolve(prefetchManagedRoute));
+  warmRouteChunks();
   return Promise.resolve();
 }
 

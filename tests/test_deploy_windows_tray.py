@@ -144,6 +144,13 @@ class DeployWindowsTrayTests(unittest.TestCase):
         self.assertEqual(outcome["step"], "verify")
         self.assertIn("/healthz", outcome["message"])
 
+    def test_the_last_health_error_is_reported_verbatim(self):
+        error = "https://192.0.2.10/healthz ConnectError: [SSL: CERTIFICATE_VERIFY_FAILED]"
+        outcome = self.run_deploy(identity=lambda **_kwargs: {"error": error})
+        self.assertFalse(outcome["ok"])
+        self.assertEqual(outcome["step"], "verify")
+        self.assertIn(error, outcome["message"])
+
 
 class ServingIdentityTests(unittest.TestCase):
     def test_the_verdict_comes_from_the_https_port_checked_against_the_project_ca(self):
@@ -167,6 +174,21 @@ class ServingIdentityTests(unittest.TestCase):
         self.assertEqual(get.call_args.kwargs["verify"], "/ca/peach.crt")
         self.assertFalse(get.call_args.kwargs["trust_env"],
                          "系统代理会替生产口回话，探测必须直连")
+
+    def test_a_timeout_carries_the_last_raw_error(self):
+        spec = mock.Mock(health_url="https://192.0.2.10/healthz", verify="/ca/peach.crt")
+        spec.name = "https"
+        refused = deploy_windows_tray.httpx.ConnectError("[SSL: CERTIFICATE_VERIFY_FAILED]")
+        unready = mock.Mock(status_code=503)
+        for answer, expected in ((refused, "ConnectError: [SSL: CERTIFICATE_VERIFY_FAILED]"),
+                                 (unready, "HTTP 503")):
+            with self.subTest(expected=expected), \
+                    mock.patch.object(deploy_windows_tray, "build_service_specs", return_value=(spec,)), \
+                    mock.patch.object(deploy_windows_tray.httpx, "get",
+                                      **({"side_effect": answer} if isinstance(answer, Exception)
+                                         else {"return_value": answer})):
+                served = deploy_windows_tray.serving_identity(timeout=0, sleep=mock.Mock())
+            self.assertEqual(served, {"error": f"https://192.0.2.10/healthz {expected}"})
 
 
 if __name__ == "__main__":

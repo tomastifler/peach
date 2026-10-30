@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import subprocess
+import re
+import tomllib
 from pathlib import Path
 
-READMES = {"README.md", "README.en.md"}
+READMES = {"README.md", "README.zh-CN.md"}
 PREFIXES = ("src/peach/", "web/", "frontend/", "migrations/", "resources/")
 FILES = {
     "pyproject.toml", "package.json", "package-lock.json",
@@ -13,6 +15,21 @@ FILES = {
     "docs/TESTING_DESKTOP.md", "docs/OPERATIONS.md", "docs/SOURCING.md",
     "scripts/build_windows.ps1", "scripts/build_app_entry.py",
 }
+
+
+def installation_contracts(repo: Path) -> list[str]:
+    """README 的 Python 下限与语言入口须和安装声明一致。"""
+    project = tomllib.loads((repo / 'pyproject.toml').read_text(encoding='utf-8'))['project']
+    floor = project['requires-python'].removeprefix('>=')
+    problems = []
+    for name in sorted(READMES):
+        text = (repo / name).read_text(encoding='utf-8')
+        if not re.search(rf'\bPython {re.escape(floor)}(?:\+| or newer| 或更高)', text):
+            problems.append(f'{name}: Python 下限须为 {floor}')
+        counterpart, = READMES - {name}
+        if counterpart not in re.findall(r'\]\(([^)\s]+)\)', text):
+            problems.append(f'{name}: 缺少语言入口 {counterpart}')
+    return problems
 
 
 #: 已经推到 GitHub 的提交。它的署名与主题改不了：改写 hash 只能强推覆盖远端。

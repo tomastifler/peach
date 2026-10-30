@@ -30,6 +30,31 @@ def _path(config):
     return config.directory("state") / "library-sharing.json"
 
 
+def _state_path(config):
+    return config.directory("state") / "library-sharing-attempt.json"
+
+
+def _state_lock(config):
+    from filelock import FileLock
+    path = _state_path(config)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return FileLock(str(path) + ".lock", timeout=5)
+
+
+def _period():
+    return datetime.now(timezone.utc).strftime("%G-W%V")
+
+
+def _used(value, period):
+    return value.get("period") == period and (value.get("attempted") is True
+        or ("attempted" not in value and value.get("status") in {"attempted", "failed"}))
+
+
+def useful_payload(payload):
+    """公共编号或任一偏好分组提供可分析内容。"""
+    return bool(payload["library"] or any(payload["preferences"].values()))
+
+
 def consent(config):
     value = remote_reporting._read(_path(config))
     return value if value.get("enabled") is True and value.get("schema") == SCHEMA else {}
@@ -41,7 +66,12 @@ def save_choice(config, enabled):
         raise ValueError("Library and taste upload options must be booleans")
     value = {"enabled": enabled, "schema": SCHEMA, "revision": uuid.uuid4().hex,
              "selected_at": datetime.now(timezone.utc).isoformat()}
-    atomic_write_text(_path(config), json.dumps(value))
+    with _state_lock(config):
+        atomic_write_text(_path(config), json.dumps(value))
+        state = remote_reporting._read(_state_path(config))
+        if state.get("status") == "queued":
+            status = "unknown" if state.get("attempted") else "blocked"
+            atomic_write_text(_state_path(config), json.dumps({**state, "status": status, "reason": "consent"}))
     return snapshot(config)
 
 
@@ -56,9 +86,11 @@ def target():
 
 def snapshot(config):
     attempt = remote_reporting._read(config.directory("state") / "library-sharing-attempt.json")
+    if attempt.get("status") == "attempted":
+        attempt = {**attempt, "status": "unknown", "attempted": True}
     return {"enabled": bool(consent(config)), "available": bool(target()),
             "schema": SCHEMA, "fields": FIELDS, "notice": NOTICE,
-            "last_attempt": attempt if attempt.get("schema") == SCHEMA else {}}
+            "last_attempt": attempt if attempt.get("schema") == SCHEMA and attempt.get("period") == _period() else {}}
 
 
 def collect(contract):
@@ -123,7 +155,7 @@ class Service:
         self._wake.set()
         return snapshot(self.config)
 
-    def _gate(self, revision, envelope):
+    def _gate(self, revision, envelope, attempt_id=None):
         current = consent(self.config)
         if self._stop.is_set() or not current or current.get("revision") != revision:
             return False
@@ -141,7 +173,7 @@ class Service:
             if len(raw) > MAX_RAW_BYTES:
                 return False
             payload = json.loads(raw)
-            if not valid_payload(payload):
+            if not valid_payload(payload) or not useful_payload(payload):
                 return False
         except (ValueError, KeyError, TypeError, OSError, EOFError):
             return False
@@ -149,38 +181,97 @@ class Service:
         for key in tuple(event):
             if key not in {"event_id", "timestamp", "platform"}:
                 del event[key]
-        event.update(message="Peach library and taste research", level="info",
-                     tags={"purpose": "population-research", "schema": str(SCHEMA), "period": payload["period"]})
+        metadata = remote_reporting.event_metadata("research")
+        event.update(**metadata, message="Peach library and taste research", level="info")
+        event["tags"].update(schema=str(SCHEMA), period=payload["period"])
         for key in tuple(envelope.headers):
             if key not in {"event_id", "sent_at"}:
                 del envelope.headers[key]
+        if attempt_id is None:
+            return True
+        with _state_lock(self.config):
+            current = consent(self.config)
+            state = remote_reporting._read(_state_path(self.config))
+            if (self._stop.is_set() or not current or current.get("revision") != revision
+                    or state.get("attempt_id") != attempt_id or state.get("revision") != revision
+                    or state.get("period") != _period() or state.get("status") != "queued"
+                    or _used(state, _period())):
+                return False
+            atomic_write_text(_state_path(self.config), json.dumps({**state, "attempted": True}))
         return True
+
+    def _delivery(self, identity, result):
+        """仅更新当前投递的脱敏回执，不把 HTTP 接收解释为留存。"""
+        if result.get("status") not in {"accepted", "failed", "unknown", "blocked"}:
+            return
+        with _state_lock(self.config):
+            state = remote_reporting._read(_state_path(self.config))
+            if (any(state.get(key) != value for key, value in identity.items())
+                    or consent(self.config).get("revision") != identity["revision"]
+                    or state.get("status") not in {"queued", "unknown"}):
+                return
+            if state.get("status") == "unknown" and result["status"] == "unknown":
+                return
+            status = result["status"]
+            if status == "unknown" and not state.get("attempted"):
+                status = "failed"
+            value = {key: value for key, value in state.items() if key not in {"reason", "status_code"}}
+            value["status"] = status
+            if type(result.get("status_code")) is int and 100 <= result["status_code"] <= 599:
+                value["status_code"] = result["status_code"]
+            if result.get("reason") in {"network", "http_status", "rate_limit", "queue_full", "consent", "disabled", "unknown"}:
+                value["reason"] = result["reason"]
+            atomic_write_text(_state_path(self.config), json.dumps(value))
 
     def attempt(self):
         current, destination = consent(self.config), target()
         if not current or not destination or self._stop.is_set():
             return
-        period = datetime.now(timezone.utc).strftime("%G-W%V")
-        state = self.config.directory("state") / "library-sharing-attempt.json"
-        from filelock import FileLock
-        state.parent.mkdir(parents=True, exist_ok=True)
-        with FileLock(str(state) + ".lock", timeout=.1):
+        period = _period()
+        state = _state_path(self.config)
+        with _state_lock(self.config):
             previous = remote_reporting._read(state)
-            if previous.get("schema") == SCHEMA and previous.get("period") == period:
+            if _used(previous, period):
                 return
-            atomic_write_text(state, json.dumps({"schema": SCHEMA, "period": period, "status": "attempted"}))
-        payload, data = collect(self.contract)
-        data = compressed(data)
-        from sentry_sdk.attachments import Attachment
-        client = remote_reporting._new_client(destination, envelope_gate=lambda envelope: self._gate(current["revision"], envelope))
+        identity = {"schema": SCHEMA, "period": period, "revision": current["revision"], "attempt_id": uuid.uuid4().hex}
+        value = {**identity, "attempted": False}
+        stage = "collection"
         try:
+            payload, data = collect(self.contract)
+            if useful_payload(payload):
+                stage = "compression"
+                data = compressed(data)
+                value["status"] = "queued"
+            else:
+                value["status"] = "waiting-data"
+        except Exception:
+            value.update(status="failed", reason=stage)
+        with _state_lock(self.config):
+            if (consent(self.config).get("revision") != identity["revision"] or _period() != period
+                    or _used(remote_reporting._read(state), period)):
+                return
+            atomic_write_text(state, json.dumps(value))
+        if value["status"] != "queued":
+            return
+        client = None
+        try:
+            from sentry_sdk.attachments import Attachment
+            client = remote_reporting._new_client(destination,
+                envelope_gate=lambda envelope: self._gate(current["revision"], envelope, identity["attempt_id"]),
+                delivery_callback=lambda result: self._delivery(identity, result))
             client.capture_event({"message": "Peach library and taste research", "level": "info",
-                                  "tags": {"purpose": "population-research", "schema": str(SCHEMA), "period": payload["period"]}},
+                                  **remote_reporting.event_metadata("research")},
                                  hint={"attachments": [Attachment(bytes=data, filename=FILENAME,
                                                                   content_type="application/gzip")]})
             client.flush(timeout=5)
+        except Exception:
+            pass
         finally:
-            client.close(timeout=0)
+            try:
+                if client is not None:
+                    client.close(timeout=0)
+            finally:
+                self._delivery(identity, {"status": "unknown", "reason": "unknown"})
 
     def start(self):
         if self._thread and self._thread.is_alive():
@@ -190,14 +281,9 @@ class Service:
             while not self._stop.is_set():
                 try:
                     self.attempt()
-                except Exception as error:
+                except Exception:
                     # 分享失败不把数据或错误原文转交诊断通道。
-                    try:
-                        state = self.config.directory("state") / "library-sharing-attempt.json"
-                        value = remote_reporting._read(state)
-                        atomic_write_text(state, json.dumps({**value, "status": "failed", "reason": type(error).__name__}))
-                    except OSError:
-                        pass
+                    pass
                 self._wake.wait(3600)
                 self._wake.clear()
         self._thread = threading.Thread(target=run, name="PeachLibrarySharing", daemon=True)

@@ -152,7 +152,8 @@ def resolves(url: str, timeout: float = 12.0,
     eltra.jp 2026-09-05 连着两趟这样被判死，而每次重试一下就 200。404 重试三次还是 404。
     """
     def get(target: str) -> httpx.Response:
-        with httpx.Client(follow_redirects=True, timeout=timeout,
+        from peach.peach_proxy import http_client
+        with http_client(follow_redirects=True, timeout=timeout,
                           limits=httpx.Limits(max_connections=4,
                                               max_keepalive_connections=0)) as client:
             return client.get(target, headers={"User-Agent": USER_AGENT})

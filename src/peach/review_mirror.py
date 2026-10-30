@@ -215,7 +215,15 @@ class ReviewMirror:
     def _validate(payload: dict) -> None:
         for key in ("sections", "sources", "counts"):
             if not isinstance(payload.get(key), dict):
-                raise ReviewMirrorError(f"Writer review response is missing {key}")
+                raise ReviewMirrorError(f"写入端复核响应缺少 {key}")
+        queues = payload.get('queues')
+        if not isinstance(queues, dict):
+            raise ReviewMirrorError('写入端未提供复核状态，请更新写入端')
+        for key in ('later', 'ignored'):
+            snapshot = queues.get(key)
+            if not isinstance(snapshot, dict) or not all(
+                    isinstance(snapshot.get(field), dict) for field in ('sections', 'counts')):
+                raise ReviewMirrorError(f'写入端的复核状态 {key} 未取得')
 
     def _rewrite_preview_urls(self, payload: dict) -> dict:
         result = deepcopy(payload)

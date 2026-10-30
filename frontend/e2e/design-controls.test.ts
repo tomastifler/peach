@@ -7,12 +7,63 @@ import { ITEM, openItemPage } from './item-fixture.ts';
 import {
   DESKTOP, MOBILE, tokenColor, openAccess, settledRun, openActivity, qualityGoal, openQualityGoals,
   openScraping, openProcessing, openCatalog, openCatalogBars, openCatalogFixture, RUNNING_JOB, FAILED_JOB,
-  installDesignBrowser,
+  installDesignBrowser, openReview,
 } from './design-fixture.ts';
 
 describe('设计决定：控件、状态与首页顶部', () => {
   let browser: Browser;
   installDesignBrowser((next) => { browser = next; });
+
+  it('复核状态沿用首页玻璃控件尺寸，空分类保留选中玻璃与状态入口', { timeout: 60_000 }, async () => {
+    for (const viewport of [DESKTOP, MOBILE]) {
+      const home = await openCatalogBars(browser, viewport);
+      let reference;
+      try {
+        reference = await home.page.locator('[data-catalog-view]').first().evaluate(element => {
+          const style = getComputedStyle(element);
+          return { height: element.getBoundingClientRect().height, fontSize: style.fontSize,
+            padding: style.padding, background: style.backgroundColor };
+        });
+      } finally {
+        await home.close();
+      }
+      const opened = await openReview(browser, undefined, viewport);
+      try {
+        const filter = opened.page.locator('[data-review-filter]');
+        const state = filter.locator('[data-entity-state]').first();
+        const style = await state.evaluate(element => {
+          const computed = getComputedStyle(element);
+          return { height: element.getBoundingClientRect().height, fontSize: computed.fontSize,
+            padding: computed.padding, background: computed.backgroundColor };
+        });
+        assert.deepEqual(style, reference);
+        const sameRow = await filter.evaluate(element => {
+          const top = element.querySelector('[data-filter-row="top"]')!.getBoundingClientRect();
+          const bottom = element.querySelector('[data-filter-row="bottom"]')!.getBoundingClientRect();
+          return Math.abs(top.top - bottom.top) < 1;
+        });
+        assert.equal(sameRow, !viewport.mobile, '足宽同排、窄屏换排');
+        const divider = await filter.locator('[data-entity-sep]').evaluate(element => getComputedStyle(element).visibility);
+        assert.equal(divider, viewport.mobile ? 'hidden' : 'visible');
+        await filter.getByRole('button', { name: /^已忽略/ }).click();
+        await settle(opened.page);
+        const geometry = await filter.evaluate(element => {
+          const button = element.querySelector('[data-entity-state][aria-pressed="true"]')!;
+          const pane = element.querySelector<HTMLElement>('[data-view-glide]')!;
+          const active = button.getBoundingClientRect(), glass = pane.getBoundingClientRect();
+          return { visible: !pane.hidden, delta: Math.abs(active.left - glass.left),
+            widthDelta: Math.abs(active.width - glass.width),
+            overflow: document.documentElement.scrollWidth > innerWidth };
+        });
+        assert.equal(geometry.visible, true);
+        assert.ok(geometry.delta < 1 && geometry.widthDelta < 1, JSON.stringify(geometry));
+        assert.equal(geometry.overflow, false);
+        assert.equal(await filter.getByRole('button', { name: /^待处理/ }).count(), 1);
+      } finally {
+        await opened.close();
+      }
+    }
+  });
 
   it('聚焦 React 输入框只画 BoardUI 外框，旧样式表的焦点环不进来', { timeout: 60_000 }, async () => {
     const opened = await openAccess(browser);
@@ -121,7 +172,8 @@ describe('设计决定：控件、状态与首页顶部', () => {
       assert.notEqual(surface, 'rgba(0, 0, 0, 0)', '警示没有底色');
       assert.equal(surface, await tokenColor(opened.page, '.peach-react', '--color-status-yellow-background'));
       const ink = await note.evaluate((element) => getComputedStyle(element).color);
-      const hint = await opened.form.getByText('Not needed when turning off the access password.').evaluate((element) => getComputedStyle(element).color);
+      assert.equal(await opened.form.locator('input[type="password"]').count(), 0);
+      const hint = await tokenColor(opened.page, '.peach-react', '--color-text-secondary');
       assert.notEqual(ink, hint, '警示文字和字段说明同色');
       assert.deepEqual(opened.problems, []);
     } finally {
@@ -149,10 +201,11 @@ describe('设计决定：控件、状态与首页顶部', () => {
     }
   });
 
-  it('状态徽章只有三档颜色：成功绿、失败红、被叫停黄，其余中性', { timeout: 60_000 }, async () => {
+  it('任务结果成功绿、失败红、中断黄，取消与排队中性', { timeout: 60_000 }, async () => {
     const opened = await openActivity(browser, [
       settledRun(1, 'succeeded', '追更检查'), settledRun(2, 'failed', '扫描与采集'),
       settledRun(3, 'cancelled', '批量操作'), settledRun(4, 'pending', '命令行批处理'),
+      settledRun(5, 'interrupted', '资料采集'),
     ]);
     try {
       const badge = (status: string) => opened.page.locator(`li[data-status="${status}"] span`).first()
@@ -160,8 +213,8 @@ describe('设计决定：控件、状态与首页顶部', () => {
       const token = (name: string) => tokenColor(opened.page, '.peach-react', name);
       assert.equal(await badge('succeeded'), await token('--color-status-lime-background'));
       assert.equal(await badge('failed'), await token('--color-status-rose-background'));
-      assert.equal(await badge('cancelled'), await token('--color-status-yellow-background'));
-      // 第四种状态不另给颜色：三档之外都读同一个中性底，颜色才还说得出「成功／失败／被叫停」。
+      assert.equal(await badge('interrupted'), await token('--color-status-yellow-background'));
+      assert.equal(await badge('cancelled'), await token('--color-background-tertiary-default'));
       assert.equal(await badge('pending'), await token('--color-background-tertiary-default'));
       assert.deepEqual(opened.problems, []);
     } finally {
@@ -302,7 +355,7 @@ describe('设计决定：控件、状态与首页顶部', () => {
       assert.equal(await fill(1),
         await tokenColor(opened.page, '.peach-react', '--color-border-focus-ring'));
       // 忙态不改 `disabled`：控件仍可聚焦，重复触发由页面自己挡。
-      const scan = card.getByRole('button', { name: 'Sync library', exact: true });
+      const scan = card.getByRole('button', { name: '同步新增文件', exact: true });
       assert.equal(await scan.getAttribute('aria-busy'), 'true');
       assert.equal(await scan.evaluate((element) => (element as HTMLButtonElement).disabled), false,
         '用原生 disabled 挡的话按钮连焦点都拿不到');
@@ -433,6 +486,57 @@ describe('设计决定：控件、状态与首页顶部', () => {
     }
   });
 
+  it('同一份问题日志只印一处，「7 天内不再问」与失败提示同一组留白', { timeout: 60_000 }, async () => {
+    const notes = { fetching_cover: 84, querying_metadata: 18 };
+    const button = '[aria-label="在资源管理器中显示"]';
+    const reveal = `#libraryProcessing ${button}`;
+    const failed = await openProcessing(browser, '/data-cleanup', { ...FAILED_JOB, notes });
+    try {
+      const alert = failed.page.locator('#libraryProcessing [role="alert"]');
+      await expectBody(failed.page, '/data-cleanup 失败提示与不再问提示', [alert], failed.problems);
+      await alert.locator('summary').click();
+      await alert.locator('ul').waitFor({ state: 'visible', timeout: 5_000 });
+      assert.equal(await failed.page.locator(reveal).count(), 1, '完整记录在两块提示里各印了一遍');
+      assert.equal(await alert.locator(button).count(), 1, '完整记录该跟着问题清单');
+      const spacing = await failed.page.evaluate(() => {
+        const box = (element: Element) => {
+          const style = getComputedStyle(element);
+          return { top: style.paddingTop, bottom: style.paddingBottom, left: style.paddingLeft };
+        };
+        const alert = document.querySelector('#libraryProcessing [role="alert"]')!;
+        const note = [...document.querySelectorAll('#libraryProcessing [role="note"]')]
+          .find((element) => element.textContent!.includes('7 天内不再问'))!;
+        return { alert: box(alert), note: box(note) };
+      });
+      assert.equal(spacing.note.top, spacing.note.bottom, '不再问提示的上下留白不一样');
+      assert.deepEqual(spacing.note, spacing.alert, '不再问提示和失败提示的内边距对不上');
+      assert.deepEqual(failed.problems, []);
+    } finally {
+      await failed.close();
+    }
+    /* 跑完的一趟没有失败提示，这条提示就是日志唯一的入口；分隔线上下的留白与内边距相同。 */
+    const complete = await openProcessing(browser, '/data-cleanup', {
+      status: 'complete', job_id: 'two', issue_count: 3, issues_log: FAILED_JOB.issues_log, notes,
+    });
+    try {
+      const note = complete.page.locator('#libraryProcessing [role="note"]', { hasText: '7 天内不再问' });
+      await expectBody(complete.page, '/data-cleanup 不再问提示', [note], complete.problems);
+      assert.equal(await complete.page.locator(reveal).count(), 1, '跑完的一趟丢了完整记录');
+      const rhythm = await note.evaluate((element, selector) => {
+        const bar = element.querySelector(selector)!.closest('.border-t')!;
+        const note = getComputedStyle(element);
+        const style = getComputedStyle(bar);
+        return { padding: note.paddingTop, gap: note.rowGap, above: style.marginTop, below: style.paddingTop };
+      }, button);
+      assert.equal(rhythm.above, rhythm.padding, '分隔线上方的留白和提示内边距不一样');
+      assert.equal(rhythm.below, rhythm.padding, '分隔线下方的留白和提示内边距不一样');
+      assert.ok(rhythm.gap === 'normal' || rhythm.gap === '0px', '正文与分隔线之间还多垫了一段间距');
+      assert.deepEqual(complete.problems, []);
+    } finally {
+      await complete.close();
+    }
+  });
+
   it('新窗口打开的来源地址两项 rel 都写：不带走会话，也不带走来处', { timeout: 60_000 }, async () => {
     const opened = await openScraping(browser);
     try {
@@ -531,7 +635,7 @@ describe('设计决定：控件、状态与首页顶部', () => {
     }
   });
 
-  it('五枚叠放头像只朝标题方向展开，左缘和窄卡边界不动', { timeout: 60_000 }, async () => {
+  it('五枚叠放头像浮于文字上展开，左缘与标题列不动', { timeout: 60_000 }, async () => {
     const names = Array.from({ length: 7 }, (_, index) => `演示演员 ${index + 1}`);
     const opened = await openCatalogFixture(browser, (payload) => {
       const item = payload.items[0];
@@ -547,8 +651,9 @@ describe('设计决定：控件、状态与首页顶部', () => {
       await stack.waitFor({ timeout: 5_000 });
       const avatars = stack.locator('[data-media-avatar]');
       assert.equal(await avatars.count(), 5, 'API 给七位表演者时卡片没有收在五枚以内');
-      const before = await avatars.evaluateAll((items) => items.map((item) => item.getBoundingClientRect().x));
+      const before = await avatars.evaluateAll((items) => items.map((item) => parseFloat(getComputedStyle(item).left)));
       const left = (await stack.boundingBox())!.x;
+      const textBefore = await stack.locator('xpath=ancestor::article[@data-media-card]').first().locator('[data-media-text]').boundingBox();
       const waitForAvatarMotion = () => stack.evaluate(async (element) => {
         const animations = element.getAnimations({ subtree: true });
         await Promise.all(animations.map((animation) => animation.finished.catch(() => undefined)));
@@ -556,17 +661,14 @@ describe('设计决定：控件、状态与首页顶部', () => {
 
       await avatars.first().hover();
       await waitForAvatarMotion();
-      const firstSpread = await avatars.evaluateAll((items) => items.map((item) => item.getBoundingClientRect().x));
+      const firstSpread = await avatars.evaluateAll((items) => items.map((item) => parseFloat(getComputedStyle(item).left)));
       for (let index = 1; index < firstSpread.length; index += 1) {
         assert.ok(firstSpread[index] > before[index], `首枚悬停时第 ${index + 1} 枚没有向标题方向展开`);
       }
 
-      /* 第三枚要从静止位置指上去：首枚悬停时它被推开 20px，直接移过去，它让回原位后指针会落到右邻上。 */
-      await opened.page.mouse.move(0, 0);
-      await waitForAvatarMotion();
       await avatars.nth(2).hover();
       await waitForAvatarMotion();
-      const after = await avatars.evaluateAll((items) => items.map((item) => item.getBoundingClientRect().x));
+      const after = await avatars.evaluateAll((items) => items.map((item) => parseFloat(getComputedStyle(item).left)));
       const card = stack.locator('xpath=ancestor::article[@data-media-card]').first();
       const bounds = await card.evaluate((cardElement) => {
         const stackRect = cardElement.querySelector('[data-media-avatars]')!.getBoundingClientRect();
@@ -575,6 +677,8 @@ describe('设计决定：控件、状态与首页顶部', () => {
         const cardRect = cardElement.getBoundingClientRect();
         return {
           stackLeft: stackRect.left,
+          stackRight: stackRect.right,
+          textLeft: cardElement.querySelector('[data-media-text]')!.getBoundingClientRect().left,
           firstRingLeft: firstRect.left - 2,
           lastRingRight: lastRect.right + 2,
           cardLeft: cardRect.left,
@@ -585,10 +689,12 @@ describe('设计决定：控件、状态与首页顶部', () => {
       // Chrome 合成层结束 transition 时会留下远小于一个物理像素的浮点残差；这里守的是
       // 头像没有发生可见位移，不把 303 与 302.9933 这种同一像素内的取整差判成布局回退。
       assert.ok(Math.abs(after[0] - before[0]) <= .5, '指向第三枚时第一枚被往左推');
-      assert.ok(Math.abs(after[1] - before[1]) <= .5, '指向第三枚时第二枚被往左推');
-      assert.ok(after[3] > before[3] && after[4] > before[4], '右侧邻座没有朝标题方向让开');
+      assert.ok(after.slice(1).every((value,index)=>Math.abs(value-firstSpread[index+1]!)<=.5), '在头像间移动时展开位置不稳定');
+      assert.ok(after[3] > before[3] && after[4] > before[4], '头像没有朝标题方向展开');
       assert.ok(bounds.firstRingLeft >= bounds.cardLeft - .5, '首枚放大加描边后被卡片左缘裁切');
       assert.ok(bounds.lastRingRight <= bounds.cardRight + .5, '头像展开越出卡片右缘');
+      assert.ok(bounds.lastRingRight > bounds.textLeft && bounds.stackRight <= bounds.textLeft, '展开头像没有浮于文字上方');
+      assert.ok(Math.abs(bounds.textLeft-textBefore!.x)<=.5, '展开头像改变了标题列位置');
 
       await opened.page.mouse.move(0, 0);
       await avatars.nth(2).focus();
@@ -649,18 +755,38 @@ describe('设计决定：控件、状态与首页顶部', () => {
       });
       assert.ok(await input.evaluate((element) => (element as HTMLInputElement).scrollLeft) > 0,
         '测试内容没有真正让搜索框横向滚动');
+      /* 残影最多活一秒（动画结束或兜底计时器就摘掉），负载重时测试的几次往返之间它就没了。
+         清空前在页面里挂好观察者：残影一挂上就记下文字与位移，再在同一个页面循环里逐帧等
+         placeholder 淡到完全透明；残影先被摘掉而 placeholder 还没透明，才算真失败。 */
+      type DissolveSeen = { text: string | null; transform: string; hidden: boolean };
+      type DissolveWindow = Window & { dissolveSeen?: Promise<DissolveSeen> };
+      await input.evaluate((element) => {
+        const host = element.parentElement!;
+        (window as DissolveWindow).dissolveSeen = new Promise<DissolveSeen>((resolve) => {
+          const seen: DissolveSeen = { text: null, transform: '', hidden: false };
+          const finish = () => { observer.disconnect(); resolve(seen) };
+          const poll = () => {
+            if (!host.querySelector(':scope > .cleardissolve')) { finish(); return }
+            if (getComputedStyle(element, '::placeholder').opacity === '0') { seen.hidden = true; finish(); return }
+            requestAnimationFrame(poll);
+          };
+          const observer = new MutationObserver(() => {
+            const value = host.querySelector<HTMLElement>(':scope > .cleardissolve [data-dissolve-value]');
+            if (!value || seen.text !== null) return;
+            seen.text = value.textContent;
+            seen.transform = value.style.transform;
+            poll();
+          });
+          observer.observe(host, { childList: true });
+        });
+      });
       await input.fill('');
-      const ghost = opened.page.locator('.search > .cleardissolve');
-      await ghost.waitFor({ timeout: 1_000 });
       assert.equal(await input.inputValue(), '', '动画阻塞了真实输入框清空');
-      assert.equal(await ghost.locator('[data-dissolve-value]').textContent(), text);
-      // 残影节点先挂载，placeholder 再经 CSS transition 淡出；慢速 Windows runner 上
-      // 两件事可能跨帧。等待过渡的最终状态，仍然守住 placeholder 必须完全不可见。
-      await opened.page.waitForFunction(() => {
-        const field = document.querySelector('#q');
-        return field !== null && getComputedStyle(field, '::placeholder').opacity === '0';
-      }, undefined, { timeout: 1_000 });
-      assert.match(await ghost.locator('[data-dissolve-value]').getAttribute('style') || '', /translateX\(-\d+px\)/);
+      const seen = await opened.page.evaluate(() => (window as DissolveWindow).dissolveSeen!);
+      assert.equal(seen.text, text, '清空时没有挂上带原内容的残影');
+      assert.match(seen.transform, /translateX\(-\d+px\)/);
+      assert.ok(seen.hidden, '残影在场时 placeholder 没有完全透明');
+      const ghost = opened.page.locator('.search > .cleardissolve');
       await ghost.waitFor({ state: 'detached', timeout: 2_000 });
       assert.equal(await input.evaluate((element) => element.classList.contains('dissolving')), false,
         '动画结束后仍压着输入框的溶解状态');
@@ -738,7 +864,7 @@ describe('设计决定：控件、状态与首页顶部', () => {
     }
   });
 
-  it('首页标签：没加上去是 --field-ring-hover 的虚线，加上去是玻璃上那圈实线，视图不画虚线；触屏上排 48、视图与标签 30', { timeout: 60_000 }, async () => {
+  it('首页标签：没加上去是 --field-ring-hover 的虚线，加上去是玻璃上那圈实线，视图不画虚线；触屏上排 48、视图与标签取紧凑档', { timeout: 60_000 }, async () => {
     /* 虚线只说「这条筛选可加、此刻没加」，取 Vercel 筛选令牌未生效那一档；四枚视图恒有一枚生效，不画。
        圆角同卡片、详情与交集条那一颗（`--tag-radius`）。触屏控件共用 30px 高度。 */
     const opened = await openCatalogBars(browser);
@@ -775,9 +901,11 @@ describe('设计决定：控件、状态与首页顶部', () => {
           return element ? Math.round(element.getBoundingClientRect().height) : null;
         };
         return { coarse: matchMedia('(pointer: coarse)').matches, row: height('[data-filter-row="top"]'),
-          view: height('[data-catalog-view]'), tag: height('[data-catalog-tag]') };
+          view: height('[data-catalog-view]'), tag: height('[data-catalog-tag]'),
+          compact: parseFloat(getComputedStyle(document.querySelector('[data-catalog-filter]')!).getPropertyValue('--control-h-compact')) };
       });
-      assert.deepEqual(heights, { coarse: true, row: 48, view: 30, tag: 30 }, '触屏筛选按钮高度不一致');
+      assert.equal(heights.compact, 32);
+      assert.deepEqual(heights, { coarse: true, row: 48, view: heights.compact, tag: heights.compact, compact: heights.compact }, '触屏筛选按钮高度不一致');
     } finally {
       await phone.close();
     }

@@ -10,11 +10,11 @@ DISC_SUFFIXES = frozenset({'.iso'})
 
 
 def is_pointer(path: str | Path) -> bool:
-    return Path(path).suffix.lower() == POINTER_SUFFIX
+    return (path.suffix if hasattr(path, 'suffix') else Path(path).suffix).lower() == POINTER_SUFFIX
 
 
 def skip_background_read(path: str | Path) -> bool:
-    return Path(path).suffix.lower() in DISC_SUFFIXES | {POINTER_SUFFIX}
+    return (path.suffix if hasattr(path, 'suffix') else Path(path).suffix).lower() in DISC_SUFFIXES | {POINTER_SUFFIX}
 
 
 def background_rows(rows, path_index: int):

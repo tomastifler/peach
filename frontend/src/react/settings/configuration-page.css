@@ -16,3 +16,5 @@ body #stats .ui-configpage>.ui-board-local-nav{align-self:stretch;flex-direction
 .ui-configpage:has(>.ui-board-local-nav)>:not(.ui-board-local-nav):not(.ui-configgroup){grid-column:1;grid-row:2}}
 /* 按页签切分组时只显示选中的那一组（`configuration-panel.ts` 的 `groupRoot`）。 */
 [data-board-group]:not(.ui-board-group-active){display:none!important}
+/* 相邻的设置行组与只读行组共享一条边界线。 */
+.peach-react :is(.ui-settings-rows,.ui-settings-facts)+:is(.ui-settings-rows,.ui-settings-facts){border-top:1px solid var(--color-separator-border)}

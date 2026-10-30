@@ -16,7 +16,7 @@ import { FOLLOW_CREDENTIALS_KEY, setFollowItemStatus, type FollowFeedHelpers, ty
 import { openPhotoLightbox } from '../../src/react/photo-lightbox/photo-lightbox-dialog';
 import { queryClient } from '../../src/react/query';
 import { wantFollowKey } from '../../src/react/wants/wants';
-import { click, mount, settle } from './render';
+import { buttonNamed, click, mount, pending, settle, type } from './render';
 
 /* 灯箱自己的开合与翻页在 `photo-lightbox.test.tsx`；这里只看详情把哪一组、从第几张交给它。 */
 vi.mock('../../src/react/photo-lightbox/photo-lightbox-dialog', () => ({ openPhotoLightbox: vi.fn(async () => {}) }));
@@ -59,6 +59,7 @@ const data = (shown: FollowDetailItem, row: FollowGroup | null = group(shown)): 
 function serve({ page = null as unknown, status = 200 } = {}) {
   const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.startsWith('/api/follow/credentials')) return { ok: true, status: 200, json: async () => ({ providers: [] }) };
+    if (url.startsWith('/api/tag-management')) return { ok: true, status: 200, json: async () => ({ items: [], duplicate_groups: [] }) };
     if (url.startsWith('/api/follow?item=')) return { ok: true, status: 200, json: async () => structuredClone(page) };
     if (url.startsWith('/api/wants?follow=')) return { ok: true, status: 200, json: async () => ({ want: null }) };
     if (init?.method === 'POST') return { ok: status < 400, status, json: async () => (status < 400 ? { ok: true } : { detail: '写入失败' }) };
@@ -84,6 +85,72 @@ async function show(given: FollowDetailData, patch: Partial<FollowDetailProps> =
 }
 
 describe('取数', () => {
+  it('标签候选保留来源分类并按规范名称显示选中勾号', async () => {
+    const fallback = serve();
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => url.startsWith('/api/tag-management')
+      ? Promise.resolve({ ok:true, json:async () => ({ items:[
+        { k:'3D', n:4, cat:'general', aliases:[], hidden:false },
+        { k:'角色', n:2, cat:'character', aliases:[], hidden:false },
+        { k:'未知', n:1, cat:'unknown', aliases:[], hidden:false },
+      ] }) }) : fallback(url, init)));
+    const { host } = await show(data(item(8, { tags:['3d'], detail_tags:['3d'], tag_types:{ '3d':'general' } })));
+    await click(host.querySelector('[aria-label="添加标签"]')); await settle();
+    const selected = host.querySelector('[data-pick="3D"]')!;
+    expect(selected.getAttribute('aria-pressed')).toBe('true');
+    expect(selected.getAttribute('data-tag-cat')).toBe('r34-general');
+    expect(selected.querySelector('use')?.getAttribute('href')).toBe('#i-check');
+    expect(host.querySelector('[data-pick="角色"]')?.getAttribute('data-tag-cat')).toBe('r34-character');
+    expect(host.querySelector('[data-pick="未知"]')?.getAttribute('data-tag-cat')).toBe('r34-unknown');
+  });
+
+  it('手动标签提交保持输入和忙态，成功后更新详情并可移除', async () => {
+    const original = item(8, { tags: ['source'], detail_tags: ['source'], custom_tags: [] });
+    const updated = item(8, { tags: ['source', '精选'], detail_tags: ['source', '精选'], custom_tags: ['精选'] });
+    const sibling = item(9);
+    const waiting = pending<{ ok: boolean; json(): Promise<unknown> }>();
+    const fallback = serve();
+    const fetcher = vi.fn((url: string, init?: RequestInit) => url === '/api/follow/tag'
+      ? JSON.parse(String(init?.body)).operation === 'add' ? waiting.answer
+        : Promise.resolve({ ok: true, json: async () => ({ item: original, group: group(original, { variants: [sibling] }) }) })
+      : fallback(url, init));
+    vi.stubGlobal('fetch', fetcher);
+    const { host, actions: receipts } = await show(data(original));
+    queryClient.setQueryData(followItemKey(sibling.id), data(sibling, group(original, { variants: [sibling] })));
+    expect(buttonNamed('管理标签', host)).toBeNull();
+    await click(host.querySelector('[aria-label="添加标签"]'));
+    const input = host.querySelector<HTMLInputElement>('#tagPickSearch')!;
+    await type(input, '精选');
+    await click(host.querySelector('[data-pick="精选"]'));
+    expect(host.querySelector('[data-pick="精选"]')).toBeNull();
+    expect(fetcher.mock.calls.filter(([url]) => url === '/api/follow/tag')).toHaveLength(1);
+    expect(input.value).toBe('精选');
+    expect(host.querySelector('[aria-label="添加标签"]')?.getAttribute('aria-busy')).toBe('true');
+    expect(receipts.toast).not.toHaveBeenCalled();
+    await waiting.release({ ok: true, json: async () => ({ item: updated, group: group(updated, { variants: [sibling] }) }) });
+    await settle();
+    expect(host.querySelector('[data-follow-tag="精选"]')).not.toBeNull();
+    expect(queryClient.getQueryData<FollowDetailData>(followItemKey(sibling.id))?.group?.primary.tags).toContain('精选');
+    expect(receipts.toast).toHaveBeenCalledWith('已添加标签「精选」', expect.objectContaining({ undo: expect.any(Function) }));
+    await click(host.querySelector('[aria-label="删除标签 精选"]')); await settle();
+    expect(host.querySelector('[data-follow-tag="精选"]')).toBeNull();
+    expect(host.querySelector('[data-follow-tag="source"]')).not.toBeNull();
+  });
+
+  it('手动标签失败可重新打开选择器重试原输入并显示原因', async () => {
+    const fallback = serve();
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => url === '/api/follow/tag'
+      ? Promise.resolve({ ok: false, status: 400, json: async () => ({ error: '标签名不含逗号' }) }) : fallback(url, init)));
+    const { host, actions: receipts } = await show(data(item(8)));
+    await click(host.querySelector('[aria-label="添加标签"]'));
+    const input = host.querySelector<HTMLInputElement>('#tagPickSearch')!;
+    await type(input, 'a,b');
+    await click(host.querySelector('[data-pick="a,b"]')); await settle();
+    await click(host.querySelector('[aria-label="添加标签"]'));
+    expect(input.value).toBe('a,b');
+    expect(host.textContent).toContain('标签名不含逗号');
+    expect(receipts.toast).not.toHaveBeenCalled();
+  });
+
   it('缓存里没有这一条就单条取 `/api/follow?item=`，取回的组里找不到这一条就报出来', async () => {
     const fetcher = serve({ page: { groups: [group(item(8))], sources: [], author_aliases: [] } });
     const props: FollowDetailProps = { id: 8, mediaIndex: null, mediaView: 'videos', relatedLimit: 0, helpers: helpers(), actions: actions() };
@@ -131,7 +198,7 @@ describe('侧栏', () => {
       '[data-follow-state]', '[data-follow-detail-tags]'].map((selector) => host.querySelector(selector)!);
     const follows = (a: Element, b: Element) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect([follows(summary!, actionsBar!), follows(actionsBar!, state!), follows(state!, tags!)]).toEqual([true, true, true]);
-    expect([...host.querySelectorAll<HTMLElement>('[data-follow-tag]')].map((tag) => [tag.dataset.followTag, tag.dataset.tagCat]))
+    expect([...host.querySelectorAll<HTMLElement>('[data-follow-tag]')].map((tag) => [tag.dataset.followTag, tag.closest('[data-detail-tag]')?.getAttribute('data-tag-cat')]))
       .toEqual([['ow', 'r34-copyright'], ['tracer', 'r34-character'], ['kou', 'r34-artist'], ['solo', 'r34-general'],
         ['animated', 'r34-metadata'], ['odd', 'r34-unknown']]);
   });

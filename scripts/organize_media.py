@@ -24,10 +24,11 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from peach import organize
+from peach import junk, organize
 from peach.config import DATABASE_PATH, GENERATED_DIR
 from peach.media_sources import SCANNABLE_LOCATIONS
 from peach.organize_templates import PLACEHOLDERS, TemplateError
+from peach.platform import location_roots
 from peach.scripting import add_ledger_write_args, open_for_write, verify_after_write
 
 
@@ -58,6 +59,7 @@ def _report_plan(plan: dict) -> None:
 def run(args: argparse.Namespace) -> int:
     connection = open_for_write(args)
     try:
+        baseline = {tuple(row) for row in connection.execute('PRAGMA foreign_key_check')}
         if args.rollback_last:
             latest = organize.latest_batch(args.generated_root)
             if latest is None:
@@ -72,6 +74,10 @@ def run(args: argparse.Namespace) -> int:
             for failure in result["failures"]:
                 print(f"  {failure['path']}：{failure['reason']}")
         else:
+            if args.apply:
+                checked = junk.isolate(args.db, roots=[(args.location, root)
+                    for root in location_roots().get(args.location, ())])
+                print(f"垃圾检查：隔离 {checked['isolated']} 个，待复核 {checked['review']} 个")
             plan = organize.build_plan(
                 connection, location=args.location,
                 file_template=args.file_template, dir_template=args.dir_template)
@@ -88,10 +94,12 @@ def run(args: argparse.Namespace) -> int:
             for failure in result["failures"]:
                 print(f"  {failure['path']}：{failure['reason']}")
             print(f"批次日志：{result['log_path']}")
-        integrity, violations = verify_after_write(connection)
-        if integrity != "ok" or violations:
-            print(f"写入后 ledger 校验失败：integrity={integrity} foreign_keys={violations}")
+        integrity, _ = verify_after_write(connection)
+        introduced = {tuple(row) for row in connection.execute('PRAGMA foreign_key_check')} - baseline
+        if integrity != "ok" or introduced:
+            print(f"写入后 ledger 校验失败：integrity={integrity} new_foreign_keys={len(introduced)}")
             return 2
+        print(f"已核对 ledger，存量外键异常 {len(baseline)} 条")
         return 0
     finally:
         connection.close()

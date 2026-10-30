@@ -21,13 +21,47 @@ from .catalog_rules import normalise_code_key
 from .http import HttpRequest, HttpxTransport, response_text
 from .scripting import HostLimiter
 from .jav_cache import DAY, PublicSnapshots, cache_lifetime
+from .javdb_identity import RULE, cache_key as identity_cache_key, current_evidence
 
 WEB = "https://catembylegacy.fastcdn.dpdns.org"
 API = "https://jdforrepam.com/api"
 PAGE_SIZE = 10
 MAX_REVIEW_PAGES = 8
+_JS_IDENTIFIER = r'[A-Za-z_$][A-Za-z0-9_$]*'
 _CACHE_ROOT = ContextVar('jav_public_cache_root', default=None)
 _CACHE_READS = ContextVar('jav_public_cache_reads', default=None)
+
+
+def public_signature_parts(script: str) -> tuple[str, str] | None:
+    """从公开请求头的签名计算式读取常量，不执行来源脚本。"""
+    calls = set(re.findall(r'\bjdsignature\s*:\s*(' + _JS_IDENTIFIER + r')\s*\(\s*\)', script))
+    if len(calls) != 1:
+        return None
+    recipes = list(re.finditer(
+        r'\bfunction\s+' + re.escape(calls.pop()) + r'\s*\(\s*\)\s*\{\s*(?:const|let|var)\s+'
+        r'(?P<stamp>' + _JS_IDENTIFIER + r')\s*=\s*Math\.floor\(Date\.now\(\)\s*/\s*'
+        r'(?:1e3|1000)\)\.toString\(\)\s*;\s*return\s*'
+        r'`\$\{(?P=stamp)\}\.\$\{(?P<middle>' + _JS_IDENTIFIER + r')\}\.'
+        r'\$\{' + _JS_IDENTIFIER + r'\(\s*(?P=stamp)\s*\+\s*(?P<suffix>' + _JS_IDENTIFIER + r')\s*\)\}`\s*;?\s*\}',
+        script,
+    ))
+    if len(recipes) != 1:
+        return None
+    recipe = recipes[0]
+    values = []
+    for name in (recipe['middle'], recipe['suffix']):
+        assignments = re.findall(r'(?<![\w$])' + re.escape(name) + r'\s*=\s*("(?:\\.|[^"\\]){1,512}")\s*[,;]', script)
+        if len(assignments) != 1:
+            return None
+        try:
+            value = json.loads(assignments[0])
+        except ValueError:
+            return None
+        if (not isinstance(value, str) or not 1 <= len(value) <= 256
+                or any(ord(char) < 32 for char in value)):
+            return None
+        values.append(value)
+    return values[0], values[1]
 
 
 @contextmanager
@@ -51,7 +85,7 @@ def cache_checked_at(prefix, *, exact=False):
 
 def cache_error(key):
     return next((read['error'] for read in reversed(_CACHE_READS.get() or [])
-                 if read['key'] == key and read['error']), '')
+                 if (read['key'] == key or read['key'].startswith(key + ':')) and read['error']), '')
 
 
 def _record_read(key, snapshot, error=''):
@@ -86,6 +120,10 @@ def preview_video_url(movie: dict) -> str:
 
 class PublicSourceUnavailable(ValueError):
     """公开来源当前未取得。"""
+
+
+class PublicIdentityAmbiguous(PublicSourceUnavailable):
+    """同番号有多个来源身份，不能按番号绑定资料或媒体。"""
 
 
 class PublicBudgetExceeded(PublicSourceUnavailable):
@@ -199,12 +237,11 @@ class PublicAPI:
             self.paused_until = self.clock() + 60
             raise PublicSourceUnavailable("Metadata source format not recognized")
         js = response_text(self._get(WEB + entry[1]))
-        middle = re.search(r'\bS1="([^"\r\n]{1,256})"', js)
-        suffix = re.search(r'\bE1="([^"\r\n]{1,256})"', js)
-        if not middle or not suffix:
+        parts = public_signature_parts(js)
+        if parts is None:
             self.paused_until = self.clock() + 60
-            raise PublicSourceUnavailable("Metadata source format not recognized")
-        self.signature_parts = middle[1], suffix[1]
+            raise PublicSourceUnavailable("作品资料来源格式未识别")
+        self.signature_parts = parts
         self.signature_until = self.clock() + 24 * 3600
         return self.signature_parts
 
@@ -232,6 +269,7 @@ class PublicAPI:
 
     def _cache_key(self, key):
         root = self._store().root
+        key = identity_cache_key(key)
         return f'{root.resolve()}\0{key}' if root is not None else key
 
     def _memory(self, cache_key, *, image, refresh):
@@ -271,10 +309,11 @@ class PublicAPI:
             failed = self.failures.get(cache_key)
             _record_read(key, self.snapshots.get(cache_key), str(failed[1]) if failed else '')
             return result
-        previous = snapshot if snapshot is not None else None if image else store.load(key)
+        stored_key = identity_cache_key(key)
+        previous = snapshot if snapshot is not None else None if image else store.load(stored_key)
         try:
-            with nullcontext() if image else store.acquire(key):
-                disk = None if image else store.load(key)
+            with nullcontext() if image else store.acquire(stored_key):
+                disk = None if image else store.load(stored_key)
                 if disk is not None and disk.fresh(self.wallclock()) and (
                         not refresh or (previous is not None and disk.revision != previous.revision)):
                     snapshot = self._remember(key, disk.value, snapshot=disk)
@@ -315,7 +354,7 @@ class PublicAPI:
             if isinstance(result, dict):
                 released = result.get('release_date') or released
             released = released if isinstance(released, str) else None
-            snapshot = self._store().save(key, result, released)
+            snapshot = self._store().save(identity_cache_key(key), result, released)
         lifetime = 6 * 3600 if image else cache_lifetime(snapshot.released, datetime.fromtimestamp(self.wallclock()).date())
         remaining = lifetime if image else None if lifetime is None else max(0, snapshot.saved + lifetime - self.wallclock())
         with self.lock:
@@ -330,39 +369,57 @@ class PublicAPI:
                 self.failures.pop(removed, None)
         return snapshot
 
-    def movie(self, code: str, *, refresh=False) -> dict:
+    def movie(self, code: str, *, refresh=False, source_id=None) -> dict:
         canonical = normalise_code_key(code)
 
         def identify():
-            rows = self._rows("/v2/search", "movies", {"q": canonical, "type": "movie", "page": 1})
-            match = next((row for row in rows if isinstance(row, dict)
-                          and normalise_code_key(row.get("number")) == canonical), None)
-            if not match or not isinstance(match.get("id"), str) or not re.fullmatch(r"[A-Za-z0-9]+", match["id"]):
-                raise PublicSourceUnavailable("No work metadata retrieved for this code")
-            return match["id"]
+            product = re.fullmatch(r'FC2-PPV-(\d+)', canonical)
+            query = product[1] if product else canonical
+            rows = self._rows("/v2/search", "movies", {"q": query, "type": "movie", "page": 1})
+            matches = [row for row in rows if isinstance(row, dict)
+                       and normalise_code_key(row.get("number")) == canonical]
+            if not matches or any(not isinstance(row.get('id'), str)
+                                  or not re.fullmatch(r'[A-Za-z0-9]+', row['id']) for row in matches):
+                raise PublicSourceUnavailable("未取得这个番号的作品资料")
+            return list(dict.fromkeys(row['id'] for row in matches))
+
+        if source_id is None:
+            identities = self._cached("movie-id:" + canonical, identify, refresh=refresh)
+            if len(identities) != 1:
+                raise PublicIdentityAmbiguous("同番号对应多个作品，请核对来源身份：" + '、'.join(identities))
+            movie_id = identities[0]
+        elif isinstance(source_id, str) and re.fullmatch(r'[A-Za-z0-9]+', source_id):
+            movie_id = source_id
+        else:
+            raise PublicSourceUnavailable("来源作品身份不匹配")
 
         def fetch():
-            movie_id = self._cached("movie-id:" + canonical, identify, refresh=refresh)
             movie = self._json("/v4/movies/" + movie_id).get("movie")
             if (not isinstance(movie, dict) or normalise_code_key(movie.get("number")) != canonical
                     or movie.get("id") != movie_id):
                 raise PublicSourceUnavailable("来源作品身份不匹配")
-            return movie
+            return {**movie, 'javdb_rule': RULE}
 
-        return self._cached("movie:" + canonical, fetch, refresh=refresh)
+        return self._cached(f"movie:{canonical}:{movie_id}", fetch, refresh=refresh)
 
     def remember_movie_identity(self, code: str, source: dict):
         """已取得的编目身份可复用，完整资料仍须通过来源的身份核对。"""
         canonical = normalise_code_key(code)
         identity = source.get("id")
-        if not isinstance(identity, str) or normalise_code_key(source.get("number")) != canonical or not re.fullmatch(r"[A-Za-z0-9]+", identity):
+        if (not current_evidence(source) or not isinstance(identity, str)
+                or normalise_code_key(source.get("number")) != canonical
+                or not re.fullmatch(r"[A-Za-z0-9]+", identity)):
             return
         key = 'movie-id:' + canonical
-        stored = self._store().load(key)
-        if stored and stored.value == identity:
-            self._remember(key, identity, snapshot=stored)
-        else:
-            self._remember(key, identity)
+        with self.lock:
+            # 已观察到的唯一身份或歧义不被较旧的发现边车反向覆盖。
+            if self._cache_key(key) in self.cache:
+                return
+            stored = self._store().load(identity_cache_key(key))
+            if stored:
+                self._remember(key, stored.value, snapshot=stored)
+            else:
+                self._remember(key, [identity])
 
     def _rows(self, path, key, query=None):
         rows = self._json(path, query).get(key)
@@ -374,52 +431,78 @@ class PublicAPI:
     def peek_movie(self, code: str) -> dict | None:
         """只读已取得的资料，不触发网络；供发现排序投影。"""
         with self.lock:
-            key = 'movie:' + normalise_code_key(code)
+            canonical = normalise_code_key(code)
+            identity_key = 'movie-id:' + canonical
+            hit = self.cache.get(self._cache_key(identity_key))
+            identity = hit[1] if hit else None
+            if identity is None:
+                stored = self._store().load(identity_cache_key(identity_key))
+                identity = stored.value if stored else None
+            if not isinstance(identity, list) or len(identity) != 1:
+                return None
+            key = f'movie:{canonical}:{identity[0]}'
             cache_key = self._cache_key(key)
             hit = self.cache.get(cache_key)
-            snapshot = self.snapshots.get(cache_key) or self._store().load(key)
+            snapshot = self.snapshots.get(cache_key) or self._store().load(identity_cache_key(key))
             if snapshot and snapshot.fresh(self.wallclock()):
                 _record_read(key, snapshot)
                 return dict(snapshot.value) if isinstance(snapshot.value, dict) else None
             return dict(hit[1]) if hit and hit[0] > self.clock() and snapshot is None else None
 
-    def reviews(self, code: str, page: int, *, refresh=False) -> list[dict]:
+    def _bound_movie(self, code, movie):
+        if movie is None:
+            return self.movie(code)
+        if (not isinstance(movie, dict) or not isinstance(movie.get('id'), str)
+                or not re.fullmatch(r'[A-Za-z0-9]+', movie['id'])
+                or normalise_code_key(movie.get('number')) != normalise_code_key(code)):
+            raise PublicSourceUnavailable('来源作品身份不匹配')
+        return movie
+
+    def reviews(self, code: str, page: int, *, refresh=False, movie=None) -> list[dict]:
         if not 1 <= page <= MAX_REVIEW_PAGES:
-            raise ValueError("The review page number must be between 1 and 8")
-        movie = self.movie(code)
+            raise ValueError("评论页码必须在 1 至 8 之间")
+        movie = self._bound_movie(code, movie)
         return self._cached(f"reviews:{movie['id']}:{page}", lambda:
                             self._rows(f"/v1/movies/{movie['id']}/reviews", "reviews", {"page": page}),
                             released=movie.get('release_date'), refresh=refresh)
 
-    def media_movie(self, code: str) -> dict:
+    def media_movie(self, code: str, *, movie=None) -> dict:
         """未缓存媒体可补齐带查询参数的临时来源地址，公开编目仍按发行日期复用。"""
-        movie = self.movie(code)
-        key = 'movie:' + normalise_code_key(code)
-        snapshot = self.snapshots.get(self._cache_key(key)) or self._store().load(key)
+        movie = self._bound_movie(code, movie)
+        key = f"movie:{normalise_code_key(code)}:{movie['id']}"
+        snapshot = self.snapshots.get(self._cache_key(key)) or self._store().load(identity_cache_key(key))
         urls = [movie.get(name) for name in ('cover_url', 'thumb_url', 'preview_video_url')]
         urls.extend(actor.get('avatar_url') for actor in movie.get('actors') or [] if isinstance(actor, dict))
         urls.extend((image.get('large_url') or image.get('url')) if isinstance(image, dict) else image
                     for image in movie.get('preview_images') or [])
         if snapshot and self.wallclock() - snapshot.saved >= DAY and any(
                 isinstance(url, str) and '?' in url for url in urls):
-            return self.movie(code, refresh=True)
+            return self.movie(code, refresh=True, source_id=movie['id'])
         return movie
 
-    def magnets(self, code: str, *, refresh=False) -> list[dict]:
-        movie = self.movie(code)
+    def magnets(self, code: str, *, refresh=False, movie=None) -> list[dict]:
+        movie = self._bound_movie(code, movie)
         return self._cached("magnets:" + movie['id'], lambda:
                             self._rows(f"/v1/movies/{movie['id']}/magnets", "magnets"),
                             released=movie.get('release_date'), refresh=refresh)
 
-    def official_preview(self, code, fetch, *, released=None, refresh=False, provider='prestige'):
+    def official_preview(self, code, fetch, *, released=None, refresh=False, provider='prestige', source_id=None):
         """预告按来源独立保存；DMM、JavDB 和未提供的预告每天可再检查。"""
         def read():
             url = fetch()
             return {'url': url, **({'release_date': released} if url and provider == 'prestige' else {})}
-        return self._cached(f'preview:{provider}:' + normalise_code_key(code), read, refresh=refresh)
+        key = f'preview:{provider}:' + normalise_code_key(code)
+        if provider == 'javdb':
+            if source_id is None:
+                key += f':search-{RULE}'
+            elif not isinstance(source_id, str) or not re.fullmatch(r'[A-Za-z0-9]+', source_id):
+                raise PublicSourceUnavailable('来源作品身份不匹配')
+            else:
+                key += ':' + source_id
+        return self._cached(key, read, refresh=refresh)
 
-    def image(self, code: str, index: str, *, original=False) -> str:
-        movie = self.media_movie(code)
+    def image(self, code: str, index: str, *, original=False, movie=None) -> str:
+        movie = self.media_movie(code, movie=movie)
         if index == "cover":
             url = movie.get("cover_url") or movie.get("thumb_url")
         elif index.startswith("actor:"):

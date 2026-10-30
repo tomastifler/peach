@@ -37,7 +37,7 @@
   flex: none;
   align-items: center;
   gap: 6px;
-  height: 30px;
+  height: var(--control-h-compact);
   padding: 0 10px;
   border-radius: 8px;
   color: color-mix(in srgb, var(--glass-text) 60%, transparent);
@@ -58,8 +58,8 @@
 .peach-react [data-junk-filters] a:focus-visible { outline: 2px solid var(--tungsten); outline-offset: 2px; }
 .peach-react [data-junk-filters] a > svg {
   flex: none;
-  width: 16px;
-  height: 16px;
+  width: var(--icon-inline);
+  height: var(--icon-inline);
   fill: none;
   stroke: currentColor;
   stroke-width: 2;

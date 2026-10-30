@@ -100,6 +100,7 @@ def scrape(contract, job_id: str | None = None) -> dict:
     previous = (contract.want_job.snapshot() or {}) if job_id else {}
     done = set(previous.get('completed_wants') or [])
     completed = set(done)
+    incomplete = set(previous.get('incomplete_wants') or [])
     fetched, covers = previous.get('fetched', 0), previous.get('covers', 0)
     provider = _provider(contract)
     while len(done) < MAX_PER_RUN:
@@ -120,11 +121,17 @@ def scrape(contract, job_id: str | None = None) -> dict:
                 saved = wants.get(connection, want_id)
             if covered and saved and saved['scraped_at'] is not None and saved['scrape_error'] is None:
                 completed.add(want_id)
+                incomplete.discard(want_id)
+            elif saved and saved['state'] != wants.ACQUIRED:
+                incomplete.add(want_id)
+            else:
+                incomplete.discard(want_id)
             if job_id and not contract.want_job.checkpoint(job_id, completed_wants=sorted(completed),
-                    checked=len(done), fetched=fetched, covers=covers):
-                raise InterruptedError('Want-list metadata task stopped')
+                    incomplete_wants=sorted(incomplete), checked=len(done), fetched=fetched, covers=covers):
+                raise InterruptedError('想要资料任务已停止')
     contract.cache_bust()
-    return {"ok": True, "total": len(done), "fetched": fetched, "covers": covers}
+    return {"ok": True, "total": len(done), "fetched": fetched, "covers": covers,
+            "incomplete": len(incomplete)}
 
 
 def start_scrape(contract, *, trigger: str = "manual") -> dict | None:

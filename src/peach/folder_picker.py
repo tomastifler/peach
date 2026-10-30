@@ -28,6 +28,10 @@ class PickerUnavailable(RuntimeError):
     """这台机器上没有可用的文件夹对话框，或者对话框没能打开。"""
 
 
+class PickerUnsupported(PickerUnavailable):
+    """当前平台不提供系统文件夹对话框。"""
+
+
 class PickerBusy(RuntimeError):
     """已经有一个对话框开着：系统对话框是模态的，第二个只会藏在第一个后面。"""
 
@@ -165,7 +169,7 @@ def command(initial: str | None, platform: str = sys.platform) -> tuple[list[str
         if initial and os.path.isdir(initial):
             script += f' default location POSIX file "{_applescript_string(initial)}"'
         return ["osascript", "-e", f"POSIX path of ({script})"], {}
-    raise PickerUnavailable("No folder dialog is available on this system")
+    raise PickerUnsupported("这个系统上没有可用的文件夹对话框")
 
 
 def pick_folder(initial: str | None = None, *, platform: str = sys.platform,

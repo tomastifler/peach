@@ -40,8 +40,8 @@ it('首屏一次取回任务快照和媒体库，卡片挂上去不再补取', a
   await prefetchMediaRepair(new AbortController().signal);
   const host = await card();
   expect(fetcher.mock.calls.map((call) => call[0]).sort()).toEqual(['/api/libraries', '/api/media-repair']);
-  expect(host.querySelector('section[aria-label="Media repair"] h3')?.textContent).toBe('Media repair');
-  expect(host.querySelector('[aria-haspopup="listbox"]')?.textContent).toBe('网盘');
+  expect(host.querySelector('section[aria-label="媒体修复"] h3')?.textContent).toBe('媒体修复');
+  expect(host.querySelector('[aria-haspopup="listbox"]')?.textContent).toBe('媒体库网盘');
 });
 
 it('下拉框里每个库都带着它的媒体库图标，选中的那个连图标一起显示在框里', async () => {
@@ -55,7 +55,7 @@ it('下拉框里每个库都带着它的媒体库图标，选中的那个连图�
     .toEqual(['#i-fixture-115', '#i-heart', '#i-hard-drive']);
   await click(options[1]);
   expect(trigger.querySelector('use')?.getAttribute('href')).toBe('#i-heart');
-  expect(trigger.textContent).toBe('PikPak');
+  expect(trigger.textContent).toBe('媒体库PikPak');
 });
 
 type Confirmation = Parameters<typeof legacyUi.confirmModal>[0];
@@ -117,19 +117,39 @@ it('修复阶段点名当前这部片，停止之后回到可以再开始的样�
   expect(buttonNamed('Start repair', host)).not.toBeNull();
 });
 
-it('一部都没找到时说清楚这个库里的片子都能直接播', async () => {
+it('进入页面不重放已完成的修复提示', async () => {
   vi.useFakeTimers();
   const host = await open({ ...idle, status: 'complete', library: '网盘', stage: '完成' });
-  expect(host.textContent).toContain('All videos in this library play fine.');
+  expect(host.textContent).not.toContain('这个库里的片子都能直接播');
+  expect(host.querySelector('[role="status"]')).toBeNull();
 });
 
 it('缺索引的片子卡在没装 untrunc 上时，指明去配置页的运行信息里下载', async () => {
   vi.useFakeTimers();
-  const host = await open({
+  confirmEverything();
+  vi.stubGlobal('fetch', fetchMock(200, {
     ...idle, status: 'complete', library: '网盘', stage: '完成', found: 2, failed: 2, missing_tool: 2,
-  });
-  expect(host.querySelector('p[role="status"]')?.textContent).toBe('0 repaired, 2 could not be repaired');
-  expect(host.textContent).toContain('2 videos missing an index need untrunc installed to be repaired; the download link is under "Runtime info" on the settings page.');
+  }));
+  const host = await open();
+  await click(buttonNamed('开始修复', host));
+  await settle();
+  expect(host.querySelector('p[role="status"]')?.textContent).toBe('修好 0 部，2 部修不了');
+  expect(host.textContent).toContain('2 部缺索引的片子要装上 untrunc 才修得了，下载入口在配置页的「运行信息」里');
+  await click(buttonNamed('关闭提示', host));
+  expect(host.textContent).not.toContain('缺少 untrunc');
+});
+
+it('本次检查完成只发一次回执', async () => {
+  confirmEverything();
+  vi.stubGlobal('fetch', fetchMock(200, { ...idle, status: 'complete', library: '网盘' }));
+  queryClient.setQueryData(MEDIA_REPAIR_KEY, idle);
+  queryClient.setQueryData(REPAIR_LIBRARIES_KEY, libraries);
+  const toast = vi.fn();
+  const host = await mount(<QueryClientProvider client={queryClient}><MediaRepairCard toast={toast} /></QueryClientProvider>);
+  await click(buttonNamed('开始修复', host));
+  await settle();
+  expect(toast).toHaveBeenCalledExactlyOnceWith('已检查媒体库，没有需要修复的视频');
+  expect(host.textContent).not.toContain('没有要修的');
 });
 
 it('进度读数按总数封顶：服务端报出的已查数超过总数时不写成 1,500 / 1,000', () => {

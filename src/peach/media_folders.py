@@ -21,10 +21,11 @@ def within(path: str, directory: str, recursive: bool = True) -> bool:
 def path_predicate(location: str, path: str, recursive: bool = True, alias: str = 'a'):
     """按完整目录组件匹配，目录名中的 SQL 通配符保持字面含义。"""
     prefix = str(PureWindowsPath(path)).rstrip('\\') + '\\'
-    clause = f'({alias}.location=? AND substr({alias}.path,1,?)=? COLLATE NOCASE'
+    normalized = f"replace({alias}.path,'/',char(92))"
+    clause = f'({alias}.location=? AND substr({normalized},1,?)=? COLLATE NOCASE'
     params: list = [location, len(prefix), prefix]
     if not recursive:
-        clause += f" AND instr(substr({alias}.path,?),char(92))=0"
+        clause += f" AND instr(substr({normalized},?),char(92))=0"
         params.append(len(prefix) + 1)
     return clause + ')', params
 
@@ -50,15 +51,13 @@ def directory_index(connection, config, *, locations: str = '', library: str = '
 
     for location, root in declared:
         node = add(location, root, None, folder_id(location, root))
+        node.update(media_libraries.media_identity.ownership(config, root))
         node['name'] = getattr(config, 'library_names', {}).get(root) or node['name']
-    rows = connection.execute(
-        "SELECT location,path,medium FROM asset WHERE path IS NOT NULL AND path<>'' "
-        "AND COALESCE(disposal,'') NOT IN ('trash','vanished') ORDER BY id")
-    for location, path, medium in rows:
+    def chain_for(location, path):
         target = PureWindowsPath(path)
         matches = [(loc, root) for loc, root in declared if loc == location and within(str(target), root)]
         if not matches:
-            continue
+            return None
         _, root = max(matches, key=lambda item: len(PureWindowsPath(item[1]).parts))
         root_key = folder_id(location, root)
         tail = target.parent.relative_to(PureWindowsPath(root)).parts
@@ -68,6 +67,28 @@ def directory_index(connection, config, *, locations: str = '', library: str = '
             current /= part
             chain[-1]['has_children'] = True
             chain.append(add(location, str(current), chain[-1]['id'], root_key))
+        return chain
+
+    # 同一目录下的文件走出来的是同一条链。七八万行逐行构造路径对象要好几秒，按目录前缀
+    # 记下第一条算出的链，其余文件只累加计数。末段为空或 `.`、没有分隔符、UNC 形态的
+    # 前缀不保证同前缀同父目录，逐行照算。
+    chains: dict[tuple[str, str], list | None] = {}
+    rows = connection.execute(
+        "SELECT location,path,medium FROM asset WHERE path IS NOT NULL AND path<>'' "
+        "AND COALESCE(disposal,'') NOT IN ('trash','vanished') ORDER BY id")
+    for location, path, medium in rows:
+        cut = max(path.rfind('\\'), path.rfind('/'))
+        prefix = path[:cut]
+        group = ((location, prefix) if cut > 0 and path[cut + 1:] not in ('', '.')
+                 and prefix[:2].replace('/', '\\') != '\\\\' else None)
+        if group is None:
+            chain = chain_for(location, path)
+        elif group in chains:
+            chain = chains[group]
+        else:
+            chain = chains[group] = chain_for(location, path)
+        if chain is None:
+            continue
         for node in chain:
             node['files'] += 1
             node['videos'] += medium == 'video'

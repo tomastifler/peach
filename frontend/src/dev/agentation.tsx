@@ -1,6 +1,6 @@
 /* 界面标注工具 Agentation 的挂载入口，只由 `vite.agentation.config.ts` 构建。
  *
- * 产物落在 `build/agentation/`，不进 Git 也不进独立包；Application 在本机开关打开时才
+ * 产物落在 `build/agentation/`，不进 Git 也不进独立包；Application 在当前地址明确启用时才
  * `import('/dev/agentation.js')`。它自带一份 React，挂在 `<body>` 末尾自己的根上，
  * 和页面里的 React 子树互不相干。用法见 docs/FRONTEND.md「界面标注」。 */
 import { Agentation } from 'agentation';

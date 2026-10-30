@@ -1,7 +1,13 @@
-/* 离线状态在 Peach 组合层复用错误色，BoardUI 的圆点结构保持原样。 */
-[data-mount="offline"] > [aria-hidden] {
+/* 中性与错误连接状态复用 BoardUI 的圆点结构及语义色。 */
+[data-connection-tone="neutral"] > [aria-hidden] {
+  background-color: var(--color-background-tertiary-default);
+}
+[data-connection-tone="neutral"] > [aria-hidden] > span {
+  background-color: var(--color-text-tertiary);
+}
+[data-connection-tone="error"] > [aria-hidden] {
   background-color: var(--color-notification-error-background);
 }
-[data-mount="offline"] > [aria-hidden] > span {
+[data-connection-tone="error"] > [aria-hidden] > span {
   background-color: var(--color-text-error-primary);
 }

@@ -7,6 +7,7 @@
 里记 `source` 与 `batch`（ADR-0067），番号样张的 `code_sample_image.source` 也是批次号（ADR-0068），
 种子包补的所属事务所 `entity_membership.source` 与 label 的片商 `label_maker.source` 同样（ADR-0073、ADR-0075），
 查创作者身份后继写的身份断言 `entity_classification.source` 也是批次号（ADR-0098）。
+种子中文规范名按 `entity.metadata_json.name_preference` 的来源和原名快照还原，作品署名同步恢复；后续人工选择保留（ADR-0122）。
 判据错了一批，就按它们认出来一起撤掉，不必一条条找。
 
 复核队列的自动否决记在 `review_decision.note` 里（`auto_rejected` 与 `rule`，ADR-0079），
@@ -61,7 +62,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from peach import (company_profiles, fc2_sellers, follow_creators, jav_poster_crop,  # noqa: E402
-                   record_rehome, sample_images, wants, western_artwork)
+                   record_rehome, sample_images, seed_pack, wants, western_artwork)
 from peach.config import COVER_DIR, GENERATED_DIR  # noqa: E402
 from peach.metadata_auto_apply import UNION_TAGS_SOURCE  # noqa: E402
 from peach.scripting import add_ledger_write_args, open_for_write, verify_after_write  # noqa: E402
@@ -312,6 +313,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         links = planned_links(connection, args.source, args.batch)
         aliases = planned_aliases(connection, args.source, args.batch)
+        names = seed_pack.planned_names(connection, args.source, args.batch)
         profiles = planned_profiles(connection, args.source, args.batch)
         claims = planned_claims(connection, args.source, args.batch)
         companies = company_profiles.planned_revert(connection, args.source, args.batch)
@@ -332,6 +334,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f" - 链接 {link['entity'][:20]:<20} {link['url'][:56]} {link['batch']}")
         for alias in aliases:
             print(f" - 别名 {alias['entity'][:20]:<20} {alias['alias'][:40]} {alias['source']}")
+        for name in names:
+            print(f" - 中文名 {name['entity']} → {name['previous_name']} {name['source']}")
         print_profiles(profiles, companies)
         for creator in creators:
             print(f" - 建档 {creator['name'][:20]:<20} {creator['sources']} 个来源 {creator['batch']}")
@@ -357,11 +361,12 @@ def main(argv: list[str] | None = None) -> int:
                "公司资料": len(companies), "卖家": len(sellers), "关注建档": len(creators), "编号": len(refs),
                "归属": len(memberships), "片商": len(makers), "标识文件": len(files), "封面": len(covers),
                "样张": sum(sample["count"] for sample in samples), "否决": len(rejections),
-               "标签": len(tags), "接回": len(rehomes), "想要入库": len(acquired)})
+               "标签": len(tags), "接回": len(rehomes), "想要入库": len(acquired), "中文名": len(names)})
         if not args.apply:
             print("dry-run；确认无误后加 --apply --backup <路径>")
             return 0
         with connection:
+            restored_names = seed_pack.revert_names(connection, names)
             company_profiles.revert(connection, companies)
             connection.executemany("DELETE FROM entity_link WHERE id=?",
                                    [(link["id"],) for link in links])
@@ -411,7 +416,7 @@ def main(argv: list[str] | None = None) -> int:
            "删除标签": len(tags), "删除扁平标签": removed_tag_rows, "重开决定": reopened,
            "撤回接回": restored, "想要回到待找": reopened_wants, "卖家关系": removed_seller_relations,
            "解绑关注来源": creator_revert["unbound"], "删除建档实体": creator_revert["removed"], "删除文件": removed,
-           "integrity_check": integrity, "foreign_key_check": orphans})
+           "还原中文名": restored_names, "integrity_check": integrity, "foreign_key_check": orphans})
     return 0
 
 

@@ -15,7 +15,7 @@
 [data-manage-menu]{position:relative;display:flex;flex-wrap:nowrap;gap:4px;margin:0;padding:0;overflow-x:auto;scrollbar-width:none}
 [data-manage-menu]::-webkit-scrollbar{display:none}
 [data-manage-menu]>button{position:relative;display:inline-flex;flex:none;align-items:center;gap:7px;margin:0;padding:8px 12px;min-height:36px;border:0;border-radius:var(--control-radius);background:none;color:var(--ink-2);font-size:14px;font-weight:400;white-space:nowrap;cursor:pointer}
-[data-manage-menu]>button svg{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+[data-manage-menu]>button svg{width:var(--icon-inline);height:var(--icon-inline);flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 [data-manage-menu]>button:hover{color:var(--ink)}
 [data-manage-menu]>button[aria-pressed="true"]{background:var(--hover);color:var(--ink)}
 

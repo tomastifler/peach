@@ -1,4 +1,4 @@
-.peach-react :is([data-namepick-toggle], [data-favorite]) {
+.peach-react :is([data-namepick-toggle], [data-entity-action]) {
   display: grid;
   flex: none;
   place-items: center;
@@ -11,9 +11,9 @@
   color: var(--muted);
   cursor: pointer;
 }
-.peach-react :is([data-namepick-toggle], [data-favorite]):is(:hover, [data-hovered]) { background: var(--hover); color: var(--ink); }
-.peach-react :is([data-namepick-toggle], [data-favorite]):focus-visible { outline: 2px solid var(--tungsten); outline-offset: 2px; }
-.peach-react :is([data-namepick-toggle], [data-favorite]) svg { width: 16px; height: 16px; fill: none; stroke: currentColor; }
+.peach-react :is([data-namepick-toggle], [data-entity-action]):is(:hover, [data-hovered]) { background: var(--hover); color: var(--ink); }
+.peach-react :is([data-namepick-toggle], [data-entity-action]):focus-visible { outline: 2px solid var(--tungsten); outline-offset: 2px; }
+.peach-react :is([data-namepick-toggle], [data-entity-action]) svg { width: 16px; height: 16px; fill: none; stroke: currentColor; }
 .peach-react [data-favorite][aria-pressed="true"] { color: var(--color-yellow-500); }
 .peach-react [data-favorite][aria-pressed="true"] svg { fill: currentColor; }
 .peach-react [data-favorite][aria-busy="true"] { color: var(--muted); cursor: wait; }
@@ -43,7 +43,7 @@
 .peach-react [data-shortcuts-footer] a:hover { background: transparent; }
 .peach-react [data-shortcuts-footer] a > svg:last-child { margin-left: auto; }
 .peach-react [data-shortcuts-footer] a:focus-visible { outline: 2px solid var(--tungsten); outline-offset: -2px; }
-.peach-react [data-shortcuts-footer] svg { width: 20px; height: 20px; fill: none; stroke: currentColor; }
+.peach-react [data-shortcuts-footer] svg { width: var(--icon-inline); height: var(--icon-inline); fill: none; stroke: currentColor; }
 .peach-react [data-shortcuts-content] { grid-column: 2; padding: 16px 32px 32px; }
 .peach-react [data-shortcuts-content] [data-empty-state] { padding: 16px; }
 .peach-react [data-shortcuts-row] { padding-block: 12px; border-bottom: 1px solid var(--color-separator-border); }
@@ -60,7 +60,4 @@
   .peach-react [data-shortcuts-head] { order: 1; padding: 16px 20px 12px; }
   .peach-react [data-shortcuts-content] { order: 2; flex: 1; padding: 16px 20px 20px; }
   .peach-react [data-shortcuts-footer] { order: 3; flex: none; flex-direction: row; padding: 10px; }
-}
-@media (width <= 640px) {
-  :is(.peach-react[data-index-head], .peach-react [data-index-head]) [data-shortcuts-entry] { order: 3; }
 }

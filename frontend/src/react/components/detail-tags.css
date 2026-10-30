@@ -1,0 +1,128 @@
+/* ── 标签 ──
+   标签文字用于筛选，右侧修改名称或删除；筛选没有选中态，照孤立按钮
+   的写法抬填充。 */
+.peach-react [data-detail-tags] [data-detail-tag] {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: var(--tag-radius);
+  background: var(--tag-fill);
+  overflow: hidden;
+  box-sizing: border-box;
+  height: var(--control-h-inline);
+  max-width: 100%;
+}
+.peach-react [data-detail-tags] [data-detail-tag][data-tag-cat^="r34-"]:not([data-tag-cat="r34-unknown"]) {
+  border-color:color-mix(in srgb,var(--tag-color) 42%,var(--surface));
+  background:color-mix(in srgb,var(--tag-color) 10%,var(--surface));
+}
+/* 外框连边线取行内档，与旁边的添加键同高；里面的按钮撑满框内。 */
+.peach-react [data-detail-tags] [data-detail-tag] button { border: 0; background: transparent; color: var(--ink-2); cursor: pointer; height: 100%; }
+/* 长标签单行省略：按钮高度随外框定死，折成两行时第二行会被切掉一半。全名在 title 上。 */
+.peach-react [data-detail-tags] [data-detail-tag] [data-tag] { min-width: 0; padding: 3px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.peach-react [data-detail-tags] [data-detail-tag] :is([data-remove-tag],[data-edit-tag]) { flex:none; width: calc(var(--control-h-inline) - 2px); padding: 0; display: grid; place-items: center; color: var(--muted); }
+.peach-react [data-detail-tags] [data-detail-tag] [data-tag]:hover { background: var(--hover); color: var(--ink); }
+.peach-react [data-detail-tags] [data-detail-tag] [data-edit-tag]:hover { background:var(--hover);color:var(--ink); }
+.peach-react [data-detail-tags] [data-detail-tag] [data-remove-tag]:hover {
+  color: var(--drop);
+  background: color-mix(in srgb, var(--drop) 12%, transparent);
+}
+.peach-react [data-detail-tags] [data-detail-tag] svg,
+.peach-react [data-detail-tags] [data-tag-plus] svg { width: var(--icon-inline); height: var(--icon-inline); stroke: currentColor; fill: none; stroke-width: 2; }
+.peach-react [data-detail-tags] [data-tag-plus] {
+  width: var(--control-h-inline);
+  height: var(--control-h-inline);
+  border: 1px dashed var(--line);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.peach-react [data-detail-tags] [data-tag-plus]:hover { background: var(--hover); color: var(--ink); }
+
+/* 标签选择器锚定加号并进入顶层，可用空间内滚动；开合沿用全站菜单，窄屏为单列。 */
+.peach-react [data-detail-tags] [data-tag-picker] {
+  position: fixed;
+  z-index: 120;
+  inset:auto;
+  width:min(480px,calc(100vw - 32px));
+  margin:0;
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  max-height: min(480px, 70vh);
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--ink) 15%, transparent);
+  border-radius: var(--floating-radius);
+  background: var(--surface);
+  box-shadow: 0 24px 70px -24px #000;
+}
+.peach-react [data-detail-tags] [data-tag-picker][hidden] { display: none; }
+.peach-react [data-detail-tags] [data-tag-picker]:not([hidden]) { animation: board-menu-in .15s ease-out backwards; transform-origin: top left; }
+.peach-react [data-detail-tags] [data-tag-picker][class~="leaving"] { animation: board-menu-out .15s ease-out forwards; }
+.peach-react [data-detail-tags] [data-tag-search] {
+  flex:none;
+  height: 54px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+}
+.peach-react [data-detail-tags] [data-tag-search] svg {
+  width: 20px;
+  height: 20px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  color: var(--muted);
+}
+/* 内边距与占位字色用浏览器默认值：岛的 Preflight 把它们清成 0 与半透明 currentColor，`revert` 退回 UA 值。 */
+.peach-react [data-detail-tags] [data-tag-search] input {
+  min-width: 0;
+  flex: 1;
+  padding: revert;
+  border: 0;
+  background: transparent;
+  outline: 0;
+  font-size: var(--fs-lg);
+}
+.peach-react [data-detail-tags] [data-tag-search] input::placeholder { color: revert; }
+.peach-react [data-detail-tags] [data-tag-scroll-frame] { position:relative;display:flex;flex:1 1 auto;min-height:0; }
+.peach-react [data-detail-tags] [data-tag-body] { flex:1 1 auto;min-width:0;min-height:0;max-height:calc(min(480px,70vh) - 54px);overflow:auto;overscroll-behavior:contain;padding:12px; }
+.peach-react [data-detail-tags] [data-tag-section] + [data-tag-section] {
+  border-top: 1px solid color-mix(in srgb, var(--ink) 9%, transparent);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+.peach-react [data-detail-tags] [data-tag-section] h4 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: var(--fs-xs);
+  letter-spacing: .12em;
+  font-weight: 600;
+}
+.peach-react [data-detail-tags] [data-tag-grid] { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 12px; }
+.peach-react [data-detail-tags] [data-pick] {
+  min-width: 0;
+  height: 34px;
+  border: 0;
+  border-radius: var(--control-radius);
+  background: transparent;
+  color: var(--ink-2);
+  padding: 0 9px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  cursor: pointer;
+}
+.peach-react [data-detail-tags] [data-pick]:is(:hover, [data-active], [aria-pressed="true"]) { background: var(--hover); color: var(--ink); }
+.peach-react [data-detail-tags] [data-pick-name] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.peach-react [data-detail-tags] [data-pick-count] { margin-left: auto; color: var(--muted); font-size: var(--fs-xs); }
+.peach-react [data-detail-tags] [data-pick] svg { width:var(--icon-inline);height:var(--icon-inline);flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;color:var(--tag-color,var(--muted)); }
+@media (max-width: 760px) {
+  .peach-react [data-detail-tags] [data-tag-grid] { grid-template-columns: 1fr; }
+}

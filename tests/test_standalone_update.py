@@ -3,7 +3,7 @@ import json
 import hashlib
 import os
 import shutil
-from contextlib import nullcontext
+from contextlib import closing, nullcontext
 from pathlib import Path
 import tempfile
 import sqlite3
@@ -18,6 +18,50 @@ from peach import update_packages
 from scripts.package_windows_release import package as package_release
 from scripts.smoke_split_update import verify as verify_split
 from support.ledger import fresh_ledger
+
+
+class ReleaseDownloadFailoverTests(unittest.TestCase):
+    def test_both_sources_fall_back_to_identical_verified_bytes(self):
+        suffix = 'v1.0.0/Peach-1.0.0-windows-x64-update.zip'
+        urls = ('https://github.com/peach-mitao/peach/releases/download/' + suffix,
+                'https://downloads.peach.video/' + suffix)
+        content = b'verified release bytes'
+        for primary in urls:
+            for failure in ('unavailable', 'corrupt'):
+                with self.subTest(primary=primary, failure=failure), tempfile.TemporaryDirectory() as folder:
+                    calls = []
+
+                    def respond(request, primary=primary, failure=failure, calls=calls):
+                        calls.append(str(request.url))
+                        if str(request.url) == primary:
+                            return httpx.Response(503) if failure == 'unavailable' else httpx.Response(200, content=b'damaged')
+                        return httpx.Response(200, content=content)
+
+                    def client(respond=respond, **_kwargs):
+                        return httpx.Client(transport=httpx.MockTransport(respond))
+
+                    archive = Path(folder).resolve() / 'update.zip'
+                    archive.write_bytes(b'previous partial download')
+                    with patch('peach.peach_proxy.http_client', side_effect=client):
+                        update.download(primary, archive, len(content), hashlib.sha256(content).hexdigest(), lambda _count: None)
+                    self.assertEqual(calls, [primary, next(url for url in urls if url != primary)])
+                    self.assertEqual(archive.read_bytes(), content)
+
+    def test_two_corrupt_sources_cannot_bypass_the_original_digest(self):
+        calls = []
+
+        def respond(request):
+            calls.append(str(request.url))
+            return httpx.Response(200, content=b'bad')
+
+        def client(**_kwargs):
+            return httpx.Client(transport=httpx.MockTransport(respond))
+
+        with tempfile.TemporaryDirectory() as folder, patch('peach.peach_proxy.http_client', side_effect=client):
+            with self.assertRaisesRegex(ValueError, '校验失败'):
+                update.download('https://github.com/peach-mitao/peach/releases/download/v1.0.0/Peach-1.0.0-windows-x64.zip',
+                                Path(folder).resolve() / 'package.zip', 3, hashlib.sha256(b'yes').hexdigest(), lambda _count: None)
+        self.assertEqual(len(calls), 2)
 
 
 class StandaloneUpdateTests(unittest.TestCase):
@@ -81,6 +125,78 @@ class StandaloneUpdateTests(unittest.TestCase):
             for name in names:
                 package.writestr(name, "fixture")
         return archive
+
+    def reader_installation(self):
+        fresh_ledger(self.database.parent)
+        target = self.root / 'app'
+        (target / '_internal').mkdir(parents=True)
+        (target / '_internal/standalone.txt').touch()
+        (target / 'Peach.exe').write_text('old', encoding='utf-8')
+        transaction = self.root / '.app-update-reader'
+        stage = transaction / 'stage/Peach'
+        (stage / '_internal').mkdir(parents=True)
+        shutil.copytree(Path(__file__).resolve().parents[1] / 'migrations', stage / '_internal/migrations')
+        (stage / 'Peach.exe').write_text('new', encoding='utf-8')
+        update.write(dict(id='reader', target=str(target), transaction=str(transaction),
+                          stage=str(stage), version='1.0.0'), state='ready')
+        return target, stage
+
+    def test_reader_with_pending_schema_is_rejected_before_install_or_ledger_writes(self):
+        target, stage = self.reader_installation()
+        with closing(sqlite3.connect(self.database)) as connection, connection:
+            connection.execute('DROP TABLE ledger_upgrade_repair')
+            connection.execute("DELETE FROM ledger_revision WHERE tbl='ledger_upgrade_repair'")
+            connection.execute("DELETE FROM schema_migration WHERE version='0048'")
+        before = self.database.read_bytes()
+        with patch('peach.runtime_prepare.configured_ledger_writer', return_value=(False, '读取端')), patch.object(
+                update.distribution, 'standalone', return_value=True), patch.object(update.sys, 'platform', 'win32'), \
+                patch.object(update.update_tasks, 'reserve') as reserve, patch.object(update, 'preserve_local_state') as preserve, \
+                patch.object(update, 'restore_database') as restore, patch('peach.windows_restart.start_tray') as start:
+            with self.assertRaisesRegex(ValueError, '写入端迁移并同步'):
+                update.request_restart()
+            self.assertEqual(update.apply(update.state_path(), 999), 1)
+        for operation in (reserve, preserve, restore, start):
+            operation.assert_not_called()
+        self.assertEqual(self.database.read_bytes(), before)
+        self.assertEqual((target / 'Peach.exe').read_text(), 'old')
+        self.assertTrue(stage.is_dir())
+
+    def test_compatible_reader_updates_program_without_reserving_or_backing_up_ledger(self):
+        target, _stage = self.reader_installation()
+        before = self.database.read_bytes()
+        health = Mock(status_code=200)
+        health.json.return_value = dict(version='1.0.0', ready=True)
+        with patch('peach.runtime_prepare.configured_ledger_writer', return_value=(False, '读取端')), patch.object(
+                update.distribution, 'standalone', return_value=True), patch.object(update.sys, 'platform', 'win32'), \
+                patch.object(update.update_tasks, 'reserve') as reserve, patch('peach.job_recovery.import_legacy_library') as import_job, \
+                patch('peach.windows_restart.process_alive', return_value=False), patch('peach.windows_restart.start_tray'), \
+                patch('peach.windows_restart.find_tray_windows', return_value=[Mock()]), patch.object(
+                update.httpx, 'get', return_value=health):
+            self.assertEqual(update.request_restart()['state'], 'restarting')
+            self.assertEqual(update.apply(update.state_path(), 999), 0)
+        reserve.assert_not_called()
+        import_job.assert_not_called()
+        self.assertFalse((self.state / 'update-backups/reader/ledger.db').exists())
+        self.assertEqual(self.database.read_bytes(), before)
+        self.assertEqual((target / 'Peach.exe').read_text(), 'new')
+
+    def test_compatible_reader_install_failure_restores_program_without_restoring_ledger(self):
+        target, stage = self.reader_installation()
+        before = self.database.read_bytes()
+        original = update.replace_with_retry
+        def replace(source, destination):
+            if source == stage:
+                raise OSError('occupied')
+            original(source, destination)
+        with patch('peach.runtime_prepare.configured_ledger_writer', return_value=(False, '读取端')), patch.object(
+                update, 'replace_with_retry', side_effect=replace), patch.object(update, 'restore_database') as restore, \
+                patch.object(update.update_tasks, 'reserve') as reserve, patch('peach.windows_restart.process_alive', return_value=False), \
+                patch('peach.windows_restart.start_tray'):
+            self.assertEqual(update.apply(update.state_path(), 999), 1)
+        restore.assert_not_called()
+        reserve.assert_not_called()
+        self.assertEqual(self.database.read_bytes(), before)
+        self.assertEqual((target / 'Peach.exe').read_text(), 'old')
 
     def test_zip_requires_a_complete_standalone_layout_and_reports_progress(self):
         archive = self.archive(["Peach/Peach.exe", "Peach/_internal/standalone.txt"])
@@ -194,7 +310,7 @@ class StandaloneUpdateTests(unittest.TestCase):
         with patch.object(update.sys, "executable", str(target / "Peach.exe")), patch.object(
                 update.release_updates, "check", return_value=release), patch.object(
                 update.httpx, "Client", side_effect=lambda **kwargs: client_type(
-                    **kwargs, transport=update.httpx.MockTransport(response))):
+                    **{**kwargs, 'transport': update.httpx.MockTransport(response), 'trust_env': False, 'proxy': None})):
             update.prepare({"id": "split-fixture"}, lock)
         lock.release.assert_called_once()
         return update.read(), requests
@@ -203,12 +319,14 @@ class StandaloneUpdateTests(unittest.TestCase):
         source, output, manifest, target, archive, release = self.release_fixture()
         rebuilt = self.root / "rebuilt"
         report = verify_split(output, "1.0.0", rebuilt)
-        self.assertEqual(report["tools"], 3)
+        self.assertEqual(report["tools"], 4)
         self.assertEqual((rebuilt / "Peach/Peach.exe").read_bytes(), (source / "Peach.exe").read_bytes())
         with zipfile.ZipFile(archive) as thin, zipfile.ZipFile(output / "Peach-1.0.0-windows-x64.zip") as full:
             self.assertNotIn("Peach/tools/ffmpeg/bin/ffmpeg.exe", thin.namelist())
             self.assertNotIn("Peach/cloudflared.exe", thin.namelist())
+            self.assertFalse([name for name in thin.namelist() if name.startswith("Peach/tools/face-models/")])
             self.assertIn("Peach/tools/ffmpeg/bin/ffmpeg.exe", full.namelist())
+            self.assertIn("Peach/tools/face-models/face_recognition_sface_2021dec.onnx", full.namelist())
             self.assertNotIn("Peach/" + update_packages.MANIFEST, full.namelist())
         state, requests = self.prepare_fixture(target, output, release)
         self.assertEqual(state["state"], "ready", state)
@@ -273,7 +391,7 @@ class StandaloneUpdateTests(unittest.TestCase):
             return httpx.Response(200, content=(output / name).read_bytes())
 
         def client(*args, **kwargs):
-            return original_client(*args, **kwargs, transport=httpx.MockTransport(respond), trust_env=False)
+            return original_client(*args, **{**kwargs, 'transport': httpx.MockTransport(respond), 'trust_env': False, 'proxy': None})
 
         with patch('peach.__version__', '1.0.0'), patch.object(update.httpx, 'Client', side_effect=client):
             self.assertEqual(prepare_install_tools(target, self.root / 'empty-cache', error, stage=stage), 0)
@@ -281,6 +399,61 @@ class StandaloneUpdateTests(unittest.TestCase):
         self.assertEqual((target / 'tools/ffmpeg/bin/ffmpeg.exe').read_bytes(), b'damaged tool')
         for bundle in manifest['tools'].values():
             self.assertTrue(update_packages.matches(stage, bundle['files']))
+
+    def prepare_online_lite(self, outcome='github'):
+        from peach.desktop_installer import prepare_install_tools
+        output, manifest, _, stage, error = self.lite_fixture()
+        target = self.root / 'fresh-online-install'
+        requests = []
+        original_client = httpx.Client
+
+        def respond(request):
+            requests.append(str(request.url))
+            r2 = request.url.host == 'downloads.peach.video'
+            if not r2 and outcome == 'unavailable':
+                return httpx.Response(503)
+            if r2 and outcome == 'github':
+                raise httpx.ConnectError('R2 unavailable', request=request)
+            name = request.url.path.rsplit('/', 1)[-1]
+            bad = outcome == 'both-corrupt' or (not r2 and outcome == 'mismatch')
+            return httpx.Response(200, content=b'corrupt' if bad else (output / name).read_bytes())
+
+        with patch('peach.__version__', '1.0.0'), patch.object(update.httpx, 'Client', side_effect=lambda **kwargs:
+                original_client(**{**kwargs, 'transport': httpx.MockTransport(respond), 'trust_env': False, 'proxy': None})):
+            result = prepare_install_tools(target, self.root / 'empty-cache', error, stage=stage)
+        self.assertFalse(target.exists())
+        return result, requests, manifest, stage, error
+
+    def test_lite_installer_prepares_from_github_with_no_r2_or_adjacent_archives(self):
+        result, requests, manifest, stage, error = self.prepare_online_lite()
+        self.assertEqual(result, 0, error.read_text(encoding='utf-8') if error.exists() else '')
+        self.assertEqual(len(requests), len(update_packages.TOOL_PATHS))
+        self.assertTrue(all(url.startswith('https://github.com/peach-mitao/peach/releases/download/v1.0.0/') for url in requests))
+        for bundle in manifest['tools'].values():
+            self.assertTrue(update_packages.matches(stage, bundle['files']))
+
+    def test_lite_installer_uses_same_version_r2_when_github_is_unavailable(self):
+        result, requests, manifest, stage, _ = self.prepare_online_lite('unavailable')
+        self.assertEqual(result, 0)
+        self.assertEqual(len(requests), 2 * len(update_packages.TOOL_PATHS))
+        self.assertTrue(all(url.startswith('https://downloads.peach.video/v1.0.0/')
+                            for url in requests[1::2]))
+        for bundle in manifest['tools'].values():
+            self.assertTrue(update_packages.matches(stage, bundle['files']))
+
+    def test_lite_installer_accepts_only_the_embedded_manifest_digest_across_sources(self):
+        result, requests, manifest, stage, _ = self.prepare_online_lite('mismatch')
+        self.assertEqual(result, 0)
+        self.assertEqual(len(requests), 2 * len(update_packages.TOOL_PATHS))
+        for bundle in manifest['tools'].values():
+            self.assertTrue(update_packages.matches(stage, bundle['files']))
+
+    def test_lite_installer_rejects_both_sources_when_their_bytes_do_not_match(self):
+        result, requests, manifest, stage, error = self.prepare_online_lite('both-corrupt')
+        self.assertEqual(result, 1)
+        self.assertEqual(len(requests), 2)
+        self.assertIn('校验失败', error.read_text(encoding='utf-8'))
+        self.assertFalse(update_packages.matches(stage, manifest['tools']['ffmpeg']['files']))
 
     def test_lite_installer_rejects_a_corrupt_archive_and_can_retry_without_touching_the_install(self):
         from peach.desktop_installer import prepare_install_tools
@@ -318,7 +491,7 @@ class StandaloneUpdateTests(unittest.TestCase):
         self.assertEqual(binary.read_bytes(), b"old version")
         self.assertEqual((target / "Peach.exe").read_bytes(), b"old application")
 
-    def test_manifest_rejects_path_escape_tool_scope_collision_and_incomplete_tools(self):
+    def test_manifest_rejects_path_escape_tool_scope_collision_and_incomplete_tool_files(self):
         source, output, manifest, target, archive, release = self.release_fixture()
         for name in ("../escape.exe", "tools/ffmpeg/../../Peach.exe", "Peach.exe", "tools/untrunc/untrunc.exe",
                      "tools/ffmpeg/bin/FFMPEG.exe"):
@@ -328,10 +501,59 @@ class StandaloneUpdateTests(unittest.TestCase):
                 (source / update_packages.MANIFEST).write_text(json.dumps(invalid), encoding="utf-8")
                 with self.assertRaises(ValueError):
                     update_packages.read_manifest(source, "1.0.0")
+        del manifest["tools"]["untrunc"]["files"]["tools/untrunc/untrunc.exe"]
+        (source / update_packages.MANIFEST).write_text(json.dumps(manifest), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "缺少必需文件"):
+            update_packages.read_manifest(source, "1.0.0")
+
+    def test_a_tool_this_version_does_not_know_is_left_out_not_refused(self):
+        """更新版本新增的工具包这一版不认得：照常更新，只是不下载它。"""
+        source, output, manifest, target, archive, release = self.release_fixture()
+        future = json.loads(json.dumps(manifest))
+        future["tools"]["future-tool"] = {"files": {"tools/future/x.bin": "a" * 64}, "asset": {}}
+        (source / update_packages.MANIFEST).write_text(json.dumps(future), encoding="utf-8")
+        self.assertEqual(set(update_packages.read_manifest(source, "1.0.0")["tools"]),
+                         set(update_packages.TOOL_PATHS))
+
+    def test_a_tool_the_new_version_dropped_is_neither_prepared_nor_required(self):
+        """更新版本不再需要的工具：清单里没有它就不准备，不当成清单残缺。"""
+        source, output, manifest, target, archive, release = self.release_fixture()
         del manifest["tools"]["untrunc"]
         (source / update_packages.MANIFEST).write_text(json.dumps(manifest), encoding="utf-8")
-        with self.assertRaises(ValueError):
-            update_packages.read_manifest(source, "1.0.0")
+        self.assertEqual(set(update_packages.read_manifest(source, "1.0.0")["tools"]),
+                         set(update_packages.TOOL_PATHS) - {"untrunc"})
+
+    def test_an_update_package_this_updater_cannot_use_falls_back_to_the_full_package(self):
+        source, output, manifest, target, archive, release = self.release_fixture()
+        full = output / "Peach-1.0.0-windows-x64.zip"
+        release.update(full_url=release["asset_url"].rsplit("/", 1)[0] + "/" + full.name,
+                       full_size=full.stat().st_size, full_digest="sha256:" + update_packages.digest(full))
+        (target / "cloudflared.exe").unlink()
+        with patch.object(update.update_packages, "read_manifest", side_effect=ValueError("更新包工具清单无效")):
+            state, requests = self.prepare_fixture(target, output, release)
+        self.assertEqual(state["state"], "ready", state)
+        self.assertEqual(requests, [archive.name, full.name], "清单读不了时不再下单个工具包")
+        self.assertEqual(Path(state["stage"]), Path(state["transaction"]) / "stage" / "Peach")
+        for bundle in manifest["tools"].values():
+            self.assertTrue(update_packages.matches(Path(state["stage"]), bundle["files"]))
+        self.assertEqual(state["downloaded"], state["total"])
+        self.assertEqual((target / "Peach.exe").read_bytes(), b"old application")
+
+    def test_supported_older_clients_can_install_this_release(self):
+        """旧版本标签里的更新代码原样读这一版的发布条目与更新包（ADR-0120）。"""
+        from scripts import update_compat
+        source, output, manifest, target, archive, release = self.release_fixture()
+        self.assertEqual(update_compat.verify(output, "1.0.0"), {})
+        rows = [update_compat.release_row(output, "1.0.0")]
+        strict = update_compat.check_clients(update_compat.ROOT, rows, manifest, "1.0.0", oldest="0.47.3")
+        self.assertIn("更新包工具清单无效", " ".join(strict["v0.47.3"]),
+                      "0.47.x 要求工具集合完全相等，人脸模型加入后它读不了更新包")
+        future = json.loads(json.dumps(manifest))
+        future["tools"]["future-tool"] = {"files": {"tools/future/x.bin": "a" * 64}, "asset": {}}
+        orphaned = update_compat.check_clients(update_compat.ROOT, rows, future, "1.0.0")
+        self.assertTrue(orphaned)
+        for reasons in orphaned.values():
+            self.assertIn("future-tool", " ".join(reasons), "新增工具旧版不认得、又没登记为运行时补齐时拒绝发布")
 
     def test_tool_archive_cannot_replace_application_files(self):
         archive = self.archive(["Peach/tools/ffmpeg/bin/ffmpeg.exe", "Peach/Peach.exe"])
@@ -376,3 +598,30 @@ class StandaloneUpdateTests(unittest.TestCase):
         update.restore_database(data)
         with update.closing(sqlite3.connect(self.database)) as connection:
             self.assertEqual(connection.execute("SELECT value FROM fixture").fetchone()[0],"original")
+
+    def test_install_state_restore_preserves_settings_checkpoints_and_absence(self):
+        self.config.path.write_text('original config', encoding='utf-8')
+        recovery = self.state / 'job-recovery'
+        recovery.mkdir()
+        (recovery / 'job.json').write_text('saved checkpoint', encoding='utf-8')
+        update.preserve_local_state({'id':'state-fixture'})
+        self.config.path.write_text('changed config', encoding='utf-8')
+        (recovery / 'job.json').write_text('changed checkpoint', encoding='utf-8')
+        repairs = self.state / 'upgrade-repairs'
+        repairs.mkdir()
+        (repairs / 'receipt.json').write_text('new receipt', encoding='utf-8')
+        update.restore_local_state({'id':'state-fixture'})
+        self.assertEqual(self.config.path.read_text(encoding='utf-8'), 'original config')
+        self.assertEqual((recovery / 'job.json').read_text(encoding='utf-8'), 'saved checkpoint')
+        self.assertFalse(repairs.exists())
+
+    def test_running_installation_is_detected_by_the_current_executable_and_version(self):
+        target = self.root / 'app'
+        with patch.object(update.distribution, 'standalone', return_value=True), patch.object(
+                update.sys, 'executable', str(target / 'Peach.exe')):
+            update.write({'target':str(target), 'version':update.__version__}, state='installing')
+            self.assertTrue(update.installation_pending())
+            update.write(update.read(), state='complete')
+            self.assertFalse(update.installation_pending())
+            update.write({'target':str(target), 'version':'0.0.0'}, state='installing')
+            self.assertFalse(update.installation_pending())

@@ -1,7 +1,13 @@
 /* Folia wall.css 与用户截图的独立暗色表面；数值与差异见 folia-video-wall.md。 */
 html[data-wall-entry] body, body[data-wall-open] { overflow:hidden; background:#070707; }
-html[data-wall-entry] :is(body>header,#drawer,#main,#catalogFilter,#count,#javLibraryHeader,#feedNew),
-body[data-wall-open] :is(body>header,#drawer,#main,#catalogFilter,#count,#javLibraryHeader,#feedNew) { visibility:hidden; pointer-events:none; }
+html[data-wall-entry] :is(body>header,[data-network-banner],#drawer,#main,#catalogFilter,#count,#javLibraryHeader,#feedNew),
+body[data-wall-open] :is(body>header,[data-network-banner],#drawer,#main,#catalogFilter,#count,#javLibraryHeader,#feedNew) { visibility:hidden; pointer-events:none; }
+/* 藏在墙后的页面仍在文档里，`visibility` 不停动画：首页筛选条那几排占位的微光、玻璃漂移照样
+   逐帧走，墙静置时主线程大半耗在这些看不见的动画上。墙开着时它们停在原处，墙收起接着走。 */
+:is(html[data-wall-entry] body,body[data-wall-open]) :is(body>header,[data-network-banner],#drawer,#main,#catalogFilter,#count,#javLibraryHeader,#feedNew),
+:is(html[data-wall-entry] body,body[data-wall-open]) :is(body>header,[data-network-banner],#drawer,#main,#catalogFilter,#count,#javLibraryHeader,#feedNew) *,
+:is(html[data-wall-entry] body,body[data-wall-open]) :is(body>header,[data-network-banner],#drawer,#main,#catalogFilter,#count,#javLibraryHeader,#feedNew) *::before,
+:is(html[data-wall-entry] body,body[data-wall-open]) :is(body>header,[data-network-banner],#drawer,#main,#catalogFilter,#count,#javLibraryHeader,#feedNew) *::after { animation-play-state:paused !important; }
 .peach-react [data-video-wall] {
   --ground:#070707; --surface:#161419; --ink:#f7f4ee; --ink-2:#f7f4ee; --muted:#aaa7a2;
   --hover:rgba(255,255,255,.08); --line-soft:rgba(255,255,255,.22);

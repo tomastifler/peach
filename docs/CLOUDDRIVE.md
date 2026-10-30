@@ -102,20 +102,20 @@ When watching a video, first pause batch frame extraction and close playback pag
 
 ## Auto-register new files from the drive
 
-Peach does not watch drive directories in real time, because every directory listing is a network request. If you want files newly saved to `B:` (115) and `A:` (PikPak) to show up in Peach immediately, have CloudDrive2 notify Peach actively.
+Peach 不实时监视网盘目录，因为每列一次目录都是一次网络请求。如果希望网盘里新存进去的文件立刻出现在 Peach，需要让 CloudDrive2 主动通知 Peach。目录与来源取自媒体库配置，不要求固定盘符。
 
 This notification (webhook) is a CloudDrive2 membership feature. Leaving it unconfigured does not affect other features; new files are still found by the periodic full scan. For the design see [ADR-0041](adr/0041-new-files-are-pushed-in-scanning-is-the-backstop.md).
 
-1. In the "Media" group of the Peach configuration page, turn on "Register new files as they land" and "Receive CloudDrive2 notifications".
-2. In "Cloud path prefix", map the directories you see in CloudDrive2 to media directories, for example `/115` to `B:\`.
-3. Click "Save configuration". The page generates a full block of CloudDrive2 configuration with the address, endpoint, and key already filled in.
-4. Click "Copy configuration", go to CloudDrive2's "Settings → Webhooks", add a new entry, paste, and save.
+1. 在 Peach 配置页「媒体」分组里，打开「发现新文件后自动入库」和「接收 CloudDrive2 通知」。
+2. 在「云端路径前缀」里，把 CloudDrive2 里看到的目录和媒体目录对应起来，例如 `/115` 对应 `B:\`。
+3. 点「保存配置」。页面会生成一整段 CloudDrive2 配置，地址、端点和密钥都已经填好。
+4. 点「复制配置」，到 CloudDrive2 的「设置 → Webhooks」里新增一条，粘贴后保存。
 
 Notes:
 
-- The address in the configuration is the LAN address of the computer running Peach. Peach only accepts notifications from this machine and private networks; requests from the public internet are ignored.
-- The Windows CloudDrive2 edit box corrupts line breaks, and the list shows "Invalid". Workaround: save this configuration as a `.toml` file, put it in `%LOCALAPPDATA%\CloudDrive.WinUI\webhooks\`, then restart CloudDrive2. "Refresh" on the Webhooks page does not re-read this folder.
-- When CloudDrive2 sends a notification it also uses its own proxy settings; the proxy must connect to LAN addresses directly.
+- 配置里的地址是 Peach 所在电脑的局域网地址，协议和端口与应用服务一致：独立版局域网模式使用 HTTP，启用 TLS 的服务使用 HTTPS。Peach 只接受本机和私有网络发来的通知，来自公网的请求一律忽略。
+- Windows 版 CloudDrive2 的编辑框会把换行存坏，列表里显示「无效」。解决办法：把这段配置存成一个 `.toml` 文件，放进 `%LOCALAPPDATA%\CloudDrive.WinUI\webhooks\`，然后重启 CloudDrive2。Webhooks 页的「刷新」不会重新读取这个文件夹。
+- CloudDrive2 发通知时也走它自己的代理设置，代理要让局域网地址直连。
 
 To verify: put a video into the drive, and a few seconds later it should appear in Peach. If it does not, check the status on the configuration page:
 
@@ -143,10 +143,12 @@ Submission happens in the cloud download dialog: "Search resources" on each item
 
 Task cards show status and failure reason; ones running remotely can be cancelled, failed, cancelled, and stalled ones can be resubmitted, and every card can copy its magnet. A few rules:
 
-- Each 115 submission uses one offline quota entry: 1500 per month for annual members and 200 per month for monthly members, and resubmitting counts too.
-- Resources 115 judges as violating rules (error code 50038) are not retried, and pasting the same magnet later is rejected directly.
-- Offline task limits for free and member PikPak accounts: not obtained.
-- When the interface stops working the task reports an error; copy the magnet and add it manually in the drive client.
+- 115 每提交一次扣一条离线配额，年费会员每月 1500 条、月费 200 条，重新提交也算。
+- 115 判为违规的资源（错误码 50038）不重试，以后再贴同一个磁力会直接拒绝。
+- 提交前丢掉解不开或不像地址的 tracker，其余参数原样保留。资源站给出的磁力偶尔带乱码 tracker，115 对这种磁力报 10004「错误的链接」，有时不报错也不建任务。
+- 提交后 15 分钟内离线列表一直看不到这个任务、目标目录里也没有文件，报「网盘没有收下任务」；列表里出现过、后来不见了，报「网盘任务被删除」。两种都算网盘问题，可以原样重新提交。
+- PikPak 免费与会员账号的离线任务上限：未取得。
+- 接口失效时任务报错，复制磁力到网盘客户端里手动添加即可。
 
 ## Where the starting values come from
 

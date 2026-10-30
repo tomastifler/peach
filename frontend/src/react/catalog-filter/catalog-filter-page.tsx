@@ -9,6 +9,8 @@
  * 详情浮窗打开期间壳不推任何东西，关掉回来还是同一批节点（`buildBars` 那段注释讲了为什么）。 */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { entityDisplayName } from '../../core/entity-names';
+import { useEntityNames } from '../use-entity-names';
 import { fitSkeleton, popBadges, popCount } from '@peach/legacy/ui';
 
 import { FilterGlassRows, FilterPill } from '../components/filter-glass';
@@ -19,8 +21,8 @@ import { useCatalogView } from '../catalog-grid/catalog-view';
 import { CatalogViewToggle } from '../catalog-grid/catalog-view-toggle';
 import { Combo, Segments, Shuffle, SortKeys } from '../entity-filter/entity-filter-page';
 import {
-  EMPTY_SLOTS, ROW_AHEAD, ROW_BATCH, ROW_FIRST, type CatalogFilterProps, type CatalogTag, type TierKind,
-  type TierPerformer, type TierStudio,
+  EMPTY_SLOTS, ROW_AHEAD, ROW_BATCH, ROW_FIRST, rememberedTiers, rememberTiers, type CatalogFilterProps,
+  type CatalogTag, type TierKind, type TierPerformer, type TierStudio,
 } from './catalog-filter';
 
 /* 上一次写出去的读数。读数那一格每次取数都换成微光再建回来，靠它分清「换了个数」和「刚出现」：
@@ -121,9 +123,11 @@ function TagPill({ tag, onPress }: { tag: CatalogTag; onPress(tag: string): void
 
 /** 两排头像。空的一排仍占 28px，画出来就是一条什么都没有的空带，所以没人就不画那一排。 */
 function Tiers(props: CatalogFilterProps) {
+  useEntityNames();
   const { actions, helpers } = props;
   const tiers = props.tiers ?? { key: '', performers: [], studios: [] };
-  const empty = props.empty || !props.tiers;
+  const loading = !props.tiers;
+  const empty = props.empty || loading;
   const performers = useRef<HTMLDivElement>(null);
   const studios = useRef<HTMLDivElement>(null);
   const more = useCallback((kind: TierKind) => () => actions.moreTops(kind), [actions]);
@@ -131,21 +135,27 @@ function Tiers(props: CatalogFilterProps) {
   const shownPerformers = usePaged(performers, tiers.performers, tiers.key, ROW_FIRST,
     empty ? undefined : more('performers'));
   const shownStudios = usePaged(studios, tiers.studios, tiers.key, ROW_FIRST, empty ? undefined : more('studios'));
-  const hasPerformers = empty || tiers.performers.length > 0;
-  const hasStudios = empty || tiers.studios.length > 0;
+  /* 取回之前照本机上次的结构画占位，壳骨架同一份记录。 */
+  const shape = useMemo(() => loading ? rememberedTiers() : null, [loading]);
+  const hasPerformers = shape ? shape.performers : props.empty || tiers.performers.length > 0;
+  const hasStudios = shape ? shape.studios : props.empty || tiers.studios.length > 0;
+  useEffect(() => {
+    if (!loading) rememberTiers({ performers: hasPerformers, studios: hasStudios });
+  }, [loading, hasPerformers, hasStudios]);
   useEffect(() => {
     helpers.wireDrag(performers.current);
     helpers.wireDrag(studios.current);
   }, [helpers, hasPerformers, hasStudios]);
   return (
-    <div data-catalog-tiers="" hidden={!hasPerformers && !hasStudios}>
+    <div data-catalog-tiers="" hidden={!hasPerformers && !hasStudios}
+      aria-busy={(loading && props.tiersPending && !props.offscreen) || undefined}>
       {hasPerformers ? (
         <div ref={performers} data-catalog-tier="performers">
           {empty ? <Placeholders kind="performer" /> : (shownPerformers as TierPerformer[]).map((person) => (
             <button key={person.name} type="button" data-tier-performer="" data-entity-kind="performer"
               data-entity-name={person.name} onClick={() => actions.openEntity('performer', person.name)}>
               <span data-tier-ring="" dangerouslySetInnerHTML={{ __html: person.ringHtml }} />
-              <span data-tier-name="">{person.name}</span>
+              <span data-tier-name="">{entityDisplayName('performer', person.name)}</span>
             </button>
           ))}
         </div>
@@ -171,7 +181,7 @@ function StudioMark({ studio }: { studio: TierStudio }) {
   return (
     <span data-tier-mark="">
       {studio.logo && !broken ? (
-        <img src={studio.logo} alt="" onError={() => setBroken(true)}
+        <img src={studio.logo} alt="" width={28} height={28} loading="lazy" decoding="async" onError={() => setBroken(true)}
           onLoad={(event) => { if (event.currentTarget.naturalWidth < 32) setBroken(true) }} />
       ) : studio.fallback}
     </span>
@@ -213,7 +223,7 @@ function Head({ count, refreshing, layout, sorts, actions }: CatalogFilterProps)
           onChange={actions.setLayout} /> : null}
         <CatalogViewToggle />
         <FolderBrowseToggle />
-        {view === 'cards' ? <SortKeys sorts={sorts} onSort={actions.setSort} /> : null}
+        <SortKeys sorts={sorts} onSort={actions.setSort} />
       </span>
     </>
   );
@@ -295,11 +305,18 @@ function usePaged<T>(row: RefObject<HTMLElement | null>, items: T[], key: string
       });
     });
   }, [row]);
-  useLayoutEffect(fill);
+  /* 量宽度合到下一帧：提交后当场量、每个 `scroll` 事件当场量，都赶在刚写完的样式后面，
+   * 一次就是一遍整树重算；横滚时一帧来好几个 `scroll`，也只需要量一次。 */
+  const frame = useRef(0);
+  const schedule = useCallback(() => {
+    if (!frame.current) frame.current = requestAnimationFrame(() => { frame.current = 0; fill() });
+  }, [fill]);
+  useEffect(() => () => cancelAnimationFrame(frame.current), []);
+  useLayoutEffect(schedule);
   useEffect(() => {
     const el = row.current;
-    el?.addEventListener('scroll', fill, { passive: true });
-    return () => el?.removeEventListener('scroll', fill);
+    el?.addEventListener('scroll', schedule, { passive: true });
+    return () => el?.removeEventListener('scroll', schedule);
   });
   return all.slice(0, current.limit);
 }

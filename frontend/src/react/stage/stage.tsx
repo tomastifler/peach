@@ -14,12 +14,14 @@
  * 跑完；那一条已经换走（原地换条或重开）或舞台已经收起就不报。 */
 import { useLayoutEffect, useRef, useSyncExternalStore, type MouseEvent, type PointerEvent } from 'react';
 import { flushSync } from 'react-dom';
+import { UNSAFE_PortalProvider } from 'react-aria';
 
 import { detailPosterUrl, releaseHoverPreviews } from '@peach/card-art';
 import { fitSkeleton, revealTexts } from '@peach/legacy/ui';
 
 import { detailSkeletonBody } from '../../board-skeleton';
 import { applyTheaterMode, closePlayerMenu, type PlayerResume } from '../../player';
+import { adoptToasts, overlayHost, topOverlay } from '../components/overlay-host';
 import { followItemKey, prefetchFollowDetail, type FollowDetailActions, type FollowDetailProps } from '../follow-detail/follow-detail';
 import { FollowDetailPage } from '../follow-detail/follow-detail-page';
 import { chooseItem, itemKey, prefetchItemDetail, queueKey, type DetailQueue, type ItemDetailActions, type ItemDetailProps } from '../item-detail/item-detail';
@@ -49,6 +51,7 @@ interface View {
 
 let host: StageHost | null = null;
 let view: View | null = null;
+let pageReturn: { left:number; top:number; anchor:HTMLElement } | null = null;
 const listeners = new Set<() => void>();
 let generation = 0;
 let controller: AbortController | null = null;
@@ -107,14 +110,26 @@ function outside(event: MouseEvent | PointerEvent): boolean {
   return event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom;
 }
 
+function requestEscape(): void {
+  const dialog = stageDialog();
+  const layer = dialog && topOverlay(dialog);
+  if (!layer) { requestClose(); return }
+  layer.focus({ preventScroll: true });
+  layer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+}
+
 function StageDialog({ view: current }: { view: View }) {
   const ref = useRef<HTMLDialogElement>(null);
-  /* 原生 `cancel`（Escape 之外的关闭请求，例如安卓返回手势）与关闭键走同一条路。Escape 本身在
-     keydown 上就处理掉了：那里 `preventDefault` 之后浏览器不再派 `cancel`。 */
+  /* 全局键盘入口与浮窗共用 requestEscape，在 keydown 上 preventDefault，避免焦点在 body 时
+     绕过弹层判断。原生 cancel 保留给其他关闭请求；不可取消的事件不能阻止浏览器关闭浮窗。 */
   useLayoutEffect(() => {
     const dialog = ref.current!;
     // 文件选择框的 cancel 会冒泡；详情只处理自己的关闭请求。
-    const cancel = (event: Event) => { if (event.target === dialog) { event.preventDefault(); requestClose() } };
+    const cancel = (event: Event) => {
+      if (event.target !== dialog) return;
+      event.preventDefault();
+      requestEscape();
+    };
     dialog.addEventListener('cancel', cancel);
     return () => dialog.removeEventListener('cancel', cancel);
   }, []);
@@ -131,7 +146,7 @@ function StageDialog({ view: current }: { view: View }) {
         /* 里层弹层（标签搜索框、右键菜单）先处理 Escape 并 `preventDefault`，这一下就不再关浮窗。 */
         if (event.key !== 'Escape' || event.defaultPrevented) return;
         event.preventDefault();
-        requestClose();
+        requestEscape();
       }}
       onPointerDown={(event) => { dismissArmed = outside(event) }}
       onClick={(event) => { if (dismissArmed && outside(event)) requestClose() }}>
@@ -140,8 +155,12 @@ function StageDialog({ view: current }: { view: View }) {
       {phase === 'skeleton' ? null : (
         /* 窄屏下滚的是 `[data-stage-scroll]`，全站那条覆盖式滚动条挂在它的兄弟位置（`<dialog>` 在顶层，
            轨道挂到它外面会落进遮罩底下）；「接着看」是 `[data-stage-grid]` 的兄弟，也得一起装进来。里面那层
-           `.peach-react` 不占盒子，token 与 Preflight 从它开始作用。 */
-        <div key="content" data-stage-scroll=""><div className="peach-react">{body}</div></div>
+           `.peach-react` 不占盒子，token 与 Preflight 从它开始作用。
+           详情里打开的弹层、下拉与气泡（查找资源、裁剪封面、推荐理由）一律挂进这个 dialog：落在 `body`
+           上会被顶层的浮窗整个盖住，判据见 `overlay-host.ts`。 */
+        <div key="content" data-stage-scroll=""><div className="peach-react">
+          <UNSAFE_PortalProvider getContainer={() => overlayHost(ref.current)}>{body}</UNSAFE_PortalProvider>
+        </div></div>
       )}
     </dialog>
   );
@@ -234,6 +253,9 @@ function swappable(kind: StageRequest['kind']): HTMLDialogElement | null {
 }
 
 async function open(request: StageRequest): Promise<void> {
+  if (!pageReturn && document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+    pageReturn = { left:window.scrollX, top:window.scrollY, anchor:document.activeElement };
+  }
   const current = swappable(request.kind);
   if (current) { await swap(request, current); return }
   if (view) dispose({ miniplayer: false });
@@ -258,6 +280,7 @@ async function open(request: StageRequest): Promise<void> {
   if (!cached) fitSkeleton(dialog);
   document.body.setAttribute('data-detail-open', '');
   if (!dialog.open) dialog.showModal();
+  adoptToasts(dialog);
   try {
     await waiting;
   } catch {
@@ -330,6 +353,8 @@ async function swap(request: StageRequest, dialog: HTMLDialogElement): Promise<v
 /* 详情浮窗的退场跟设置弹层同一条：`data-closing` 让 `board-dialog-out` 和遮罩淡出演完，再拆。等待有
    上限：`animation` 被别的规则关掉时 animationend 不会来。 */
 function exit(): Promise<void> {
+  /* 退场动画的透明度会带着 dialog 里的 Toast 一起淡掉；先放回 body，让它随浮窗淡出露出来。 */
+  adoptToasts(null);
   const dialog = stageDialog();
   if (!dialog?.open || dialog.hasAttribute('data-closing') || matchMedia('(prefers-reduced-motion: reduce)').matches) {
     return Promise.resolve();
@@ -355,8 +380,9 @@ function dispose({ miniplayer = true }: { miniplayer?: boolean } = {}): void {
   const dialog = stageDialog();
   // 舞台拆掉之前收起挂在舞台里的悬停预览（「接着看」那一排的卡）。
   if (dialog) releaseHoverPreviews(dialog);
-  // 右键菜单开着时挪进了舞台：先放回 body，别跟着浮窗一起被卸掉。
+  // 右键菜单开着时挪进了舞台、Toast 栈打开时就挪了进来：先放回 body，别跟着浮窗一起被卸掉。
   closePlayerMenu();
+  adoptToasts(null);
   if (dialog?.open) dialog.close();
   view = null;
   closeRequested = false;
@@ -364,6 +390,16 @@ function dispose({ miniplayer = true }: { miniplayer?: boolean } = {}): void {
   paint();
   player.setStageMeta(null);
   document.body.removeAttribute('data-detail-open');
+  const returning = pageReturn;
+  pageReturn = null;
+  const restorePosition = () => {
+    if (!view && returning?.anchor.isConnected && returning.anchor.getClientRects().length) {
+      window.scrollTo({ left:returning.left, top:returning.top, behavior:'instant' });
+    }
+  };
+  restorePosition();
+  // 背景列表接管布局后的滚动锚定也回到打开详情时的位置。
+  requestAnimationFrame(restorePosition);
 }
 
 function update(patch: StagePatch): void {
@@ -387,7 +423,7 @@ function repaintPoster(): void {
 }
 
 const api: StageApi = {
-  open, update, exit, dispose, requestClose, repaintPoster,
+  open, update, exit, dispose, requestClose, requestEscape, repaintPoster,
   isOpen: () => !!view,
   showing: () => (view && swappable(view.content.kind) ? view.content.kind : null),
   activeVideo: () => player.activeStageVideo(),

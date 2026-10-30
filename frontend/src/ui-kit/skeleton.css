@@ -34,7 +34,7 @@ section:has(>.ui-alphagroup){display:flex;flex-direction:column;gap:16px}
 .ui-skeletondashhero i::after,.ui-skeletondashhero b::after,
 .ui-skeletondashpanel i::after,.ui-skeletondashpanel b::after,.ui-skeletondashpanel em::after,
 .ui-skeletondashstrip i::after,.ui-skeletondashstrip b::after,.ui-skeletondashstrip em::after{content:'';position:absolute;inset:0;right:-200%;
-  visibility:visible;border-radius:inherit;
+  visibility:inherit;border-radius:inherit;
   background:linear-gradient(to right,var(--hover),var(--skeleton-sheen) 50%,var(--hover));
   background-size:50% 100%;
   animation:skeleton-sweep 1.5s ease-in-out infinite reverse}

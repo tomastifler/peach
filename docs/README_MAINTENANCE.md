@@ -1,11 +1,16 @@
 # README maintenance
 
-1. Check the capabilities, install methods, and limits involved in this change against the table below.
-2. In the same batch, check the Chinese and English READMEs and edit whatever needs adjusting, keeping the usage entry points and security notes.
-3. Check against [Documentation and UI copy](WRITING.md#checking-and-review), then run the [official test entry](TESTING.md#formal-entry).
+默认入口 `README.md` 使用英文，简体中文版为 `README.zh-CN.md`；两种语言同批核对。
 
-The README is for people visiting the project for the first time, and in order covers what it is, the intro video and screenshots, what it can do, how to install, FAQ,
-issue reporting, and the documentation entry points. Write in the user's words: say what it can do and whether it touches files, and do not write internal concepts such as ledger, candidate, or entity; for internal mechanisms and development flow, leave only links. The Chinese and English versions are maintained in the same batch, and platform support, install methods, and capability limits stay consistent. Mainline capabilities, the installed runtime state, and release artifacts are each governed by the implementation, the local health check, and Releases, and the README does not state local IPs, port ownership, real library numbers, or dynamic version numbers.
+1. 按下表核对本次涉及的能力、安装方式与限制。
+2. 同批核对中英文 README，修改需要调整的内容，保留使用入口和安全说明。
+3. 用 documd 提供当前稿的可视化预览，取得用户明确确认后才能推送 README；继续修改时确认对应的新稿。
+4. 按 [文档与界面文案](WRITING.md#检查与复核) 检查，再运行 [正式测试入口](TESTING.md#正式入口)。
+
+README 面向初次访问项目的人，依次讲它是什么、界面导览与截图、能做什么、怎么装、常见问题、
+问题反馈和文档入口。用使用者的话写：说能做什么、会不会动文件，不写账本、候选、实体这类内部
+概念，内部机制与开发流程只留链接。中英文同批维护，平台支持、安装方式和能力限制保持一致。主线能力、已安装运行态和发行制品分别
+以实现、本机健康检查和 Releases 为准，README 不填写本机 IP、端口归属、真实馆藏数字或动态版本号。
 
 | Content | Where to verify |
 | --- | --- |
@@ -21,10 +26,10 @@ state the reason in the Git trailer of the last commit on the delivery branch:
 
 | Judgment | Standalone field at the end of the commit message |
 | --- | --- |
-| Both READMEs updated | `README-Impact: updated; which user-facing notes were synced` |
-| Only the Chinese README needs changes | `README-Impact: updated; reason for the Chinese change`, plus `README-Reviewed: README.en.md; why the English needs no change` |
-| Only the English README needs changes | `README-Impact: updated; reason for the English change`, plus `README-Reviewed: README.md; why the Chinese needs no change` |
-| No README impact | `README-Impact: none; specific reason` |
+| 已更新两份 README | `README-Impact: updated; 同步了哪些用户说明` |
+| 只需修改中文 README | `README-Impact: updated; 中文修改原因`，另加 `README-Reviewed: README.md; 英文无需修改的原因` |
+| 只需修改英文 README | `README-Impact: updated; 英文修改原因`，另加 `README-Reviewed: README.zh-CN.md; 中文无需修改的原因` |
+| 不影响 README | `README-Impact: none; 具体原因` |
 
 The declaration is written together with other trailers such as `Co-Authored-By` in one contiguous block at the end of the commit message, with no blank lines between them.
 For the attribution form within the same block see "Staging and committing" in `.claude/skills/peach-worktree/SKILL.md`.
@@ -38,24 +43,25 @@ A README change must check both languages; `updated` must correspond to at least
 When only one needs adjusting, state the unchanged file and the reason with a single `README-Reviewed`; do not change a correct translation just to satisfy the check.
 Staged content after the commit cannot satisfy the requirement. The truthfulness of the reason is still the responsibility of code review, and the script does not replace semantic judgment.
 
-`agent_worktree.py ready/integrate` runs this gate before accepting test records. The check covers the delivery of this branch,
-and allows the whole batch of diffs to be checked together at the final delivery commit. The repository's `scripts/githooks/commit-msg` checks attribution on commits to `agent/*`
-branches, as well as the format and placement of any README declaration already in the message; intermediate commits may omit the README declaration.
-Merge messages are exempt from the attribution check, amend uses the same field criteria, and the hook only reads the message. Consistency of the README declaration with the whole branch diff
-is checked by the delivery gate, and a branch that fails cannot be integrated through the project entry point.
-No scheduled tasks, account-specific hooks, or extra model calls are needed. The Python minimum, copy, and snapshot checks continue to reuse the existing tests.
-When structure or branding is adjusted, re-read the registered reference snapshots; upstream changes serve as reference only, and planned features must not be written as implemented.
+`agent_worktree.py preflight` 在耗时验证前核对这一门槛；`ready/integrate` 在接受测试记录前复用同一检查。检查覆盖本次分支交付，
+允许在最后交付提交统一核对整批差异。仓库 `scripts/githooks/commit-msg` 在 `agent/*`
+分支提交时检查署名，以及消息中已有 README 声明的格式与分段；中间提交可以不写 README 声明。
+合并消息免除署名检查，amend 使用同一套字段判据；钩子只读消息。README 声明与整个分支差异
+的一致性由交付门槛检查，未通过的分支不能经项目入口集成。
+无需定时任务、账号专属 hook 或额外模型调用。Python 下限、文案和快照校验继续复用现有测试。
+结构或品牌调整时重读已登记的参考快照，上游变化只作为参考，计划功能不得写成已实现。
 
 ## Demo dataset
 
 Screenshots for the README, tutorials, and website come from the demo library by default. Using a classification model to screen "harmless-looking" frames from the real library is not
 an alternative: what gets screened out is mostly black frames and title cards, and the product codes, names, and studios on the cards still leak the source.
 
-Frames from the real library that have been confirmed segment by segment can be used, provided that no access credentials, LAN addresses, tunnel addresses,
-or full filesystem paths appear in the frame; once any of these four is in shot, this machine's coordinates are sent to the public internet and cannot be recalled. The README intro video is attached to the `intro-video` Release; screenshots are served from the official website's static assets as WebP display images and lossless PNG originals, and the README image links point to the PNG, to avoid the download response of Release attachments. A WebP display image must be under 4 MB, and you must verify that the GitHub image proxy returns the image and the browser decodes it fully; the high-density playback wall uses a separate compressed display image, and the original stays 3840×2160. Screenshots do not go into the repository: all of `resources/` gets packed into the installer. The few demo media files that truly must
-be kept in the repository go in `docs/assets/`, each compressed to under 8 MB (`tests/test_repo_hygiene.py`).
+公开 README 复用官网已发布的电影演示库截图，展示馆藏、人物、关注、统计与播放器；界面导览链接到官网 `#live`，仅嵌入已核对内容、来源和许可的视频。截图与文案明确区分演示数据、实际功能和影片访问权，保留来源的年龄、地区和访问限制，不把外部来源的访问权说成 Peach 提供的能力。展示素材的来源、署名与许可链接到官网[素材来源与许可](https://peach.video/credits/)，软件许可不替代第三方素材许可。项目定位与公开附件边界见[文档规范](WRITING.md#公开与私有记录)。
 
-The generator is `scripts/demo_dataset.py`; it writes only to the target directory and touches no ledger:
+公开画面不得出现访问凭据、局域网地址、隧道地址、文件系统完整路径或个人馆藏。截图由官网静态资源提供 WebP 展示图与无损 PNG 原图，README 的图片链接指向 PNG，避免 Release 附件的下载响应。WebP 展示图须小于 4 MB，并核验 GitHub 图片代理返回图片且浏览器完整解码；原图保持 3840×2160。更新链接时核对官网实际发布范围，不能只因本地文件存在就认为线上可用。截图不进仓库：`resources/` 会被整个打进安装包。仓库里确需
+留存的少量演示媒体放 `docs/assets/`，单个文件压到 8 MB 以内（`tests/test_repo_hygiene.py`）。
+
+本地测试另有生成器 `scripts/demo_dataset.py`，只写目标目录，不碰任何账本；以下人像生成模式不作为当前公开 README 的素材来源：
 
 ```powershell
 & .\.venv\Scripts\python.exe -X utf8 scripts\demo_dataset.py --output <directory> --count 24
@@ -100,16 +106,15 @@ creator pages and entity galleries are empty; this is the product's current stat
 
 ## Reference basis
 
-- **README structure (2026-09-06)**: the then-current README originals of Immich, Bruno, and Hoppscotch were taken as reference,
-  with URLs, dates, and SHA-256 in the `readme-*` entries of `docs/reference-sources.json`.
-  Adopted a short tagline, a small concrete logo, centralized download navigation, and a trimmed capability grouping; only Peach's own icons are kept,
-  and external trademarks, screenshots, feature promises, or promotional content are not copied. Upstream snapshots are for evidence only, keeping the original text and upstream license entries.
-- **READMEs of similar projects (2026-09-26)**: 映库, OpenAver, amane, Stash, MetaTube, and MDCx,
-  also registered in `docs/reference-sources.json`. What was borrowed is the information order: header link row,
-  video and screenshots near the top, one line per feature, a three-step download, FAQ, and what to attach when giving feedback. Copy, screenshots, and added
-  terms of use are not borrowed; Peach's boundaries follow AGPL and `SECURITY.md`.
-- **Demo material**: any screenshot or video in the README takes its frames within the boundaries of the "Demo dataset" section above, and when swapping material
-  those boundaries are re-checked.
-- **Length trade-offs (2026-10-17)**: re-read the registered originals of amane, Stash, and OpenAver and checked the live README. Adopted amane's short feature list and install entry, kept Peach's demo, all five screenshots, six highlights, and the necessary security notes; source install steps are centralized in [Operations and configuration](OPERATIONS.md#running-from-source-windows-macos). Routes, field criteria, cache periods, update package mechanics, and development flow are carried by the topic documents.
-- **Screenshots and Star history (2026-10-17)**: screenshots keep the two-column table of `a5f979d6^`, with the playback wall on its own row, and all five WebPs link to the PNG originals. Star History uses `/svg` per the official [`EmbedMarkdownSection.tsx`](https://github.com/star-history/star-history/blob/608d0e39be441665c01cd6ac1fd01ca5ec1eaf39/frontend/components/EmbedMarkdownSection.tsx), keeps light and dark themes, and links to the interactive page the user specified. Measured, `/chart` and `/svg` both return HTTP 200, an SVG type, and `Cache-Control: public, s-maxage=86400, max-age=86400`; the same version's [`cache.ts`](https://github.com/star-history/star-history/blob/608d0e39be441665c01cd6ac1fd01ca5ec1eaf39/backend/cache.ts) sets both the data and the SVG cache to 24 hours. The interactive page URL only changes where a click goes and cannot guarantee the embedded image refreshes instantly; the README makes no real-time promise.
-- **Interactive chart and embedded chart (2026-10-17)**: the user's screenshot shows a vertical axis of 0, 10, 100; the embed API uses `logscale` to get the same ticks. The official same-version [`StarChartViewer.tsx`](https://github.com/star-history/star-history/blob/608d0e39be441665c01cd6ac1fd01ca5ec1eaf39/frontend/components/StarChartViewer.tsx) calls GitHub in the browser and reuses the result in page memory; the 24-hour server cache applies to the embedded image endpoint, and the data freshness of the website's interactive chart cannot be judged from it. The official site `https://peach.video` is in the top navigation of both the Chinese and English READMEs.
+- **README 结构（2026-09-06）**：取 Immich、Bruno、Hoppscotch 当时的 README 原文作参照，
+  URL、日期与 SHA-256 见 `docs/reference-sources.json` 的 `readme-*` 条目。
+  采用短定位、小尺寸具象 Logo、集中下载导航和精简能力分组；仅沿用 Peach 自有图标，
+  不复制外部商标、截图、功能承诺或宣传内容。上游快照仅为取证，保留原文及上游许可入口。
+- **同类项目的 README（2026-09-26）**：映库、OpenAver、amane、Stash、MetaTube、MDCx，
+  登记同在 `docs/reference-sources.json`。借的是信息顺序：页头链接行、
+  视频与截图靠前、功能一行一条、下载三步走、常见问题、反馈要附什么。不借文案、截图和附加
+  使用条款，Peach 的边界以 AGPL 与 `SECURITY.md` 为准。
+- **演示素材**：README 里任何截图或视频都按上面「演示数据集」一节的边界取图，换素材时重新核对
+  那几条边界。
+- **篇幅取舍（2026-10-27）**：参考 amane 的一行一功能与安装入口，以及 SakuraMedia 的主图与折叠截图。README 保留六条特色、安装表、文档导航和必要限制；参数、缓存、任务恢复、诊断与升级细节由专题文档承载。当前原文版本见 `docs/reference-sources.json`，不复制外部文案或使用条款。
+- **截图与 Star 历史（2026-10-27）**：五张电影演示库截图保留，首页主图直接展示，其余四张折叠；WebP 均链接 PNG 原图。Star History 由 `scripts/render_star_history.py` 按逐日记录生成，横轴从第一个 Star 开始，采用蜜桃色霓虹描边、线性绝对值坐标和深浅主题（2026-10-28 起取代 Star Chart 的周粒度图）。独立 GitHub Actions 每日生成 SVG，仅写入 `star-history` 分支，README 不承诺即时刷新；取数与取舍见 [复用记录](REUSE.md)。

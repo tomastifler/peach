@@ -220,7 +220,7 @@ export async function prefetchItemDetail(props: ItemDetailProps, signal: AbortSi
 /* ── 壳递进来的那几样 ── */
 
 /** 标签选择器的一个候选：馆藏里带这枚标签的作品数。 */
-export interface TagCount { k: string; n?: number }
+export interface TagCount { k: string; n?: number; cat?: string }
 
 /** 详情里仍由遗留层拼的几段 HTML 与读数。都是全站语义契约的唯一实现，这里不另写一份。
  *  身份格与队列行的图、头像和署名直接取 `@peach/card-art`。 */
@@ -367,18 +367,7 @@ export function identityGroups(item: DetailItem): IdentityGroups {
    评分落在 `asset.rating`，量纲是 0–100：这一列是 Stash 的 rating100 直接导进来的，taste_history
    也按 rating/20 折算成 0–5 分。所以第 n 颗星送出的是 n*20，不是 n。再点当前那一颗表示撤销，
    送 0，后端写回 NULL——「没评过」和「评了一星」在排序上必须是两件事。 */
-export const RATING_STEP = 20;
-export const clampRating = (value: number | null | undefined) => Math.min(Math.max(value || 0, 0), 100);
-export const ratingStars = (value: number | null | undefined) => Math.round(clampRating(value) / RATING_STEP);
-export const ratingText = (value: number | null | undefined) => {
-  const stars = ratingStars(value);
-  return stars ? `${stars} stars` : 'Not rated';
-};
-/** 点第 `star` 颗之后要送的值：点的就是当前那一颗是撤销。 */
-export const nextRating = (before: number | null | undefined, star: number) => {
-  const picked = star * RATING_STEP;
-  return picked === (before || 0) ? 0 : picked;
-};
+export { RATING_STEP, clampRating, ratingStars, ratingText, nextRating } from '../components/rating-values';
 
 /* ── 标签 ── */
 

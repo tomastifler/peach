@@ -14,7 +14,7 @@ export type SelectField = HTMLElement & { value: string; disabled: boolean };
    白底页面上七块黑。2026-09-04 实测 vercel.com 后台：整站没有一个原生下拉，触发器是
    button，面板是自绘 listbox，面板底色就是页面底色（浅色下纯白 --ds-background-100），
    行高 36px、圆角 6px、行内边距 0 8px，悬停与选中都是 5% 中性填充，选中项没有勾。Peach
-   的行高走站内已有的 --control-h（38px），面板与定位复用 .popmenu 和 wireAnchoredMenu。
+   的行高走站内已有的 --control-h（36px），面板与定位复用 .popmenu 和 wireAnchoredMenu。
 
    选中态只有填充，行内也就没有一枚勾要占位：行首腾出来的那一格正好让每一项的站标和
    触发器里那一枚落在同一列上。面板的左内边距（.popmenu 的 6px 加行的 6px）按触发器的
@@ -78,7 +78,7 @@ export function wireSelectField(root: HTMLElement): SelectField {
   });
   if(current())current()!.tabIndex=0;
   Object.defineProperty(root,'value',{configurable:true,
-    get:()=>current()?.dataset.selectOption??'',set:(value:string)=>choose(value)});
+    get:()=>current()?.dataset.selectOption??'',set:(value:string)=>{choose(value)}});
   Object.defineProperty(root,'disabled',{configurable:true,
     get:()=>trigger.disabled,set:(value:unknown)=>{trigger.disabled=!!value;if(value)anchored.setOpen(false)}});
   return root as SelectField;

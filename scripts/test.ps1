@@ -3,6 +3,7 @@ param(
     [ValidateSet('full', 'auto', 'follow', 'catalog', 'media', 'sync', 'metadata', 'tooling', 'web', 'checks', 'core', 'packaging')]
     [string]$Scope = 'auto',
     [switch]$Fresh,
+    [switch]$Resume,
     [string[]]$Focus = @(),
     [string]$Base = 'master',
     [int]$ShardIndex = 0,
@@ -66,6 +67,7 @@ try {
     Write-Host "Peach source: $LoadedPath"
     $PeachTestExtra = @()
     if ($Fresh) { $PeachTestExtra += '--fresh' }
+    if ($Resume) { $PeachTestExtra += '--resume' }
     foreach ($PeachFocusSelector in $Focus) { $PeachTestExtra += @('--focus', $PeachFocusSelector) }
     & $Python scripts\test_runner.py --scope $Scope --base $Base --shard-index $ShardIndex --shard-count $ShardCount --jobs $Jobs @PeachTestExtra
     exit $LASTEXITCODE

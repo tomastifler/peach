@@ -100,7 +100,7 @@ export function DataCleanupPage({ toast, failure, open }: DataCleanupProps) {
         <div id="libraryProcessing" className="scroll-mt-20">
           <LibraryProcessingCard toast={notify} monitor onComplete={refreshReadings} />
         </div>
-        <div id="mediaRepair"><MediaRepairCard /></div>
+        <div id="mediaRepair"><MediaRepairCard toast={notify} /></div>
         <OrganizeCard toast={notify} failure={failure} />
       </div>
       <LinkManager />

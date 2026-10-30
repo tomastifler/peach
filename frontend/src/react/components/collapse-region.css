@@ -1,0 +1,5 @@
+.peach-react [data-collapse-chevron] { transform: rotate(0deg); transition: transform var(--motion-swap); }
+.peach-react :is(button,summary)[aria-expanded="true"] > [data-collapse-chevron] { transform: rotate(180deg); }
+/* 贴底停靠的面板向上展开：箭头指向点击后面板顶边移动的方向，收起时朝上、展开时朝下。 */
+.peach-react [data-collapse-upward][aria-expanded="false"] > [data-collapse-chevron] { transform: rotate(180deg); }
+.peach-react [data-collapse-upward][aria-expanded="true"] > [data-collapse-chevron] { transform: rotate(0deg); }

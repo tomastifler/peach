@@ -17,26 +17,39 @@ r"""人脸检出：OpenCV 的 YuNet，取代已经跑不起来的 Haar 级联。
 丢掉假阳性（`278GYAN-017` 检到画面最左的剧照拼贴，`KAVR-428` 一张图检出 7 个框）。
 YuNet 给的是框 + 5 个关键点 + 置信度，可以按分数卡，不必靠位置猜。
 
-模型不进 Git：它是二进制资产，和 ffmpeg 一样放 `peach-data/tools/`。首次运行按
-固定 URL 取一次并校验 sha256——版本要能复现，不能「取到什么算什么」。
+模型不进 Git：它是二进制资产，和 ffmpeg 一样随安装包分发（`bundled_model`），取用前
+校验 sha256——版本要能复现，不能「取到什么算什么」。随包那份不在或对不上时，退回
+`peach-data/tools/` 里联网取过的那份，再退回按固定 URL 联网取一次。
 """
 from __future__ import annotations
 
 import hashlib
-import urllib.request
+import logging
+import os
+import sys
+import httpx
+from .peach_proxy import read_url
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .config import TOOLS_DIR
 
-#: opencv_zoo 的 YuNet 定版模型。走 media. 域名是因为仓库用 Git LFS，
-#: raw. 域名只会回一个 131 字节的指针文件。
-MODEL_URL = (
-    "https://media.githubusercontent.com/media/opencv/opencv_zoo/main/"
-    "models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
-)
+LOGGER = logging.getLogger(__name__)
+
+#: opencv_zoo 的定版提交。模型与许可证都按这个提交取，内容不随 main 分支变化。
+ZOO_COMMIT = "48b10fa505aeb51fbd127fc60a5c660040e823b7"
+#: 走 media. 域名是因为仓库用 Git LFS，raw. 域名只会回一个 131 字节的指针文件。
+ZOO_MEDIA = f"https://media.githubusercontent.com/media/opencv/opencv_zoo/{ZOO_COMMIT}/models/"
+
+#: opencv_zoo 的 YuNet 定版模型。
+MODEL_URL = ZOO_MEDIA + "face_detection_yunet/face_detection_yunet_2023mar.onnx"
 MODEL_SHA256 = "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
 MODEL_PATH = TOOLS_DIR / "yunet" / "face_detection_yunet_2023mar.onnx"
+
+#: 随包模型目录的环境变量。Docker 镜像经它指到镜像里那份；桌面包不设，读程序目录。
+BUNDLE_ENV = "PEACH_FACE_MODELS"
+#: 桌面包里随包模型所在的工具目录名，与 `update_packages.TOOL_PATHS` 的 `face-models` 同名。
+BUNDLE_TOOL = "face-models"
 
 #: 低于这个分数的检出不算数。YuNet 会给出置信度，不必再靠「落在左半边就是假阳性」
 #: 这类位置规则去猜——那条规则只在长封套上成立，换个版式就不成立。
@@ -153,11 +166,75 @@ def ensure_model(path: Path | None = None, *, allow_download: bool = True) -> Pa
     """返回可用的模型路径；本地没有且允许联网时取一次。
 
     校验 sha256 而不是只看文件在不在：半个下载同样留下一个文件，而它会让
-    `FaceDetectorYN_create` 抛一个和网络毫无关系的错。
+    `FaceDetectorYN_create` 抛一个和网络毫无关系的错。没指定 `path` 时先认随包那份。
     """
+    if path is None and (bundled := bundled_model(MODEL_PATH.name, MODEL_SHA256)) is not None:
+        return bundled
     target = Path(path) if path is not None else MODEL_PATH
     return fetch_model(target, MODEL_URL, MODEL_SHA256,
                        allow_download=allow_download, label="face model")
+
+
+def bundled_dir() -> Path | None:
+    """随包模型所在的目录：环境变量优先，其次是冻结桌面包的程序目录；源码运行没有。"""
+    configured = os.environ.get(BUNDLE_ENV)
+    if configured:
+        return Path(configured).expanduser()
+    if getattr(sys, "frozen", False):
+        from .ffmpeg import bundled_tools_root
+        return bundled_tools_root() / BUNDLE_TOOL
+    return None
+
+
+#: 已核对过的随包模型：路径 → ((期望哈希, 大小, 修改时间), 是否对得上)。活动中心按轮询读
+#: `face_models.status`，37 MB 的 SFace 每次都算一遍哈希太贵；文件没变就沿用这个进程里第一次
+#: 核对的结论，对不上的那份也只警告一次。重装后大小或修改时间变了，结论随之作废。
+_verified: dict[Path, tuple[tuple[str, int, int], bool]] = {}
+
+
+def bundled_model(name: str, sha256: str) -> Path | None:
+    """随包那份模型：在且哈希对得上就返回它，否则返回 None。
+
+    对不上不删：程序目录常常只读，而且那份文件归安装包管，不归这里。也不往数据根复制，
+    不碰 `downloads` 与 `observer`——这不是联网取到的。
+    """
+    root = bundled_dir()
+    if root is None:
+        return None
+    path = root / name
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    key = (sha256, stat.st_size, stat.st_mtime_ns)
+    cached = _verified.get(path)
+    if cached is not None and cached[0] == key:
+        return path if cached[1] else None
+    try:
+        actual = _digest(path)
+    except OSError:
+        return None
+    _verified[path] = (key, actual == sha256)
+    if actual != sha256:
+        LOGGER.warning("随包的人脸模型校验不符，退回数据目录或联网取：%s（期望 %s，实际 %s）",
+                       path, sha256, actual)
+        return None
+    return path
+
+
+#: 每联网取到一份模型加一。进程里活得久的探针按它判断「失败之后有没有人把模型取回来了」，
+#: 不必等满自己的重试窗口（`avatar_face.FaceProbe`）。
+downloads = 0
+
+#: 联网取模型的结果回报给谁：`observer(label, error)`，取到时 `error` 为 None。服务装配时
+#: 由 `face_models.attach` 接上，把失败写进任务中心；命令行里没人接，就是空操作。
+#: 本地已有、`allow_download=False` 两条路不算联网，不回报。
+observer = None
+
+
+def _observe(label: str, error: Exception | None) -> None:
+    if observer is not None:
+        observer(label, error)
 
 
 def fetch_model(target: Path, url: str, sha256: str, *, allow_download: bool,
@@ -167,6 +244,7 @@ def fetch_model(target: Path, url: str, sha256: str, *, allow_download: bool,
     本地那份哈希对得上就直接用；对不上先删掉，再按 `allow_download` 决定取不取。
     取不到、校验不符一律抛 `FaceModelUnavailable`，由调用方决定跳过还是停下。
     """
+    global downloads
     target = Path(target)
     if target.is_file() and _digest(target) == sha256:
         return target
@@ -177,16 +255,20 @@ def fetch_model(target: Path, url: str, sha256: str, *, allow_download: bool,
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix(".part")
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:
-            payload = response.read()
-    except OSError as error:
-        raise FaceModelUnavailable(f"Failed to fetch {label}: {error}") from error
+        payload = read_url(url, timeout=timeout)
+    except (OSError, httpx.HTTPError) as error:
+        failure = FaceModelUnavailable(f"取{label}失败：{error}")
+        _observe(label, failure)
+        raise failure from error
     digest = hashlib.sha256(payload).hexdigest()
     if digest != sha256:
-        raise FaceModelUnavailable(
-            f"{label} checksum mismatch: expected {sha256}, got {digest}")
+        failure = FaceModelUnavailable(f"{label}校验不符：期望 {sha256}，实际 {digest}")
+        _observe(label, failure)
+        raise failure
     temporary.write_bytes(payload)
     temporary.replace(target)
+    downloads += 1
+    _observe(label, None)
     return target
 
 
@@ -200,6 +282,7 @@ class FaceDetector:
     def __init__(self, model: Path | None = None, *, score: float = DEFAULT_SCORE,
                  nms: float = DEFAULT_NMS, allow_download: bool = True) -> None:
         import cv2
+        import numpy
 
         self._cv2 = cv2
         self.score = score
@@ -209,8 +292,10 @@ class FaceDetector:
             raise FaceModelUnavailable(
                 "This OpenCV build has no FaceDetectorYN; 4.5.4 or later is required")
         # 模型那道门只管「算不算一次读数」，留不留这张脸由 `detect` 按中位数判。
-        self._detector = create(str(self.model_path), "", (320, 320),
-                                min(score, READ_FLOOR), nms, 5000)
+        # Python 读取支持中文路径；原生文件接口不参与模型路径解码。
+        model_bytes = numpy.frombuffer(self.model_path.read_bytes(), dtype=numpy.uint8)
+        self._detector = create("ONNX", model_bytes, numpy.empty(0, dtype=numpy.uint8),
+                                (320, 320), min(score, READ_FLOOR), nms, 5000)
 
     def detect(self, image) -> list[Face]:
         """返回归一化坐标的人脸，按面积从大到小。

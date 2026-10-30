@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import importlib.util
+import plistlib
+import shutil
+import subprocess
 import sys
 import tempfile
 from types import SimpleNamespace
@@ -46,6 +49,8 @@ class MacStandaloneDistributionTests(TestCase):
 
             self.assertEqual(filename, str(destination))
             self.assertEqual(volume_name, "Peach")
+            self.assertEqual(settings["filesystem"], "APFS")
+            self.assertNotIn("Peach.app", settings.get("hide_extensions", []))
             self.assertEqual(settings["files"], [str(app)])
             self.assertEqual(settings["symlinks"], {"Applications": "/Applications"})
             self.assertEqual((resource / "runtime").read_bytes(), b"native executable")
@@ -85,6 +90,43 @@ class MacStandaloneDistributionTests(TestCase):
         with self.assertRaises(FileNotFoundError):
             self.builder.package_dmg(self.root / "Peach.app", destination)
         self.assertFalse(destination.parent.exists())
+
+    @skipUnless(sys.platform == "darwin", "磁盘镜像与代码签名需要 macOS")
+    def test_signed_unicode_resources_survive_the_disk_image(self):
+        app, resource = self.bundle(links=True)
+        executable = app / "Contents/MacOS/Peach"
+        shutil.copyfile("/usr/bin/true", executable)
+        executable.chmod(0o755)
+        (app / "Contents/Info.plist").write_bytes(plistlib.dumps({
+            "CFBundleExecutable": "Peach", "CFBundleIdentifier": "video.peach.signature-test",
+            "CFBundlePackageType": "APPL", "CFBundleVersion": "1",
+        }))
+        name = "カリビアンコム.png"
+        (resource / name).write_bytes(b"signed unicode resource")
+        subprocess.run(["codesign", "--force", "--sign", "-", str(app)], check=True,
+                       capture_output=True, text=True, encoding="utf-8")
+        subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)], check=True,
+                       capture_output=True, text=True, encoding="utf-8")
+        image = self.builder.package_dmg(app, self.root / "Peach.dmg")
+        mount = self.root / "mounted"
+        mount.mkdir()
+        subprocess.run(["hdiutil", "attach", str(image), "-readonly", "-nobrowse",
+                        "-mountpoint", str(mount)], check=True,
+                       capture_output=True, text=True, encoding="utf-8")
+        try:
+            copied = mount / "Peach.app"
+            verification = subprocess.run(
+                ["codesign", "--verify", "--deep", "--strict", "--verbose=4", str(copied)],
+                capture_output=True, text=True, encoding="utf-8")
+            self.assertEqual(verification.returncode, 0, verification.stderr)
+            resources = copied / "Contents/Resources"
+            self.assertIn(name, [path.name for path in resources.iterdir()])
+            self.assertEqual((resources / name).read_bytes(), b"signed unicode resource")
+            self.assertTrue((resources / "runtime").is_symlink())
+            self.assertEqual((resources / "runtime").readlink(), Path("../MacOS/Peach"))
+        finally:
+            subprocess.run(["hdiutil", "detach", str(mount)], check=True,
+                           capture_output=True, text=True, encoding="utf-8")
 
     def test_non_macos_build_is_rejected_before_running_tools(self):
         with mock.patch.object(self.builder.sys, "platform", "win32"), \

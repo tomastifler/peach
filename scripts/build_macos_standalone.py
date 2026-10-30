@@ -58,11 +58,11 @@ def package_dmg(app: Path, destination: Path) -> Path:
             path = background if scale == 1 else staging / "background@2x.png"
             path.write_bytes(svg_to_bytes(svg_path=source, zoom=scale))
         build_dmg(str(destination), "Peach", settings={
-            "format": "UDZO", "files": [str(app)],
+            "format": "UDZO", "filesystem": "APFS", "files": [str(app)],
             "symlinks": {"Applications": "/Applications"},
             "background": str(background), "window_rect": ((160, 160), (640, 420)),
             "icon_locations": {"Peach.app": (174, 220), "Applications": (466, 220)},
-            "icon_size": 128, "text_size": 13, "hide_extensions": ["Peach.app"],
+            "icon_size": 128, "text_size": 13,
             "default_view": "icon-view", "arrange_by": None,
             "show_toolbar": False, "show_sidebar": False, "show_status_bar": False,
             "show_tab_view": False, "show_pathbar": False,
@@ -70,19 +70,43 @@ def package_dmg(app: Path, destination: Path) -> Path:
     return destination
 
 
-def build(destination: Path, *, dmg: bool = True, target_arch: str | None = None) -> dict[str, str]:
+def build(destination: Path, *, dmg: bool = True, target_arch: str | None = None,
+          require_reporting: bool = False) -> dict[str, str]:
     if sys.platform != "darwin":
         raise SystemExit("macOS 应用必须在 macOS 上构建")
-    if (ROOT / "resources" / "seed").exists():
-        raise SystemExit("本机实体导出不能进入发行资源")
+    from peach import seed_pack
+    seed_pack.load(ROOT / "resources/seed/entities.json")
     architecture = target_arch or platform.machine()
     if architecture not in {"arm64", "x86_64"} or architecture != platform.machine():
         raise SystemExit("目标架构必须与当前 Python 一致；请使用 arm64 或 x86_64 Python 及对应依赖构建")
+    from write_reporting_config import reporting_config, write as write_reporting_config
+    reporting_config(require=require_reporting)
     from build_macos_app import build_frontend_bundles
+    from media_tool_bundle import validate
+    from build_macos_media import audit_binary
+    from fetch_cloudflared_macos import validate as validate_cloudflared
+    from fetch_face_models import install as install_face_models
+    from build_amane_runtime import build as build_amane_runtime, verify as verify_amane_runtime
+
+    media_root = ROOT / "build/media-macos" / architecture
+    sources = []
+    for tool in ("ffmpeg", "untrunc"):
+        _manifest, archive = validate(media_root / tool / tool, tool, architecture=architecture)
+        sources.append(archive)
+        for name in (("bin/ffmpeg", "bin/ffprobe") if tool == "ffmpeg" else ("untrunc",)):
+            audit_binary(media_root / tool / tool / name, architecture)
+    cloudflared = media_root / "cloudflared"
+    validate_cloudflared(cloudflared, architecture)
+    work = ROOT / "build" / "macos-standalone" / architecture
+    amane_runtime = work / "amane-runtime"
+    build_amane_runtime(amane_runtime, work=work / "amane-build")
+    # 人脸模型在 PyInstaller 之前取齐并校验，网络不通时尽早失败。
+    face_models = work / "face-models"
+    shutil.rmtree(face_models, ignore_errors=True)
+    install_face_models(face_models)
 
     build_frontend_bundles()
     destination = destination.resolve()
-    work = ROOT / "build" / "macos-standalone" / architecture
     work.mkdir(parents=True, exist_ok=True)
     commit = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"],
                             capture_output=True, text=True, encoding="utf-8", check=True).stdout.strip()
@@ -94,13 +118,29 @@ def build(destination: Path, *, dmg: bool = True, target_arch: str | None = None
             capture_output=True, text=True, encoding="utf-8", check=True).stdout.strip()),
     }
     (work / "build-info.json").write_text(json.dumps(identity), encoding="utf-8")
+    reporting = write_reporting_config(work / "sentry.json", require=require_reporting)
     subprocess.run([
         sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
         "--distpath", str(destination), "--workpath", str(work / "app"),
         str(ROOT / "scripts" / "peach_macos.spec"),
     ], check=True, cwd=ROOT, env={**os.environ, "PEACH_MACOS_BUILD_INFO": str(work / "build-info.json"),
+                                "PEACH_MACOS_REPORTING_CONFIG": str(reporting),
+                                "PEACH_MACOS_AMANE_RUNTIME": str(amane_runtime),
                                 "PEACH_MACOS_TARGET_ARCH": architecture})
     app = destination / "Peach.app"
+    verify_amane_runtime(app / "Contents/Frameworks/tools/amane-runtime")
+    tools = app / "Contents/Resources/tools"
+    tools.mkdir(exist_ok=True)
+    for tool in ("ffmpeg", "untrunc"):
+        shutil.copytree(media_root / tool / tool, tools / tool)
+    shutil.copytree(face_models, tools / "face-models")
+    shutil.copyfile(cloudflared / "cloudflared", app / "Contents/MacOS/cloudflared")
+    (app / "Contents/MacOS/cloudflared").chmod(0o755)
+    for name in ("LICENSE-cloudflared.txt", "NOTICE-cloudflared.md"):
+        shutil.copyfile(cloudflared / name, app / "Contents/Resources" / name)
+    shutil.copyfile(cloudflared / "manifest.json", app / "Contents/Resources/cloudflared-manifest.json")
+    for archive in sources:
+        shutil.copyfile(archive, destination / archive.name)
     minimum = minimum_system_version(app)
     info_path = app / "Contents" / "Info.plist"
     info = plistlib.loads(info_path.read_bytes())
@@ -123,9 +163,11 @@ def main() -> int:
     parser.add_argument("--destination", type=Path)
     parser.add_argument("--target-arch", choices=("arm64", "x86_64"), default=platform.machine())
     parser.add_argument("--no-dmg", action="store_true", help="只生成独立应用")
+    parser.add_argument("--require-reporting", action="store_true", help="发行构建：缺 Sentry DSN 时失败")
     args = parser.parse_args()
     destination = args.destination or ROOT / "dist" / "macos.noindex" / args.target_arch
-    print(json.dumps(build(destination, dmg=not args.no_dmg, target_arch=args.target_arch), ensure_ascii=False))
+    print(json.dumps(build(destination, dmg=not args.no_dmg, target_arch=args.target_arch,
+                           require_reporting=args.require_reporting), ensure_ascii=False))
     return 0
 
 

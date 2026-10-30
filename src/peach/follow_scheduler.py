@@ -107,6 +107,8 @@ class FollowUpdateScheduler:
         self._last_checked = 0
         self._last_added = 0
         self._consecutive_failures = 0
+        #: 这一串连续失败里第一轮的开始时刻；成功一轮就清空。
+        self._failing_since: str | None = None
 
     def start(self) -> None:
         if self._started or not self.available:
@@ -128,6 +130,30 @@ class FollowUpdateScheduler:
         self.store.save(self.config)
         if self._started:
             self._apply_job()
+        return self.status()
+
+    def run_now(self) -> dict:
+        """把下一轮提前到此刻，由调度线程照常跑完并结算失败计数。
+
+        手动检查走的是另一条路，不碰这里的 `last_error`；重试自动检查的失败只能让
+        这个任务自己再跑一轮。之后的轮次从这一轮起按原间隔排。
+        """
+        if not self.available:
+            raise ValueError(self.unavailable_message)
+        if not self._started or not self.config.enabled:
+            raise ValueError("自动运行没有开启")
+        with self._state_lock:
+            already = self._running
+            # 提前标成运行中：调度线程领走这一轮之前，读状态的人不该再看到旧的失败。
+            self._running = True
+        if already:
+            return self.status()
+        try:
+            self.scheduler.modify_job(self.job_id, next_run_time=datetime.now(timezone.utc))
+        except JobLookupError:
+            with self._state_lock:
+                self._running = False
+            raise ValueError("自动运行没有开启") from None
         return self.status()
 
     def _apply_job(self) -> None:
@@ -215,6 +241,10 @@ class FollowUpdateScheduler:
             self._consecutive_failures = (
                 self._consecutive_failures + 1 if failed else 0)
             failures = self._consecutive_failures
+            if not failed:
+                self._failing_since = None
+            elif failures == 1:
+                self._failing_since = self._last_started_at
         if not failed or not self._started:
             return
         delay = self.backoff_minutes(failures)
@@ -250,4 +280,5 @@ class FollowUpdateScheduler:
                 "last_checked": self._last_checked,
                 "last_added": self._last_added,
                 "consecutive_failures": self._consecutive_failures,
+                "failing_since": self._failing_since,
             }

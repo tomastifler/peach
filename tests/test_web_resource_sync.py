@@ -12,7 +12,7 @@ import sqlite3
 import tempfile
 import time
 import unittest
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from unittest import mock
 
 from peach import web_batch
@@ -42,6 +42,8 @@ class PurgeMissingTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name).resolve()
+        self.mount = self.root / "mount"
+        self.mount.mkdir()
         self.db_path = str(fresh_ledger(self.root))
         con = sqlite3.connect(self.db_path)
         sep = chr(92)
@@ -64,12 +66,12 @@ class PurgeMissingTests(unittest.TestCase):
         con.close()
         self.contract = rm_web.WebContract(Path(self.db_path))
         # 只有 001 和 a.mp4 还在盘上；002、003 当作已被手动删除。
-        for name in ("001.jpg", "a.mp4"):
-            (self.root / name).write_bytes(b"x")
+        for path in (self.mount / "creator/P/001.jpg",
+                     self.mount / "creator/V/a.mp4"):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"x")
         # 检查会遍历在线来源的目录来找空文件夹；测试目录必须固定在临时目录中，否则会遍历
         # 这台机器上真实的 `R:\media` 与网盘挂载。
-        self.mount = self.root / "mount"
-        self.mount.mkdir()
         for module in (rm_sync, web_batch):
             declared = mock.patch.object(module, "LOCATION_ROOT_DECLARATIONS",
                                          {"115": (str(self.mount),)})
@@ -84,8 +86,15 @@ class PurgeMissingTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def _translate(self, raw):
-        """把账本的 Windows 路径映射到临时目录里的同名文件。"""
-        return self.root / str(raw).rsplit(chr(92), 1)[-1]
+        """把来源盘符和相对目录映射进临时挂载；Unix 根路径保持原样。"""
+        text = str(raw)
+        windows = PureWindowsPath(text)
+        drive = windows.drive.upper()
+        if drive == "B:":
+            return self.mount.joinpath(*windows.parts[1:])
+        if drive == "R:":
+            return (self.root / "local").joinpath(*windows.parts[1:])
+        return Path(raw)
 
     def _synced(self, online=lambda location: location == "115"):
         """账本路径映射到临时目录；删除那一侧（`web_batch`）要跟着映射，否则它去问真实的 B:。"""
@@ -292,8 +301,8 @@ class PurgeMissingTests(unittest.TestCase):
             preview = rm_sync.w_resource_sync_scan(self.contract)
 
         self.assertEqual(preview["missing"], 2)
-        # 账本那几行同住一个目录，列一次；来源根为找空文件夹再列一次。
-        self.assertEqual(scandir.call_count, 2)
+        # 两个账本目录各列一次，再遍历来源树的根、父目录和两个子目录。
+        self.assertEqual(scandir.call_count, 6)
         source = next(row for row in preview["sources"] if row["location"] == "115")
         self.assertEqual(source["total"], 4)
         self.assertEqual(source["unreadable"], 0)
@@ -362,8 +371,8 @@ class PurgeMissingTests(unittest.TestCase):
 
         self.assertEqual(preview["missing"], 0)
         source = next(row for row in preview["sources"] if row["location"] == "115")
-        # 账本那几行所在的目录一个，来源根一个：同一个目录只数一次。
-        self.assertEqual(source["unreadable"], 2)
+        # 两个账本目录加来源根：同一个目录只数一次。
+        self.assertEqual(source["unreadable"], 3)
         self.assertEqual(preview["empty"], 0)
 
     def test_background_sync_polls_then_rechecks_only_missing_candidates(self):
@@ -437,7 +446,7 @@ class PurgeMissingTests(unittest.TestCase):
 
     def test_intact_directory_reports_no_change(self):
         for name in ("002.jpg", "003.jpg"):
-            (self.root / name).write_bytes(b"x")
+            (self.mount / "creator/P" / name).write_bytes(b"x")
         result = self._run()
         self.assertEqual(result["removed"], 0)
         self.assertEqual(result["checked"], 3)
@@ -471,7 +480,7 @@ class PurgeMissingTests(unittest.TestCase):
         `unreadable` 数不到它，所以清理那一侧照名单删就会删掉几百行文件还在的资产。
         """
         for name in ("002.jpg", "003.jpg"):
-            (self.root / name).write_bytes(b"x")
+            (self.mount / "creator/P" / name).write_bytes(b"x")
         with mock.patch.object(rm_sync, "translate_ledger_path", self._translate), \
              mock.patch.object(rm_sync, "_missing_resource_ids",
                                return_value=([1, 2, 3], 0)):

@@ -4,6 +4,7 @@
  * （`['feed-new', 实体 id | 'home']`），一处改了合集开关，按 `['feed-new']` 一次就能把两行都作废。
  * 卡片的 HTML 仍由壳拼（`feedRowHtml`）：封面取景、版次字样与那条连接方式的 Note 都是遗留层
  * 那一份，取图失败时的兜底链也直接改节点。 */
+import { appSettingsStore } from '@peach/appearance';
 import { api } from '@peach/legacy/core';
 
 import { queryClient } from '../query';
@@ -43,9 +44,10 @@ export function preloadImages(html: string, count: number, ms: number): Promise<
 
 /** 拉取由定时器做，页面只读已经发现的那些：进这一页顺手发一轮请求，等于把每次刷新都变成对别人
  *  服务器的一次拉取。骨架还占着时（首屏）先把头几张封面取到手再整行换掉：否则骨架退场、真卡进来，
- *  封面格里又是一轮微光，同一行等了两遍。慢的那几张不等满，到点照换。 */
+ *  封面格里又是一轮微光，同一行等了两遍。慢的那几张不等满，到点照换。
+ *  一行取几部按设置弹窗「新作显示数量」（`feedLimit`），改了由壳作废两行的查询重取。 */
 export async function fetchFeedNew(entityId: number | null, rowHtml: FeedRowHtml, preload: boolean): Promise<FeedNew> {
-  const query = new URLSearchParams({ limit: '12' });
+  const query = new URLSearchParams({ limit: String(appSettingsStore().value.feedLimit) });
   if (entityId) query.set('entity', String(entityId));
   const data = await (api(`/api/feeds/discoveries?${query}`).catch(() => null) as Promise<FeedDiscoveries | null>);
   const ok = data && !(data as { error?: string }).error ? data : null;

@@ -10,7 +10,7 @@ import type { FollowFeedActions, FollowFeedHelpers } from '../../src/react/follo
 
 const followHelpers: FollowFeedHelpers = { workMark: () => '', tagLabel: tag => tag, wireDrag: vi.fn(), wireScroller: vi.fn(),
   listSkeletonHtml: () => '', jobProgress: vi.fn() };
-const followActions: FollowFeedActions = { route: vi.fn(), shuffle: vi.fn(), loaded: vi.fn(), openDetail: vi.fn(), openAuthor: vi.fn(), openManage: vi.fn(),
+const followActions: FollowFeedActions = { route: vi.fn(), shuffle: vi.fn(), loaded: vi.fn(), openDetail: vi.fn(), openAuthor: vi.fn(),
   toggleSelection: vi.fn(), setImagesOnly: vi.fn(), setPhotoLayout: vi.fn(), canFlip: () => true, toast: vi.fn(),
   failure: vi.fn(), checkReport: vi.fn() };
 const helpers: EntityPageHelpers = { portraitImg: entityPortraitImg, wireDrag: vi.fn(), wireScroller: vi.fn(), wireFeedRow: vi.fn(),

@@ -115,18 +115,67 @@ class FollowUpdateSchedulerTests(unittest.TestCase):
                              min(interval * MAX_BACKOFF_FACTOR,
                                  MAX_INTERVAL_MINUTES))
             scheduler._run()
-            self.assertEqual(scheduler.status()["consecutive_failures"], 1)
+            first = scheduler.status()
+            self.assertEqual(first["consecutive_failures"], 1)
+            self.assertEqual(first["failing_since"], first["last_started_at"])
             with self.assertLogs("peach.follow_scheduler", level="ERROR") as captured:
                 scheduler._run()
             self.assertIn("上游断了", "\n".join(captured.output))
             status = scheduler.status()
             self.assertEqual(status["consecutive_failures"], 2)
             self.assertEqual(status["last_error"], "上游断了")
+            # 连续失败的起点停在第一轮，不跟着每一轮往后挪。
+            self.assertEqual(status["failing_since"], first["failing_since"])
             scheduler._run()
             status = scheduler.status()
             self.assertEqual(status["consecutive_failures"], 0)
             self.assertIsNone(status["last_error"])
+            self.assertIsNone(status["failing_since"])
             self.assertEqual(status["last_added"], 2)
+
+    def test_run_now_runs_the_scheduled_job_and_settles_its_failure(self):
+        import threading
+        finished = threading.Event()
+        outcomes = [{"ok": True, "checked": 1, "results": [{"ok": False}]},
+                    {"ok": True, "checked": 1, "results": [{"ok": True, "added": 1}]}]
+
+        def run_check():
+            return outcomes.pop(0)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            scheduler = FollowUpdateScheduler(Path(temporary), run_check, available=True)
+            self.addCleanup(scheduler.stop)
+            with self.assertRaises(ValueError):
+                scheduler.run_now()
+            scheduler._run()
+            self.assertEqual(scheduler.status()["last_error"], "1 个来源检查失败")
+            original = scheduler._run
+
+            def tracked():
+                original()
+                finished.set()
+            scheduler._run = tracked
+            scheduler.start()
+            # 提前标成运行中，读状态的人不会在调度线程领走之前再看到旧的失败。
+            self.assertTrue(scheduler.run_now()["running"])
+            self.assertTrue(finished.wait(10))
+            status = scheduler.status()
+            self.assertEqual((status["running"], status["last_error"], status["consecutive_failures"]),
+                             (False, None, 0))
+            self.assertIsNotNone(status["next_run_at"])
+
+    def test_run_now_is_refused_without_a_running_job(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            reader = FollowUpdateScheduler(Path(temporary), lambda: {"ok": True}, available=False)
+            with self.assertRaises(ValueError):
+                reader.run_now()
+            writer = FollowUpdateScheduler(Path(temporary), lambda: {"ok": True}, available=True)
+            self.addCleanup(writer.stop)
+            writer.start()
+            writer.update(enabled=False, interval_minutes=60)
+            with self.assertRaises(ValueError):
+                writer.run_now()
+            self.assertFalse(writer.status()["running"])
 
     def test_backoff_pushes_the_next_run_past_the_plain_interval(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -1,11 +1,199 @@
-"""改字工具只保存静态源文案，冲突与代码路径不能误写。"""
+"""改字工具保存源文案与动态模板，冲突与代码路径不能误写。"""
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
+import threading
+import time
+import os
 from peach import dev_copy
 
 
 class DevCopyTests(unittest.TestCase):
+    def test_setup_copy_sources_can_be_saved_with_digest_protection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            (root / 'src/peach').mkdir(parents=True)
+            for name in ('routes_pages.py', 'onboarding.py', 'media_sources.py'):
+                with self.subTest(name=name):
+                    path = root / 'src/peach' / name
+                    path.write_text("LABEL = '设置说明'", encoding='utf-8')
+                    candidate = next(row for row in dev_copy.candidates(root, '设置说明') if row['file'].endswith(name))
+                    dev_copy.save(root, {'original': '设置说明', 'replacement': '媒体设置说明', 'candidate': candidate})
+                    self.assertEqual(path.read_text(encoding='utf-8'), "LABEL = '媒体设置说明'")
+                    with self.assertRaises(ValueError):
+                        dev_copy.save(root, {'original': '设置说明', 'replacement': '无效修改', 'candidate': candidate})
+
+    def test_status_recovers_from_a_short_read_lock_and_preserves_persistent_denial(self):
+        from peach import dev_copy_runtime as runtime
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            with patch.object(Path, 'read_text', side_effect=[PermissionError('sharing'), '{"state":"ready"}']), \
+                    patch.object(runtime.time, 'sleep') as sleep:
+                self.assertEqual(runtime.status(root)['state'], 'ready')
+                sleep.assert_called_once()
+            with patch.object(Path, 'read_text', side_effect=PermissionError('denied')) as read, \
+                    patch.object(runtime.time, 'sleep') as sleep, self.assertRaises(PermissionError):
+                runtime.status(root)
+            self.assertEqual(read.call_count, 5)
+            self.assertEqual(sleep.call_count, 4)
+
+    def test_static_text_can_be_deleted_and_dynamic_placeholders_are_required(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            (root / 'frontend/src').mkdir(parents=True)
+            path = root / 'frontend/src/copy.tsx'
+            path.write_text("const a = '说明'; const b = <p>正文</p>;", encoding='utf-8')
+            for original in ('说明', '正文'):
+                candidate, = dev_copy.candidates(root, original)
+                result = dev_copy.save(root, {'original': original, 'replacement': '', 'candidate': candidate})
+                self.assertEqual(result['text'], '')
+            self.assertEqual(path.read_text(encoding='utf-8'), "const a = ''; const b = <p></p>;")
+            (root / 'src/peach').mkdir(parents=True)
+            dynamic = root / 'src/peach/library_processing.py'
+            dynamic.write_text('message = f"待处理 {count} 项"', encoding='utf-8')
+            candidate, = dev_copy.candidates(root, '待处理 5 项')
+            with self.assertRaises(ValueError):
+                dev_copy.save(root, {'original': '待处理 5 项', 'replacement': '', 'candidate': candidate})
+            self.assertEqual(dynamic.read_text(encoding='utf-8'), 'message = f"待处理 {count} 项"')
+
+    def test_build_failure_preserves_served_files_and_can_be_retried(self):
+        from peach import dev_copy_runtime as runtime
+        from subprocess import CompletedProcess
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            (root / 'frontend/src').mkdir(parents=True)
+            path = root / 'frontend/src/copy.ts'
+            path.write_text("const title = '说明';", encoding='utf-8')
+            (root / 'web/dist').mkdir(parents=True)
+            served = root / 'web/dist/peach-app.js'
+            served.write_text('有效产物', encoding='utf-8')
+            candidate, = dev_copy.candidates(root, '说明')
+            with patch('peach.dev_copy_runtime.subprocess.run', return_value=CompletedProcess([], 1, '', '语法错误')):
+                result = runtime.submit(root, {'original': '说明', 'replacement': '新说明', 'candidate': candidate})
+                self._wait_for_state(runtime, root, 'error')
+            self.assertEqual(served.read_text(encoding='utf-8'), '有效产物')
+            self.assertEqual(path.read_text(encoding='utf-8'), "const title = '新说明';")
+            self.assertIn('语法错误', runtime.status(root)['message'])
+            with patch('peach.dev_copy_runtime.build_frontend'):
+                retry = runtime.submit(root, {'id': result['apply']['id']}, retry=True)
+                self._wait_for_state(runtime, root, 'ready')
+            self.assertNotEqual(result['apply']['id'], retry['apply']['id'])
+
+    def test_tray_reload_obeys_task_gate_and_releases_ownership_lock(self):
+        from peach import dev_copy_runtime as runtime
+        from peach.runtime_prepare import TaskGate, ActiveRun, Step
+        from unittest.mock import Mock
+        for blocked in (True, False):
+            with self.subTest(blocked=blocked), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve()
+                (root / 'src/peach').mkdir(parents=True)
+                path = root / 'src/peach/library_processing.py'
+                path.write_text("TITLE = '说明'", encoding='utf-8')
+                candidate, = dev_copy.candidates(root, '说明')
+                runtime.submit(root, {'original': '说明', 'replacement': '新说明', 'candidate': candidate})
+                with self.assertRaises(ValueError):
+                    runtime.submit(root, {})
+                tray = SimpleNamespace(_action_lock=threading.Lock(), manager=Mock(),
+                                       _readiness=lambda: Step('readiness', 'current', '服务已就绪'))
+                gate = TaskGate(blocking=(ActiveRun(1, 'test', 'manual', 'running', os.getpid(), None),)) if blocked else TaskGate()
+                with patch('peach.runtime_prepare.task_gate', return_value=gate):
+                    runtime.poll(tray, root)
+                    self._wait_for_state(runtime, root, 'error' if blocked else 'ready')
+                self.assertEqual(tray.manager.restart.call_count, 0 if blocked else 1)
+                self.assertFalse(tray._action_lock.locked())
+
+    @staticmethod
+    def _wait_for_state(runtime, root, state):
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            if runtime.status(root).get('state') == state:
+                return
+            time.sleep(.01)
+        raise AssertionError(runtime.status(root))
+
+    def test_saved_frontend_copy_is_built_and_published(self):
+        from peach import dev_copy_runtime
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            (root / 'web/dist').mkdir(parents=True)
+            (root / 'web/dist/peach-app.js').write_text('现有产物', encoding='utf-8')
+            def build(argv, **kwargs):
+                from subprocess import CompletedProcess
+                stage = Path(kwargs['env']['PEACH_FRONTEND_OUT_DIR'])
+                for name in dev_copy_runtime.BUNDLES:
+                    (stage / name).write_text('有效产物', encoding='utf-8')
+                self.assertEqual((root / 'web/dist/peach-app.js').read_text(encoding='utf-8'), '现有产物')
+                return CompletedProcess(argv, 0, stdout='构建完成', stderr='')
+            with patch('peach.dev_copy_runtime.subprocess.run', side_effect=build):
+                dev_copy_runtime.build_frontend(root)
+            self.assertEqual((root / 'web/dist/peach-app.js').read_text(encoding='utf-8'), '有效产物')
+
+    def test_frontend_copy_publishes_new_chunks_and_drops_the_previous_ones(self):
+        """主包按页拆出的 chunk 名字带哈希（ADR-0118）：新的一批跟入口一起发出，上一批随后删掉。"""
+        from peach import dev_copy_runtime
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            dist = root / 'web/dist'
+            dist.mkdir(parents=True)
+            (dist / 'peach-app.stats-page-Old00000.js').write_text('旧 chunk', encoding='utf-8')
+            def build(argv, **kwargs):
+                from subprocess import CompletedProcess
+                stage = Path(kwargs['env']['PEACH_FRONTEND_OUT_DIR'])
+                for name in (*dev_copy_runtime.BUNDLES, 'peach-app.stats-page-New11111.js'):
+                    (stage / name).write_text(name, encoding='utf-8')
+                (stage / 'peach-app.stats-page-New11111.js.map').write_text('{}', encoding='utf-8')
+                return CompletedProcess(argv, 0, stdout='构建完成', stderr='')
+            with patch('peach.dev_copy_runtime.subprocess.run', side_effect=build):
+                dev_copy_runtime.build_frontend(root)
+            self.assertEqual(sorted(path.name for path in dist.iterdir()),
+                             sorted([*dev_copy_runtime.BUNDLES, 'peach-app.stats-page-New11111.js']))
+            self.assertEqual((dist / 'peach-app.stats-page-New11111.js').read_text(encoding='utf-8'),
+                             'peach-app.stats-page-New11111.js')
+
+    def test_processing_template_keeps_live_values_and_validates_placeholders(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            package = root / "src/peach"
+            package.mkdir(parents=True)
+            path = package / "library_processing.py"
+            source = ("# 中文说明\n"
+                      "def summary(problems, paused):\n"
+                      "    return (f'{problems} 项需要处理，其中 {paused} 项是来源限流；'\n"
+                      "            '其余可重试。')\n")
+            path.write_text(source, encoding="utf-8")
+            original = "768 项需要处理，其中 533 项是来源限流；其余可重试。"
+            candidate, = dev_copy.candidates(root, original)
+            self.assertEqual(candidate["template"], "{problems} 项需要处理，其中 {paused} 项是来源限流；其余可重试。")
+            for replacement in ["处理 {problems} 项", "处理 {unknown} 项", "处理 {problems!r}、{paused}", "{problems} {paused} {paused}"]:
+                with self.assertRaises(ValueError):
+                    dev_copy.save(root, {"original": original, "replacement": replacement, "candidate": candidate})
+                self.assertEqual(path.read_text(encoding="utf-8"), source)
+            result = dev_copy.save(root, {"original": original,
+                "replacement": "来源限流 {paused} 项，共 {problems} 项待处理。", "candidate": candidate})
+            self.assertEqual(result["text"], "来源限流 533 项，共 768 项待处理。")
+            namespace = {}
+            exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), namespace)
+            self.assertEqual(namespace["summary"](10, 3), "来源限流 3 项，共 10 项待处理。")
+            self.assertEqual(len(list((root / "build/copy-editor/backups").rglob(path.name))), 1)
+            with self.assertRaises(ValueError):
+                dev_copy.save(root, {"original": original, "replacement": "{problems} {paused}", "candidate": candidate})
+
+    def test_template_preserves_expressions_formatting_and_literal_braces(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            package = root / "src/peach"
+            package.mkdir(parents=True)
+            path = package / "library_processing.py"
+            path.write_text("def summary(total):\n    return f'共 {{数量}} {total + 1:04d} 项'\n", encoding="utf-8")
+            candidate, = dev_copy.candidates(root, "共 {数量} 0003 项")
+            self.assertEqual(candidate["template"], "共 {{数量}} {value1} 项")
+            dev_copy.save(root, {"original": "共 {数量} 0003 项", "replacement": "{{总数}} '{value1}' 项", "candidate": candidate})
+            namespace = {}
+            exec(compile(path.read_text(encoding="utf-8"), str(path), "exec"), namespace)
+            self.assertEqual(namespace["summary"](4), "{总数} '0005' 项")
+
     def test_library_notice_is_editable_and_other_python_files_are_excluded(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()

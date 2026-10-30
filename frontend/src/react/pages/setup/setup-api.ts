@@ -17,7 +17,7 @@ export interface SetupQuestion {
   default: string;
   required: boolean;
   advanced: boolean;
-  input: 'folders' | 'choice' | 'text' | 'number';
+  input: 'folders' | 'folder' | 'choice' | 'text' | 'number';
   prefix: string;
   suffix: string;
   options?: SetupOption[];
@@ -27,6 +27,8 @@ export interface SetupQuestion {
 export interface MountDependency { name: string; message: string; download_url: string; download_label: string }
 
 export interface SetupQuestions {
+  peach_proxy?: import('../../bundle').PeachProxyState;
+  docker?: boolean;
   remote_reporting?: import('../../settings/remote-reporting-settings').RemoteReportingState;
   windows: boolean;
   standalone: boolean;
@@ -44,6 +46,7 @@ export interface SetupFact { term: string; value: string; download_url?: string;
 
 export interface SetupDone {
   restored?: boolean;
+  skip_media?: boolean;
   url: string;
   scan_requested: boolean;
   history_guide: boolean;
@@ -54,15 +57,27 @@ export interface SetupDone {
 
 export type SetupErrors = Partial<Record<string, string | string[]>>;
 
-export interface SetupFolder { path: string; location: string; root: string; cost?: 'free' | 'metered' | '' }
+export interface SetupFolder {
+  path: string;
+  location: string;
+  root: string;
+  library_id?: string;
+  library?: string;
+  library_icon?: string;
+  library_color?: string;
+  cost?: 'free' | 'metered' | '';
+  library_policy?: import('../../settings/library-policy-settings').Preset;
+  library_stages?: string;
+}
 
 export interface SetupSubmission {
   media_dir: SetupFolder[];
+  skip_media: boolean;
   access_enabled: boolean;
   access_password?: string;
   access_confirm?: string;
   scan_now: boolean;
-  history_guide: boolean;
+  history_guide?: boolean;
   [key: string]: unknown;
 }
 

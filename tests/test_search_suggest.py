@@ -42,7 +42,7 @@ class LedgerFixture(unittest.TestCase):
              # 既无番号也无发行标题，只有一个相机文件名。
              (6, r"R:\Media\IMG_2757_682.MOV", "IMG_2757_682.MOV", None, None, None),
              # 文件名里有别人的番号，它自己没有番号。
-             (7, r"R:\Media\old-ABW-clip.mp4", "old-ABW-clip.mp4", None, None, None)],
+             (7, r"R:\Media\old-ABW-recording.mp4", "old-ABW-recording.mp4", None, None, None)],
         )
         self.con.executemany(
             "INSERT INTO entity(id,kind,canonical_name,normalized_name,created_at,updated_at)"
@@ -181,8 +181,21 @@ class SuggestTests(LedgerFixture):
         self.assertEqual(self.values("潜入", "asset"), ["ABW-123"])
 
     def test_a_hit_in_the_file_name_ranks_last(self):
-        """`old-ABW-clip.mp4` 里有别人的番号。它排在真的叫这个番号的那条之后。"""
-        self.assertEqual(self.values("ABW", "asset"), ["ABW-123", "old-ABW-clip"])
+        """`old-ABW-recording.mp4` 里有别人的番号。它排在真的叫这个番号的那条之后。"""
+        self.assertEqual(self.values("ABW", "asset"), ["ABW-123", "old-ABW-recording"])
+
+    def test_local_extras_do_not_supply_work_suggestions_or_performer_counts(self):
+        self.con.executemany(
+            "INSERT INTO asset(id,location,path,name,medium,size,first_seen,code) "
+            "VALUES(?,'local',?,?,'video',100,'2026-01-01','ABW-777')",
+            [(90, r"R:\Media\ABW-777-clip2.mp4", "ABW-777-clip2.mp4"),
+             (91, r"R:\Media\ABW-777\Extras\Disc 1\making.mp4", "making.mp4")])
+        self.con.executemany(
+            "INSERT INTO asset_entity(asset_id,entity_id,role,source,confidence) "
+            "VALUES(?,11,'performer','test',1.0)", [(90,), (91,)])
+        self.con.commit()
+        self.assertEqual(self.values("ABW-777", "asset"), [])
+        self.assertEqual(self.group("涼森", "performer")[0]["n"], 3)
 
     def test_a_file_name_loses_its_extension(self):
         """`.MOV` 是存储事实，不是这部片叫什么。"""
@@ -476,7 +489,7 @@ class OneWorkOneSlotTests(LedgerFixture):
         self.assertTrue(works[0]["has_thumb"])
 
     def test_the_video_group_lists_each_work_once(self):
-        self.assertEqual(self.values("ABW", "asset"), ["ABW-124", "ABW-123", "old-ABW-clip"])
+        self.assertEqual(self.values("ABW", "asset"), ["ABW-124", "ABW-123", "old-ABW-recording"])
 
     def test_the_video_group_opens_the_file_written_the_canonical_way(self):
         item = next(item for item in self.group("ABW", "asset") if item["value"] == "ABW-123")

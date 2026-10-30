@@ -1,14 +1,23 @@
-import { esc, icon } from './core';
+import { esc } from './core';
+import { islandGlyph } from './island-skeleton';
 import type { EntitySortKey, SegmentOption } from './react/entity-filter/entity-filter';
 import { SEGMENTED_GLASS_TRACK, SEGMENT_GLASS } from './react/components/segmented';
+import { catalogView } from './react/catalog-grid/catalog-view';
 
 interface Layout { name: string; label: string; value: string; options: readonly SegmentOption[] }
+const icon = (name: string) => name.startsWith('ri-')
+  ? `<svg class="size-4 shrink-0" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><use href="#${name}"/></svg>`
+  : islandGlyph(name, 'size-4 shrink-0');
+export const FILTER_WAITING = 'inert aria-disabled="true" tabindex="-1" data-skeleton-control';
+const segments = (label: string, value: string, options: readonly SegmentOption[]) =>
+  `<span data-entity-layout="" class="${SEGMENTED_GLASS_TRACK}" role="radiogroup" aria-label="${esc(label)}">${options.map(([key, text, glyph]) =>
+    `<span class="${SEGMENT_GLASS}" role="radio" aria-label="${esc(text)}" aria-checked="${key === value}" data-glass-segment=""${key === value ? ' data-selected=""' : ''} ${FILTER_WAITING}>${icon(glyph)}</span>`).join('')}</span>`;
 
 /** 已知的控件保留文字、字形与按下态；等待接线时不能执行动作。 */
 export function filterControlsSkeletonHtml(sorts: readonly EntitySortKey[], layout: Layout | null): string {
-  const waiting = 'disabled data-skeleton-action';
-  const sizes = layout ? `<span data-entity-layout="" class="${SEGMENTED_GLASS_TRACK}" role="radiogroup" aria-label="${esc(layout.label)}">${layout.options.map(([value, label, glyph]) =>
-    `<button type="button" class="${SEGMENT_GLASS}" role="radio" aria-label="${esc(label)}" aria-checked="${value === layout.value}" data-glass-segment=""${value === layout.value ? ' data-selected=""' : ''} ${waiting}>${icon(glyph)}</button>`).join('')}</span>` : '';
-  return `<span data-entity-sorts=""><button type="button" data-entity-batch="" aria-label="Shuffle" ${waiting}>${icon('shuffle')}</button>${sizes}${sorts.map(sort =>
-    `<button type="button" data-entity-sort="${esc(sort.key)}" aria-pressed="${sort.pressed}" ${waiting}>${esc(sort.label)}${sort.dir ? icon(sort.dir === 'asc' ? 'arrow-up' : 'arrow-down') : ''}</button>`).join('')}</span>`;
+  const view = catalogView();
+  const folders = new URLSearchParams(location.search);
+  const sizes = layout && view === 'cards' ? segments(layout.label, layout.value, layout.options) : '';
+  return `<span data-entity-sorts=""><button type="button" data-entity-batch="" data-filter-action="" aria-label="换一批" ${FILTER_WAITING}>${icon('shuffle')}</button>${sizes}${segments('馆藏显示方式', view, [['cards','卡片','ri-layout-grid-line'],['list','列表','ri-list-unordered']])}<button type="button" data-folder-mode-toggle="" aria-label="文件夹模式" aria-pressed="${folders.get('browse') === 'folders' || !!folders.get('folder')}" ${FILTER_WAITING}>${icon('ri-folder-3-line')}</button>${sorts.map(sort =>
+    `<button type="button" data-entity-sort="${esc(sort.key)}" aria-pressed="${sort.pressed}" ${FILTER_WAITING}>${esc(sort.label)}${sort.dir ? icon(sort.dir === 'asc' ? 'arrow-up' : 'arrow-down') : ''}</button>`).join('')}</span>`;
 }

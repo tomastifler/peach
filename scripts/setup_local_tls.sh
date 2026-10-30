@@ -60,6 +60,8 @@ subjectAltName = ${SAN}
 keyUsage = critical, digitalSignature, keyEncipherment
 extendedKeyUsage = serverAuth
 basicConstraints = critical, CA:FALSE
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid, issuer
 CNF
 
 openssl req -new -newkey rsa:2048 -nodes \
@@ -82,5 +84,7 @@ chmod 600 "$TLS_DIR/peach.key"
 echo "Re-issued the server certificate with the existing CA (CA unchanged; installed trust remains valid)"
 echo "  SAN: ${SAN}"
 openssl x509 -in "$TLS_DIR/peach.crt" -noout -serial -dates | sed 's/^/  /'
-echo "  Takes effect after restarting the service: python scripts/install_macos_agent.py install"
-[ -n "$LAN_IP" ] && echo "  Note: ${LAN_IP} is the current LAN address; re-run this script after changing networks; peach.local is unaffected"
+echo "  重启服务后生效：python scripts/install_macos_agent.py install"
+if [ -n "$LAN_IP" ]; then
+    echo "  注意：${LAN_IP} 是当前的局域网地址，换网络后需要重跑本脚本；peach.local 不受影响"
+fi

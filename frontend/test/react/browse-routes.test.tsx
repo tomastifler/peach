@@ -44,7 +44,7 @@ function shellActions(): ShellActions {
     openItem: vi.fn(), openEntity: vi.fn(), openTag: vi.fn(), openTasteSignal: vi.fn(), navigate: vi.fn(),
     openManage: vi.fn(), managePath: vi.fn(() => ''), openFollow: vi.fn(), receipt: vi.fn(), toast: vi.fn(),
     failure: vi.fn(), revealSource: vi.fn(async () => ''), reopenTutorial: vi.fn(async () => {}),
-    requestConfigurationSection: vi.fn(), routeReview: vi.fn(),
+    routeReview: vi.fn(),
     routeFollowManage: vi.fn(), saveFollowPreference: vi.fn(), srcBadge: () => '', routeIndex: vi.fn(),
     savePeopleLayout: vi.fn(), exitSelectMode: vi.fn(), personAvatar: vi.fn(() => ({ html: '', face: '' })),
     authorAvatar: vi.fn(() => ''), showIndexTags: vi.fn(), openFollowAuthor: vi.fn(), openFollowTag: vi.fn(),
@@ -159,6 +159,8 @@ it('播放列表页就地推刷新代次：代次不变、不重挂，只重取�
 it('播放列表页：进舞台、去资料页、翻页门槛与回执都接到壳的那一组上', async () => {
   const r = await load();
   const actions = shellActions();
+  // 直接读 `page()` 的 props，不经首屏取数：播放列表页的代码先装上。
+  await (await import('../../src/react/router/route-chunk')).loadRouteChunks();
   const props = (r.BROWSE_ROUTES['/playlists'].page({ revision: 3 }, actions, vi.fn()) as ReactElement<PlaylistsProps>).props;
   expect([props.openPlaylist, props.openEntity, props.canFlip]).toEqual([actions.openPlaylist, actions.openEntity, actions.canFlip]);
   expect(props.revision).toBe(3);
@@ -197,7 +199,7 @@ function followHelpers(): FollowFeedHelpers {
 }
 function followActions(): FollowFeedActions {
   return {
-    route: vi.fn(), shuffle: vi.fn(), loaded: vi.fn(), openDetail: vi.fn(), openAuthor: vi.fn(), openManage: vi.fn(), toggleSelection: vi.fn(),
+    route: vi.fn(), shuffle: vi.fn(), loaded: vi.fn(), openDetail: vi.fn(), openAuthor: vi.fn(), toggleSelection: vi.fn(),
     setImagesOnly: vi.fn(), setPhotoLayout: vi.fn(), canFlip: () => false, toast: vi.fn(), failure: vi.fn(), checkReport: vi.fn(),
   };
 }

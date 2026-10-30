@@ -1,12 +1,12 @@
 # Directory Browsing
 
-The "Folder mode" switch on the right of the library filter bar turns on the directory tree and breadcrumbs. The tree is grouped by the top-level directories in the media library configuration, shows the directories already registered in the database, and keeps the original directory names and hierarchy. Turning the switch off returns to all works.
+首页和资料页作品区的「文件夹模式」开关打开目录树和面包屑。目录树按媒体库配置中的顶层目录分组，展示数据库中已登记的目录，保留原目录名与层级。资料页的目录筛选与当前人物、厂牌、创作者或标签范围相交；关闭开关保留当前页面的其他筛选。
 
 The "Cards / List" toggle on the right switches the library display mode, shared by the works area on the home page and profile pages; the current browser remembers the choice. The list shows cover, name, ownership, duration, size, and view count, with rows separated by straight lines; on narrow screens duration and size move under the name.
 
-The list defaults to 20 works per page, with 10, 20, 50, and 100 as options. Click a column header to sort, or use the sort menu to pick added time, release date, rating, and other fields; sorting applies to the entire filtered result. Select all only affects the current page, selected works persist across pages, and the bottom bulk actions use all selected works. Returning from a detail page keeps the page number and sort within the same filter scope.
+列表默认每页 20 部，可选 10、20、50、100 部。顶部保留发行时间、评分、时长等排序按钮，与列表排序菜单和列标题共用当前排序；排序作用于整个筛选结果。全选只影响本页，已选作品跨页保留，底部批量操作使用全部已选作品。详情返回保留同一筛选范围内的页码和排序。
 
-On narrow screens the count and action controls share one row and scroll horizontally. Work cards size their height to the actual text and tags. The enrichment hint is followed by "View processing details →", with the enrich button on its own next row.
+计数与操作控件共用一行，宽度不足时整行横向滚动查看，计数和按钮保留完整宽度。作品卡片按实际文字和标签定高。补全提示的说明后接「查看处理详情 →」，补全按钮单独放在下一行。
 
 ## Finding Content
 
@@ -14,7 +14,9 @@ Click a directory name to enter that scope, and click the arrow to expand subdir
 
 "Include subfolders" decides whether the works list includes lower-level directories. On desktop the tree sits to the left of the content; when space is tight, a directory button next to the breadcrumbs opens a popover. The directory location goes into the address bar, so refresh and browser back restore it.
 
-The directory tree reads paths from the Peach database, so offline mounts can still browse registered content. Unscanned files and empty directories must be ingested first; a path only indicates where something is filed.
+子文件夹入口默认显示前 12 个，超过时提供「展开全部」和「收起文件夹」。进入另一目录时恢复收起状态。
+
+目录树读取 Peach 数据库中的路径，离线挂载仍可浏览已登记内容。未扫描的文件和空目录需要先经过入库；路径只表示收纳位置。
 
 ## Setting a Directory Purpose
 

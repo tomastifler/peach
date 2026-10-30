@@ -64,10 +64,13 @@ export interface CoverJob {
 
 /** amane 桥那张卡（ADR-0043）。`revision` 是清单里钉的 amane sha，`version` 是锁里那一条的
  *  版本号；`installed` 是 venv 里有没有解释器；`sites` 是经桥开放给来源链的站。`job` 是重建
- *  任务的快照，`status` 同 `CoverJob`。 */
+ *  任务的快照，`status` 同 `CoverJob`。安装包缺桥的清单或脚本时 `bundled` 为假，
+ *  `problem` 写原因，`revision` 与 `version` 为空。 */
 export interface AmaneBridge {
   repository: string;
   license: string;
+  bundled: boolean;
+  problem: string;
   revision: string;
   version: string;
   installed: boolean;

@@ -36,8 +36,14 @@ describe('视频退出续播', () => {
         : await openFollowFeed(browser, path, viewport, { ready: '#stage [data-follow-detail-side]' });
       try {
         const page = opened.page;
+        // 用例里的刷新与跳转会取消还在转发的片源请求，那一趟落空不算失败；其余错误照常抛出。
+        const settled = (error: unknown) => {
+          if (!/already handled|disposed|closed/i.test(String(error))) throw error;
+        };
         await page.route((url) => ['/stream', '/follow-stream'].includes(url.pathname),
-          async (route) => { await route.fulfill({ response: await route.fetch({ url: clip }) }) });
+          async (route) => {
+            try { await route.fulfill({ response: await route.fetch({ url: clip }) }) } catch (error) { settled(error) }
+          });
         await page.route((url) => ['/api/activity', '/api/follow/activity', '/api/follow/play'].includes(url.pathname),
           (route) => route.fulfill({ json: { ok: true } }));
         const key = kind === 'item' ? `item:${ITEM.plain}` : `follow:${DETAIL.collection}:main`;
@@ -70,7 +76,7 @@ describe('视频退出续播', () => {
         assert.deepEqual(opened.problems.filter((line) => !line.includes('VIDEOJS')), []);
       } finally {
         if (await opened.page.locator('#stage[open]').count()) await opened.page.locator('#closeStage').click();
-        await opened.page.unrouteAll({ behavior: 'wait' });
+        await opened.page.unrouteAll({ behavior: 'ignoreErrors' });
         await opened.close();
       }
     });

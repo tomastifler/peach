@@ -6,6 +6,7 @@
 .index{padding:4px 0 20px;min-width:0;max-width:100%}
 .index .ihead{display:flex;align-items:center;gap:12px;margin-bottom:20px}
 .index .ihead h2{margin:0}
+.index .ihead h2,.index .ihead [data-tag-mode]{flex:none}
 .indexheading{display:inline-flex;align-items:center}
 .index .ihead .geist-search{flex:1;max-width:320px;margin-left:auto}
 #indexCount{color:var(--muted)}
@@ -32,28 +33,11 @@
 /* 骨架里的版式开关是接管后那枚 BoardUI 分段器的替身：每格 28px 见方、图标 16px，整枚宽度对得上。 */
 .index .ihead .iconswitch>label{width:28px;height:28px}
 .index .ihead .iconswitch svg{width:16px;height:16px}
-.tagwall{display:flex;flex-wrap:wrap;gap:7px}
-/* 标签行骨架前面那枚色点，占的是真标签类型色点的位置。 */
-.alphatag::before{content:"";width:7px;height:7px;border-radius:50%;
-  background:var(--tag-color,var(--muted));flex:none}
-.index-tags .tg,.alphatag{--tag-color:#7A91A8}
-/* 标签云骨架与真标签同一档身量：这一页标签是主体，比卡片上的大一档。 */
-.index .index-tags .tg{border-color:color-mix(in srgb,var(--tag-color) 32%,transparent);color:var(--ink-2);
-  background:color-mix(in srgb,var(--tag-color) 7%,transparent);padding:5px 12px;font-size:var(--fs-sm)}
-/* 一行一枚标签：36px 高、控件圆角，取的是排名行那一档身量。 */
-.alphatag{display:flex;align-items:center;justify-content:flex-start;gap:9px;height:36px;border:0;background:transparent;
-  color:var(--ink-2);padding:0 10px;border-radius:var(--control-radius);text-align:left;cursor:pointer;min-width:0}
-.alphatag span:first-of-type{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
-.alphatag .n{color:var(--muted);font-size:var(--fs-xs);flex:none}
-/* 表头一行放不下四样东西：标题、计数、版式开关、过滤框。挤在一行时每样都被压到
-   竖排两行，过滤框直接被压成 0 宽。窄屏改成标题与过滤框一行、开关另起一行；
-   开关自己 flex:none，宁可整组换行也不把它拆成两行。 */
+/* 标题、动作和过滤框共用一行；过滤框按剩余宽度收缩，名册读数独占窄屏次行。 */
 @media (max-width:760px){
-  .index .ihead{flex-wrap:wrap}
+  .index .ihead{flex-wrap:wrap;column-gap:8px}
   .indexheading,#indexCount{white-space:nowrap}
-  .index .ihead .geist-search{order:1}
-  .index .ihead::after{content:"";order:2;flex-basis:100%;height:0}
-  .index .ihead .iconswitch{order:3;flex:none}
+  #indexCount{order:1;flex-basis:100%;line-height:20px}
   /* 公司格放宽一档是给标识换宽度，手机上 343px 只装得下一列，整块卡横着铺满，
      标识却还是那 70px：这一档换不来更大的标识，只换来一屏三家。收回人格那一档，两列。 */
   .igrid[data-cells="company"]{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}

@@ -26,6 +26,8 @@ from .fsutil import atomic_path
 
 #: 复核 CSV 的编码。改它等于改所有复核产物的可读性，不要在调用处覆盖。
 ENCODING = "utf-8-sig"
+#: 候选的 JSON 证据可包含多行原始资料；单字段最多读取 16 Mi 个字符。
+MAX_FIELD_CHARS = 16 * 1024 * 1024
 
 
 def read_rows(path: Path | str, *, missing_ok: bool = False) -> list[dict[str, str]]:
@@ -41,8 +43,14 @@ def read_rows(path: Path | str, *, missing_ok: bool = False) -> list[dict[str, s
     target = Path(path)
     if missing_ok and not target.is_file():
         return []
+    # csv 的限制属于进程全局，只增不减，避免并发读者互相恢复成较小限制。
+    csv.field_size_limit(max(csv.field_size_limit(), MAX_FIELD_CHARS))
     with target.open(encoding=ENCODING, newline="") as handle:
-        return list(csv.DictReader(handle))
+        reader = csv.DictReader(handle, strict=True)
+        try:
+            return list(reader)
+        except csv.Error as exc:
+            raise csv.Error(f'复核 CSV 读取失败：{target}，第 {reader.reader.line_num} 行：{exc}') from exc
 
 
 def write_rows(

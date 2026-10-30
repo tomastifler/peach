@@ -1,6 +1,8 @@
 /* 活动页云下载段的行为：任务卡给哪些键、没有任务时整段不画、只读端不给写操作。 */
 import { QueryClientProvider } from '@tanstack/react-query';
-import { afterEach, expect, it, vi } from 'vitest';
+import { act } from 'react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { registerNameWritings, setNameLanguage } from '../../src/core/entity-names';
 
 import { DownloadsPanel, downloadPollInterval } from '../../src/react/activity/downloads-panel';
 import type { DownloadsSnapshot, DownloadTask } from '../../src/react/bundle';
@@ -8,6 +10,7 @@ import { queryClient } from '../../src/react/query';
 import { buttonNamed, click, mount, settle } from './render';
 
 afterEach(() => queryClient.clear());
+beforeEach(() => { registerNameWritings([]); setNameLanguage('zh-CN') });
 
 const task = (patch: Partial<DownloadTask> = {}): DownloadTask => ({
   id: 1, info_hash: 'a'.repeat(40), provider: '115', provider_label: '115', source_uri: 'magnet:?xt=urn:btih:' + 'a'.repeat(40),
@@ -55,14 +58,79 @@ const show = async () => {
   return host;
 };
 
+it('下载卡片的可见署名和读屏名称跟随语言，人物链接保留原身份', async () => {
+  registerNameWritings([], { 宮: '宫', 澤: '泽', 寧: '宁' });
+  serve(snapshot({ tasks: [task({ artwork: { has_cover: false, code: 'ABC-123',
+    performer_entities: [{ id: 20, name: '宮澤寧音', has_image: false }],
+  } })] }));
+  const host = await show();
+  const link = host.querySelector('[data-media-avatar]');
+  expect(link?.getAttribute('aria-label')).toBe('打开女优页：宫泽宁音');
+  expect(link?.getAttribute('href')).toBe('/performers/20');
+  expect(host.textContent).toContain('宫泽宁音');
+  await act(async () => setNameLanguage('ja'));
+  expect(link?.getAttribute('aria-label')).toBe('打开女优页：宮澤寧音');
+  expect(host.textContent).toContain('宮澤寧音');
+});
+
+it.each([
+  [{ title: '制作记录' }, 'ABC-123 · 制作记录'],
+  [{ title: 'ABC-123 制作记录' }, 'ABC-123 · 制作记录'],
+  [{ title: 'ABC-123' }, 'ABC-123'],
+  [{ title: null, display_title: '', display_code: 'ABC-123' }, 'ABC-123'],
+  [{ title: 'ABC-123', display_title: '作品资料中的标题' }, 'ABC-123 · 作品资料中的标题'],
+  [{ code: null, display_code: 'XYZ-456', display_title: '制作花絮' }, 'XYZ-456 · 制作花絮'],
+  [{ code: null, title: '制作记录', display_name: '' }, '制作记录'],
+] as [Partial<DownloadTask>, string][])('云下载卡片用番号和标题标识作品：%j', async (patch, expected) => {
+  serve(snapshot({ tasks: [task(patch)] }));
+  const host = await show();
+  expect(host.querySelector('strong')?.textContent).toBe(expected);
+  await click(buttonNamed('展开标题', host));
+  expect(host.querySelector('[data-download-title-full]')?.textContent).toBe(expected);
+});
+
+it('入库资料随轮询补上本机封面和女优头像，不发起来源取图', async () => {
+  const shown = snapshot({ tasks: [task()] });
+  const { calls } = serve(shown);
+  const host = await show();
+  expect(host.querySelector('[data-download-cover] img')).toBeNull();
+  expect(buttonNamed('取消', host)).not.toBeNull();
+  const refreshed = serve(snapshot({ tasks: [task({ state: 'ingested', cancellable: false, artwork: {
+    has_cover: true, code: 'ABC-123', cover_key: 'ABC-123', cover_version: 'v2',
+    performer_entities: [{ id: 20, name: '测试女优', has_image: true, image_version: 'a2' }],
+  } })] }));
+  await act(async () => { await queryClient.invalidateQueries({ queryKey: ['downloads'] }); });
+  await vi.waitFor(async () => {
+    await settle();
+    expect(host.querySelector('[data-download-cover] img')?.getAttribute('src')).toBe('/cover?code=ABC-123&thumb=2&v=v2');
+  });
+  expect(host.querySelector('[data-media-avatar] img')?.getAttribute('src')).toContain('/entity-image?');
+  expect(host.querySelector('[data-media-avatar]')?.getAttribute('aria-label')).toBe('打开女优页：测试女优');
+  expect([...calls, ...refreshed.calls].every(([url]) => url.startsWith('/api/downloads'))).toBe(true);
+});
+
+it.each([
+  [{ state: 'ingested', asset_id: 42 }, '/assets/42'],
+  [{ state: 'ingested', asset_id: null }, null],
+  [{ state: 'remote_running', asset_id: 42 }, null],
+] as [Partial<DownloadTask>, string | null][])('只有已入库并关联作品的任务提供封面和标题链接：%j', async (patch, href) => {
+  serve(snapshot({ tasks: [task(patch)] }));
+  const host = await show();
+  expect(host.querySelector('[data-download-cover-link]')?.getAttribute('href') ?? null).toBe(href);
+  expect(host.querySelector('[data-download-title-link]')?.getAttribute('href') ?? null).toBe(href);
+});
+
 it('远端在跑的任务给进度与取消键，取消发到取消接口', async () => {
   const { posts } = serve(snapshot({ tasks: [task()] }), { '/api/downloads/cancel': { ok: true, task: task() } });
   const host = await show();
   const card = host.querySelector('[data-download-state=remote_running]')!;
   expect(card.querySelector('[role=progressbar]')?.getAttribute('aria-valuenow')).toBe('42');
   expect(card.textContent).toContain('远端下载中');
-  expect(buttonNamed('Resubmit', card)).toBeNull();
-  await click(buttonNamed('Cancel', card));
+  expect(buttonNamed('重新提交', card)).toBeNull();
+  // 辅助的两个在前，改动任务的取消排在最后。
+  expect([...card.querySelectorAll('[data-download-actions] button')].map((node) => node.textContent))
+    .toEqual(['展开标题', '复制磁力', '取消']);
+  await click(buttonNamed('取消', card));
   await settle();
   expect(posts()).toEqual([['/api/downloads/cancel', { id: 1 }]]);
 });
@@ -87,6 +155,16 @@ it('失败的任务写中文原因，可以重新提交；被判违规的只剩�
   }]]);
 });
 
+it('对账遇到暂时性故障退避重排时，底栏写出原因，卡片不算失败', async () => {
+  serve(snapshot({ tasks: [task({ failure_detail: '查询进度时连不上 CloudDrive2：timeout' })] }));
+  const host = await show();
+  const card = host.querySelector<HTMLElement>('[data-download-state=remote_running]')!;
+  expect(card.textContent).toContain('稍后自动重试 · 查询进度时连不上 CloudDrive2：timeout');
+  expect(card.className).not.toContain('border-border-error-default');
+  expect(buttonNamed('重新提交', card)).toBeNull();
+  expect(buttonNamed('取消', card)).not.toBeNull();
+});
+
 it('只读端任务照常列出，但没有取消键', async () => {
   serve(snapshot({ available: false, tasks: [task()] }));
   const host = await show();
@@ -105,7 +183,7 @@ it('后处理失败可以单独重试，不会重新提交磁力', async () => {
   });
   const host = await show();
   expect(host.textContent).toContain('资料采集失败');
-  await click(buttonNamed('Retry post-processing', host));
+  await click(buttonNamed('重试入库后整理', host));
   await settle();
   expect(posts()).toEqual([['/api/downloads/postprocess', { id: 1 }]]);
 });
@@ -128,4 +206,28 @@ it('有任务还在跟进时五秒查一次，全是终态三十秒一次', () =
     cancellable: false, state: 'ingested', postprocess_active: true, postprocess_state: 'running',
   })] }))).toBe(5_000);
   expect(downloadPollInterval(undefined)).toBe(30_000);
+});
+
+it('加载更多接上较早任务，失败保留列表并允许重试，刷新不丢已加载的任务', async () => {
+  let fail = true;
+  vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+    const earlier = input.includes('before_id=2');
+    if (earlier && fail) return { ok: false, status: 500, json: async () => ({ message: '读取失败' }) };
+    return { ok: true, status: 200, json: async () => snapshot({
+      tasks: earlier ? [task({ id: 1 })] : [task({ id: 3 }), task({ id: 2 })],
+      has_more: !earlier, next_before_id: earlier ? null : 2,
+    }) };
+  }));
+  const host = await show();
+  await click(buttonNamed('加载更多', host));
+  await vi.waitFor(() => expect(host.textContent).toContain('读取失败'));
+  expect(host.querySelectorAll('[data-download-id]')).toHaveLength(2);
+  fail = false;
+  await click(buttonNamed('加载更多', host));
+  await vi.waitFor(() => expect(host.querySelectorAll('[data-download-id]')).toHaveLength(3));
+  await queryClient.invalidateQueries({ queryKey: ['downloads'] });
+  await settle();
+  expect([...host.querySelectorAll('[data-download-id]')].map((node) => node.getAttribute('data-download-id')))
+    .toEqual(['3', '2', '1']);
+  expect(buttonNamed('加载更多', host)).toBeNull();
 });

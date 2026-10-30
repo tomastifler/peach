@@ -17,6 +17,7 @@ import {
   type KeyboardEvent, type ReactNode,
 } from 'react';
 import { flushSync } from 'react-dom';
+import { useQuery } from '@tanstack/react-query';
 import { ButtonLink } from '@/components/base/buttons/button';
 import {
   attachOverlayScrollbar, closeAnchoredMenu, iconSwapHtml, moveGlidePane, revealTexts,
@@ -30,7 +31,8 @@ import { Icon, RemixIcon } from './icon';
 import { IconSwitch, SelectField } from './legacy-controls';
 import { NumberSetting } from './number-setting';
 import type { Choice, PanelSettings, SettingsPanelApi, SettingsPanelHost } from './settings-panel-api';
-import { refreshPanelData, useSaveSettings } from './settings-data';
+import { fetchSettings, refreshPanelData, SETTINGS_KEY, useSaveSettings } from './settings-data';
+import { Note } from '../components/note';
 import { SidebarOrder } from './sidebar-order';
 import { SettingsDialogClose } from '../components/settings-dialog-close';
 
@@ -250,10 +252,11 @@ function SettingsNav({ tab, epoch, configurable, openConfiguration, onSelect }: 
   );
 }
 
-function Group({ index, tab, children }: { index: number; tab: number; children: ReactNode }) {
+function Group({ index, tab, children, cards = false }: { index: number; tab: number; children: ReactNode; cards?: boolean }) {
   return (
-    <section data-setting-group="" id={groupId(index)} role="tabpanel" aria-labelledby={tabId(index)} hidden={index !== tab}>
-      <h3>{SECTION_LABELS[SECTIONS[index][0]]}</h3>
+    <section data-setting-group="" data-setting-layout={cards ? 'cards' : undefined}
+      id={groupId(index)} role="tabpanel" aria-labelledby={tabId(index)} hidden={index !== tab}>
+      <h3>{SECTIONS[index][0]}</h3>
       {children}
     </section>
   );
@@ -343,9 +346,10 @@ function SettingsPanel({ host: current, view: shown }: { host: SettingsPanelHost
         <SettingsNav tab={shown.tab} epoch={epoch} configurable={shown.configurable} onSelect={select}
           openConfiguration={() => { close(false); current.openConfiguration() }} />
         <div data-settings-scroll="" ref={scroll}>
-          <Group index={0} tab={shown.tab}>
-            <Row title="Theme">
-              <IconSwitch id="themeSetting" name="theme" legend="Theme" options={current.themeOptions} value={settings.theme}
+          <Group index={0} tab={shown.tab} cards>
+            <div data-setting-card="">
+            <Row title="主题">
+              <IconSwitch id="themeSetting" name="theme" legend="主题" options={current.themeOptions} value={settings.theme}
                 attr="data-theme-choice" variant="themeswitch" epoch={epoch}
                 onChoose={(choice) => { settings.theme = choice; save(); current.changed('theme') }} />
             </Row>
@@ -358,10 +362,13 @@ function SettingsPanel({ host: current, view: shown }: { host: SettingsPanelHost
               onToggle={(on) => { settings.uiSounds = on; save(); current.changed('uiSounds') }} />
             <ToggleRow id="homeGlowSetting" title="Sidebar glow" checked={settings.homeGlow.on}
               onToggle={(on) => { settings.homeGlow.on = on; save(); current.changed('glow') }} />
+            </div>
             <GlowSettings host={current} />
-            <section data-sidebar-setting="" aria-labelledby="sidebarOrderTitle">
-              <span><b id="sidebarOrderTitle">Navigation items and order</b></span>
-              <SidebarOrder host={current} />
+            <section data-setting-block="" aria-labelledby="sidebarOrderTitle">
+              <h4 data-settings-subheading="" id="sidebarOrderTitle">导航入口与顺序</h4>
+              <div data-setting-card="">
+                <section data-sidebar-setting=""><SidebarOrder host={current} /></section>
+              </div>
             </section>
           </Group>
           <BrowseGroup host={current} tab={shown.tab} epoch={epoch} />
@@ -403,6 +410,8 @@ function decorateDirection(field: HTMLElement, ascending: boolean): void {
   if (label) label.textContent = ascending ? 'Ascending' : 'Descending';
 }
 
+/* 「浏览与播放」分两段：作品列表（网格、排序、卡片与悬停）在前，播放在后。转码方式写的是运行 Peach
+   那台电脑的配置，在 Peach 配置「应用与维护 → 视频播放」，不在这里（ADR-0103）。 */
 function BrowseGroup({ host: current, tab, epoch }: GroupProps) {
   const settings = current.store.value;
   const save = () => current.store.save();
@@ -410,7 +419,8 @@ function BrowseGroup({ host: current, tab, epoch }: GroupProps) {
   const ascending = settings.defaultSortDirection === 'asc';
   return (
     <Group index={1} tab={tab}>
-      <Row title="Titles loaded per batch">
+      <h4 data-settings-subheading="">作品列表</h4>
+      <Row title="每批加载作品">
         <div id="batchSizeSetting">
           <NumberSetting key={epoch} id="batchSizeSetting" label="Titles per batch" value={settings.batchSize}
             onApply={(value) => { settings.batchSize = value || 60; save(); current.changed('batchSize') }} />
@@ -431,6 +441,19 @@ function BrowseGroup({ host: current, tab, epoch }: GroupProps) {
           value={current.videoLayout()} attr="data-video-layout" variant="javimageswitch" text epoch={epoch}
           onChoose={(layout) => current.setVideoLayout(layout)} />
       </Row>
+      <label data-setting-row=""><span><b>合并分卷与版本</b></span>
+        <input type="checkbox" id="groupCollapseSetting" data-toggle="" role="switch" checked={settings.groupCollapse}
+          onChange={(event) => { settings.groupCollapse = event.target.checked; save(); current.changed('groupCollapse') }} />
+      </label>
+      <Row title="悬停预览延迟">
+        <div id="hoverDelaySetting">
+          <NumberSetting key={epoch} id="hoverDelaySetting" label="悬停预览延迟" value={settings.hoverDelaySeconds}
+            onApply={(value) => {
+              settings.hoverDelaySeconds = boundedPreference(value, 0, 60, 5); save(); current.changed('hoverDelay');
+            }} />
+        </div>
+      </Row>
+      <h4 data-settings-subheading="">播放</h4>
       <PlaybackRows host={current} epoch={epoch} />
     </Group>
   );
@@ -441,24 +464,51 @@ function JavGroup({ host: current, tab, epoch }: GroupProps) {
   const save = () => current.store.save();
   return (
     <Group index={2} tab={tab}>
-      <h4 data-settings-subheading="">Title display</h4>
-      <Row title="Default image">
-        <IconSwitch id="javImageSetting" name="jav-image" legend="Default image" options={JAV_IMAGE_OPTIONS}
+      <h4 data-settings-subheading="">作品显示</h4>
+      <NameLanguageSetting host={current} epoch={epoch} />
+      <Row title="默认图片">
+        <IconSwitch id="javImageSetting" name="jav-image" legend="默认图片" options={JAV_IMAGE_OPTIONS}
           value={settings.javImage} attr="data-jav-image-choice" variant="javimageswitch" text epoch={epoch}
           onChoose={(choice) => { settings.javImage = normalizeJavImage(choice); save(); current.changed('javImage') }} />
       </Row>
-      <label data-setting-row=""><span><b>Merge parts and versions</b></span>
-        <input type="checkbox" id="groupCollapseSetting" data-toggle="" role="switch" checked={settings.groupCollapse}
-          onChange={(event) => { settings.groupCollapse = event.target.checked; save(); current.changed('groupCollapse') }} />
-      </label>
-      <h4 data-settings-subheading="">New release display</h4>
-      <ToggleRow id="feedAutoScrollSetting" title="Auto-scroll new releases" checked={settings.feedAutoScroll}
+      <h4 data-settings-subheading="">新作显示</h4>
+      <Row title="显示数量">
+        <div id="feedLimitSetting">
+          <NumberSetting key={epoch} id="feedLimitSetting" label="新作显示数量" value={settings.feedLimit}
+            onApply={(value) => { settings.feedLimit = boundedPreference(value, 1, 100, 12); save(); current.changed('feedLimit') }} />
+        </div>
+      </Row>
+      <ToggleRow id="feedAutoScrollSetting" title="自动滚动" checked={settings.feedAutoScroll}
         onToggle={(on) => { settings.feedAutoScroll = on; save(); current.changed('feedAutoScroll') }} />
       {FEED_COMPILATIONS.map(([id, key, label, title]) => (
         <CompilationToggle key={id} host={current} id={id} settingKey={key} label={label} title={title} />
       ))}
     </Group>
   );
+}
+function NameLanguageSetting({ host: current, epoch }: { host: SettingsPanelHost; epoch: number }) {
+  const query = useQuery({ queryKey: SETTINGS_KEY, queryFn: ({ signal }) => fetchSettings(signal), staleTime: 0 });
+  const save = useSaveSettings();
+  const [pending, setPending] = useState<'zh-CN' | 'ja' | null>(null);
+  const language = query.data?.performerNameLanguage;
+  return <>
+    <Row title="女优名称" description={<small data-copy-key="performer-name-language-help">名称与别名只显示所选语言的写法；缺少对应时保留当前名称。偏好保存在数据库，其他设备读取同一份设置。</small>}>
+      <SelectField id="performerNameLanguageSetting" label="女优名称" epoch={epoch}
+        options={[["zh-CN", "中文"], ["ja", "日文原文"]]}
+        value={pending ?? language ?? current.store.value.performerNameLanguage}
+        disabled={query.isPending || query.isError || save.isPending || !language} busy={save.isPending}
+        onPick={(value) => {
+          if (save.isPending || (value !== 'zh-CN' && value !== 'ja') || value === language) return;
+          setPending(value);
+          save.mutate({ performerNameLanguage: value }, {
+            onSuccess: (saved) => { current.syncRemote(saved); current.receipt('已保存名称显示偏好') },
+            onError: (error) => current.failure('保存名称显示偏好', error),
+            onSettled: () => setPending(null),
+          });
+        }} />
+    </Row>
+    {query.isError ? <Note tone="error">未取得数据库中的名称偏好，请重新打开设置。</Note> : null}
+  </>;
 }
 /* 合集开关由服务端判，列表、未读数和补封面排队都跟着它，所以先存到服务端再重画；往返期间开关
    停在新位置、挂忙态，失败退回原位。 */
@@ -497,15 +547,7 @@ function PlaybackRows({ host: current, epoch }: Omit<GroupProps, 'tab'>) {
   const save = () => current.store.save();
   return (
     <>
-      <Row title="Hover preview delay">
-        <div id="hoverDelaySetting">
-          <NumberSetting key={epoch} id="hoverDelaySetting" label="Hover preview delay" value={settings.hoverDelaySeconds}
-            onApply={(value) => {
-              settings.hoverDelaySeconds = boundedPreference(value, 0, 60, 5); save(); current.changed('hoverDelay');
-            }} />
-        </div>
-      </Row>
-      <ToggleRow id="detailAutoplaySetting" title="Autoplay when opening details" checked={settings.detailAutoplay}
+      <ToggleRow id="detailAutoplaySetting" title="打开详情自动播放" checked={settings.detailAutoplay}
         onToggle={(on) => { settings.detailAutoplay = on; save() }} />
       <ToggleRow id="miniplayerSetting" title="Miniplayer after leaving details" checked={settings.miniplayer}
         onToggle={(on) => { settings.miniplayer = on; save(); current.changed('miniplayer') }} />

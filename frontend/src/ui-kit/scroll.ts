@@ -1,9 +1,9 @@
 /* 滚动那一组：横排的滚轮转向、拖动与橡皮筋、横排自动滚动、选中底板的滑动、Geist Scroller，
-   以及按名单批量挂覆盖式滚动条。由共享源码直接引用，随 `peach-app.js` 发出；
+   以及自动接管滚动区的覆盖式滚动条。由共享源码直接引用，随 `peach-app.js` 发出；
    已绑定的横排、自动滚动的那几排与弹簧取值都是模块级状态，只有一份。 */
 import { esc } from '../core';
 
-import { attachOverlayScrollbar } from './overlay-scrollbar';
+import { attachOverlayScrollbar, detachOverlayScrollbar, pruneOverlayScrollbars, refreshOverlayScrollbars, releaseOverlayScrollbars } from './overlay-scrollbar';
 
 const horizontalControls=new Map<Element,any>();
 let horizontalCleanup:MutationObserver|null|undefined;
@@ -71,19 +71,26 @@ function edgeBounce(el:HTMLElement){
 }
 /** 同一容器只绑定一次。指针在这一排上时滚轮只滚这一排，滚到头弹一下，不带着整页走。 */
 /** 会超宽的横向滚动层：两端按滚动位置渐隐，竖向滚轮转成横向，`drag` 为真时可拖。 */
-export function wireHorizontalScroller(el:any,{drag=false,fade=true}={}):any{
+export function wireHorizontalScroller(el:any,{drag=false,fade=true,wheel=true,elastic=true,dragIgnore=''}={}):any{
   if(!el)return;
+  if(fade)el.dataset.scrollGesture='';
   const existing=horizontalControls.get(el);
   if(existing){existing.options.drag ||= drag;existing.options.fade ||= fade;existing.update();return existing}
-  const options={drag,fade},abort=new AbortController(),bounce=edgeBounce(el);
+  const options={drag,fade,wheel,elastic,dragIgnore},abort=new AbortController(),bounce=edgeBounce(el);
   let start:{x:number;left:number}|null=null,moved=0,heldUntil=0,target=0,kicked=false,glide=0,glideAt=0,pos=0,pending=0;
   /* 值没变就不写：自动滚动每一帧都触发一次 `scroll`，同值重写属性照样让样式重算一遍。 */
   const mark=(key:string,value:string)=>{if(el.dataset[key]!==value)el.dataset[key]=value};
-  const scrollable=()=>['auto','scroll','hidden'].includes(getComputedStyle(el).overflowX);
+  /* `overflow-x` 只在尺寸观察器回调里重新读：那一刻样式和布局刚算完，读它不触发重算。
+     滚动、滚轮里每次现读，会把上一次写进 `data-overflow-*` 弄脏的整棵样式树当场重算一遍。 */
+  let overflowX='';
+  const scrollable=()=>{if(!overflowX)overflowX=getComputedStyle(el).overflowX;return ['auto','scroll','hidden'].includes(overflowX)};
   const update=()=>{if(options.fade){const active=scrollable();mark('overflowLeft',String(active&&el.scrollLeft>1));mark('overflowRight',String(active&&el.scrollLeft+el.clientWidth<el.scrollWidth-1))}};
+  /* 滚动事件一帧可能来好几次，渐隐标记合到下一帧写一次。 */
+  let marking=0;
+  const scheduleUpdate=()=>{if(!marking)marking=requestAnimationFrame(()=>{marking=0;update()})};
   const listen=(target:EventTarget,event:string,handler:(event:any)=>void,extra={})=>target.addEventListener(event,handler,{...extra,signal:abort.signal});
-  listen(el,'scroll',update,{passive:true});
-  const kick=(delta:number)=>{if(!kicked){kicked=true;bounce.kick(delta)}};
+  listen(el,'scroll',scheduleUpdate,{passive:true});
+  const kick=(delta:number)=>{if(options.elastic&&!kicked){kicked=true;bounce.kick(delta)}};
   const stopGlide=()=>{cancelAnimationFrame(glide);glide=0;pending=0};
   /* 位置自己记一份小数：一帧只走零点几个像素时，`scrollLeft` 读回来是取整后的值。
      推过头的那一下等走到头再弹，半路就弹看起来是没到头先弹了。 */
@@ -102,6 +109,7 @@ export function wireHorizontalScroller(el:any,{drag=false,fade=true}={}):any{
      要滚整页，指针挪到这一排外面去。推过头就弹一下，一次手势只弹一次：触控板的惯性
      尾巴一格一格地撞在边上，每格都弹就是一串抖动。 */
   listen(el,'wheel',event=>{
+    if(!options.wheel)return;
     const max=el.scrollWidth-el.clientWidth;
     if(event.defaultPrevented||!event.cancelable||Math.abs(event.deltaY)<=Math.abs(event.deltaX)||max<=0||!scrollable())return;
     event.preventDefault();
@@ -120,24 +128,42 @@ export function wireHorizontalScroller(el:any,{drag=false,fade=true}={}):any{
     if(over)pending=over;
     if(!glide){pos=el.scrollLeft;glideAt=performance.now();glide=requestAnimationFrame(frame)}
   },{passive:false});
-  listen(el,'mousedown',event=>{if(!options.drag||event.button!==0||el.scrollWidth-el.clientWidth<=1)return;event.stopPropagation();stopGlide();start={x:event.pageX,left:el.scrollLeft};moved=0;el.style.cursor='grabbing'});
+  listen(el,'mousedown',event=>{
+    moved=0;
+    if(!options.drag||event.button!==0||el.scrollWidth-el.clientWidth<=1)return;
+    if(options.dragIgnore&&(event.shiftKey||event.ctrlKey||event.metaKey||event.altKey||event.target.closest?.(options.dragIgnore)))return;
+    event.stopPropagation();stopGlide();start={x:event.pageX,left:el.scrollLeft};moved=0;el.style.cursor='grabbing';
+  });
   listen(window,'mousemove',event=>{
     if(!start)return;
     const dx=event.pageX-start.x,want=start.left-dx,max=el.scrollWidth-el.clientWidth;
     moved=Math.max(moved,Math.abs(dx));el.scrollLeft=want;
-    bounce.drag(want<0?want:want>max?want-max:0);
+    if(options.elastic)bounce.drag(want<0?want:want>max?want-max:0);
     event.preventDefault();
   });
-  listen(window,'mouseup',()=>{if(start)bounce.release();start=null;el.style.cursor=''});
+  const endDrag=()=>{if(start&&options.elastic)bounce.release();start=null;el.style.cursor=''};
+  listen(window,'mouseup',endDrag);
+  listen(window,'blur',endDrag);
+  listen(el,'keydown',()=>{moved=0});
   listen(el,'click',event=>{if(moved>6){event.stopPropagation();event.preventDefault();moved=0}},{capture:true});
-  const resize=new ResizeObserver(update);
-  const observe=()=>{resize.observe(el);for(const child of el.children)resize.observe(child);update()};
-  const contents=new MutationObserver(()=>{resize.disconnect();observe()});
+  /* 尺寸观察器第一次回调就在本帧布局之后，初次的渐隐标记也由它写：挂上的那一刻页面多半
+     刚插完一批节点，当场量会把整棵样式树提前重算一遍。内容增删时重挂观察器，新挂上的
+     子元素会再回调一次；只删不增的那种由下一帧补写。 */
+  const resize=new ResizeObserver(()=>{overflowX='';update()});
+  const observe=()=>{resize.observe(el);for(const child of el.children)resize.observe(child)};
+  const contents=new MutationObserver(()=>{resize.disconnect();observe();scheduleUpdate()});
   contents.observe(el,{childList:true,characterData:true,subtree:true});observe();
-  const control={options,update,destroy(){abort.abort();stopGlide();resize.disconnect();contents.disconnect();horizontalControls.delete(el);el.style.cursor='';if(!horizontalControls.size){horizontalCleanup?.disconnect();horizontalCleanup=null}}};
+  // 外面手动叫的重算（换了版式、改了内容）连 `overflow-x` 一起重读。
+  const control={options,update(){overflowX='';update()},destroy(){abort.abort();stopGlide();cancelAnimationFrame(marking);marking=0;resize.disconnect();contents.disconnect();horizontalControls.delete(el);delete el.dataset.scrollGesture;el.style.cursor='';if(!horizontalControls.size){horizontalCleanup?.disconnect();horizontalCleanup=null}}};
   horizontalControls.set(el,control);
   if(!horizontalCleanup){horizontalCleanup=new MutationObserver(()=>{for(const [node,item] of horizontalControls)if(!node.isConnected)item.destroy()});horizontalCleanup.observe(document.body,{childList:true,subtree:true})}
-  update();return control;
+  return control;
+}
+
+/** 表格使用横向拖动；滚轮维持浏览器行为，控件与列宽手柄独立处理指针。 */
+export function wireTableScroller(el:HTMLElement|null):any{
+  return wireHorizontalScroller(el,{drag:true,fade:false,wheel:false,elastic:false,
+    dragIgnore:'a,button,input,select,textarea,label,[role="button"],[role="checkbox"],[role="slider"],.react-aria-ColumnResizer'});
 }
 
 /* 一排横卡自己缓缓往前走，走到头停一下再往回走。一秒 24px 是看得出在动、又不催人读的
@@ -149,6 +175,8 @@ const AUTO_SCROLL_RESUME=3000;
 const autoScrollers=new Map<Element,()=>void>();
 const autoScrollWakeups=new Set<()=>void>();
 let autoScrollVisibility:MutationObserver|null=null;
+let autoScrollSight:IntersectionObserver|null=null;
+const autoScrollSightings=new Map<Element,(visible:boolean)=>void>();
 /**
  * 横排自动滚动。指针停在上面、焦点在里面、这一排不在屏幕上、页面切到后台时都停；
  * 人滚过或拖过之后从人停下的位置接着走。系统要求减少动态效果时不动。
@@ -157,21 +185,26 @@ export function wireAutoScroll(el:any):void{
   if(!el||autoScrollers.has(el))return;
   if(matchMedia('(prefers-reduced-motion:reduce)').matches)return;
   const abort=new AbortController();
-  let pos=el.scrollLeft,dir=1,last=0,frame=0,hovered=false,holdUntil=0;
+  let pos=el.scrollLeft,dir=1,last=0,frame=0,hovered=false,focused=false,onscreen=true,holdUntil=0,max=-1,resync=false;
   const listen=(target:EventTarget,type:string,fn:()=>void)=>target.addEventListener(type,fn,{passive:true,signal:abort.signal});
-  /* 在不在屏幕上每帧量一次，不另挂观察器：页面观察器只留给「载入更多」那一份。
-     滚出屏幕后循环停下，页面再滚动时由下面的捕获监听叫醒。 */
-  const onscreen=()=>{const r=el.getBoundingClientRect();return r.width>0&&r.bottom>0&&r.top<innerHeight};
-  const running=()=>el.isConnected&&!hovered&&!document.hidden&&
-    (!document.body.hasAttribute('data-detail-open')||!!el.closest('#stage'))&&!el.matches(':focus-within')&&onscreen();
+  /* 在不在屏幕上交给共用的交叉观察器，回调里叫醒；循环里只读自己记下的状态。每帧量
+     `getBoundingClientRect()` 会在上一帧写完 `scrollLeft` 之后把整棵样式树当场重算。
+     交叉观察器不看 `visibility`：播放墙盖住页面时这一排几何上仍在屏幕里，按页面标记停。 */
+  const covered=()=>(document.body.hasAttribute('data-detail-open')&&!el.closest('#stage'))
+    ||(document.body.hasAttribute('data-wall-open')&&!el.closest('[data-video-wall]'));
+  const running=()=>el.isConnected&&onscreen&&!hovered&&!focused&&!document.hidden&&!covered();
   const tick=(now:number)=>{
     frame=0;
     if(!el.isConnected){stop();return}
     if(!running())return;
     frame=requestAnimationFrame(tick);
     const dt=last?Math.min(now-last,64):0;last=now;
-    const max=el.scrollWidth-el.clientWidth;
-    if(now<holdUntil||max<=1)return;
+    if(now<holdUntil)return;
+    /* 循环里只写不读：可滚距离等尺寸变了才重量，人动过之后才回读一次位置。每帧读一次
+       `scrollWidth`，赶上别处刚改过样式（换主题、悬停、滚页面）就是一次整树重算。 */
+    if(max<0)max=el.scrollWidth-el.clientWidth;
+    if(resync){resync=false;pos=el.scrollLeft}
+    if(max<=1)return;
     /* 位置自己记一份小数：一帧只走零点几个像素，`scrollLeft` 读回来是取整后的值，
        拿它接着加会一直原地不动。 */
     pos=Math.min(max,Math.max(0,pos+dir*AUTO_SCROLL_SPEED*dt/1000));
@@ -181,20 +214,30 @@ export function wireAutoScroll(el:any):void{
   // 重画换掉了这一排时，挂在 document 上的监听要在下一次叫醒时跟着撤掉。
   const wake=()=>{if(!el.isConnected)stop();else if(!frame&&running()){last=0;frame=requestAnimationFrame(tick)}};
   const hold=()=>{holdUntil=performance.now()+AUTO_SCROLL_RESUME};
-  // 读回来和自己记的差不到一个像素就是自己那一帧；差得多是人滚的，从人停下的地方接着走。
-  listen(el,'scroll',()=>{if(Math.abs(el.scrollLeft-pos)>1){pos=el.scrollLeft;hold()}});
+  /* 人能滚这一排的时候指针一定在上面或焦点在里面（滚轮、拖动、触摸、方向键），那时循环已经停了；
+     离开时记下要回读位置，下一帧从人停下的地方接着走。 */
   listen(el,'pointerenter',()=>{hovered=true});
-  listen(el,'pointerleave',()=>{hovered=false;hold();wake()});
-  listen(el,'focusout',()=>setTimeout(wake,0));
+  listen(el,'pointerleave',()=>{hovered=false;resync=true;hold();wake()});
+  listen(el,'focusin',()=>{focused=true});
+  listen(el,'focusout',()=>setTimeout(()=>{focused=el.contains(document.activeElement);resync=true;wake()},0));
+  const sizes=new ResizeObserver(()=>{max=-1});
+  sizes.observe(el);
+  const contents=new MutationObserver(()=>{max=-1});
+  contents.observe(el,{childList:true});
   listen(document,'visibilitychange',wake);
-  document.addEventListener('scroll',wake,{capture:true,passive:true,signal:abort.signal});
   wake();
-  function stop(){cancelAnimationFrame(frame);frame=0;abort.abort();autoScrollers.delete(el);autoScrollWakeups.delete(wake);
-    if(!autoScrollers.size){autoScrollVisibility?.disconnect();autoScrollVisibility=null}}
+  function stop(){cancelAnimationFrame(frame);frame=0;abort.abort();sizes.disconnect();contents.disconnect();autoScrollers.delete(el);autoScrollWakeups.delete(wake);
+    autoScrollSight?.unobserve(el);autoScrollSightings.delete(el);
+    if(!autoScrollers.size){autoScrollVisibility?.disconnect();autoScrollVisibility=null;autoScrollSight?.disconnect();autoScrollSight=null}}
   autoScrollers.set(el,stop);
   autoScrollWakeups.add(wake);
   if(!autoScrollVisibility){autoScrollVisibility=new MutationObserver(()=>autoScrollWakeups.forEach(resume=>resume()));
-    autoScrollVisibility.observe(document.body,{attributes:true,attributeFilter:['data-detail-open']})}
+    autoScrollVisibility.observe(document.body,{attributes:true,attributeFilter:['data-detail-open','data-wall-open']})}
+  if(typeof IntersectionObserver==='function'){
+    autoScrollSight??=new IntersectionObserver(entries=>{for(const entry of entries)autoScrollSightings.get(entry.target)?.(entry.isIntersecting)});
+    autoScrollSightings.set(el,visible=>{onscreen=visible;wake()});
+    autoScrollSight.observe(el);
+  }
 }
 export function stopAutoScroll(el:Element):void{autoScrollers.get(el)?.()}
 
@@ -225,25 +268,34 @@ export function moveGlidePane(
   axis:'x'|'y'='x',
 ):void{
   /* 原地重量也要撤掉还在跑的位移与形变，动画不能继续覆盖新落点。 */
-  pane.getAnimations().forEach(a=>a.cancel());
+  cancelGlide(pane);
   pane.style.width=`${box.w}px`;pane.style.height=`${box.h}px`;
   const span=axis==='y'?'h':'w',head=axis==='y'?'y':'x';
   const settled=`${box.x}px ${box.y}px`;
   if(from&&from[head]!==box[head]&&!matchMedia('(prefers-reduced-motion:reduce)').matches){
     const ease=glideEase();
-    pane.animate([{translate:axis==='y'?`${box.x}px ${from.y}px`:`${from.x}px ${box.y}px`},
-      {translate:settled}],{duration:ease.duration,easing:ease.easing,fill:'none'});
+    const moving=[pane.animate([{translate:axis==='y'?`${box.x}px ${from.y}px`:`${from.x}px ${box.y}px`},
+      {translate:settled}],{duration:ease.duration,easing:ease.easing,fill:'none'})];
+    glides.set(pane,moving);
     /* 一块被拽着走的软东西，跑起来在跑的方向上抻开，停下来收回去。抻多少按这一跳跨了
        自己几个身位算，封在一个半身位：再远也不该更长，那时候读起来不是被拉长的同一
        块，是换上来的另一块。峰值压在前三成——加速那一段才拉得动它。
        形变只在这一排排布的方向上：另一根轴的尺寸是这一排给定的，在那儿拉扯会让它看
        起来不是这一排里的东西。 */
     const reach=Math.min(Math.abs(box[head]-from[head])/box[span],1.5),grow=1+reach*.12;
-    pane.animate([{scale:'1 1',offset:0},
+    moving.push(pane.animate([{scale:'1 1',offset:0},
       {scale:axis==='y'?`1 ${grow}`:`${grow} 1`,offset:.3},{scale:'1 1',offset:1}],
-      {duration:ease.duration,easing:'ease-in-out',fill:'none'});
+      {duration:ease.duration,easing:'ease-in-out',fill:'none'}));
   }
   pane.style.translate=settled;
+}
+/* 底板上跑的只有上面这两段，自己记着撤：`getAnimations()` 要先把整份样式算到最新才答得上来，
+   侧栏开合那一下正好整页样式都脏着，读一次就是一次整树重算。 */
+const glides=new WeakMap<HTMLElement,Animation[]>();
+export function cancelGlide(pane:HTMLElement|null|undefined):void{
+  if(!pane)return;
+  glides.get(pane)?.forEach(a=>a.cancel());
+  glides.delete(pane);
 }
 
 /** Geist Scroller: one-axis overflow with edge fades as the scroll affordance. */
@@ -279,19 +331,6 @@ export function wireScrollers(root:ParentNode=document):void{
   });
 }
 
-/** 挂覆盖式滚动条的滚动容器。列表只写在这一处，样式那边认的是挂上之后的属性。
- *
- * `[data-stage-scroll]` 是详情浮窗里所有内容的外层。窄屏下整块内容自己纵向滚，滚的得是它而不是
- * `<dialog data-stage>` 本身：轨道必须是滚动容器的兄弟，而 dialog 在顶层，挂在它
- * 父级上的轨道会落到遮罩底下。宽屏下它不溢出，组件自己量得出来，轨道不显示。 */
-const OVERLAY_SCROLLERS=[
-  '[data-stage-side-content]','[data-stage-scroll]','.tagpickbody','[data-mix-list]','.playlistpicklist',
-  '[data-player-stats]',
-  '.vjs-peach-settings-menu','.ui-geist-scroller-container','.metricstrip','.ui-tastesummaries',
-  '.ui-skeletondashstrip','.followpagination',
-  '.reviewtabs','.ftablewrap','.ui-board-local-nav','[data-manage-menu]',
-  '.follow-workspace-switch','.fmanagenav','[role="listbox"]',
-].join(',');
 /* Board 层里会超宽的横向滚动层：两端按滚动位置渐隐说明「那边还有」，鼠标停在上面时竖向
    滚轮转成横向。边线留给外层框，渐隐只落在这一层。
    这里登记的都是 `frontend/` 或 board.css 画出来的层，它们不经过 `wireAllDrag` 那份按 id
@@ -301,12 +340,61 @@ const OVERLAY_SCROLLERS=[
 const BOARD_EDGE_SCROLLERS='.reviewtabs,.ftablewrap,.ui-board-local-nav,[data-manage-menu],'
   +'.follow-workspace-switch,.fmanagenav';
 
-/** 把这一批 DOM 里所有该有覆盖式滚动条的容器接上；重复调用只接新出现的那些。 */
-export function wireOverlayScrollbars(root:ParentNode=document):void{
-  root.querySelectorAll<HTMLElement>(OVERLAY_SCROLLERS).forEach(el=>{
-    if(el.matches(BOARD_EDGE_SCROLLERS)){
-      wireHorizontalScroller(el);return;
-    }
-    attachOverlayScrollbar(el);
+/** 按实际 overflow 接管滚动容器；横向手势导航保留现有渐隐反馈。 */
+export function wireOverlayScrollbars(root:ParentNode=document,subtree=true):void{
+  const nodes=[...(root instanceof HTMLElement?[root]:[]),...(subtree?root.querySelectorAll<HTMLElement>('*'):[])];
+  nodes.filter(el=>el instanceof HTMLElement&&el.matches(BOARD_EDGE_SCROLLERS)).forEach(el=>wireHorizontalScroller(el));
+  const gesture=(el:HTMLElement)=>el.hasAttribute('data-horizontal-scroll')
+    ||(horizontalControls.has(el)&&horizontalControls.get(el).options.fade!==false);
+  // 样式读取与轨道挂载分两段，避免每插入一条轨道就重新计算后面所有节点的样式。
+  const candidates=nodes.flatMap<{el:HTMLElement;axes:readonly ('x'|'y')[]}>(el=>{
+    if(!(el instanceof HTMLElement)||el===document.body||el===document.documentElement
+      ||el.closest('.ovtrack,.ui-ov-edges'))return [];
+    if(el.closest('[data-skeleton],[data-skeleton-tier]')){detachOverlayScrollbar(el);return []}
+    if(el.closest('[inert]'))return [];
+    const horizontalGesture=gesture(el),axes=horizontalGesture?['y'] as const:['y','x'] as const;
+    if(el.dataset.overlayScrollbar&&el.dataset.overlayAxes===axes.join(''))return [];
+    const style=getComputedStyle(el);
+    const vertical=/^(auto|scroll)$/.test(style.overflowY);
+    if(vertical||(!horizontalGesture&&/^(auto|scroll)$/.test(style.overflowX)))return [{el,axes}];
+    return horizontalGesture&&el.dataset.overlayScrollbar?[{el,axes:[] as const}]:[];
   });
+  candidates.forEach(({el,axes})=>axes.length?attachOverlayScrollbar(el,{axes}):detachOverlayScrollbar(el));
+}
+
+/** 按新增子树及样式变化增量接管滚动区；响应式布局改变时刷新整棵树。 */
+export function observeScrollRegions(root:HTMLElement=document.body):()=>void{
+  let frame=0;
+  const pending=new Map<HTMLElement,boolean>();
+  const decorative=(node:Element)=>!!node.closest('.ovtrack,.ui-ov-edges');
+  const flush=()=>{
+    frame=0;
+    const trees=[...pending].filter(([node])=>node.isConnected);
+    pending.clear();
+    for(const [node,subtree] of trees)if(!trees.some(([parent,deep])=>deep&&parent!==node&&parent.contains(node)))wireOverlayScrollbars(node,subtree);
+    pruneOverlayScrollbars();
+  };
+  const queue=(node:HTMLElement,subtree=true)=>{
+    if(decorative(node))return;
+    pending.set(node,(pending.get(node)??false)||subtree);
+    if(!frame)frame=requestAnimationFrame(flush);
+  };
+  const observer=new MutationObserver(records=>{
+    for(const record of records){
+      if(record.type==='attributes'){
+        if(record.target instanceof HTMLElement){
+          if(record.attributeName==='data-theater')refreshOverlayScrollbars(record.target);
+          queue(record.target,record.attributeName!=='style');
+        }
+      }else{
+        for(const node of record.addedNodes)if(node instanceof HTMLElement)queue(node);
+        if(record.removedNodes.length&&!frame)frame=requestAnimationFrame(flush);
+      }
+    }
+  });
+  observer.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['class','style','hidden','open','inert','data-skeleton','data-skeleton-tier','data-horizontal-scroll','data-theater']});
+  const resize=()=>queue(root);
+  window.addEventListener('resize',resize,{passive:true});
+  queue(root);
+  return ()=>{observer.disconnect();window.removeEventListener('resize',resize);cancelAnimationFrame(frame);pending.clear();releaseOverlayScrollbars(root);pruneOverlayScrollbars()};
 }

@@ -1,7 +1,8 @@
 /* preferences 域控制器：本域状态与动作，启动由 Application 的生命周期统一安装。 */
 import { loadMediaSources } from './../query/media-sources';
-import { buildBars, dropOfflineFromDefaultLoc, homePath, loadCatalog, paintCatalogFilter, repaintCatalogGrid } from './catalog.js';
+import { buildBars, catalogState, dropOfflineFromDefaultLoc, homePath, loadCatalog, paintCatalogFilter, repaintCatalogGrid } from './catalog.js';
 import { appSettingsStore } from './../appearance/settings';
+import { entityDisplayName, setNameLanguage } from '../core/entity-names';
 import { playUiSound, setUiSoundsEnabled, wireUiSounds } from '../ui-kit/sounds';
 import { applyTheme, watchSystemTheme } from './../appearance/theme';
 import { applyAccent, applyGlassFaces, applyHomeGlow, paintHomeGlowNow } from './../appearance/glow';
@@ -17,6 +18,7 @@ import { stageApi } from '../react/application-residents';
 import { syncJavImages } from './../jav-artwork';
 import { coverAnchor } from './../card-art/framing';
 import { mediaState, repaintDetailPoster } from './media.js';
+import { loadingState } from './loading.js';
 import { updateManagedRoute } from './../history/managed';
 import { MEDIA_SOURCE_ICONS, emptyStateHtml, wireHorizontalScroller } from '../ui-kit';
 import { tagLabel } from '../core/tags';
@@ -31,8 +33,9 @@ export async function loadSourceStatus(){
   try{
     const d=await loadMediaSources(effects.signal);
     if(!effects.isActive)return preferencesState.sourceOnline;
-    preferencesState.sourceOnline=Object.fromEntries((d.sources||[]).map(s=>[s.location,s.online]));
-    preferencesState.sourceProblems=Object.fromEntries((d.sources||[]).map(s=>[s.location,s.message||'']));
+    const roots=(d.sources||[]).flatMap(s=>s.roots||[]).filter(r=>r.root_id);
+    preferencesState.sourceOnline=Object.fromEntries([...(d.sources||[]).map(s=>[s.location,s.online]),...roots.map(r=>[r.root_id,r.online])]);
+    preferencesState.sourceProblems=Object.fromEntries([...(d.sources||[]).map(s=>[s.location,s.message||'']),...roots.map(r=>[r.root_id,r.message||''])]);
   }catch{if(!effects.isActive)return preferencesState.sourceOnline;preferencesState.sourceOnline={};preferencesState.sourceProblems={}}
   document.body.classList.toggle('offline-source',Object.values(preferencesState.sourceOnline).includes(false));
   dropOfflineFromDefaultLoc();
@@ -63,8 +66,8 @@ export function sidebarFacets(facetData,context){
   return {
     locations:(facetData.locations||[]).map(row=>({value:row.k,label:LOC[row.k]||row.k,n:row.n??null,dot:sidebarDot(row.k),
       ...(preferencesState.sourceOffline(row.k)?{offline:preferencesState.OFFLINE_HINT}:{})})),
-    regions:rows(facetData.regions),orientations:rows(facetData.orientations),
-    creators:rows(creators),tags:rows(facetData.tags),tech:rows(facetData.tech),
+    regions:rows(facetData.regions),orientations:rows(facetData.orientations),years:rows(facetData.years),
+    creators:rows(creators,row=>entityDisplayName('creator',row.k)),tags:rows(facetData.tags),tech:rows(facetData.tech),
     followTags:rows(facetData.follow_tags,row=>tagLabel(row.k)),
     duration:!!facetData.stats?.duration,
   };
@@ -142,6 +145,7 @@ preferencesState.OFFLINE_REASON = {local:'Cannot read the media folder. Check th
 preferencesState.offlineReason = key=>preferencesState.sourceProblems[key]||preferencesState.OFFLINE_REASON[key]||'Cannot read the media folder for this source. Check folder permissions and mount status.';
 preferencesState.settingsStore = appSettingsStore();
 preferencesState.appSettings = preferencesState.settingsStore.value;
+setNameLanguage(preferencesState.appSettings.performerNameLanguage);
 preferencesState.saveSettings = ()=>preferencesState.settingsStore.save();
 document.documentElement.style.setProperty('--hover-delay',`${preferencesState.appSettings.hoverDelaySeconds}s`);
 setUiSoundsEnabled(preferencesState.appSettings.uiSounds);
@@ -155,6 +159,11 @@ preferencesState.catalogLoadWaiters = [];
 preferencesState.nextCatalogLoad = ()=>new Promise(resolve=>preferencesState.catalogLoadWaiters.push(resolve));
 preferencesState.handOff = loading=>{preferencesState.catalogLoadWaiters.splice(0).forEach(resolve=>resolve(loading));return loading};
 preferencesState.settingsEffects = {
+  performerNameLanguage:()=>{
+    setNameLanguage(preferencesState.appSettings.performerNameLanguage);
+    loadingState.syncPageTitle(location.href);
+    catalogState.barsRendered='';buildBars();
+  },
   theme:()=>applyTheme(),
   /* 开这一格时立刻响一声开关音，人才知道它开了。关的那一声由 document 上的 change 监听
      发出：捕获阶段排在这里前面，那时开关还没关掉，最后一声还能响出来。 */
@@ -182,6 +191,7 @@ preferencesState.settingsEffects = {
   /* 折叠是在渲染时做的，不重取的话已经被跳过的那些卡不会自己冒出来。 */
   groupCollapse:()=>reloadCurrentSurface(),
   feedAutoScroll:()=>syncFeedAutoScroll(),
+  feedLimit:()=>refreshFeedRows(),
   feedCompilations:()=>refreshFeedRows(),
   /* 设置说的是「离开详情不再进小窗」，已经开着的那个小窗留着反而像没生效。 */
   miniplayer:()=>{if(!preferencesState.appSettings.miniplayer)stageApi()?.closeMiniplayer()},

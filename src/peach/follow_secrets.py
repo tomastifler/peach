@@ -203,6 +203,14 @@ CREDENTIAL_GUIDE: dict[str, dict] = {
     "coomer": {"requirement": "none"},
     "pawchive": {"requirement": "none"},
     "rule34video": {"requirement": "none"},
+    "iwara": {
+        "requirement": "optional",
+        "fields": ["access_token"],
+        "syncable": [],
+        "why": "公开作者视频无需登录；有访问限制的视频需要账号访问权及有效登录凭据。",
+        "where": "https://www.iwara.tv/",
+        "howto": "登录 Iwara 后，从成功的 apiq.iwara.tv/video 请求复制 Authorization 中 Bearer 后的值，填写 access_token。令牌过期后需重新复制。",
+    },
     "rule34xxx": {
         "requirement": "required",
         "fields": ["user_id", "api_key"],

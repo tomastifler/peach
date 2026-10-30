@@ -10,13 +10,13 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { queryClient } from '../../src/react/query';
 import {
   commonReviewSources, filterReviewRows, groupReviewRows, prefetchReview, REVIEW_DECISION_URL,
-  REVIEW_KEY, REVIEW_PAGE_SIZE, REVIEW_URL, reviewGroupingOptions,
+  REVIEW_KEY, REVIEW_PAGE_SIZE, REVIEW_URL, reviewGroupingOptions, settleReviewRows,
   reviewWindow, type ReviewCandidate, type ReviewData, type ReviewRow,
   type DecisionResult,
 } from '../../src/react/review/review';
 import { ReviewPage } from '../../src/react/review/review-page';
 
-import { choose, click, mountRoot, settle } from './render';
+import { actionOrder, choose, click, mountRoot, settle } from './render';
 
 // 客户端是模块级的单例（所有 React 根共用一个），用例之间不清就互相喂数据。
 afterEach(() => queryClient.clear());
@@ -31,6 +31,7 @@ const candidate = (source: string, value: string): ReviewCandidate =>
 /** 一条元数据字段候选。`sources` 给几家就是几个候选，给一家就是单一来源。 */
 const row = (at: number, sources: string[] = ['javdb', 'nfo']): ReviewRow => ({
   item_key: `row-${at}`,
+  queue_order: at,
   field: 'title',
   field_label: '标题',
   query: `ABC-${at}`,
@@ -46,6 +47,7 @@ const QUEUE: ReviewRow[] = [
 const review = (over: Partial<ReviewData> = {}): ReviewData => ({
   sections: { metadata_fields: QUEUE, creator_tags: [] },
   counts: { metadata_fields: QUEUE.length, creator_tags: 0 },
+  queues: { later: { sections: {}, counts: {} }, ignored: { sections: {}, counts: {} } },
   genre_tags: ['剧情'],
   ...over,
 });
@@ -106,8 +108,78 @@ const buttonIn = (root: ParentNode, name: string) =>
   [...root.querySelectorAll('button')].find((button) => button.textContent?.trim() === name) ?? null;
 const tabNamed = (root: ParentNode, name: string) =>
   [...root.querySelectorAll('[role="tab"]')].find((tab) => tab.textContent?.startsWith(name)) ?? null;
+const stateNamed = (root: ParentNode, name: string) =>
+  [...root.querySelectorAll('[aria-label="复核状态"] button')].find(button => button.textContent?.startsWith(name)) ?? null;
 const statusText = (root: ParentNode) =>
   [...root.querySelectorAll('[role="status"]')].map((node) => node.textContent?.trim());
+
+it('展开来源依据不选择候选，也不提交资料判定', async () => {
+  const entry = row(1);
+  entry.candidates![0]!.catalog_evidence = { runtime: { display_value: '120 分钟' } };
+  const { host, fetcher } = await open({ data: review({ sections: { metadata_fields: [entry] } }) });
+  const card = cards(host)[0]!;
+  const toggle = card.querySelector('button[aria-label="展开 javdb 的来源依据"]')!;
+  expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  await click(toggle);
+  expect(toggle.getAttribute('aria-expanded')).toBe('true');
+  expect([...card.querySelectorAll<HTMLInputElement>('input[type="radio"]')].every(input => !input.checked)).toBe(true);
+  expect(fetcher.mock.calls.some(([url]) => url === REVIEW_DECISION_URL)).toBe(false);
+  expect(card.textContent).toContain('120 分钟');
+});
+
+it('当前值独立显示人工归属，不混入旧说明中的维护实现细节', async () => {
+  const entry = { ...row(1), current_value: '用户整理的标题', current_owner: 'user:manual',
+    evidence: '旧说明里的维护脚本名称', videos: 1 };
+  const { host } = await open({ data: review({ sections: { metadata_fields: [entry] } }) });
+  const current = cards(host)[0]!.querySelector('[aria-label="当前信息"]')!;
+  expect(current.textContent).toContain('用户整理的标题');
+  expect(current.textContent).toContain('人工确认');
+  expect(current.textContent).not.toContain('旧说明里的维护脚本名称');
+});
+
+it('标题只标出不同文字，保留共同内容和原始候选值', async () => {
+  const before = '共同开头，旧的内容；共同结尾 😀';
+  const after = '共同开头，新的内容；共同结尾 😀';
+  const entry = { ...row(1, ['nfo']), current_value: before,
+    candidates: [candidate('nfo', after)] };
+  const { host, fetcher } = await open({ data: review({ sections: { metadata_fields: [entry] } }) });
+  const card = cards(host)[0]!;
+  const current = card.querySelector('[aria-label="当前信息"]')!;
+  expect(current.textContent).toContain(before);
+  expect(card.textContent).toContain(after);
+  expect([...card.querySelectorAll('mark')].map(mark => mark.textContent)).toEqual(['旧', '新']);
+  await click(buttonIn(card, '通过'));
+  const request = fetcher.mock.calls.find(([url]) => url === REVIEW_DECISION_URL)!;
+  expect(JSON.parse(request[1]!.body as string)).toMatchObject({ candidate_key: entry.candidates[0]!.candidate_key });
+});
+
+it('来源依据只对照同名字段，不把演员与标题当作差异', async () => {
+  const entry = { ...row(1), field: 'performers', field_label: '演员', current_value: '演员甲',
+    candidates: ['javdb', 'nfo'].map((source, at) => ({ ...candidate(source, '演员甲'),
+      catalog_evidence: { title: { display_value: `共同开头，${at ? '新的' : '旧的'}内容；共同结尾` } } })) };
+  const { host } = await open({ data: review({ sections: { metadata_fields: [entry] } }) });
+  const card = cards(host)[0]!;
+  const trigger = card.querySelector('button[aria-label="展开 javdb 的来源依据"]')!;
+  await click(trigger);
+  const panel = document.getElementById(trigger.getAttribute('aria-controls')!)!;
+  expect(panel.textContent).toContain('共同开头，旧的内容；共同结尾');
+  expect([...panel.querySelectorAll('mark')].map(mark => mark.textContent)).toEqual(['旧']);
+  expect(card.querySelector('[aria-label="当前信息"]')!.querySelectorAll('mark')).toHaveLength(0);
+});
+
+it('资料字段独立于来源分组筛选，并在全队列计数后重新分页', async () => {
+  const entries = [...QUEUE, ...[201, 202].map(at => ({ ...row(at), field: 'performers', field_label: '演员' }))];
+  const { host } = await open({ data: review({ sections: { metadata_fields: entries } }) });
+  await click(buttonIn(host, '下一页'));
+  await choose(host.querySelector('button[aria-label="筛选资料字段"]'), '演员 · 2');
+  expect(keys(host)).toEqual(['row-201', 'row-202']);
+  expect(buttonIn(host, '下一页')).toBeNull();
+  await choose(host.querySelector('button[aria-label="筛选分组方式"]'), '按来源');
+  expect(keys(host)).toEqual(['row-201', 'row-202']);
+  await choose(host.querySelector('button[aria-label="筛选资料字段"]'), '标题 · 25');
+  expect(cards(host)).toHaveLength(REVIEW_PAGE_SIZE);
+  expect(keys(host)[0]).toBe('row-0');
+});
 /** Note 按语气落在 `note`／`status`／`alert` 三种角色上。 */
 const noteText = (root: ParentNode) =>
   [...root.querySelectorAll('[role="note"], [role="status"], [role="alert"]')]
@@ -156,13 +228,13 @@ it('分类进地址栏，换一条队列就把手里的选择放下', async () =
   await click(boxOf(host, 0));
   expect(statusText(host)).toContain('1 selected');
   expect(host.querySelector('[data-selection-dock]')).not.toBeNull();
-  await click(tabNamed(host, 'Creator tags'));
-  expect(props.route).toHaveBeenCalledWith({ category: 'creator_tags' });
-  expect(statusText(host)).not.toContain('1 selected');
+  await click(tabNamed(host, '创作者标签'));
+  expect(props.route).toHaveBeenCalledWith({ category: 'creator_tags', queue: '' });
+  expect(statusText(host)).not.toContain('已选 1 项');
   expect(host.querySelector('[data-selection-dock]')).toBeNull();
   // 默认那一档不写进地址栏。
-  await click(tabNamed(host, 'Metadata fields'));
-  expect(props.route).toHaveBeenLastCalledWith({ category: '' });
+  await click(tabNamed(host, '元数据字段'));
+  expect(props.route).toHaveBeenLastCalledWith({ category: '', queue: '' });
 });
 
 it('Shift 选一段，翻页之后手里还是同一批', async () => {
@@ -203,10 +275,12 @@ it('批量判定把成功的摘掉，没写成的留下来等重试', async () =
   const { host, props } = await open({
     decisions: [{ ok: true }, { ok: false, error: '来源已失效' }, { ok: true }],
   });
-  await choose(host.querySelector('button[aria-label="Filter current category"]'), 'Single source · 3');
-  await click(buttonIn(host, 'Select all in category'));
-  expect(statusText(host)).toContain('3 selected');
-  await click(buttonIn(host, 'Approve selected'));
+  await choose(host.querySelector('button[aria-label="筛选当前分类"]'), '单一来源 · 3');
+  await click(buttonIn(host, '全选当前分类'));
+  expect(statusText(host)).toContain('已选 3 项');
+  expect(actionOrder(buttonIn(host, '通过所选')!.parentElement).filter((name) => name.endsWith('所选') || name === '取消选择'))
+    .toEqual(['忽略所选', '稍后处理所选', '通过所选', '取消选择']);
+  await click(buttonIn(host, '通过所选'));
   await settle();
   expect(props.toast).toHaveBeenCalledWith('Approved 2 items, 1 incomplete');
   expect(queueOf().sections.metadata_fields).toHaveLength(QUEUE.length - 2);
@@ -268,8 +342,8 @@ it('只读数据库上判定与批量都不给点', async () => {
   expect(host.querySelector('a[href="https://writer.example/review"]')).toBeTruthy();
   // 勾选与批量操作整条都不出现：没有可写的东西，工具条只是一排点不动的按钮。
   expect(boxOf(host, 0)).toBeFalsy();
-  expect(buttonIn(host, 'Select all on page')).toBeNull();
-  for (const name of ['Approve', 'Reject', 'Skip']) {
+  expect(buttonIn(host, '全选本页')).toBeNull();
+  for (const name of ['通过', '忽略', '稍后处理']) {
     expect(buttonIn(cards(host)[0]!, name)).toHaveProperty('disabled', true);
   }
 });
@@ -277,6 +351,88 @@ it('只读数据库上判定与批量都不给点', async () => {
 it('打开复核页只读队列，不再触发自动落库写操作', async () => {
   const { fetcher } = await open();
   expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual([REVIEW_URL]);
+});
+
+it('稍后处理切换独立队列，刷新地址可还原且恢复保持原排序', async () => {
+  const { host, props } = await open();
+  await click(buttonIn(cards(host)[1]!, '稍后处理'));
+  await settle();
+  expect(queueOf().counts.metadata_fields).toBe(24);
+  expect(queueOf().queues.later.counts.metadata_fields).toBe(1);
+  await click(stateNamed(host, '稍后处理'));
+  expect(props.route).toHaveBeenLastCalledWith({ category: '', queue: 'later' });
+  expect(keys(host)).toEqual(['row-1']);
+  expect(buttonIn(cards(host)[0]!, '恢复待处理')).toBeTruthy();
+  await click(buttonIn(cards(host)[0]!, '恢复待处理'));
+  await settle();
+  expect(queueOf().queues.later.counts.metadata_fields).toBe(0);
+  expect(queueOf().sections.metadata_fields?.slice(0, 3).map(row => row.item_key))
+    .toEqual(['row-0', 'row-1', 'row-2']);
+  await click(stateNamed(host, '待处理'));
+  expect(keys(host).slice(0, 3)).toEqual(['row-0', 'row-1', 'row-2']);
+});
+
+it('已忽略通过链接打开，只提供恢复，跨状态清空选择', async () => {
+  const data = review({ queues: {
+    later: { sections: {}, counts: {} },
+    ignored: { sections: { metadata_fields: [{ ...row(7), decision: 'rejected' }] },
+      counts: { metadata_fields: 1 } },
+  } });
+  const { host, props } = await open({ data }, { queue: 'ignored' });
+  expect(keys(host)).toEqual(['row-7']);
+  expect(buttonIn(cards(host)[0]!, '通过')).toBeNull();
+  expect(buttonIn(cards(host)[0]!, '恢复待处理')).toBeTruthy();
+  await click(boxOf(host, 0));
+  expect(buttonIn(host, '恢复所选')).toBeTruthy();
+  expect(buttonIn(host, '通过所选')).toBeNull();
+  await click(stateNamed(host, '待处理'));
+  expect(props.route).toHaveBeenLastCalledWith({ category: '', queue: '' });
+  expect(host.querySelector('[data-selection-dock]')).toBeNull();
+});
+
+it('空分类仍可在筛选浮窗切换状态，只读时保留筛选并隐藏全选', async () => {
+  const { host, props } = await open({ data: review({
+    sections: { metadata_fields: [] }, counts: { metadata_fields: 0 },
+  }) }, { readOnly: true });
+  const filter = host.querySelector('[aria-label="复核筛选"]');
+  expect(filter?.querySelector('[aria-label="复核状态"]')).toBeTruthy();
+  expect(buttonIn(filter!, '全选本页')).toBeNull();
+  await click(stateNamed(filter!, '已忽略'));
+  expect(props.route).toHaveBeenLastCalledWith({ category: '', queue: 'ignored' });
+  expect(host.textContent).toContain('此分类没有已忽略项目');
+  expect(filter?.querySelector('[aria-label="复核状态"]')).toBeTruthy();
+});
+
+it('批量状态移动只采用成功项，失败行和其他类别保持不变', () => {
+  queryClient.setQueryData(REVIEW_KEY, review());
+  settleReviewRows('metadata_fields', ['row-1', 'row-2'], 'rejected');
+  const data = queueOf();
+  expect(data.counts.metadata_fields).toBe(23);
+  expect(data.queues.ignored.sections.metadata_fields?.map(row => row.item_key))
+    .toEqual(['row-1', 'row-2']);
+  expect(data.sections.metadata_fields?.some(row => row.item_key === 'row-0')).toBe(true);
+  expect(data.sections.creator_tags).toEqual([]);
+  settleReviewRows('metadata_fields', ['row-1'], 'restore');
+  expect(queueOf().queues.ignored.counts.metadata_fields).toBe(1);
+  expect(queueOf().counts.metadata_fields).toBe(24);
+});
+
+it('批量稍后处理失败的行留在待处理，成功行进入独立队列', async () => {
+  const rows = [row(0, ['nfo']), row(1, ['nfo']), row(2, ['nfo'])];
+  const { host } = await open({
+    data: review({ sections: { metadata_fields: rows }, counts: { metadata_fields: 3 } }),
+    decisions: [{ ok: true }, { ok: false, error: '候选已变更' }, { ok: true }],
+  });
+  await click(buttonIn(host, '全选本页'));
+  await click(buttonIn(host, '稍后处理所选'));
+  await settle();
+  expect(keys(host)).toEqual(['row-1']);
+  expect(cards(host)[0]?.textContent).toContain('候选已变更');
+  expect(queueOf().counts.metadata_fields).toBe(1);
+  expect(queueOf().queues.later.counts.metadata_fields).toBe(2);
+  await click(stateNamed(host, '稍后处理'));
+  expect(keys(host)).toEqual(['row-0', 'row-2']);
+  expect(host.querySelector('[data-selection-dock]')).toBeNull();
 });
 
 it('队列读取失败时说读取失败、给重试键，和空队列分得开；重试成功后画出队列', async () => {
@@ -294,16 +450,16 @@ it('队列读取失败时说读取失败、给重试键，和空队列分得开�
   expect(host.textContent).toContain('Could not load the review queue');
   expect(host.textContent).not.toContain('No items to review in this category');
   fail = false;
-  await click(buttonIn(host, 'Retry'));
+  await click(buttonIn(host, '立即重试'));
   await settle();
   expect(host.textContent).not.toContain('Could not load the review queue');
   expect(cards(host)).toHaveLength(REVIEW_PAGE_SIZE);
 });
 
-it('没有可采纳候选的卡，通过键写「不可通过」，和「跳过」字面分得开', async () => {
+it('没有可采纳候选的卡仍可忽略或稍后处理，通过键不可用', async () => {
   const empty: ReviewRow = { ...row(7), candidates: [] };
   const { host } = await open({ data: review({ sections: { metadata_fields: [empty], creator_tags: [] } }) });
   const footer = cards(host)[0]!.querySelector('footer')!;
   expect([...footer.querySelectorAll('button')].map((button) => button.textContent?.trim()))
-    .toEqual(['Reject', 'Skip', 'Cannot approve']);
+    .toEqual(['忽略', '稍后处理', '不可通过']);
 });

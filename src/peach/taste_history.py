@@ -14,9 +14,10 @@ import sys
 import time
 from collections import Counter, defaultdict
 from contextlib import closing, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta, timezone
 from html.parser import HTMLParser
+import itertools
 from itertools import chain
 from functools import lru_cache
 from pathlib import Path
@@ -32,7 +33,7 @@ import ahocorasick
 
 from .catalog_rules import LENGTH_TAGS, TECH_TAGS
 from .review_csv import read_rows, write_rows
-from .taste_sites import ADULT_DOMAINS, MIXED_DOMAINS, account_key, identity_context, mixed_adult
+from .taste_sites import ADULT_DOMAINS, MIXED_DOMAINS, account_key, identity_context, mixed_adult, parse_url
 
 
 @dataclass(frozen=True)
@@ -741,12 +742,17 @@ class _HistoryRows:
     taste: tuple[_TasteVisit, ...]
     identity_visits: tuple[tuple[str, str, str], ...] = ()
     bookmarks: tuple[tuple[str, str, str], ...] = ()
+    #: 读出这些行时历史库的版本（`store_version`）。按行派生的缓存拿它作键，
+    #: 不另读一次：另读的那次可能已经是下一次写入之后的版本。
+    version: tuple = ()
 
 
 #: 按历史库文件的版本缓存解析结果。历史库只在导入与刷新时变，逐条解析网址要十几秒；
 #: 账本写入与它无关，不该连带重算。键里带 `-wal` 的版本：WAL 模式下写入先落在那里。
 _HISTORY_ROWS: dict[tuple, _HistoryRows] = {}
 _PREFERENCE_VISITS: dict[tuple, tuple[tuple[str, str, str], ...]] = {}
+#: 读的途中历史库被写过的那几次读，各领一个序号作版本，见 `_history_rows`。
+_UNSETTLED_READS = itertools.count()
 
 
 def store_version(store_path: Path) -> tuple:
@@ -872,12 +878,20 @@ def _read_history_rows(store_path: Path) -> _HistoryRows | None:
 
 
 def _history_rows(store_path: Path) -> _HistoryRows | None:
+    """历史库解析结果，`version` 是读之前取的版本。
+
+    读的途中历史库被写（口味刷新逐个来源提交）的话，读前读后两个版本对不上，这份结果
+    不进缓存，版本也换成只属于它自己的一个值，按版本取键的派生缓存不会拿别的行命中它。
+    """
     version = store_version(store_path)
     cached = _HISTORY_ROWS.get(version)
     if cached is None:
         cached = _read_history_rows(store_path)
         if cached is None:
             return None
+        if store_version(store_path) != version:
+            return replace(cached, version=(*version, "unsettled", next(_UNSETTLED_READS)))
+        cached = replace(cached, version=version)
         # 只留最新一版：旧版本的键再也不会被问到。
         _HISTORY_ROWS.clear()
         _HISTORY_ROWS[version] = cached
@@ -1275,45 +1289,92 @@ def _taste_analysis(
     }
 
 
+#: 每条浏览信号（身份访问在前、书签在后，与 `_HistoryRows` 同序）对应的出演者、创作者与
+#: 域名，键是历史库版本加身份输入。只留最新一版。账本的其它写入（播放、关注检查、
+#: 状态）不改身份输入，这份结果照样命中，重算只剩按行累加。
+_LINKED_SIGNALS: dict[tuple, tuple[tuple, ...]] = {}
+_NO_SIGNAL = ((), (), "", False)
+
+
 def _linked_history_evidence(history_store, ledger_connection, since, history):
     """账号与标题的规范身份按浏览器信号汇总。"""
-    from .taste_evidence import IdentityIndex, browser_entities
     browser_performers = Counter()
     history["bookmark_performers"] = Counter()
-    from .entities import male_performer_ids
-    excluded = male_performer_ids(ledger_connection)
-    accounts, _ = identity_context(ledger_connection)
     cached = _history_rows(history_store) if history_store.is_file() else None
     if cached:
-        index = IdentityIndex(ledger_connection)
-        matcher = index.title_matcher()
-        rows = [(*row, False) for row in cached.identity_visits]
-        rows.extend((*row, True) for row in cached.bookmarks)
-        for visited_at, url, title, bookmark in rows:
+        rows = chain(((visited_at, False) for visited_at, _, _ in cached.identity_visits),
+                     ((visited_at, True) for visited_at, _, _ in cached.bookmarks))
+        for (visited_at, bookmark), signal in zip(rows, _linked_signals(history_store, cached, ledger_connection)):
             if since and visited_at < since:
                 continue
-            matches = set(browser_entities(url, title, index, matcher, accounts, {}))
-            raw_creators = _url_candidates(url, title)[2]
-            domain = (urlparse(url).hostname or "").removeprefix("www.")
-            for eid, kind, name in matches:
-                if eid in excluded:
-                    continue
-                if kind == "performer":
-                    browser_performers[name] += 1
-                    if bookmark:
-                        history["bookmark_performers"][name] += 1
-                elif kind == "creator":
-                    if name.casefold() in raw_creators:
-                        continue
-                    history["creators"][name] += 1
-                    if bookmark:
-                        history["bookmark_creators"][name] += 1
-                    history["creator_domains"].setdefault(name.casefold(), Counter())[domain] += 1
-            if matches and not (_is_taste_domain(domain) or mixed_adult(url, title)):
+            performers, creators, domain, counts_domain = signal
+            for name in performers:
+                browser_performers[name] += 1
+                if bookmark:
+                    history["bookmark_performers"][name] += 1
+            for name in creators:
+                history["creators"][name] += 1
+                if bookmark:
+                    history["bookmark_creators"][name] += 1
+                history["creator_domains"].setdefault(name.casefold(), Counter())[domain] += 1
+            if counts_domain:
                 history["domains"][domain] += 1
                 if bookmark:
                     history["bookmark_domains"][domain] += 1
     return browser_performers
+
+
+def _linked_signals(history_store, cached, ledger_connection):
+    """每条浏览信号一份 `_linked_signal`。同一网址与标题（历史里约四成是重复访问）只判一次。"""
+    from .entities import male_performer_ids
+    from .taste_evidence import IdentityIndex, browser_entities
+    excluded = male_performer_ids(ledger_connection)
+    accounts, _ = identity_context(ledger_connection)
+    index = IdentityIndex(ledger_connection)
+    # 判据读到的账本只有这几样：实体的种类与规范名、别名、身份链接与关注来源推出的账号、
+    # 排除的男优。取值本身进键，不用账本版本号——关注检查每小时都写账本，身份却很少变。
+    # 历史库那一半用这些行读出时的版本：此刻再读一次可能已是新版本，旧行算出的信号存到
+    # 新版本下，之后新行命中它就会按位置错配。
+    key = (cached.version,
+           tuple(sorted((eid, row["kind"], row["canonical_name"]) for eid, row in index.entities.items())),
+           tuple(sorted((kind, label, tuple(sorted(ids))) for (kind, label), ids in index.aliases.items())),
+           tuple(sorted((identity, tuple(sorted(values))) for identity, values in accounts.items())),
+           tuple(sorted(excluded)))
+    hit = _LINKED_SIGNALS.get(key)
+    if hit is not None:
+        return hit
+    matcher = index.title_matcher()
+    pairs: dict[tuple[str, str], tuple] = {}
+    signals = []
+    for _, url, title in chain(cached.identity_visits, cached.bookmarks):
+        signal = pairs.get((url, title))
+        if signal is None:
+            signal = pairs[url, title] = _linked_signal(
+                url, title, browser_entities(url, title, index, matcher, accounts, {}), excluded)
+        signals.append(signal)
+    result = tuple(signals)
+    _LINKED_SIGNALS.clear()
+    _LINKED_SIGNALS[key] = result
+    return result
+
+
+def _linked_signal(url, title, entities, excluded):
+    """一对网址与标题贡献的出演者、创作者、域名，以及这次访问算不算进域名榜。"""
+    matches = set(entities)
+    raw_creators = _url_candidates(url, title)[2]
+    domain = (parse_url(url).hostname or "").removeprefix("www.")
+    performers, creators = [], []
+    for eid, kind, name in matches:
+        if eid in excluded:
+            continue
+        if kind == "performer":
+            performers.append(name)
+        elif kind == "creator" and name.casefold() not in raw_creators:
+            creators.append(name)
+    counts_domain = bool(matches) and not (_is_taste_domain(domain) or mixed_adult(url, title))
+    if not (performers or creators or counts_domain):
+        return _NO_SIGNAL
+    return tuple(performers), tuple(creators), domain, counts_domain
 
 
 def _attach_bookmark_counts(rows, counts):
@@ -1541,7 +1602,7 @@ def _title_tags(title):
 
 def _url_candidates(url: str, title: str = "") -> tuple[str | None, set[str], set[str]]:
     try:
-        parsed = urlparse(url)
+        parsed = parse_url(url)
         domain = (parsed.hostname or "").casefold()
     except ValueError:
         return None, set(), set()

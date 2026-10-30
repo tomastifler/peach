@@ -18,6 +18,7 @@ import type { SidebarApi, SidebarHost } from './sidebar/sidebar-api';
 import type { ManageHeaderApi, ManageHeaderHost } from './manage-header/manage-header-api';
 import type { BatchDockApi, BatchDockHost } from './batch-dock/batch-dock-api';
 import type { GlowPickerHost } from './glow-picker/glow-picker-api';
+import type { CoverItem, FaceRef } from '@peach/card-art';
 
 export type { IndexProps };
 export type { CatalogGridProps };
@@ -57,6 +58,25 @@ export interface StartupState {
 
 export interface UninstallState {
   available: boolean; full_available: boolean; message: string; data_root: string; directories: string[];
+}
+
+/** 数据目录里的一类数据。`reclaimable` 是清理这一类能腾出的字节。 */
+export interface StorageCategory {
+  key: string; label: string; description: string; note: string; cleanable: boolean;
+  bytes: number; files: number; reclaimable: number;
+}
+
+export interface StorageRelocation { state: 'done' | 'error'; message: string; notes?: string[]; finished_at: number }
+
+export interface StorageState {
+  data_root: string;
+  free_bytes: number | null;
+  total_bytes: number | null;
+  system_drive: boolean;
+  usage: { measured_at: number; total_bytes: number; total_files: number; categories: StorageCategory[] } | null;
+  job: { state: 'idle' | 'measuring' | 'cleaning'; category?: string; categories?: string[]; message: string; error?: boolean;
+    files?: number; bytes?: number; expected_files?: number | null };
+  relocation: { available: boolean; message: string; steps?: { text: string; command: string }[]; last: StorageRelocation | null };
 }
 
 export interface PeachProxyState { mode: string; proxy_saved: boolean; needs_selection: boolean }
@@ -106,12 +126,12 @@ export interface AutomaticUpdateState {
   mode: string; interval_hours: number; available: boolean; download_available: boolean; error?: string;
 }
 
-/** 云下载的两条渠道：115 经 CloudDrive2，PikPak 直连。 */
-export type DownloadProviderKey = '115' | 'pikpak';
+/** 媒体库中可用的直连渠道与 CloudDrive2 路径渠道。 */
+export type DownloadProviderKey = '115' | 'pikpak' | `clouddrive:${string}:${string}`;
 
 export interface DownloadConfig {
   clouddrive_address: string;
-  targets: Partial<Record<DownloadProviderKey, string>>;
+  targets: Record<string, string>;
   /** PikPak 根目录对应的数据库路径前缀，空串表示还没选。 */
   pikpak_root: string;
   wait_hours: number;
@@ -121,6 +141,8 @@ export type PikPakBrowserState = 'idle' | 'waiting' | 'done' | 'cancelled' | 'ti
 
 /** 设置页的云下载块。凭据只报存没存过，不回值。 */
 export interface DownloadSettingsState {
+  problems?: string[];
+  media_sources: string[];
   available: boolean;
   config: DownloadConfig;
   token_set: boolean;
@@ -174,6 +196,9 @@ export interface DownloadTask {
   code: string | null;
   title: string | null;
   origin: string | null;
+  display_code?: string | null;
+  display_title?: string | null;
+  artwork?: (CoverItem & { performer_entities?: (FaceRef & { name: string })[]; performer_total?: number }) | null;
   state: string;
   state_label: string;
   failure: string | null;
@@ -202,6 +227,8 @@ export interface DownloadsSnapshot {
   available: boolean;
   providers: { key: DownloadProviderKey; label: string; configured: boolean; target: string }[];
   tasks: DownloadTask[];
+  has_more?: boolean;
+  next_before_id?: number | null;
 }
 
 export interface DownloadSubmitResult {
@@ -228,7 +255,11 @@ export interface UpdateJob {
 }
 
 export interface MediaSource {
+  transport?: 'filesystem' | 'smb'; smb_username?: string; smb_password_saved?: boolean; smb_encrypt?: boolean;
+  root_id?: string; library_id?: string;
   location: string; root: string; path: string; online?: boolean; library?: string; library_icon?: string; cost?: 'free' | 'metered';
+  /** 媒体库来源色（强调色键名，空串不上色）与处理方式；`library_stages` 是自定义时所选步骤，逗号分隔。 */
+  library_color?: string; library_policy?: 'auto' | 'local' | 'custom'; library_stages?: string;
 }
 
 export interface ConfigurationFact {
@@ -239,11 +270,13 @@ export interface ConfigurationFact {
 }
 
 export interface ConfigurationData {
+  section_errors?: Record<string, { title: string; message: string; error_id: string }>;
   remote_reporting?: import('./settings/remote-reporting-settings').RemoteReportingState;
   library_sharing?: import('./settings/library-sharing-settings').LibrarySharingState;
   ledger_read_only?: boolean;
   startup?: StartupState;
   uninstall?: UninstallState;
+  storage?: StorageState;
   peach_proxy?: PeachProxyState;
   entry_links?: EntryLinksState;
   push_discovery?: PushDiscoveryState;
@@ -265,6 +298,10 @@ export interface ConfigurationData {
   windows?: boolean;
   port: number;
   port_editable?: boolean;
+  network?: {
+    editable: boolean; host: string; mdns_name: string; scope: 'local' | 'lan';
+    local_url: string; lan_url: string; ip_url: string;
+  };
   mount_dependencies?: { name: string; available: boolean; download_url: string }[];
   facts: ConfigurationFact[];
 }
@@ -292,6 +329,7 @@ export interface ConfigurationPanel {
 export interface ConfigurationGroupProps extends Pick<ConfigurationProps, 'receipt'> {
   data: ConfigurationData;
   panel?: ConfigurationPanel;
+  issues?: import('react').ReactNode;
 }
 
 /** 高清版目标页仍由遗留层提供的能力。全是纯函数或导航，页面不持有它们的状态。 */
@@ -314,10 +352,6 @@ export interface StatsProps {
   tagLabel(key: string): string;
   /** 点一个内容标签：回目录并按它筛选。整页换成目录由遗留壳做。 */
   onTag(key: string): void;
-  /** 打开配置页的「媒体」页签。没有视频或没有存储来源时空态里的那个去处。 */
-  openMediaSettings(): void;
-  /** 这台机器能不能改配置。不能改时空态不给「添加媒体目录」。 */
-  configurable: boolean;
 }
 
 /** 口味页仍由遗留层提供的能力。都是导航、查表或回执，页面不持有它们的状态。 */
@@ -360,7 +394,6 @@ export interface FollowManageProps {
   toast(message: string): void;
   /** 去「看更新」那一页（`/follow`）。整页换成哪一屏仍归遗留壳。 */
   openFollow(): void;
-  openServiceConfiguration(): void;
   /** 数据库只读：这台机器只能浏览，写操作全部不给点。 */
   readOnly: boolean;
   readOnlyMessage: string;
@@ -376,8 +409,9 @@ export interface FollowManageProps {
 export interface ReviewProps {
   /** 地址栏此刻带着的分类。不认识的值退回默认那一档。 */
   category: string;
+  queue?: string;
   /** 把分类写回地址栏。空串表示这一项此刻就是默认值，壳不写进去。 */
-  route(params: { category: string }): void;
+  route(params: { category: string; queue?: string }): void;
   /** 打开作品详情（遗留层的整页视图，含播放器与队列）。 */
   openItem(id: number): void;
   /** 打开实体资料页。`kind` 是 `creator`／`performer`。 */

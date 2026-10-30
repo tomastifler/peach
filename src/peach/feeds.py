@@ -116,20 +116,21 @@ def stamp(moment: datetime | None = None) -> str:
         timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
-def scan_code(text: str | None) -> str | None:
+def scan_code(text: str | None, *, product: bool = False) -> str | None:
     """从一段文本里找出番号：整段先试一次，不成再逐词元试。
 
-    番号的判据一个字都不新写，全部转给 `catalog_rules.release_code_from_text`——
-    两份实现漂移会产生两个封面缓存键，那是 `catalog_rules` 自己注释里记着的旧伤。
-    这里加的只是「标题里夹着简介时也要能找到」这一层。
+    番号判据复用 `catalog_rules`；明确商品身份使用保留尾字母的解析器，普通文件名
+    使用文本解析器。两条路径都按第一个可识别番号确定身份，不在标题后段另挑作品。
     """
     if not text:
         return None
-    whole = release_code_from_text(text)
+    from .catalog_rules import release_code_from_product
+    parser = release_code_from_product if product else release_code_from_text
+    whole = parser(text)
     if whole:
         return whole
     for token in _TOKEN.findall(str(text)):
-        found = release_code_from_text(token)
+        found = parser(token)
         if found:
             return found
     return None

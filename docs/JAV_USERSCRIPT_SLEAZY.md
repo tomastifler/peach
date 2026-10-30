@@ -1,9 +1,9 @@
 # JAV Userscript Release
 
-For public installation and usage notes see [Sleazy: Peach · JAV Ingest](https://sleazyfork.org/zh-CN/scripts/600821).
+公开安装与使用说明见 [Sleazy：Peach 用户脚本](https://sleazyfork.org/zh-CN/scripts/600821)。
 
 The script source, site list, and release copy are maintained by [peach-mitao/peach-userscript](https://github.com/peach-mitao/peach-userscript). User-facing installation, pairing, download channel, and permission notes are in that repository's [Sleazy release notes](https://github.com/peach-mitao/peach-userscript/blob/main/docs/SLEAZY.md).
 
-Releases use the verified full `dist/peach-jav.user.js` artifact, keeping readable code and the AGPL-3.0-or-later license. The install match rules and inline script rules are built from the same site list. The Sleazy release page and the GitHub Release use the same version, and Peach updates the install script and backend site snapshot following the [artifact sync flow](JAV_BROWSER.md#artifact-sync).
+发布时使用经过验证的 `dist/peach-jav.user.js` 完整制品，保留可读代码及 AGPL-3.0-or-later 许可证。安装匹配规则和脚本内联规则由同一份站点清单构建。Sleazy 自动从最新 GitHub Release 同步脚本，从该仓库 `docs/SLEAZY.md` 与 `docs/SLEAZY.zh-CN.md` 同步英文与简中说明；脚本默认语言须保持英语，否则与默认语言相同的本地化名称会被 Sleazy 忽略。Peach 按[制品同步流程](JAV_BROWSER.md#制品同步)更新安装脚本和后端站点快照。
 
 Sleazy's release rules and account security requirements are enforced by that site; the actual public address is whatever the successfully published script page shows.

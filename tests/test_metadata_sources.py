@@ -25,6 +25,49 @@ DEMO = SiteConfig(name="demo", label="Demo", provider="demo-page", base_url="htt
 
 
 class JavDBResourceTests(unittest.TestCase):
+    def test_title_projection_accepts_original_only_display_only_and_english_original(self):
+        from peach.sources.javdb import JavDBSource
+        panel = '<div class="panel-block"><strong>番號:</strong><span class="value">MIKR-023</span></div>'
+        for html, expected in (('<span class="origin-title">日本語原題</span>', '日本語原題'),
+                               ('<strong class="current-title">仅显示标题</strong>', '仅显示标题'),
+                               ('<strong class="current-title">译文</strong><span class="origin-title">Original *Title*</span>',
+                                'Original *Title*')):
+            with self.subTest(html=html):
+                payload = JavDBSource().parse(Page('https://javdb.com/v/XeYkdb', (html + panel).encode()), 'MIKR-023').payload()
+                self.assertEqual(payload['title'], expected)
+
+    def test_original_title_is_separate_from_localized_display_and_keeps_source_identity(self):
+        from peach.sources.javdb import JavDBSource
+        html = '''<strong class="current-title">自动翻译标题</strong>
+        <span class="origin-title" style="display:none">Original *A* **j*yqy*pq* 日本語</span>
+        <div class="panel-block"><strong>番號:</strong><span class="value">MIKR-023</span></div>'''
+        payload = JavDBSource().parse(Page('https://javdb.com/v/XeYkdb', html.encode()), 'MIKR-023').payload()
+        self.assertEqual(payload['title'], 'Original *A* **j*yqy*pq* 日本語')
+        self.assertEqual(payload['origin_title'], payload['title'])
+        self.assertEqual(payload['display_title'], '自动翻译标题')
+        self.assertEqual(payload['source_id'], 'XeYkdb')
+        self.assertEqual(payload['javdb_rule'], 2)
+
+    def test_same_number_different_source_ids_are_not_selected_by_search_order(self):
+        from peach.sources.javdb import JavDBSource
+        source = JavDBSource()
+        for identities in [('XeYkdb', 'MO50k'), ('MO50k', 'XeYkdb')]:
+            html = ''.join(f'<a href="/v/{identity}" class="box" title="film"><strong>MIKR-023</strong></a>'
+                           for identity in identities)
+            with self.subTest(order=identities), patch.object(source, '_page', return_value=Page('https://javdb.com/search', html.encode())) as get:
+                with self.assertRaises(SourceFailure) as caught:
+                    source.fetch('MIKR-023', session=None)
+                self.assertEqual(caught.exception.detail, 'identity_ambiguous')
+                self.assertEqual(get.call_count, 1)
+
+    def test_repeated_card_for_one_source_id_is_not_a_second_work(self):
+        from peach.sources.javdb import JavDBSource
+        source = JavDBSource()
+        card = '<a href="/v/XeYkdb" class="box" title="film"><strong>MIKR-023</strong></a>'
+        detail = Page('https://javdb.com/v/XeYkdb', b'detail')
+        with patch.object(source, '_page', side_effect=[Page('https://javdb.com/search', (card * 2).encode()), detail]):
+            self.assertEqual(source.fetch('MIKR-023', session=None).url, detail.url)
+
     def test_categories_keep_raw_words_and_deduplicate_links_after_identity_check(self):
         from peach.sources.javdb import JavDBSource
         from peach.metadata import extract_peach_fields

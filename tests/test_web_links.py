@@ -31,6 +31,9 @@ class FakeContract:
         self.db_path = db
         self.link_check = BackgroundJob("PeachLinkCheckJob", id_key="check_id")
 
+    def has_entity_image(self, kind, entity_id):
+        return False
+
     @contextmanager
     def read_connection(self):
         connection = sqlite3.connect(
@@ -138,6 +141,22 @@ class SummaryTests(unittest.TestCase):
         self.assertEqual(info["by_kind"], {"social": 1, "official": 2})
         self.assertEqual(info["by_entity_kind"], {"performer": 2, "studio": 1})
         self.assertIn(("moodyz.com", 1), info["top_hosts"])
+        with self.contract.read_connection() as connection:
+            for host, _ in info["top_hosts"]:
+                link = connection.execute("SELECT url FROM entity_link WHERE id=?",
+                                          (info["top_host_link_ids"][host],)).fetchone()
+                self.assertEqual(web_links.urlsplit(link["url"]).hostname, host)
+
+    def test_check_snapshot_resolves_current_entity_identity_without_rechecking_links(self):
+        self.contract.link_check.state = {
+            'status': 'complete', 'check_id': 'identity', 'checked': 1, 'total': 1,
+            'gone': [], 'unclear': [{'id': 1, 'entity': '旧名称', 'link_kind': 'social',
+                                    'label': 'X @a', 'url': 'https://x.com/a', 'note': 'HTTP 403'}],
+        }
+        with mock.patch('peach.web_links._probe', side_effect=AssertionError('不能联网')):
+            item, = web_links.w_links_check(self.contract, {'status_only': True})['unclear']
+        self.assertEqual((item['entity_id'], item['entity_kind']), (1, 'performer'))
+        self.assertEqual(item['face'], {'id': 1, 'name': '凉森玲梦', 'has_image': False})
 
     def test_prune_refuses_without_a_finished_check(self):
         """没有检查结果就删除，等于凭空删。"""

@@ -83,30 +83,38 @@ MAX_FOLLOWUP_DEPTH = 2
 
 #: 任务登记表：key → 给人看的名字。不在表里的 key 由界面原样显示，不猜。
 TASK_LABELS = {
-    "follow-check": "Follow check",
-    "follow-resolve": "Follow source lookup",
-    "library-processing": "Scan and collect",
-    "taste-refresh": "Taste analysis",
-    "link-check": "Link check",
-    "link-prune": "Dead link cleanup",
-    "resource-scan": "Resource sync check",
-    "resource-apply": "Resource sync cleanup",
-    "scraping-cover": "Cover collection",
-    "media-repair": "Media repair",
-    "organize": "Organize by template",
-    "batch": "Batch operation",
-    "scrape-codes": "Code metadata scrape",
-    "jav-covers": "Bulk cover fetch",
-    "entity-avatar": "Fill in profile images",
-    "studio-mark": "Studio website and logo backfill",
-    "creator-identity": "Creator identity lookup",
-    "code-samples": "Release sample backfill",
-    "feed-check": "Feed fetch",
-    "feed-scrape": "Fetch new-release metadata",
-    "want-scrape": "Fetch want-list metadata",
-    "timeline-thumbnails": "Video thumbnail collection",
-    "download-postprocess": "Cloud download post-processing",
-    "seed-import": "Import seed data",
+    "follow-check": "追更检查",
+    "follow-resolve": "关注来源查找",
+    "library-processing": "扫描与采集",
+    "taste-refresh": "口味分析",
+    "link-check": "链接检查",
+    "link-prune": "失效链接清理",
+    "resource-scan": "资源同步检查",
+    "resource-apply": "资源同步清理",
+    "scraping-cover": "封面采集",
+    "media-repair": "媒体修复",
+    "upgrade-repairs": "自动修复",
+    "upgrade-library": "自动修复资料",
+    "organize": "按模板整理",
+    "batch": "批量操作",
+    "scrape-codes": "番号资料刮削",
+    "jav-covers": "封面批量抓取",
+    "entity-avatar": "补全资料图片",
+    "performer-profile": "补全女优资料",
+    "performer-alias": "补全女优别名",
+    "studio-mark": "补厂牌官网与标识",
+    "creator-identity": "查创作者身份",
+    "code-samples": "补番号样张",
+    "feed-check": "订阅源拉取",
+    "feed-scrape": "取新作资料",
+    "feed-cover": "补新作封面",
+    "want-scrape": "取想要的资料",
+    "timeline-thumbnails": "视频缩略图采集",
+    "download-postprocess": "云下载后处理",
+    "seed-import": "导入初始资料",
+    "follow-creator": "关注作者建档",
+    "amane-bridge": "重建 amane 桥",
+    "face-models": "下载人脸模型",
 }
 
 
@@ -276,14 +284,15 @@ class TaskRunStore:
             return self._start(task_key, trigger=trigger, mutex_key=mutex_key,
                                conflict=conflict, total=total, label=label, pid=pid)
 
-    def suspend(self, run_id: int, *, label: str = '等待安装完成后继续') -> None:
+    def suspend(self, run_id: int, *, label: str = '等待安装完成后继续',
+                paused_for_update: bool = True) -> None:
         if not self.enabled:
             return
         with self.database.write_transaction(notify=False) as connection:
             connection.execute(
                 "UPDATE task_run SET status='pending',pid=0,progress_label=?,result_summary=? "
                 "WHERE id=? AND status='running'",
-                (label, json.dumps({'paused_for_update': True}), run_id))
+                (label, json.dumps({'paused_for_update': True} if paused_for_update else {}), run_id))
 
     def _resume(self, run_id, task_key):
         if run_id is None or not self.enabled:
@@ -518,30 +527,32 @@ class TaskRunStore:
                 return None
         return int(cursor.lastrowid)
 
-    def claim_followup(self, task_keys) -> TaskRun | None:
+    def claim_followup(self, task_keys, first=()) -> TaskRun | None:
         from .update_tasks import admission, UpdateBusy
         try:
             with admission(self.database.db_path):
-                return self._claim_followup(task_keys)
+                return self._claim_followup(task_keys, first)
         except UpdateBusy:
             return None
 
-    def _claim_followup(self, task_keys) -> TaskRun | None:
+    def _claim_followup(self, task_keys, first=()) -> TaskRun | None:
         """领走这几类里最早的一条待跑后继并标 `running`；没有就返回 None。
 
-        `task_keys` 是调用方这条通道负责的任务种类。按 id 升序领：后继之间没有优先级
-        （ADR-0040 未决），先声明的先跑是唯一说得清的顺序。
+        `task_keys` 是调用方这条通道负责的任务种类，`first` 是其中插队先领的那几类
+        （ADR-0114）。同一档里按 id 升序领，先声明的先跑。
         """
         keys = tuple(dict.fromkeys(str(key) for key in task_keys or ()))
         if not self.enabled or not keys:
             return None
+        ahead = tuple(dict.fromkeys(str(key) for key in first or ())) or ("",)
         marks = ",".join("?" * len(keys))
         moment = stamp()
         with self.database.write_transaction(notify=False) as connection:
             row = connection.execute(
                 f"SELECT id FROM task_run WHERE followup_key IS NOT NULL "
-                f"AND status='pending' AND task_key IN ({marks}) ORDER BY id LIMIT 1",
-                keys).fetchone()
+                f"AND status='pending' AND task_key IN ({marks}) "
+                f"ORDER BY task_key IN ({','.join('?' * len(ahead))}) DESC, id LIMIT 1",
+                (*keys, *ahead)).fetchone()
             if row is None:
                 return None
             run_id = int(row["id"])
@@ -649,8 +660,8 @@ class TaskRunStore:
     def prune(self, task_key: str, keep: int = DEFAULT_KEEP) -> int:
         """每个 task_key 只留最近 `keep` 条终态记录，返回删掉多少条。
 
-        活跃行一条都不动：它们不是历史。阈值用 `LIMIT 1 OFFSET keep` 取「第 keep+1 新
-        的那条 id」，不用窗口函数——这张表上要的只是一个分界点。
+        活跃任务保留，指向已清退历史的父任务和根任务关联由删除触发器置空。
+        阈值用 `LIMIT 1 OFFSET keep` 取「第 keep+1 新的那条 id」。
         """
         if not self.enabled or keep < 0:
             return 0
@@ -719,11 +730,16 @@ class TaskRunStore:
         一页数的是顶层那几轮，它们已结束的后继跟着一起回来：一轮拉取派出二十条后继时，
         按行数翻页会让后继占满这一页、把派出它们的那一轮挤到下一页，页面上就只剩一串
         没有父卡片可挂的散行。父行已被 `prune` 掉的后继自己算顶层。
+
+        后继还在排或在跑的那几轮不算「完成」，由 `active_parents` 单独交给「正在进行」：
+        自动修复每分钟派一批，它们留在这里会占满第一页，「最近完成」就只剩一个「加载更早」。
         """
         size = max(1, min(int(limit), 500))
         marks = ",".join(f"'{name}'" for name in TERMINAL_STATUSES)
+        active = ",".join(f"'{name}'" for name in ACTIVE_STATUSES)
         where = (f"t.status IN ({marks}) AND (t.parent_run_id IS NULL OR NOT EXISTS "
-                 "(SELECT 1 FROM task_run p WHERE p.id=t.parent_run_id))")
+                 "(SELECT 1 FROM task_run p WHERE p.id=t.parent_run_id)) AND NOT EXISTS "
+                 f"(SELECT 1 FROM task_run c WHERE c.parent_run_id=t.id AND c.status IN ({active}))")
         values: list[object] = []
         if before is not None:
             where += " AND (t.finished_at<? OR (t.finished_at=? AND t.id<?))"
@@ -749,6 +765,38 @@ class TaskRunStore:
                 f"AND id NOT IN ({holes}) AND status IN ({marks}) ORDER BY id",
                 [*ids, *ids]).fetchall()
         return [_row(row) for row in rows]
+
+    def active_parents(self) -> list[TaskRun]:
+        """自己已经结束、派出的后继还有在排或在跑的那几轮，新的在前。"""
+        if not self.enabled:
+            return []
+        marks = ",".join(f"'{name}'" for name in ACTIVE_STATUSES)
+        with self.database.read_connection() as connection:
+            rows = connection.execute(
+                f"SELECT {_COLUMNS} FROM task_run WHERE id IN (SELECT DISTINCT parent_run_id FROM task_run "
+                f"WHERE status IN ({marks}) AND parent_run_id IS NOT NULL) AND status NOT IN ({marks}) "
+                "ORDER BY id DESC").fetchall()
+        return [_row(row) for row in rows]
+
+    def followup_counts(self, parent_ids) -> dict[int, dict[str, int]]:
+        """这几轮直接派出的后继按状态各有几条。
+
+        活动页只取得到最近几十条后继，一轮派出上千条时，父任务还算不算在进行、
+        做到第几条，要靠这份计数回答，不能数页面上那几行。
+        """
+        ids = sorted({int(run_id) for run_id in parent_ids})
+        if not self.enabled or not ids:
+            return {}
+        counts: dict[int, dict[str, int]] = {}
+        with self.database.read_connection() as connection:
+            for offset in range(0, len(ids), 900):
+                batch = ids[offset:offset + 900]
+                for parent, status, count in connection.execute(
+                        f"SELECT parent_run_id, status, count(*) FROM task_run "
+                        f"WHERE parent_run_id IN ({','.join('?' * len(batch))}) GROUP BY parent_run_id, status",
+                        batch):
+                    counts.setdefault(int(parent), {})[str(status)] = int(count)
+        return counts
 
     # -- 调用方的便利入口 --------------------------------------------------
 

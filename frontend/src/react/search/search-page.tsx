@@ -12,7 +12,10 @@ import { useLayoutEffect, useReducer, useRef, type MouseEvent, type ReactNode } 
 import { avatarInner } from '@peach/card-art';
 
 import { apiGet, apiSend } from '../../api';
+import { entityDisplayName } from '../../core/entity-names';
+import { useEntityNames } from '../use-entity-names';
 import { TabCount } from '../components/board-tabs';
+import { PillTabList } from '../components/pill-tabs';
 import {
   menuModel, shufflePicks, SUGGEST_DEBOUNCE, SUGGEST_EACH, SUGGEST_ONE_KIND, SUGGEST_PROFILE_KINDS, fold,
   type MenuModel, type MenuSection, type SearchApi, type SearchOption, type SearchProps, type SuggestCard,
@@ -20,6 +23,7 @@ import {
 } from './search';
 
 interface Store {
+  dismissed: boolean;
   history: string[];
   pool: string[];
   poolRequest: number;
@@ -44,7 +48,7 @@ interface Store {
 }
 
 const emptyStore = (): Store => ({
-  history: [], pool: [], poolRequest: 0, recommendations: [], recommendationRequest: 0, query: '', picks: [], suggestFor: '', groups: [], tabs: [],
+  dismissed: false, history: [], pool: [], poolRequest: 0, recommendations: [], recommendationRequest: 0, query: '', picks: [], suggestFor: '', groups: [], tabs: [],
   suggestRequest: 0, asked: '', timer: 0, kind: '', active: -1, reveal: false, rewind: false,
 });
 
@@ -79,11 +83,13 @@ export function SearchPage(props: SearchProps) {
     const onStart = () => latest.current.helpers.composing();
     const onKey = (event: KeyboardEvent) => op.key(event);
     const onFocus = () => op.focus();
+    const onClick = () => { if (s.dismissed) op.focus() };
     input.addEventListener('input', onInput);
     input.addEventListener('compositionend', onInput);
     input.addEventListener('compositionstart', onStart);
     input.addEventListener('keydown', onKey);
     input.addEventListener('focus', onFocus);
+    input.addEventListener('click', onClick);
     const api: SearchApi = { close: op.close };
     latest.current.expose(api);
     return () => {
@@ -92,6 +98,7 @@ export function SearchPage(props: SearchProps) {
       input.removeEventListener('compositionstart', onStart);
       input.removeEventListener('keydown', onKey);
       input.removeEventListener('focus', onFocus);
+      input.removeEventListener('click', onClick);
       clearTimeout(s.timer);
       s.recommendationRequest++;
       latest.current.expose(null);
@@ -214,6 +221,7 @@ function createOps(props: () => SearchProps, s: Store, menu: () => HTMLElement |
 
   const isOpen = () => { const el = menu(); return !!el && !el.hidden };
   const close = () => {
+    s.dismissed = true;
     s.recommendationRequest++;
     const el = menu();
     if (el) props().helpers.dismiss(el);
@@ -222,6 +230,7 @@ function createOps(props: () => SearchProps, s: Store, menu: () => HTMLElement |
   };
   /** 按此刻的输入与手上的数据画一遍：有东西就掀开，没有就收起。推荐每画一次洗一次。 */
   const paint = () => {
+    if (s.dismissed) return;
     s.query = input().value.trim();
     s.picks = s.query ? [] : shufflePicks(s.pool, readHistory());
     s.active = -1;
@@ -338,10 +347,12 @@ function createOps(props: () => SearchProps, s: Store, menu: () => HTMLElement |
   };
   const onInput = (event: InputEvent) => {
     if (event.isComposing) return;
+    s.dismissed = false;
     props().helpers.typed(input());
     refresh();
   };
   const focus = () => {
+    s.dismissed = false;
     void loadRecommendations();
     void Promise.all([loadHistory(), loadPool()]).then(() => {
       if (!focused()) return;
@@ -362,16 +373,17 @@ function Tabs({ tabs, kind, onPick, wire }: {
   useLayoutEffect(() => { wire(row.current) }, [wire, tabs]);
   const tab = (k: string, label: string, total?: number) => (
     <button key={k || 'all'} type="button" role="tab" data-suggest-kind={k} aria-selected={kind === k}
+      data-pill-selected={kind === k ? '' : undefined} data-pill-variant="gray"
       // 页签选择保留输入焦点，便于继续输入与使用方向键。
       onMouseDown={(event) => event.preventDefault()} onClick={() => onPick(k)}>
       {label}{total ? <TabCount value={total} /> : null}
     </button>
   );
   return (
-    <div ref={row} data-search-tabs="" role="tablist" aria-label="Suggestions by type">
-      {tab('', 'All')}
+    <PillTabList ref={row} data-search-tabs="" data-pill-nav="" role="tablist" aria-label="按种类看补全">
+      {tab('', '全部')}
       {tabs.map((t) => tab(t.kind, t.label, t.total))}
-    </div>
+    </PillTabList>
   );
 }
 
@@ -381,6 +393,7 @@ function Row({ entry, active, helpers, onPick, onPeek, onRemove }: {
   entry: SearchOption; active: boolean; helpers: SearchProps['helpers'];
   onPick(entry: SearchOption): void; onPeek(card: SuggestCard): void; onRemove(value: string): Promise<void>;
 }) {
+  useEntityNames();
   const shared = {
     'data-search-value': entry.value, 'data-active': active ? '' : undefined,
     onClick: (event: MouseEvent) => {
@@ -433,8 +446,8 @@ function Row({ entry, active, helpers, onPick, onPeek, onRemove }: {
     return (
       <div data-search-option="person" data-open-entity={opens} {...shared} onMouseDown={keep}>
         <Face item={item} kind={kind} />
-        <button type="button" data-search-person="" data-search-meta="" aria-label={`View ${item.value}`}>
-          <span data-search-name=""><span>{item.value}</span>{matched}</span>
+        <button type="button" data-search-person="" data-search-meta="" aria-label={`查看 ${entityDisplayName(kind, item.value)}`}>
+          <span data-search-name=""><span>{entityDisplayName(kind, item.value)}</span>{matched}</span>
           <span data-search-sub="">{sub}</span>
         </button>
         {works.length ? (

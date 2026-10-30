@@ -15,7 +15,7 @@ describe('宽封套与来源封面', () => {
         const page = await context.newPage();
         const remote = 'https://covers.example.test/wide.svg';
         const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="800" height="438"><rect width="428" height="438" fill="#777"/><rect x="428" width="372" height="438" fill="#ccc"/></svg>';
-        await page.route(remote, route => route.fulfill({ contentType: 'image/svg+xml', body: svg }));
+        await page.route('**/cover-image?code=*', route => route.fulfill({ contentType: 'image/svg+xml', body: svg }));
         await page.route('**/jav-cover?code=MIDA-085', route => route.fulfill({ contentType: 'image/svg+xml', body: svg }));
         await page.route('**/cover?code=EXM-006*', route => route.fulfill({ contentType: 'image/svg+xml', body: svg }));
         await page.route('**/cover?code=MDVR-276*', route => route.fulfill({ contentType: 'image/svg+xml',

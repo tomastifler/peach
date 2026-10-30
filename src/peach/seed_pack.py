@@ -1,4 +1,4 @@
-"""实体事实的私有种子包：只给已有实体填空（ADR-0073、ADR-0075、ADR-0111）。
+"""随应用分发的实体事实种子包（ADR-0073、ADR-0075、ADR-0117）。
 
 导出的是女优、厂牌与事务所名下**能在公开站点上重新查到**的文字事实：别名、站上编号、
 官网与社媒链接、女优资料表、所属事务所、label 归哪家片商。不导任何图像字节、本机路径、
@@ -16,21 +16,22 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from . import link_status
 from . import seed_corrections, seed_validation
-from .entities import _ref_is_free, normalize_entity_name
+from .entities import _ref_is_free, normalize_entity_name, prefer_entity_name, rewrite_flat_projection
 from .minnano_av import PROFILE_COLUMNS
 from .performer_profiles import read_profile, write_profile
-from .config import STATE_DIR
+from .config import PROJECT_ROOT
 from .social_links import canonical_url
 
 FORMAT = 1
 SOURCE = "auto:seed"
-DEFAULT_PACK = STATE_DIR / "seed" / "entities.json"
+DEFAULT_PACK = PROJECT_ROOT / "resources" / "seed" / "entities.json"
 #: 导出的实体种类。创作者、系列与标签是本机馆藏的投影，不在这里。
 KINDS = ("performer", "studio", "agency")
 #: 不导的站上编号：Stash 的 id 是那台机器上另一份数据库的行号。
@@ -401,6 +402,8 @@ def _land_pointer(connection, entity_id: int, item: dict, field: str, batch: str
 
 def _land_one(connection, entity_id: int, item: dict, version: str, batch: str, stamp: str, report: dict, *, revision: bool = False) -> None:
     report["aliases"] += _land_aliases(connection, entity_id, item, version, batch, report)
+    if _land_name(connection, entity_id, item, batch):
+        report["names"] = report.get("names", 0) + 1
     report["refs"] += _land_refs(connection, entity_id, item, batch, stamp)
     report["links"] += _land_links(connection, entity_id, item, batch, stamp)
     _land_profile(connection, entity_id, item, batch, report, revision=revision)
@@ -408,9 +411,81 @@ def _land_one(connection, entity_id: int, item: dict, version: str, batch: str, 
         _land_pointer(connection, entity_id, item, field, batch, stamp, report)
 
 
+def _land_name(connection, entity_id: int, item: dict, batch: str) -> bool:
+    """唯一匹配人物的中文规范名；保留人工选择、非登记写法与身份冲突。"""
+    target = str(item["name"])
+    if item["kind"] != "performer" or not re.fullmatch(r"[一-鿿·]+", target):
+        return False
+    row = connection.execute("SELECT canonical_name,metadata_json FROM entity WHERE id=?", (entity_id,)).fetchone()
+    current = str(row[0])
+    if current == target:
+        return False
+    try:
+        metadata = json.loads(row[1] or "{}")
+    except (TypeError, ValueError):
+        return False
+    if not isinstance(metadata, dict):
+        return False
+    preference = metadata.get("name_preference") or {}
+    if not isinstance(preference, dict) or str(preference.get("source", "")).startswith(("user:", "review:")):
+        return False
+    manual = connection.execute("SELECT 1 FROM entity_alias WHERE entity_id=? AND source='user:preferred-name' LIMIT 1", (entity_id,)).fetchone()
+    names = {normalize_entity_name(a["alias"]) for a in item.get("aliases", [])
+             if float(a.get("confidence", 1.0)) >= 0.9}
+    if manual or normalize_entity_name(current) not in names:
+        return False
+    known = connection.execute("SELECT 1 FROM entity_alias WHERE entity_id=? AND normalized_alias=?", (entity_id, normalize_entity_name(target))).fetchone()
+    taken = connection.execute("SELECT 1 FROM entity WHERE kind='performer' AND normalized_name=? AND id<>? UNION SELECT 1 FROM entity_alias a JOIN entity e ON e.id=a.entity_id WHERE e.kind='performer' AND a.normalized_alias=? AND e.id<>?", (normalize_entity_name(target), entity_id, normalize_entity_name(target), entity_id)).fetchone()
+    if not known or taken:
+        return False
+    return prefer_entity_name(connection, entity_id, target, source=batch)["changed"]
+
+
 def written(report: dict) -> int:
     """这次导入动了多少行：补上的加换掉的。"""
-    return sum(int(report.get(key, 0)) for key in (*COUNT_KEYS[1:], "refreshed", "withdrawn"))
+    return sum(int(report.get(key, 0)) for key in (*COUNT_KEYS[1:], "refreshed", "withdrawn", "names"))
+
+
+def planned_names(connection, source: str, batch: str = "") -> list[dict]:
+    """当前仍归指定种子批次拥有、且有原名快照的规范名。"""
+    if source != SOURCE:
+        return []
+    found = []
+    for entity_id, name, raw in connection.execute(
+            "SELECT id,canonical_name,metadata_json FROM entity WHERE kind='performer'"):
+        try:
+            metadata = json.loads(raw or "{}")
+        except (TypeError, ValueError):
+            continue
+        record = metadata.get("name_preference") if isinstance(metadata, dict) else None
+        if (isinstance(record, dict) and _ours(record.get("source"))
+                and (not batch or record["source"] == batch)
+                and record.get("name") == name and record.get("previous_name")):
+            found.append({"entity_id": entity_id, "entity": name, **record})
+    return found
+
+
+def revert_names(connection, names: list[dict]) -> int:
+    """按原名快照还原规范名和作品署名，保留后续人工选择。"""
+    changed = 0
+    for item in names:
+        entity_id, previous = item["entity_id"], item["previous_name"]
+        row = connection.execute("SELECT canonical_name,metadata_json FROM entity WHERE id=?", (entity_id,)).fetchone()
+        metadata = json.loads(row[1] or "{}") if row else {}
+        if not row or metadata.get("name_preference", {}) != {k: v for k, v in item.items() if k not in {"entity_id", "entity"}}:
+            continue
+        taken = connection.execute("SELECT 1 FROM entity WHERE kind='performer' AND normalized_name=? AND id<>?", (normalize_entity_name(previous), entity_id)).fetchone()
+        if taken:
+            raise ValueError("原规范名已被其他实体占用，未撤回中文名")
+        if item.get("previous_preference") is None:
+            metadata.pop("name_preference", None)
+        else:
+            metadata["name_preference"] = item["previous_preference"]
+        connection.execute("UPDATE entity SET canonical_name=?,normalized_name=?,metadata_json=?,updated_at=? WHERE id=?",
+                           (previous, normalize_entity_name(previous), json.dumps(metadata, ensure_ascii=False), _now(), entity_id))
+        rewrite_flat_projection(connection, "performer", entity_id, row[0], previous)
+        changed += 1
+    return changed
 
 
 def land(connection: sqlite3.Connection, pack: dict) -> dict:
@@ -441,7 +516,9 @@ def _land_pack(connection: sqlite3.Connection, pack: dict) -> dict:
         report.update(withdrawn=0, withdrawal_conflicts=[])
         seed_corrections.withdraw(connection, pack, report)
     for item in pack.get("entities") or []:
-        found = matches(connection, item["identity"] if revision else item)
+        found = matches(connection, item)
+        if revision:
+            found |= matches(connection, item["identity"])
         if len(found) > 1:
             report["duplicates"].append({"kind": item["kind"], "name": item["name"],
                                          "entities": sorted(_name(connection, entity_id) for entity_id in found)})
@@ -457,6 +534,7 @@ def _land_pack(connection: sqlite3.Connection, pack: dict) -> dict:
 def plan(connection: sqlite3.Connection, pack: dict) -> dict:
     """dry-run：在只读账本的内存副本上跑一遍 `land`，交出同样的报告，本机账本一字不动。"""
     scratch = sqlite3.connect(":memory:")
+    scratch.row_factory = sqlite3.Row
     try:
         connection.backup(scratch)
         scratch.execute("PRAGMA foreign_keys=ON")

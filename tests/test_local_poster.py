@@ -13,6 +13,37 @@ from peach.local_poster import read_jpeg
 
 
 class LocalPosterTests(unittest.TestCase):
+    def test_generated_sidecar_poster_is_signed_served_and_rebuilt_when_source_changes(self):
+        from types import SimpleNamespace
+        from peach import artifact_rules, upgrade_rules
+        from peach.library_processing import _read_local_posters, _queue_local_poster
+        from peach.previews import PreviewService, PreviewUnavailable
+        from peach.repository import MediaAsset
+        generated = self.root / 'posters'
+        jobs = []
+        enqueue = lambda source, code, target: jobs.append((dict(id=1, name='video.mp4'), source, code, target))
+        def generate():
+            jobs.clear()
+            _queue_local_poster(self.root / 'video.mp4', '1_4', generated, posters=[self.source],
+                                enqueue=enqueue, generated=True)
+            return _read_local_posters(jobs, dict(speed_mode='standard', covers=0), update=lambda **_: None,
+                issue=lambda *_args, **_kwargs: self.fail('配套图片应可读取'), generated_root=generated)
+        self.assertEqual(generate(), set())
+        poster = generated / '1_4.jpg'
+        self.assertTrue(artifact_rules.current(poster, upgrade_rules.LOCAL_POSTERS, source_required=True))
+        service = PreviewService(SimpleNamespace(media_asset=lambda _: MediaAsset(id=1, path=None, snapshot_path=None)),
+            None, self.root / 'snapshots', generated, self.root / 'avatars', self.root / 'logos')
+        self.assertEqual(service.poster(1), poster)
+        generate()
+        self.assertEqual(jobs, [])
+        Image.new('RGB', (24, 36), 'red').save(self.source)
+        with self.assertRaises(PreviewUnavailable):
+            service.poster(1)
+        generate()
+        self.assertEqual(len(jobs), 1)
+        self.assertEqual(service.poster(1), poster)
+        self.assertTrue(self.source.is_file())
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -127,7 +158,7 @@ class LocalPosterTests(unittest.TestCase):
                 issue=lambda *_args, **_kwargs: self.fail('图片应可读取'))
         self.assertEqual((state['covers'], failed), (1, set()))
 
-    def test_mixed_sources_isolate_only_the_cloud_picture(self):
+    def test_mixed_sources_isolate_every_picture(self):
         from peach.library_processing import _read_local_posters
         jobs = [(dict(id=index, name=f'{index}.mp4', location=location), self.source, str(index),
                  self.root / 'covers' / f'{index}.jpg') for index, location in enumerate(('local', 'pikpak'))]
@@ -136,4 +167,4 @@ class LocalPosterTests(unittest.TestCase):
             failed = _read_local_posters(jobs, state, update=lambda **_: None,
                 issue=lambda *_args, **_kwargs: self.fail('图片应可读取'))
         self.assertEqual((state['covers'], failed), (2, set()))
-        self.assertEqual(run.call_count, 1)
+        self.assertEqual(run.call_count, 2)

@@ -158,7 +158,9 @@ def _read_moov(handle, limit: int) -> bytes | None:
 
 def _moov_of(path: Path | str, probe_bytes: int) -> bytes | None:
     try:
-        with open(path, "rb") as handle:
+        from .smb_media import resolve
+        remote = resolve(path)
+        with (remote.open() if remote is not None else open(path, "rb")) as handle:
             return _read_moov(handle, probe_bytes)
     except OSError:
         return None

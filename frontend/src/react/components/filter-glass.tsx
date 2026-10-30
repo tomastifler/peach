@@ -3,23 +3,25 @@
  * 料（漂移的两团、斜光、内嵌边与落影）由 `web/board.css` 的 `[data-glass-pane]` 一处给，
  * 几何、饱和度与文字色在 `../styles.css` 的 `[data-filter-glass]`，高对比与减少透明度的回退
  * 也在那一条上。吸到顶栏下沿那一刻由 `use-stuck.ts` 标 `data-stuck`，影换成抬起来那一档。
- * 胶囊键 30px 高、透明底、一圈 `--glass-low`，
+ * 胶囊键取紧凑档（32px）、透明底、一圈 `--glass-low`，
  * 悬停换成 `--glass-rim` 边加 `--glass-pick-fill` 底——玻璃上的键不是 BoardUI 那种实心按钮。 */
 import { useRef, type ReactNode, type RefObject } from 'react';
 import { cx } from '@/utils/cx';
 import { IconButton, type IconButtonProps } from '@/components/base/buttons/icon-button';
 import { spinnerHtml } from '@peach/legacy/ui';
 
+import { GlassDrift } from './glass-drift';
 import { useStuck } from './use-stuck';
 import { useHorizontalScroller } from './use-horizontal-scroller';
+import './filter-glass.css';
 
 const BusyIcon = ({ className }: { className?: string }) => <span aria-hidden className={className}
   dangerouslySetInnerHTML={{ __html: spinnerHtml('Processing') }} />;
 
-/** 筛选栏动作使用 30px 尺寸和蓝色动作表面。 */
-export function FilterIconButton({ label, icon, busy = false, onPress, ...props }:
-  Omit<IconButtonProps, 'aria-label' | 'size' | 'onClick'> & { label: string; busy?: boolean; onPress(): void }) {
-  return <IconButton {...props} data-filter-action="" size="small" icon={busy ? BusyIcon : icon}
+/** 筛选栏动作使用紧凑档（`size="small"`，32px）和蓝色动作表面。 */
+export function FilterIconButton({ label, icon, busy = false, busyStyle = 'spinner', onPress, ...props }:
+  Omit<IconButtonProps, 'aria-label' | 'size' | 'onClick'> & { label: string; busy?: boolean; busyStyle?: 'spinner' | 'strand'; onPress(): void }) {
+  return <IconButton {...props} data-filter-action="" size="small" icon={busy && busyStyle === 'spinner' ? BusyIcon : icon}
     aria-label={label} title={props.title || label} aria-busy={busy || undefined} aria-disabled={busy || undefined}
     onClick={() => { if (!busy) onPress() }} />;
 }
@@ -32,6 +34,7 @@ export function FilterGlass({ title, children }: { title: string; children: Reac
       className="sticky top-topbar z-10 mb-5.5 flex flex-wrap items-center gap-x-2.5 gap-y-2 px-4 py-2.5">
       <h3 className="mr-1 text-body-medium">{title}</h3>
       {children}
+      <GlassDrift />
     </div>
   );
 }
@@ -80,13 +83,14 @@ export function FilterGlassRows(
         className={cx('flex min-h-11.5 min-w-0 items-center gap-3 px-3 py-2', bottomClassName)}>
         {bottom}
       </div>
+      <GlassDrift />
     </div>
   );
 }
 
 /* 浮层上的筛选药丸：8px 圆角、13px 字，未选中是一圈虚线 `--glass-low`，悬停转实线；选中的
  * 线与填充归调用方（标签类型药丸取自己的类型色，见 `../styles.css` 的 `[data-tag-pill]`）。 */
-const FILTER_PILL = 'flex h-7.5 flex-none cursor-pointer items-center gap-1.75 rounded-lg border border-dashed'
+const FILTER_PILL = 'flex h-8 flex-none cursor-pointer items-center gap-1.75 rounded-lg border border-dashed'
   + ' border-(--glass-low) bg-transparent px-2.5 text-body-2-regular leading-5 whitespace-nowrap text-inherit'
   + ' outline-none hover:border-solid focus-visible:ring-2 focus-visible:ring-border-focus-ring';
 
@@ -104,7 +108,7 @@ export function FilterPill(
 
 /* 浮层上的动作键：平时一圈 `--glass-low` 细线，悬停浮起一块首页那种提亮的玻璃（料在 `../styles.css`
  * 的 `[data-glass-pill]`）。只换填充的话，浅色下那一档白压在同样发白的浮层上分不出来。 */
-const PILL = 'h-7.5 cursor-pointer rounded-full border border-(--glass-low) bg-transparent px-3'
+const PILL = 'h-8 cursor-pointer rounded-full border border-(--glass-low) bg-transparent px-3'
   + ' text-body-2-regular leading-none whitespace-nowrap text-inherit outline-none'
   + ' focus-visible:ring-2 focus-visible:ring-border-focus-ring'
   + ' aria-busy:cursor-wait aria-busy:opacity-55';

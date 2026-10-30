@@ -1,5 +1,5 @@
-"""媒体库按声明路径分组，来源与挂载仍由媒体配置管理。"""
-from pathlib import PureWindowsPath
+"""媒体库按持久身份分组，来源与挂载归存储根目录。"""
+from . import media_identity
 
 LIBRARY_ICONS = frozenset({"hard-drive", "database", "heart", "star", "tags", "115", "pikpak",
                          "heart-hand", "flame", "cherry", "gem", "crown", "shirt", "footprints",
@@ -10,25 +10,25 @@ LIBRARY_ICONS = frozenset({"hard-drive", "database", "heart", "star", "tags", "1
 
 
 def libraries(config):
+    catalog, stored = media_identity.catalog(config)
     groups = {}
-    for location, roots in config.locations.items():
-        for root in roots:
-            name = config.library_names.get(root) or PureWindowsPath(root).name or root
-            groups.setdefault(name, []).append({"location": location, "root": root})
-    icons = getattr(config, "library_icons", {})
-    return [{"id": name, "name": name, "roots": roots,
-             "icon": next((icons[item["root"]] for item in roots
-                           if icons.get(item["root"]) in LIBRARY_ICONS),
-                          roots[0]["location"] if len({item["location"] for item in roots}) == 1 else "database")}
-            for name, roots in groups.items()]
+    for root_id, root in stored.items():
+        groups.setdefault(root["library_id"], []).append({**root, "root_id": root_id})
+    return [{"id": key, "name": catalog[key]["name"], "roots": roots,
+             "icon": catalog[key].get("icon") if catalog[key].get("icon") in LIBRARY_ICONS else (
+                 roots[0]["location"] if len({item["location"] for item in roots}) == 1 else "database"),
+             "color": catalog[key].get("color", ""), "policy": catalog[key].get("policy", "") or "auto",
+             "stages": sorted(media_identity.library_stages(catalog[key]), key=media_identity.STAGES.index)}
+            for key, roots in groups.items()]
 
 
 def predicate(config, library):
     """路径边界精确匹配；未知库返回空集。"""
+    from .media_folders import path_predicate
     roots = next((row["roots"] for row in libraries(config) if row["id"] == library), [])
     terms, params = [], []
     for item in roots:
-        prefix = str(PureWindowsPath(item["root"])).rstrip("\\") + "\\"
-        terms.append("(a.location=? AND substr(a.path,1,?)=? COLLATE NOCASE)")
-        params.extend((item["location"], len(prefix), prefix))
+        clause, values = path_predicate(item["location"], item["root"])
+        terms.append(clause)
+        params.extend(values)
     return "(" + " OR ".join(terms) + ")" if terms else "0", params

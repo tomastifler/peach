@@ -77,8 +77,6 @@ FIELDS = ("entity_id", "kind", "name", "link_kind", "label", "url", "evidence",
 PORTRAIT_FIELDS = ("entity_id", "kind", "name", "matched_name", "portrait_url",
                    "source", "page", "verdict")
 SOURCES = ("laoshi", "bstar", "jae", "javdb")
-#: 直连不通的来源：jae 被对端重置（`WinError 10054`），javdb 直接连接超时。
-PROXY_SOURCES = ("jae", "javdb")
 #: 压过 `--interval` 的按来源最小间隔（秒）。javdb 按出口 IP 自己封速率，实测
 #: 2026-09-04 那一轮：03:22:01 起 8 分钟取到 124 页，中位间隔 1.23 秒、最快 0.76 秒，
 #: 逐分钟成功数 44 / 15 / 6 / 0 / 0 / 0 / 7 / 50 / 2，之后整站每条路径都回 403，
@@ -846,8 +844,7 @@ def run(args) -> int:
     sources = SOURCES if args.source == "all" else (args.source,)
     for source in sources:
         interval = max(args.interval, SOURCE_INTERVAL.get(source, 0.0))
-        site = Site(args.cache_dir / source, interval, args.timeout, refresh=args.refresh,
-                    via_proxy=source in PROXY_SOURCES)
+        site = Site(args.cache_dir / source, interval, args.timeout, refresh=args.refresh)
         collector = COLLECTORS.get(source)
         try:
             site_links, pages = (collector(site, args.limit) if collector

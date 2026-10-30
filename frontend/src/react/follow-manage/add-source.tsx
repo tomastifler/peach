@@ -9,7 +9,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, RefObject } from 'react';
 import { RiFilter3Line, RiSearchLine } from '@remixicon/react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Dialog, Popover } from 'react-aria-components';
+import { Popover } from 'react-aria-components';
 
 import { Button } from '@/components/base/buttons/button';
 import { Checkbox } from '@/components/base/checkbox/checkbox';
@@ -25,6 +25,7 @@ import { cardClass } from '../components/card';
 import { LoadingDots } from '../components/loading-dots';
 import { Note } from '../components/note';
 import { TaskProgress } from '../components/task-progress';
+import { SelectionPopover } from '../components/selection-popover';
 import { busyProps } from '../settings/use-action';
 import { ExternalLink, FieldLabel, Help } from '../settings/section';
 import {
@@ -35,20 +36,22 @@ import {
 import { SourceIcon } from './source-view';
 
 const MENU_ROW = cx(MENU_ITEM, MENU_ITEM_INTERACTIVE, 'text-body-2-medium');
-const PLACEHOLDER = 'Paste a source link, or enter a creator name or id…';
+const PLACEHOLDER = '粘贴来源链接，或输入创作者名、id…';
+const TITLE = '添加创作者关注';
 // 索引下载的提醒只在真按名字查时出现；常驻成一句说明就是噪音。
-const BY_NAME_HINT = 'Searching… (the first search by name downloads the creator index, which can take tens of seconds)';
-const BY_LINK_HINT = 'Identifying…';
-const NO_CANDIDATE = 'No source found on the site';
+const BY_NAME_HINT = '查找中（首次按名字查要下载创作者索引，可能几十秒）';
+const BY_LINK_HINT = '识别中';
+const NO_CANDIDATE = '站内没有查到来源';
 
 export interface AddSourceProps {
   data: FollowData;
   credentials: CredentialData;
   readOnly: boolean;
   toast(message: string): void;
-  /** 去凭据那一栏配这个站。候选里的「需要配置凭据」按下去就是换页签。 */
-  openCredentials(): void;
 }
+
+/** 凭据配在「来源与订阅」设置里；候选行的凭据链接指到那里。 */
+const CREDENTIALS_PATH = '/settings/subscriptions';
 
 /** 候选的身份是它的地址：同一次查找里同一个地址只会出现一次。 */
 const candidateKey = (row: number, candidate: ResolveCandidate) => `${row}:${candidate.url}`;
@@ -116,14 +119,12 @@ function SuggestMenu(
 /** 来源筛选：列出全部可关注的站，默认全选。取消勾选的站，其查找结果行不显示、也不进
  *  「添加选中」。 */
 function SourceFilter(
-  { credentials, hidden, onHidden, openCredentials }:
+  { credentials, hidden, onHidden }:
   {
     credentials: CredentialData; hidden: ReadonlySet<string>;
-    onHidden(next: Set<string>): void; openCredentials(): void;
+    onHidden(next: Set<string>): void;
   },
 ) {
-  const trigger = useRef<HTMLButtonElement>(null);
-  const [open, setOpen] = useState(false);
   const rows = (credentials.providers || []).filter((row) => row.followable);
   const shown = rows.filter((row) => !hidden.has(row.provider_label)).length;
   const label = shown === rows.length ? 'All sources' : `${shown}/${rows.length} sources`;
@@ -132,44 +133,16 @@ function SourceFilter(
     if (on) next.delete(provider); else next.add(provider);
     onHidden(next);
   };
-  return (
-    <>
-      <Button ref={trigger} variant="secondary" leadingIcon={RiFilter3Line}
-        aria-haspopup="dialog" aria-expanded={open} aria-label={label}
-        onClick={() => setOpen(true)}>{label}</Button>
-      <Popover triggerRef={trigger} isOpen={open} onOpenChange={setOpen}
-        placement="bottom end" offset={4} className={MENU_POPOVER_SURFACE}>
-        <Dialog aria-label="Source filter" className="flex w-64 flex-col gap-1 outline-none">
-          {rows.length ? (
-            <div className="flex items-center gap-2 pb-1">
-              <Button variant="ghost" size="small"
-                onClick={() => onHidden(new Set())}>Select all</Button>
-              <Button variant="ghost" size="small"
-                onClick={() => onHidden(new Set(rows.map((row) => row.provider_label)))}>Select none</Button>
-            </div>
-          ) : <Help>No sources available</Help>}
-          {rows.map((row) => {
-            const needsCredential = row.requirement === 'required'
-              && (!row.present || (row.missing || []).length > 0);
-            return (
-              <div key={row.provider} className="flex items-center gap-2">
-                <Checkbox isSelected={!hidden.has(row.provider_label)}
-                  onChange={(on) => toggle(row.provider_label, on)}>
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <SourceIcon provider={row.provider} />{row.provider_label}
-                  </span>
-                </Checkbox>
-                {needsCredential ? (
-                  <Button variant="ghost" size="xs" className="ml-auto"
-                    onClick={() => { setOpen(false); openCredentials() }}>Credentials required</Button>
-                ) : null}
-              </div>
-            );
-          })}
-        </Dialog>
-      </Popover>
-    </>
-  );
+  return <SelectionPopover label="来源筛选" triggerLabel={label} leadingIcon={RiFilter3Line}
+    empty="暂无可用来源"
+    items={rows.map(row => ({ id: row.provider_label, selected: !hidden.has(row.provider_label),
+      label: <span className="flex min-w-0 items-center gap-1.5"><SourceIcon provider={row.provider} />{row.provider_label}</span> }))}
+    onChange={toggle}
+    actions={[
+      { label: '全选', disabled: !rows.length, onPress: () => onHidden(new Set()) },
+      { label: '全不选', disabled: !rows.length, onPress: () => onHidden(new Set(rows.map(row => row.provider_label))) },
+      { label: '凭据设置', href: CREDENTIALS_PATH },
+    ]} />;
 }
 
 /** 一条查找结果。候选逐条列，已经关注的列出来但不许再勾——否则人以为没查到。 */
@@ -219,7 +192,7 @@ function PickRow(
   );
 }
 
-export function AddSource({ data, credentials, readOnly, toast, openCredentials }: AddSourceProps) {
+export function AddSource({ data, credentials, readOnly, toast }: AddSourceProps) {
   const [line, setLine] = useState('');
   const [composing, setComposing] = useState(false);
   /** 这一趟查的是什么。等待提示使用已提交的词，输入框可继续编辑并保留重试内容。 */
@@ -349,8 +322,8 @@ export function AddSource({ data, credentials, readOnly, toast, openCredentials 
 
   return (
     /* 旧 `.followmanage .fmain>.fsec`：一块分区就是一张填充卡，标题在卡里。 */
-    <div className={cardClass({ padding: 'none', className: 'flex flex-col gap-4 px-6 py-5 max-sm:px-4' })}>
-      <h3 className="text-title-2-medium text-text-primary">Add follow</h3>
+    <section aria-label={TITLE} className={cardClass({ padding: 'none', className: 'flex flex-col gap-4 px-6 py-5 max-sm:px-4' })}>
+      <h3 className="text-title-2-medium text-text-primary">{TITLE}</h3>
 
       <div className="flex flex-wrap items-end gap-2">
         {/* 焦点离开的是字段和下拉两处才收，不是离开输入框就收：下拉里的每一条都是真的按钮，
@@ -371,8 +344,7 @@ export function AddSource({ data, credentials, readOnly, toast, openCredentials 
               busy={suggesting} onPick={search} onClose={closeMenu} />
           ) : null}
         </div>
-        <SourceFilter credentials={credentials} hidden={hidden} onHidden={setHidden}
-          openCredentials={openCredentials} />
+        <SourceFilter credentials={credentials} hidden={hidden} onHidden={setHidden} />
         <Button variant="primary" disabled={readOnly || !line.trim()}
           {...busyProps(running || resolve.isPending)} onClick={() => search(line)}>Find</Button>
       </div>
@@ -396,11 +368,11 @@ export function AddSource({ data, credentials, readOnly, toast, openCredentials 
               }} />
           ))}
           <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" size="small"
+              onClick={() => dismiss()}>关闭</Button>
             <Button variant="primary" size="small" disabled={readOnly || !picked.length}
               {...busyProps(register.isPending)}
-              onClick={() => register.mutate(picked)}>{`Add selected (${picked.length})`}</Button>
-            <Button variant="secondary" size="small"
-              onClick={() => dismiss()}>Close</Button>
+              onClick={() => register.mutate(picked)}>{`添加选中（${picked.length}）`}</Button>
             {register.isPending ? (
               <span role="status" className="text-body-2-regular text-text-secondary">
                 {`Adding… ${added}/${picked.length}`}
@@ -420,6 +392,6 @@ export function AddSource({ data, credentials, readOnly, toast, openCredentials 
           ))}
         </div>
       ) : null}
-    </div>
+    </section>
   );
 }

@@ -1,20 +1,29 @@
 body[data-folder-browse] #main{display:grid;grid-template-columns:224px minmax(0,1fr);column-gap:24px;align-items:start}
 body[data-folder-browse] #main>:not(#catalogFoldersTree){grid-column:2;min-width:0}
 body[data-folder-browse] #catalogFoldersTree{grid-column:1;grid-row:1 / span 20;position:sticky;top:var(--folder-sticky-top,calc(var(--topH) + 16px));min-width:0}
-body[data-folder-browse] #catalogFoldersTree .folder-tree-scroller{max-height:calc(100dvh - var(--folder-sticky-top,calc(var(--topH) + 16px)) - 72px)}
+body[data-folder-browse] #catalogFoldersTree .catalog-folder-navigation{max-height:var(--folder-available-height,calc(100dvh - var(--folder-sticky-top,calc(var(--topH) + 16px)) - 16px))}
+body[data-folder-browse] #catalogFoldersTree .folder-tree-scroller{max-height:none}
 #catalogFolderHeader{margin-bottom:20px}
 .catalog-folder-heading{display:flex;min-width:0;flex-direction:column;gap:12px}
 .folder-scope-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .folder-children{display:flex;flex-wrap:wrap;gap:4px}
 .folder-children>button{max-width:100%}
+.entity-folder-workspace[data-folder-browse]{display:grid;grid-template-columns:224px minmax(0,1fr);gap:24px;align-items:start}
+.entity-folder-workspace>[data-folder-tree-host]{position:sticky;top:var(--folder-sticky-top);min-width:0}
+.entity-folder-workspace .catalog-folder-navigation{max-height:var(--folder-available-height)}
+[data-folder-header-host]{margin-bottom:20px}
 .folder-crumb-name{display:block;max-width:180px;overflow:hidden;text-overflow:ellipsis}
-.folder-tree-scroller{max-height:calc(100dvh - var(--topH) - 124px);overflow:auto;overscroll-behavior:contain}
+.folder-tree-scroller{min-height:0;max-height:calc(100dvh - var(--topH) - 124px);overflow:auto;overscroll-behavior:contain;scroll-padding-block:4px}
+.folder-tree-frame>[data-overlay-track="y"]{translate:-8px 0;overflow:hidden}
+.folder-tree-frame>[data-overlay-track="y"] [data-overlay-thumb]{transition-property:width}
 .folder-drawer-trigger{display:none}
-.peach-react button[data-folder-mode-toggle]{width:30px;height:30px;padding:0;border:0;border-radius:var(--control-radius);background:transparent;box-shadow:none;color:color-mix(in srgb,var(--glass-text) 60%,transparent)}
+.peach-react button[data-folder-mode-toggle]{width:var(--control-h-compact);height:var(--control-h-compact);padding:0;border:0;border-radius:var(--control-radius);background:transparent;box-shadow:none;color:color-mix(in srgb,var(--glass-text) 60%,transparent)}
 .peach-react button[data-folder-mode-toggle]:is(:hover,[aria-pressed="true"]){color:var(--glass-text)}
 .peach-react button[data-folder-mode-toggle][aria-pressed="true"]{background:linear-gradient(180deg,var(--glass-sheen),transparent 62%),var(--glass-pick-fill);box-shadow:inset 0 0 0 1px var(--glass-rim),var(--glass-pick-shadow)}
 .peach-react button[data-folder-mode-toggle] svg{fill:currentColor;stroke:none;width:16px;height:16px}
 @media(max-width:1100px){
+  .entity-folder-workspace[data-folder-browse]{display:block}
+  .entity-folder-workspace>[data-folder-tree-host]{display:none}
   body[data-folder-browse] #main{display:block}
   body[data-folder-browse] #catalogFoldersTree{display:none}
   .folder-drawer-trigger{display:inline-flex}

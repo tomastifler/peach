@@ -15,12 +15,13 @@ import os
 import sqlite3
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import closing, redirect_stdout
 from pathlib import Path, PureWindowsPath
 from unittest.mock import patch
 
-from peach import scan
+from peach import catalog_rules, scan
 from peach.migrations import upgrade
+from support.web import route_client
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATIONS = ROOT / "migrations"
@@ -73,8 +74,24 @@ class WindowsShapeTests(_ScanCase):
         for path in rows:
             self.assertTrue(Path(path).is_file(), path)
 
+    def test_scan_isolates_shortcuts_without_removing_files_or_media_sidecars(self):
+        ad = self.media / '点击进入.url'
+        ad.write_bytes(b'link')
+        video = self.media / 'ABC-123.mp4'
+        video.write_bytes(b'video')
+        (self.media / 'ABC-123.nfo').write_text('<movie/>', encoding='utf-8')
+        kwargs = dict(declared_roots={'local': (str(self.media),)}, windows=True)
+        first, _ = self._scan(str(self.media), **kwargs)
+        second, _ = self._scan(str(self.media), **kwargs)
+        self.assertEqual((first.junk_isolated, second.junk_isolated), (1, 0))
+        self.assertTrue(ad.is_file())
+        with closing(sqlite3.connect(self.db)) as connection:
+            self.assertEqual(connection.execute('SELECT disposal,disposal_reason FROM asset WHERE path=?',
+                                               (str(ad),)).fetchone(), ('trash', 'junk'))
+            self.assertEqual(connection.execute('SELECT disposal FROM asset WHERE path=?',
+                                               (str(video),)).fetchone(), (None,))
+
     def test_scanned_video_is_visible_without_a_thumbnail_filter(self):
-        from support.web import route_client
         from peach.api import create_app
         from peach.config import PeachSettings
         self._scan(str(self.media), declared_roots={"local": (str(self.media),)}, windows=True)
@@ -105,6 +122,154 @@ class WindowsShapeTests(_ScanCase):
 
 class PosixShapeTests(_ScanCase):
     """macOS：账本里写 `R:\\media\\...`，遍历的是挂载点，读取侧按挂载表翻回去。"""
+
+    def test_file_identity_preserves_id_and_personal_fields_after_external_rename(self):
+        options = dict(declared_roots={'local': ('R:\\media',)}, mounts={'local': (self.media,)}, windows=False)
+        first, _ = self._scan('R:\\media', **options)
+        old = self.media / '创作者/sub/a.mp4'
+        with closing(sqlite3.connect(self.db)) as connection, connection:
+            asset_id = connection.execute("SELECT id FROM asset WHERE medium='video'").fetchone()[0]
+            connection.execute("UPDATE asset SET rating=5,catalog_title='人工标题' WHERE id=?", (asset_id,))
+        old.rename(self.media / 'changed.mp4')
+        second, _ = self._scan('R:\\media', **options, new_only=True)
+        self.assertEqual(second.new_ids, ())
+        with closing(sqlite3.connect(self.db)) as connection:
+            self.assertEqual(connection.execute('SELECT id,name,rating,catalog_title FROM asset WHERE medium=\'video\'').fetchall(),
+                             [(asset_id,'changed.mp4',5,'人工标题')])
+
+    def test_same_size_copy_and_hardlink_are_separate_files(self):
+        options = dict(declared_roots={'local': ('R:\\media',)}, mounts={'local': (self.media,)}, windows=False)
+        self._scan('R:\\media', **options)
+        old = self.media / '创作者/sub/a.mp4'
+        (self.media / 'copy.mp4').write_bytes(old.read_bytes())
+        os.link(old, self.media / 'hardlink.mp4')
+        result, _ = self._scan('R:\\media', **options, new_only=True)
+        self.assertEqual(len(result.new_ids), 2)
+        with closing(sqlite3.connect(self.db)) as connection:
+            self.assertEqual(connection.execute("SELECT count(*) FROM asset WHERE medium='video'").fetchone()[0], 3)
+
+    def test_same_second_scan_returns_only_exact_insertions(self):
+        options = dict(declared_roots={'local': ('R:\\media',)}, mounts={'local': (self.media,)}, windows=False)
+        with patch('peach.scan.time.strftime', return_value='2026-10-27 12:00:00'):
+            self._scan('R:\\media', **options)
+            (self.media / 'new.mp4').write_bytes(b'new-video')
+            result, _ = self._scan('R:\\media', **options, new_only=True)
+        self.assertEqual(len(result.new_ids), 1)
+        with closing(sqlite3.connect(self.db)) as connection:
+            self.assertEqual(connection.execute('SELECT name FROM asset WHERE id=?', result.new_ids).fetchone()[0], 'new.mp4')
+
+    def test_repeated_scan_in_one_second_keeps_completed_videos_out_of_the_new_queue(self):
+        from peach.library_new_assets import pending, remember
+        options = dict(declared_roots={'local': ('R:\\media',)}, mounts={'local': (self.media,)}, windows=False)
+        with patch('peach.scan.time.strftime', return_value='2026-10-27 12:00:00'):
+            self._scan('R:\\media', **options)
+            queued = pending(self.db)
+            self.assertEqual(len(queued), 1)
+            remember(self.db, completed=queued)
+            self._scan('R:\\media', **options)
+            self.assertEqual(pending(self.db), [])
+
+    def test_windows_mount_mapping_has_the_same_ledger_path_contract(self):
+        options = dict(declared_roots={'local': ('R:\\media',)}, mounts={'local': (self.media,)}, windows=True)
+        self.assertEqual(scan.walk_root_for('local', 'R:\\media\\创作者', **options), self.media / '创作者')
+        self.assertEqual(scan.ledger_root_for('local', self.media / '创作者', **options), 'R:\\media\\创作者')
+
+    def test_root_case_changes_preserve_asset_identity_and_personal_records(self):
+        options = dict(declared_roots={'local': ('R:\\media',)}, mounts={'local': (self.media,)}, windows=False)
+        self._scan('R:\\media', **options)
+        with closing(sqlite3.connect(self.db)) as connection, connection:
+            connection.execute("UPDATE asset SET rating=4,play_count=7")
+            before = list(connection.execute("SELECT id,path,rating,play_count FROM asset ORDER BY id"))
+        self._scan('r:\\MEDIA', **options)
+        with closing(sqlite3.connect(self.db)) as connection, connection:
+            self.assertEqual(list(connection.execute("SELECT id,path,rating,play_count FROM asset ORDER BY id")), before)
+
+    def test_conflicting_paths_preserve_each_record_and_allow_other_files_to_register(self):
+        paths = ('R:\\media\\copy.mp4', 'r:/MEDIA/COPY.MP4')
+        (self.media / 'copy.mp4').write_bytes(b'present')
+        with closing(sqlite3.connect(self.db)) as connection, connection:
+            for path, rating, plays, disposal in zip(paths, (2, 5), (3, 9), ('vanished', 'trash')):
+                connection.execute(
+                    'INSERT INTO asset(location,path,name,medium,size,first_seen,last_seen,rating,play_count,disposal) '
+                    "VALUES('local',?,'copy.mp4','video',99,'2000-01-01','2000-01-01',?,?,?)",
+                    (path, rating, plays, disposal))
+            before = list(connection.execute('SELECT id,path,size,rating,play_count,disposal FROM asset ORDER BY id'))
+        issues = []
+        with patch.object(scan, 'BATCH_SIZE', 1):
+            result, output = self._scan('R:\\media', declared_roots={'local': ('R:\\media',)},
+                                       mounts={'local': (self.media,)}, windows=False, onerror=issues.append)
+        self.assertEqual((result.files, result.path_conflicts, result.gone), (3, 1, 0))
+        self.assertEqual(len(result.new_ids), 2)
+        self.assertEqual(len(issues), 1)
+        self.assertIsInstance(issues[0], scan.ScanPathConflict)
+        self.assertEqual(issues[0].paths, paths)
+        self.assertEqual(issues[0].asset_ids, (1, 2))
+        self.assertIn('路径重复待复核 1 组', output)
+        with closing(sqlite3.connect(self.db)) as connection:
+            self.assertEqual(list(connection.execute(
+                'SELECT id,path,size,rating,play_count,disposal FROM asset WHERE id<=2 ORDER BY id')), before)
+            self.assertEqual(connection.execute('SELECT count(*) FROM asset').fetchone()[0], 4)
+            self.assertTrue(all(row[0] > '2000-01-01' for row in connection.execute(
+                'SELECT last_seen FROM asset WHERE id<=2')))
+
+    def test_missing_conflict_records_remain_unobserved_and_do_not_block_another_root(self):
+        (self.root / 'other').mkdir()
+        (self.root / 'other' / 'new.mp4').write_bytes(b'new')
+        with closing(sqlite3.connect(self.db)) as connection, connection:
+            for path in ('R:\\media\\missing.mp4', 'r:\\MEDIA\\MISSING.mp4'):
+                connection.execute("INSERT INTO asset(location,path,name,medium,last_seen) "
+                                   "VALUES('local',?,'missing.mp4','video','2000-01-01')", (path,))
+        options = dict(declared_roots={'local': ('R:\\media', 'S:\\other')},
+                       mounts={'local': (self.media, self.root / 'other')}, windows=False)
+        first, _ = self._scan('R:\\media', **options)
+        second, _ = self._scan('S:\\other', **options)
+        self.assertEqual((first.path_conflicts, first.gone), (1, 2))
+        self.assertEqual((second.path_conflicts, second.files, second.gone), (0, 1, 0))
+        with closing(sqlite3.connect(self.db)) as connection:
+            self.assertEqual(list(connection.execute('SELECT last_seen FROM asset WHERE id<=2')),
+                             [('2000-01-01',), ('2000-01-01',)])
+
+    def test_subtitles_do_not_choose_between_conflicting_video_records(self):
+        (self.media / 'copy.mp4').write_bytes(b'present')
+        (self.media / 'copy.srt').write_text('subtitle', encoding='utf-8')
+        options = dict(declared_roots={'local': ('R:\\media',)}, mounts={'local': (self.media,)}, windows=False)
+        self._scan('R:\\media', **options)
+        with closing(sqlite3.connect(self.db)) as connection, connection:
+            before = list(connection.execute('SELECT id,asset_id,path,pairing FROM asset_subtitle'))
+            self.assertEqual(len(before), 1)
+            connection.execute("INSERT INTO asset(location,path,name,medium) "
+                               "VALUES('local','r:\\MEDIA\\COPY.mp4','copy.mp4','video')")
+        (self.media / 'copy.en.srt').write_text('another subtitle', encoding='utf-8')
+        result, _ = self._scan('R:\\media', **options)
+        self.assertEqual(result.path_conflicts, 1)
+        self._scan('R:\\media', **options, resume_state={'mapping': str(self.media), 'pending': [],
+                       'current_directory': str(self.media), 'cursor': 'copy.srt',
+                       'here': {'copy.mp4': (7, '2000-01-01'), 'copy.srt': (8, '2000-01-01')}})
+        with closing(sqlite3.connect(self.db)) as connection:
+            self.assertEqual(list(connection.execute('SELECT id,asset_id,path,pairing FROM asset_subtitle')), before)
+
+    def test_relocated_mount_restarts_traversal_and_preserves_file_id(self):
+        saved = []
+        options = dict(declared_roots={'local': ('R:\\media',)}, mounts={'local': (self.media,)}, windows=False)
+        self._scan('R:\\media', save_checkpoint=lambda value: saved.append(value), **options)
+        with closing(sqlite3.connect(self.db)) as connection, connection:
+            before = list(connection.execute("SELECT id,path FROM asset ORDER BY id"))
+        moved = self.root / 'moved'
+        self.media.rename(moved)
+        (moved / 'new.mp4').write_bytes(b'new')
+        self._scan('R:\\media', resume_state=saved[-1], **{**options, 'mounts': {'local': (moved,)}})
+        with closing(sqlite3.connect(self.db)) as connection, connection:
+            self.assertEqual(list(connection.execute("SELECT id,path FROM asset ORDER BY id LIMIT 3")), before)
+            self.assertEqual(connection.execute('SELECT count(*) FROM asset').fetchone()[0], 4)
+
+    def test_scanning_one_root_does_not_count_other_roots_as_missing(self):
+        options = dict(declared_roots={'local': ('R:\\media', 'S:\\other')},
+                       mounts={'local': (self.media, self.root / 'other')}, windows=False)
+        with closing(sqlite3.connect(self.db)) as connection, connection:
+            connection.execute("INSERT INTO asset(location,path,name,medium,last_seen) VALUES('local','S:\\other\\copy.mp4','copy.mp4','video','2000-01-01')")
+        result, _ = self._scan('R:\\media', **options)
+        self.assertEqual(result.gone, 0)
+        self.assertEqual(len(result.new_ids), 3)
 
     def test_resume_skips_committed_directories_and_retains_subtitles_and_new_ids(self):
         (self.media / '创作者/sub/a.srt').write_text('subtitle', encoding='utf-8')
@@ -137,6 +302,21 @@ class PosixShapeTests(_ScanCase):
         with patch.object(scan.os, 'scandir', side_effect=AssertionError('已完成的根不应再次枚举')):
             second, _ = self._scan('R:\\media', resume_state=json.loads(json.dumps(saved[-1])), **options)
         self.assertEqual(second, first)
+
+    def test_release_checkpoint_without_conflict_count_preserves_completed_work(self):
+        saved = []
+        options = dict(declared_roots={'local': ('R:\\media',)}, mounts={'local': (self.media,)}, windows=False)
+        first, _ = self._scan('R:\\media', save_checkpoint=lambda value: saved.append(value), **options)
+        released = json.loads(json.dumps(saved[-1]))
+        del released['result']['path_conflicts']
+        with closing(sqlite3.connect(self.db)) as connection:
+            before = list(connection.execute('SELECT id,path,first_seen,last_seen FROM asset ORDER BY id'))
+        with patch.object(scan.os, 'scandir', side_effect=AssertionError('已完成目录保留扫描结果')):
+            resumed, _ = self._scan('R:\\media', resume_state=released, **options)
+        self.assertEqual(resumed, first)
+        self.assertEqual(resumed.path_conflicts, 0)
+        with closing(sqlite3.connect(self.db)) as connection:
+            self.assertEqual(list(connection.execute('SELECT id,path,first_seen,last_seen FROM asset ORDER BY id')), before)
 
     def test_file_batch_cursor_resumes_inside_a_directory(self):
         saved = {}
@@ -251,6 +431,119 @@ class SidecarTests(_ScanCase):
         self.assertEqual(set(self._paths()), {
             r"R:\media\写真\cover.jpg", r"R:\media\写真\extrafanart\1.jpg",
             r"R:\media\写真\poster-1.jpg"})
+
+    def test_movie_trailers_are_sidecars_and_short_main_features_are_kept(self):
+        self._layout(['ABC-123/ABC-123.mp4', 'ABC-123/ABC-123-trailer.mp4',
+                      'ABC-123/ABC-123.nfo', 'ABC-123/ABC-123-poster.jpg',
+                      'ABC-123/extrafanart/1.jpg', 'ABC-123/short-film.mp4'])
+        result, _ = self._scan(r'R:\media\ABC-123', declared_roots=self.DECLARED,
+                               mounts={'local': (self.media,)}, windows=False)
+        self.assertEqual((result.files, result.sidecars), (2, 4))
+        self.assertEqual(set(self._paths()), {
+            r'R:\media\ABC-123\ABC-123.mp4', r'R:\media\ABC-123\short-film.mp4'})
+        self.assertTrue((self.media / 'ABC-123/ABC-123-trailer.mp4').is_file())
+
+    def test_trailer_names_use_an_explicit_terminal_marker(self):
+        self.assertEqual(scan.video_stems(['ABC-123.mp4', 'ABC-123-trailer.mp4']),
+                         frozenset({'abc-123'}))
+        for name in ('ABC-123-trailer.mp4', 'ABC-123.TRAILER.MKV', 'ABC-123_trailer.mov',
+                     'ABC-123 trailer.m4v', 'trailer.mp4'):
+            with self.subTest(name=name):
+                self.assertTrue(scan.is_sidecar(name, frozenset()))
+        for name in ('ABC-123.mp4', 'Trailer Park.mp4', 'ABC-123-trailer-park.mp4',
+                     'ABC-123trailer.mp4', 'ABC-123-trailer.mp4.bak', 'trailer.jpg'):
+            with self.subTest(name=name):
+                self.assertFalse(scan.is_sidecar(name, frozenset()))
+
+    def test_media_server_extras_and_nested_directories_are_not_registered(self):
+        paths = ['Film/Film.mkv', 'Film/Trailer 1-trailer.MP4', 'Film/Interview-interview2.mkv',
+                 'Film/trailers/Teaser.mp4', 'Film/Extras/Trailers/Trailer 2.mkv',
+                 'Film/behind the scenes/Making of.mp4', 'Film/deleted scenes/Ending.mp4',
+                 'Film/shorts/Bonus.mp4', 'Film/specials/Bonus.mp4',
+                 'Film/backdrops/Menu.mkv', 'Film/theme-music/Score.flac', 'Film/theme.mp3']
+        self._layout(paths)
+        result, _ = self._scan(r'R:\media\Film', declared_roots=self.DECLARED,
+                               mounts={'local': (self.media,)}, windows=False)
+        self.assertEqual((result.files, result.sidecars), (1, len(paths) - 1))
+        self.assertEqual(self._paths(), {r'R:\media\Film\Film.mkv': 'video'})
+        self.assertTrue(all((self.media / name).is_file() for name in paths))
+
+    def test_a_declared_shorts_root_contains_independent_features(self):
+        self._layout(['Shorts/One.mp4', 'Shorts/Film/extras/Making of.mp4'])
+        result, _ = self._scan(r'R:\media\Shorts', declared_roots={'local': (r'R:\media\Shorts',)},
+                               mounts={'local': (self.media / 'Shorts',)}, windows=False)
+        self.assertEqual((result.files, result.sidecars), (1, 1))
+        self.assertEqual(self._paths(), {r'R:\media\Shorts\One.mp4': 'video'})
+
+
+class LocalExtraNamingTests(unittest.TestCase):
+    def test_movie_and_episode_suffixes_and_numbered_bare_names(self):
+        examples = {
+            'trailer.mp4': 'trailer', 'trailer2.MKV': 'trailer', 'sample1.mp4': 'sample',
+            'Film-trailer1.mp4': 'trailer', 'Film.trailer2.mkv': 'trailer',
+            'Film_trailer3.mov': 'trailer', 'Film trailer4.m4v': 'trailer',
+            'Film- trailer5.mp4': 'trailer', 'Film-sample1.mp4': 'sample',
+            'Film.sample2.mkv': 'sample', 'Film_sample3.mov': 'sample',
+            'Film sample4.mp4': 'sample', 'Film- sample5.mp4': 'sample',
+            'Performance Capture-behindthescenes.mkv': 'behindthescenes',
+            'Ending-deleted.mp4': 'deleted', 'Ending-deletedscene2.mp4': 'deleted',
+            'Special Effects-featurette.mp4': 'featurette', 'Actor-interview.mp4': 'interview',
+            'Arrival-scene.mp4': 'scene', 'Moment-clip.mp4': 'clip',
+            'Bonus-short.mp4': 'short', 'Bonus-extra.mp4': 'other', 'Bonus-other.mp4': 'other',
+            'Show - S01E01 - Episode-deleted2.mkv': 'deleted', 'theme.flac': 'themeaudio',
+        }
+        for name, expected in examples.items():
+            with self.subTest(name=name):
+                self.assertEqual(catalog_rules.local_extra_type(name), expected)
+                self.assertTrue(scan.is_sidecar(name, frozenset()))
+
+    def test_exact_markers_preserve_titles_and_unsupported_files(self):
+        for name in ('Short Film.mp4', 'Trailer Park.mp4', 'Interview.mp4', 'Sample Story.mp4',
+                     'Filmtrailer.mp4', 'Film-short-story.mp4', 'Film-deleted-scenes.mp4',
+                     'Film-trailerA.mp4', 'Film-trailer.mp4.bak', 'Film-trailer.jpg',
+                     'Film-interview.mp3', 'theme.mp4', '', None):
+            with self.subTest(name=name):
+                self.assertIsNone(catalog_rules.local_extra_type(name))
+
+    def test_dedicated_directories_are_case_insensitive_and_allow_nesting(self):
+        directories = {'Trailers': 'trailer', 'Behind The Scenes': 'behindthescenes',
+            'Deleted Scenes': 'deleted', 'Interviews': 'interview', 'Scenes': 'scene',
+            'Samples': 'sample', 'Sample': 'sample', 'Shorts': 'short',
+            'Featurettes': 'featurette', 'Clips': 'clip', 'Other': 'other',
+            'Extras': 'other', 'Extra': 'other', 'Specials': 'other', 'Backdrops': 'themevideo'}
+        for directory, expected in directories.items():
+            for path in (f'R:/Movies/Film/{directory}/Clip.mp4',
+                         f'R:/Movies/Film/{directory}/Disc 1/Clip.mp4'):
+                with self.subTest(path=path):
+                    self.assertEqual(catalog_rules.local_extra_type('Clip.mp4', path,
+                                     library_roots=('R:/Movies',)), expected)
+        self.assertEqual(catalog_rules.local_extra_type('Score.opus', '/movies/Film/theme-music/Score.opus'),
+                         'themeaudio')
+        self.assertIsNone(catalog_rules.local_extra_type('Score.opus', '/movies/Film/trailers/Score.opus'))
+        self.assertEqual(catalog_rules.local_extra_type('Clip.mp4', '/movies/Film/Extras/theme-music/Clip.mp4'),
+                         'other')
+        self.assertEqual(catalog_rules.local_extra_type('Score.opus', '/movies/Film/theme-music/clips/Score.opus'),
+                         'themeaudio')
+
+    def test_longest_library_root_is_the_directory_boundary(self):
+        for path, roots in ((r'R:\Shorts\Film.mp4', ('R:/Shorts',)),
+                            ('/Movies/Extras/Film.mp4', ('/Movies', '/Movies/Extras')),
+                            (r'\\server\Shorts\Film.mp4', (r'\\server\Shorts',))):
+            with self.subTest(path=path):
+                self.assertIsNone(catalog_rules.local_extra_type('Film.mp4', path, library_roots=roots))
+        self.assertEqual(catalog_rules.local_extra_type('Clip.mp4', 'R:/Shorts/Film/Extras/Clip.mp4',
+                         library_roots=('r:/shorts',)), 'other')
+
+    def test_sqlite_classifier_uses_configured_library_boundaries(self):
+        from peach.repository import LedgerDatabase
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary).resolve() / 'ledger.db'
+            sqlite3.connect(path).close()
+            database = LedgerDatabase(path, media_roots=('R:/Movies', 'R:/Movies/Shorts'))
+            with database.read_connection() as connection:
+                values = [connection.execute("SELECT peach_is_local_extra('Film.mp4',?)", (value,)).fetchone()[0]
+                          for value in ('R:/Movies/Shorts/Film.mp4', 'R:/Movies/Shorts/Film/Extras/Film.mp4')]
+            self.assertEqual(values, [0, 1])
 
     def test_the_rule_reads_names_only(self):
         videos = scan.video_stems(["ABC-1.mp4", "notes.txt"])

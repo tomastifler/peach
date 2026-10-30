@@ -10,6 +10,13 @@ const seed = () => 'fresh-seed';
 const initial = (pathname = '/', search = '') => initialCatalogFilters({ pathname, search }, preferences, seed);
 
 describe('目录地址与默认范围', () => {
+  it('发行年份多选随分享地址恢复，重置清除年份', () => {
+    const filters = initial('/', '?loc=115&year=2024,none&q=作品');
+    const address = new URL(homePath(filters), 'https://peach.test');
+    expect(initial(address.pathname, address.search).year).toBe('2024,none');
+    expect(resetCatalogFilters(filters, preferences, seed).year).toBe('');
+    expect(initial('/follow', '?year=2024').year).toBe('');
+  });
   it('只在目录地址读取筛选，非目录地址仍可指定来源范围', () => {
     expect(initial('/follow', '?loc=115&tag=blender&owner=none&q=other&sort=rating&seed=foreign')).toMatchObject({
       loc: '115', tag: '', owner: '', q: '', sort: 'new', dir: 'asc', seed: 'fresh-seed',
@@ -58,7 +65,7 @@ describe('目录地址与默认范围', () => {
     const state = resetCatalogFilters(previous, preferences, seed);
     expect(state).toEqual({
       loc: 'pikpak', creator: '', studio: '', owner: '', tag: '', tag_match: 'all', len: '',
-      dur_min: '', dur_max: '', orient: '', region: '', state: '', sort: 'new', dir: 'asc',
+      dur_min: '', dur_max: '', orient: '', region: '', year: '', state: '', sort: 'new', dir: 'asc',
       seed: 'fresh-seed', q: '', jav: '', thumb: '0',
       browse: '', folder: '', folder_recursive: '',
     });

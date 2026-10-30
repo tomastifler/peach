@@ -8,7 +8,7 @@ import { after, before, describe, it } from 'node:test';
 import type { Browser, Page } from 'playwright-core';
 
 import { FIRST, MORE, openFollowFeed } from './follow-fixture.ts';
-import { launch, layout, VIEWPORTS } from './harness.ts';
+import { launch, layout, settle, VIEWPORTS } from './harness.ts';
 
 const DESKTOP = VIEWPORTS.find((viewport) => !viewport.mobile)!;
 const MOBILE = VIEWPORTS.find((viewport) => viewport.mobile)!;
@@ -90,8 +90,9 @@ describe('关注页岛', () => {
         } }));
         await page.route((url) => url.pathname === '/api/items', (route) =>
           route.fulfill({ json: { items: [], total: 0, has_more: false } }));
-        await page.reload({ waitUntil: 'networkidle' });
-        assert.equal(await page.getByRole('searchbox', { name: 'Search creators' }).count(), 0);
+        await page.reload({ waitUntil: 'load' });
+        await settle(page);
+        assert.equal(await page.getByRole('searchbox', { name: '搜索创作者' }).count(), 0);
         const author = page.locator('[data-follow-authors] a[data-follow-author="name:kou"]');
         assert.equal(await author.count(), 1);
         assert.equal(await author.getAttribute('href'), '/creators/90101');
@@ -153,13 +154,23 @@ describe('关注页岛', () => {
             assert.ok(Math.abs(pair.glass[side] - pair.key[side]) <= 1, JSON.stringify(pair));
           }
         }
-        const animations = await page.locator('[data-follow-filter-glass] [data-view-glide=""]').evaluate(async (node) => {
-          node.animate([{ translate: '0px 0px' }, { translate: '100px 0px' }], { duration: 10_000 });
+        /* 在跑的位移由玻璃自己的滑动发起：指针移到相邻那一枚键上，玻璃滑过去。滑动动画由
+           `moveGlidePane` 自己记着撤，所以要走真的悬停，不在节点上另挂动画。窗口改尺寸后重量，
+           那段位移得被掐掉，不能继续把玻璃从新落点拽走。用例的浏览器默认减少动态，滑动不起，这里放开。 */
+        await page.emulateMedia({ reducedMotion: 'no-preference' });
+        const animations = await page.locator('[data-follow-filter-glass]').evaluate(async (host) => {
+          const glass = host.querySelector<HTMLElement>('[data-view-glide=""]')!;
+          const keys = [...host.querySelectorAll<HTMLElement>('[data-follow-filter]')];
+          const at = keys.findIndex((key) => key.getAttribute('aria-pressed') === 'true');
+          const neighbour = keys[at + 1] ?? keys[at - 1]!;
+          neighbour.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse' }));
+          const moving = glass.getAnimations().length;
           window.dispatchEvent(new Event('resize'));
           await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-          return node.getAnimations().length;
+          return { moving, left: glass.getAnimations().length };
         });
-        assert.equal(animations, 0, '重新落位后仍有动画覆盖玻璃位置');
+        assert.ok(animations.moving > 0, `悬停相邻的键没有起滑动：${JSON.stringify(animations)}`);
+        assert.equal(animations.left, 0, '重新落位后仍有动画覆盖玻璃位置');
         assert.deepEqual(opened.problems, []);
       } finally { await opened.close(); }
     });
@@ -208,7 +219,8 @@ describe('关注页岛', () => {
     });
     await page.route((url) => url.pathname === '/api/follow' && !url.searchParams.has('item'),
       (route) => route.fulfill({ json: payload }));
-    await page.reload({ waitUntil: 'networkidle' });
+    await page.reload({ waitUntil: 'load' });
+    await settle(page);
     return opened;
   };
 
@@ -478,7 +490,8 @@ describe('关注页岛', () => {
           (route) => route.fulfill({ json: payload }));
         // 只读服务拒绝尺寸回写时，当前卡片仍使用浏览器取得的尺寸。
         await page.route('**/api/follow/image-dims', (route) => route.fulfill({ status: 409, json: { ok: false } }));
-        await page.reload({ waitUntil: 'networkidle' });
+        await page.reload({ waitUntil: 'load' });
+        await settle(page);
         const image = page.locator('[data-follow-wall] [data-media-pic] > img').first();
         await image.waitFor();
         await image.evaluate(async (node: HTMLImageElement) => { await node.decode() });

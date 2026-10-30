@@ -127,6 +127,15 @@ def main(argv: list[str] | None = None) -> int:
     if len(argv) > 1 and argv[1].startswith("--installer-"):
         return installer_command(argv)
     from peach import error_reporting
+    if len(argv) == 4 and argv[1] == "--relocate-data":
+        # 迁移助手不能在要搬走的数据目录里开着任何文件：崩溃日志改写到临时目录，
+        # 也不发送统计（那会写数据目录里的发送记录）。
+        import tempfile
+        from peach import remote_reporting
+        from peach.data_storage import apply as relocate_data
+        remote_reporting.disable_for_process()
+        error_reporting.install(Path(tempfile.gettempdir()) / "Peach" / "logs")
+        return relocate_data(Path(argv[2]), int(argv[3]))
     error_reporting.install()
     if len(argv) in (2, 3) and argv[1] == "--diagnostic-report":
         from peach.support_bundle import save_bundle

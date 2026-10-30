@@ -9,6 +9,7 @@ import {
   isCurrentPostSetupTutorialRequest,
   nextPostSetupTutorialRequest,
   postSetupTutorialCollapsed,
+  postSetupTutorialErrorHtml,
   postSetupTutorialMarker,
   postSetupTutorialSignature,
   postSetupTutorialSkipped,
@@ -97,4 +98,11 @@ describe('安装教程的状态', () => {
     expect(postSetupTutorialCollapsed()).toBe(false);
     expect([...postSetupTutorialSkipped()]).toEqual([]);
   });
+});
+
+it('取不到清单时关闭在左、立即重试在右', () => {
+  const host = document.createElement('div');
+  host.innerHTML = postSetupTutorialErrorHtml('');
+  expect([...host.querySelectorAll('.post-setup-error-actions button')].map((button) => button.textContent))
+    .toEqual(['关闭', '立即重试']);
 });

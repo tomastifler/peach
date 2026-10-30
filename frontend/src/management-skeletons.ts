@@ -85,7 +85,7 @@ export function duplicatesSkeleton(): string {
     <div data-collection-summary class="mb-5 flex items-end justify-between gap-4 rounded-surface bg-background-secondary-default px-6 py-5 max-compact:flex-col max-compact:items-start max-compact:gap-3 max-compact:p-4 dark:bg-background-primary-default">
       <div class="flex min-w-0 flex-col gap-2"><span class="text-body-regular text-text-secondary">Duplicates</span><strong class="text-display-4-medium">${text('4em')}</strong></div><p class="text-body-regular text-text-secondary">${text('12em')}</p>
     </div>
-    <div data-filter-glass data-glass-pane class="mb-5.5 flex flex-wrap items-center gap-x-2.5 gap-y-2 px-4 py-2.5"><h3 class="mr-1 text-body-medium">Bulk keep</h3>${['Keep largest in all', 'Keep longest in all'].map(label => `<button ${wait} class="h-7.5 rounded-full border border-separator-border px-3 text-body-2-medium">${label}</button>`).join('')}</div>
+    <div data-filter-glass data-glass-pane class="mb-5.5 flex flex-wrap items-center gap-x-2.5 gap-y-2 px-4 py-2.5"><h3 class="mr-1 text-body-medium">批量保留</h3>${['全部保留最大', '全部保留最长'].map(label => `<button ${wait} class="h-8 rounded-full border border-separator-border px-3 text-body-2-medium">${label}</button>`).join('')}</div>
     ${group.repeat(2)}
   </div></div>`;
 }

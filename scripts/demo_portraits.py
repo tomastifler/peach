@@ -22,6 +22,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from peach.user_agent import USER_AGENT  # noqa: E402
+from peach.peach_proxy import read_url
 
 MANIFEST_PATH = Path(__file__).resolve().parent / "demo-portraits.json"
 GFRIENDS_RAW = "https://raw.githubusercontent.com/gfriends/gfriends/master/Content/"
@@ -77,7 +78,7 @@ def load_manifest(path: Path | None = None) -> list[Portrait]:
     return [Portrait(**entry) for entry in document["entries"]]
 
 
-def fetch(portrait: Portrait, cache_dir: Path, *, opener=urllib.request.urlopen) -> Path:
+def fetch(portrait: Portrait, cache_dir: Path, *, opener=None) -> Path:
     """取一张图到缓存，校验哈希。缓存命中就不再联网。
 
     哈希不符是硬错误，不是可以将就的降级：清单的全部意义就是「取到的是我看过的那张」，
@@ -88,8 +89,11 @@ def fetch(portrait: Portrait, cache_dir: Path, *, opener=urllib.request.urlopen)
     if target.is_file() and hashlib.sha256(target.read_bytes()).hexdigest() == portrait.sha256:
         return target
     request = urllib.request.Request(portrait.url, headers={"User-Agent": USER_AGENT})
-    with opener(request, timeout=60) as response:
-        body = response.read(MAX_IMAGE_BYTES + 1)
+    if opener is None:
+        body = read_url(portrait.url, headers=dict(request.header_items()), max_bytes=MAX_IMAGE_BYTES)
+    else:
+        with opener(request, timeout=60) as response:
+            body = response.read(MAX_IMAGE_BYTES + 1)
     if len(body) > MAX_IMAGE_BYTES:
         raise RuntimeError(f"{portrait.name} 的图超过 {MAX_IMAGE_BYTES} 字节，取错了东西")
     digest = hashlib.sha256(body).hexdigest()

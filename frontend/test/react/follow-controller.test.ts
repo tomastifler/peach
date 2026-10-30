@@ -10,7 +10,7 @@ const view = (patch: Partial<FollowView> = {}): FollowView => ({ status: '', med
   work: '', tags: [], durMin: 0, durMax: 0, sort: 'new', dir: 'desc', seed: 7, ...patch });
 const helpers: FollowFeedHelpers = { workMark: () => '', tagLabel: tag => tag, wireDrag: vi.fn(), wireScroller: vi.fn(),
   listSkeletonHtml: () => '', jobProgress: vi.fn() };
-const delegated: Omit<FollowFeedActions, 'route' | 'shuffle'> = { loaded: vi.fn(), openDetail: vi.fn(), openAuthor: vi.fn(), openManage: vi.fn(),
+const delegated: Omit<FollowFeedActions, 'route' | 'shuffle'> = { loaded: vi.fn(), openDetail: vi.fn(), openAuthor: vi.fn(),
   toggleSelection: vi.fn(), setImagesOnly: vi.fn(), setPhotoLayout: vi.fn(), canFlip: () => true, toast: vi.fn(),
   failure: vi.fn(), checkReport: vi.fn() };
 
@@ -113,7 +113,10 @@ describe('关注域地址与会话控制', () => {
 
   it('管理页非法页码和页签归默认，重新进入保持页签并清排序', () => {
     expect(followManageParams('?page=-4&tab=invalid')).toEqual({ tab: 'list', page: 1, sort: '', dir: '' });
-    expect(followManageParams('?page=3.9&tab=feeds&sort=added&dir=asc')).toEqual({ tab: 'feeds', page: 3, sort: 'added', dir: 'asc' });
+    expect(followManageParams('?page=3.9&tab=feeds&sort=added&dir=asc')).toEqual({ tab: 'list', page: 3, sort: 'added', dir: 'asc' });
+    expect(followManageEntry('?tab=feeds')).toBe('/subscriptions');
+    expect(followManageParams('?tab=tags').tab).toBe('tags');
+    expect(followManageEntry('?tab=tags')).toBe('/subscriptions?tab=tags');
     expect(followManagePath({ tab: 'list', page: 1, sort: '', dir: '' })).toBe('/subscriptions');
     expect(followManageEntry('?tab=wants&page=4&sort=x')).toBe('/jav?tab=wants');
     expect(followManageEntry('?tab=wants', 'add')).toBe('/subscriptions?tab=add');

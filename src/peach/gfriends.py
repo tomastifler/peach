@@ -1,4 +1,4 @@
-"""Gfriends 头像图库的索引：目录约定、候选排序和本地缓存的读法。
+"""Gfriends 头像图库的索引：目录约定、候选排序、本地缓存的读法与取法。
 
 图库把每个人的图分散在几十个来源目录下，一个人常有十几张。`Filetree.json` 是那棵
 文件树的快照，键是展示名（可能是别名），值才是实际文件——两者未必相同。
@@ -14,6 +14,7 @@ Minnano、FANZA 这些大型数据库，收录量上万但原图常常只有两�
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import time
@@ -21,8 +22,16 @@ import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .fsutil import atomic_write_bytes
+from .http import HttpRequest, HttpTransport
+
 #: 图库的 raw 根。索引和图片都挂在它下面。
 GFRIENDS_RAW = "https://raw.githubusercontent.com/gfriends/gfriends/master/"
+#: 索引本身。上游不发版本也不给哈希，能判的只有「解析得出来」。
+INDEX_URL = GFRIENDS_RAW + "Filetree.json"
+#: 取一次索引的上限。实际 6.5 MB 上下，留足增长余量。
+INDEX_MAX_BYTES = 32 * 1024 * 1024
+INDEX_TIMEOUT = 60
 #: 目录名首字符的先后。未知前缀排在最后，不能因为 `find` 返回 -1 反而抢到最前。
 QUALITY_ORDER = "0123456789abcdefghijklmnopqrstuvwxyz"
 #: 索引缓存的保鲜期。图库持续增补，缓存不能永不过期：只要文件在就一直复用的话，
@@ -82,16 +91,49 @@ def index_age(cache_dir: Path) -> float | None:
         return None
 
 
+def index_stale(cache_dir: Path) -> bool:
+    """没有缓存或缓存超过保鲜期。"""
+    age = index_age(cache_dir)
+    return age is None or age > INDEX_MAX_AGE_SECONDS
+
+
+def index_revision(cache_dir: Path | None) -> str:
+    """索引内容指纹；相同内容的保鲜刷新不触发整批头像重派。"""
+    if cache_dir is None:
+        return "missing"
+    try:
+        return hashlib.sha256((cache_dir / INDEX_NAME).read_bytes()).hexdigest()[:16]
+    except OSError:
+        return "missing"
+
+
 def load_index(cache_dir: Path) -> dict[str, list[tuple[str, str]]]:
     """只读本地缓存的索引。取不到或坏了都返回空。
 
-    联网补索引是长跑批处理的事（`scripts/audit_performer_portraits.py`）。页面这一侧
-    宁可少列几个候选，也不该在一次点击里同步拉 6 MB。
+    这里从不联网：页面这一侧宁可少列几个候选，也不该在一次点击里同步拉 6 MB。
+    缓存由 `fetch_index` 补，服务在后台调它（`avatar_picker.IndexRefresher`）。
     """
     try:
         return parse_filetree((cache_dir / INDEX_NAME).read_bytes())
     except (OSError, KeyError, TypeError, ValueError):
         return {}
+
+
+def fetch_index(transport: HttpTransport, cache_dir: Path) -> dict[str, list[tuple[str, str]]]:
+    """联网取一份索引，解析得出来才换进缓存，返回解析结果。
+
+    任何一步失败都抛出，旧缓存原样留着：过期的索引照样能查，只是新收的人查不到，
+    比换成半个 JSON 强。写缓存用临时文件加 `os.replace`，读的一方只会看到完整的一份。
+    """
+    response = transport(HttpRequest("GET", INDEX_URL, {"Accept": "application/json"}),
+                         INDEX_TIMEOUT, INDEX_MAX_BYTES)
+    if response.status != 200:
+        raise ValueError(f"Gfriends 索引 HTTP {response.status}")
+    if len(response.body) > INDEX_MAX_BYTES:
+        raise ValueError("Gfriends 索引超过大小上限")
+    index = parse_filetree(response.body)
+    atomic_write_bytes(cache_dir / INDEX_NAME, response.body)
+    return index
 
 
 @dataclass(frozen=True)

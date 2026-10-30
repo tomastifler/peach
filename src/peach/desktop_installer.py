@@ -81,8 +81,11 @@ def stop(program: Path, *, timeout: float = 60) -> bool:
     托盘管，只能按镜像路径清场，否则覆盖安装写不进被占用的 DLL。
     """
     from .windows_restart import find_tray_windows, post_stop
-    for window in find_tray_windows(program / "Peach.exe"):
-        post_stop(window.handle)
+    windows = find_tray_windows(program / "Peach.exe")
+    # 每个窗口都投递一次；一条都没投出去、窗口又还在，托盘收不到停止消息，等也不会退。
+    sent = [post_stop(window.handle) for window in windows]
+    if windows and not any(sent) and find_tray_windows(program / "Peach.exe"):
+        return False
     deadline = time.monotonic() + timeout
     while find_tray_windows(program / "Peach.exe"):
         if time.monotonic() > deadline:
@@ -142,7 +145,7 @@ def prepare(program: Path, owner: int, error_file: Path) -> int:
 
 def prepare_install_tools(program: Path, cache: Path, error_file: Path, *, stage: Path | None = None) -> int:
     """在安装器临时目录备齐工具，不读取馆藏设置或修改现有安装。"""
-    from . import __version__, standalone_update, update_packages
+    from . import __version__, release_updates, standalone_update, update_packages
     from .fsutil import atomic_write_text
     import tempfile
     stage = (stage or Path(sys.executable).resolve().parent).resolve()
@@ -158,7 +161,7 @@ def prepare_install_tools(program: Path, cache: Path, error_file: Path, *, stage
                 standalone_update.download(url, archive, size, checksum, progress)
 
         release = {'latest_version': __version__,
-                   'asset_url': f'https://github.com/peach-mitao/peach/releases/download/v{__version__}/package.zip'}
+                   'asset_url': f'{release_updates.RELEASES_URL}/download/v{__version__}/package.zip'}
         with tempfile.TemporaryDirectory(prefix='peach-installer-tools-', dir=stage.parent) as folder:
             standalone_update.prepare_tools(stage, program, Path(folder).resolve(), release, {'total': 0, 'downloaded': 0},
                                             report=lambda data, **changes: data.update(changes), fetch=fetch)

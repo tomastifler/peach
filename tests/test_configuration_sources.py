@@ -1,5 +1,6 @@
 """CloudDrive 表单、来源映射与离线状态的隔离回归。"""
 from dataclasses import replace
+from contextlib import ExitStack
 import ntpath
 import os
 from pathlib import Path, PurePosixPath, PureWindowsPath
@@ -9,6 +10,108 @@ import unittest
 from unittest.mock import patch
 
 from peach import media_configuration as media_config, onboarding, settings_file
+
+
+class ConfigurationIsolationTests(unittest.TestCase):
+    def test_phone_access_addresses_use_runtime_protocol_scope_and_ipv6(self):
+        from peach.routes_configuration import network_payload
+        runtime = SimpleNamespace(host='0.0.0.0', port=8900, tls_enabled=True,
+                                  mdns_enabled=True, mdns_port=443, mdns_name='peach-writer', mdns_address='192.0.2.8')
+        request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(settings=runtime)),
+                                  base_url='https://peach-writer.local/')
+        with patch('peach.distribution.standalone', return_value=False):
+            result = network_payload(request, self.config)
+            self.assertEqual(result['lan_url'], 'https://peach-writer.local/')
+            self.assertEqual(result['ip_url'], '')
+            self.assertEqual(result['scope'], 'lan')
+            self.assertFalse(result['editable'])
+            runtime.tls_enabled, runtime.mdns_enabled, runtime.mdns_address = False, False, 'fd00::8'
+            self.assertEqual(network_payload(request, self.config)['ip_url'], 'http://[fd00::8]:8900/')
+            runtime.host = '127.0.0.1'
+            local = network_payload(request, self.config)
+            self.assertEqual((local['scope'], local['lan_url'], local['ip_url']), ('local', '', ''))
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name).resolve()
+        self.config = settings_file.PeachConfig(self.root, self.root / "config.toml", present=True)
+        self.config.path.write_text("[server]\nport = 8900\n", encoding="utf-8")
+
+    def test_optional_configuration_readers_fail_independently_with_diagnostic_ids(self):
+        from peach import routes_configuration as routes, remote_reporting, library_sharing
+
+        readers = (
+            ("remote_reporting", remote_reporting, "snapshot", {}),
+            ("library_sharing", library_sharing, "snapshot", {}),
+            ("startup", routes.desktop_startup, "snapshot", {}),
+            ("uninstall", routes.desktop_uninstall, "snapshot", {}),
+            ("storage", routes.data_storage, "snapshot", {}),
+            ("peach_proxy", routes.peach_proxy, "describe", {}),
+            ("entry_links", routes.entry_links, "snapshot", {}),
+            ("updates", routes.release_updates, "snapshot", {}),
+            ("update_job", routes.standalone_update, "public", {}),
+            ("access", routes.access, "load", {}),
+            ("media_sources", routes.media_configuration, "rows", []),
+            ("library_count", routes.media_libraries, "libraries", []),
+            ("mount_dependencies", routes.media_configuration, "mount_dependencies", []),
+            ("facts", routes, "runtime_fact_entries", []),
+        )
+        for failed, *_ in readers:
+            with self.subTest(failed=failed), ExitStack() as stack:
+                for key, module, name, value in readers:
+                    stack.enter_context(patch.object(module, name, side_effect=RuntimeError("private-detail"))
+                                        if key == failed else patch.object(module, name, return_value=value))
+                stack.enter_context(patch.object(routes.access, "public", return_value={}))
+                emit = stack.enter_context(patch.object(routes.error_reporting, "event"))
+                result = routes.snapshot(self.config)
+                self.assertEqual(list(result["section_errors"]), [failed])
+                self.assertEqual(len(result["section_errors"][failed]["error_id"]), 32)
+                self.assertNotIn("private-detail", str(result))
+                self.assertEqual(result["media_dirs"], [])
+                self.assertEqual(result["port"], 8900)
+                self.assertEqual(emit.call_args.kwargs["section"], failed)
+
+    def test_runtime_configuration_sections_do_not_hide_the_healthy_sections(self):
+        from unittest.mock import Mock
+        from peach import routes_configuration as routes
+
+        for failed in ("tunnel", "automatic_updates", "push_discovery", "downloads"):
+            with self.subTest(failed=failed), ExitStack() as stack:
+                state = SimpleNamespace(sync=None, tunnel=Mock(), automatic_updates=Mock(),
+                                        downloads=object(), push_discovery=SimpleNamespace(declared_roots={}))
+                state.tunnel.snapshot.return_value = object()
+                state.automatic_updates.snapshot.return_value = {"state": "idle"}
+                if failed in ("tunnel", "automatic_updates"):
+                    getattr(state, failed).snapshot.side_effect = OSError("private-detail")
+                request = SimpleNamespace(app=SimpleNamespace(state=state))
+                stack.enter_context(patch.object(routes, "local_only"))
+                stack.enter_context(patch.object(routes.settings_file, "load_config", return_value=self.config))
+                stack.enter_context(patch.object(routes, "snapshot", return_value={"media_dirs": [], "port": 8900}))
+                stack.enter_context(patch.object(routes, "network_payload", return_value={"scope": "local"}))
+                stack.enter_context(patch.object(routes, "tunnel_payload", return_value={"state": "idle"}))
+                for key, module, name in (("push_discovery", routes, "push_discovery_payload"),
+                                          ("downloads", routes.web_downloads, "settings_payload")):
+                    stack.enter_context(patch.object(module, name, side_effect=OSError("private-detail"))
+                                        if key == failed else patch.object(module, name, return_value={"ok": True}))
+                stack.enter_context(patch.object(routes.error_reporting, "event"))
+                result = routes.read_configuration(request)
+                self.assertEqual(list(result["section_errors"]), [failed])
+                self.assertEqual(result["port"], 8900)
+                for key in {"tunnel", "automatic_updates", "push_discovery", "downloads"} - {failed}:
+                    self.assertIn(key, result)
+
+    def test_generated_push_discovery_origins_support_ipv6_and_actual_ports(self):
+        from peach import routes_configuration as routes
+
+        for address, port, tls, expected in (("::1", 443, True, "https://[::1]"),
+                                             ("::1", 8443, True, "https://[::1]:8443"),
+                                             ("192.0.2.1", 8900, False, "http://192.0.2.1:8900")):
+            with self.subTest(address=address, port=port):
+                state = SimpleNamespace(mdns=SimpleNamespace(address=address), settings=SimpleNamespace(
+                    mdns_address=None, mdns_port=port, tls_enabled=tls))
+                result = routes.push_discovery_payload(SimpleNamespace(app=SimpleNamespace(state=state)), {})
+                self.assertEqual(result["origin"], expected)
 
 
 class MediaConfigurationTests(unittest.TestCase):

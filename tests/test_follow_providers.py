@@ -55,9 +55,11 @@ class ProviderRegistryTests(unittest.TestCase):
         values = list(PROVIDER_PRIORITY.values())
         self.assertEqual(len(values), len(set(values)), "优先级重复会让选主条目结果不确定")
 
-    def test_official_identity_providers_do_not_proxy_media(self):
-        """官方三家走各自详情接口取媒体，不经本地代理，所以不该有主机白名单。"""
-        for key in _OFFICIAL_IDENTITY_PROVIDERS:
+    def test_official_identity_preserves_each_sources_media_boundary(self):
+        """官方作者身份与媒体传输独立；Iwara 的签名媒体由本机代理。"""
+        self.assertIn("iwara", _OFFICIAL_IDENTITY_PROVIDERS)
+        self.assertEqual(_PROVIDER_HOSTS["iwara"], ("iwara.tv",))
+        for key in _OFFICIAL_IDENTITY_PROVIDERS - {"iwara"}:
             self.assertEqual(follow_providers.PROVIDERS[key].hosts, ())
             self.assertNotIn(key, _PROVIDER_HOSTS)
 

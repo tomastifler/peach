@@ -12,10 +12,29 @@ from peach.web_jav_discovery import _metadata_response
 
 
 class DiscoveryMetadataTests(unittest.TestCase):
+    def test_legacy_sidecar_identity_is_not_trusted_and_new_original_title_survives_restart(self):
+        self.path.write_text(json.dumps({'version': 1, 'records': {'MIKR-023': {
+            'movie': {'id': 'WrongFirst', 'number': 'MIKR-023'}, 'checked_at': self.now[0]}}}), encoding='utf8')
+        original = self.path.read_bytes()
+        old_job = self.path.with_suffix('.job.json')
+        old_job.write_text(json.dumps({'status': 'running', 'codes': ['MIKR-023'],
+                                      'completed_codes': ['MIKR-023']}), encoding='utf8')
+        old = DiscoveryMetadata(self.path, api=self.api, clock=lambda: self.now[0])
+        self.addCleanup(old.stop)
+        self.assertEqual(old.peek('MIKR-023')[0], {})
+        self.assertIsNone(old.job.snapshot())
+        old.remember('MIKR-023', {'id': 'XeYkdb', 'number': 'MIKR-023',
+                                 'title': '显示题', 'origin_title': 'Original 日本語', 'javdb_rule': 2})
+        restarted = DiscoveryMetadata(self.path, api=self.api, clock=lambda: self.now[0])
+        self.addCleanup(restarted.stop)
+        self.assertEqual(restarted.peek('MIKR-023')[0]['origin_title'], 'Original 日本語')
+        self.assertEqual(self.path.read_bytes(), original)
+        self.assertTrue(old_job.exists())
+
     def test_restart_retains_batch_identity_budget_and_completed_codes(self):
         self.cache.remember('EXM-001', {'number': 'EXM-001', 'tags': [], 'score': 4, 'duration': 120})
-        self.path.with_suffix('.job.json').write_text(json.dumps(dict(
-            job_id='original', status='running', codes=['EXM-001', 'EXM-002'], refresh=True,
+        self.cache.job_path.write_text(json.dumps(dict(
+            javdb_rule=2, job_id='original', status='running', codes=['EXM-001', 'EXM-002'], refresh=True,
             completed=1, completed_codes=['EXM-001'], attempted_codes=['EXM-001'], requests=3, bytes=120,
             active_seconds=10)), encoding='utf-8')
         with patch.object(self.api, 'movie', return_value={'number': 'EXM-002', 'tags': [], 'score': 4, 'duration': 120}) as movie:
@@ -36,15 +55,15 @@ class DiscoveryMetadataTests(unittest.TestCase):
         self.addCleanup(self.cache.stop)
 
     def test_repeated_restart_keeps_checkpoint_before_the_next_item_finishes(self):
-        self.path.with_suffix('.job.json').write_text(json.dumps(dict(
-            job_id='original', status='running', codes=['EXM-001', 'EXM-002'], refresh=True,
+        self.cache.job_path.write_text(json.dumps(dict(
+            javdb_rule=2, job_id='original', status='running', codes=['EXM-001', 'EXM-002'], refresh=True,
             started_at=100, completed=1, completed_codes=['EXM-001'], attempted_codes=['EXM-001'],
             failed_codes=[], requests=3, bytes=120, active_seconds=10)), encoding='utf-8')
         with patch.object(DiscoveryMetadata, '_run_batch'):
             first = DiscoveryMetadata(self.path, api=self.api, clock=lambda: self.now[0])
             first.job.thread.join(5)
             first.stop()
-        saved = json.loads(self.path.with_suffix('.job.json').read_text(encoding='utf-8'))
+        saved = json.loads(self.cache.job_path.read_text(encoding='utf-8'))
         self.assertEqual(saved['completed_codes'], ['EXM-001'])
         self.assertEqual(saved['started_at'], 100)
         with patch.object(self.api, 'movie', return_value={'number': 'EXM-002', 'tags': [], 'score': 4, 'duration': 120}) as movie:
@@ -97,7 +116,7 @@ class DiscoveryMetadataTests(unittest.TestCase):
         self.assertNotIn('avatar_image', actors[1])
         self.assertTrue(actors[1]['has_avatar'])
         self.assertFalse(actors[2]['has_avatar'])
-        self.assertNotIn('signature', self.path.read_text(encoding='utf-8'))
+        self.assertNotIn('signature', self.cache.path.read_text(encoding='utf-8'))
 
     def test_source_cooldown_stops_batch_and_preserves_failure(self):
         def unavailable(code):

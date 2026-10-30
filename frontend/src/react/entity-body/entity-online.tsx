@@ -6,7 +6,11 @@
 import type { UseInfiniteQueryResult, InfiniteData } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { requestErrorMessage } from '@peach/legacy/core';
-import { emptyStateHtml } from '@peach/legacy/ui';
+import { Button, ButtonLink } from '@/components/base/buttons/button';
+import { EmptyState } from '../components/empty-state';
+import { spriteGlyph } from '../components/sprite-glyph';
+import { FollowCheckButton } from '../follow-feed/follow-check-button';
+import { entityCheckSources } from '../follow-feed/follow-check';
 
 import { LoadMore } from '../catalog-grid/catalog-grid-page';
 import { RetryNote, useSkeletonReveal } from '../components/grid-reveal';
@@ -32,6 +36,7 @@ export interface EntityOnlineProps {
   helpers: FollowFeedHelpers;
   actions: FollowFeedActions;
   canLoadMore?: () => boolean;
+  clearFilters(): void;
 }
 
 export function EntityOnline(props: EntityOnlineProps) {
@@ -54,7 +59,7 @@ export function EntityOnline(props: EntityOnlineProps) {
   );
 }
 
-function Cards({ view, media, data, visible, context, photoSize, photoLayout, imagesOnly, actions }:
+function Cards({ view, media, data, visible, context, photoSize, photoLayout, imagesOnly, actions, clearFilters }:
   EntityOnlineProps & { data: FollowPage }) {
   const write = useFollowWrite({ view, revision: 0, actions });
   const sources = useMemo(() => {
@@ -78,13 +83,19 @@ function Cards({ view, media, data, visible, context, photoSize, photoLayout, im
         selected={false} selectMode={false} busy={write.busy.get(id) || ''} failure={write.failures.get(id) || ''}
         actions={actions} onStatus={write.status} onSave={write.save} />
     );
-  }) : <Empty searched={!!(data.groups || []).length || !!(view.status || view.provider || view.tags.length)} />;
+  }) : <Empty searched={!!(data.groups || []).length || !!(view.status || view.provider || view.tags.length || view.durMin || view.durMax)}
+    clear={clearFilters} actions={actions} sources={entityCheckSources(data.sources || [], view.author)} />;
   return <div data-follow-list="" data-follow-wall={images ? '' : undefined} {...wall}>{body}</div>;
 }
 
-function Empty({ searched }: { searched: boolean }) {
-  const html = searched
-    ? emptyStateHtml('search-x', 'No updates under the current filter', 'Try changing the media type, status, source or tags.')
-    : emptyStateHtml('rss', 'No updates fetched yet', "After the follow page checks for updates, this creator's new content will appear here.");
-  return <div data-follow-empty="" className="contents" dangerouslySetInnerHTML={{ __html: html }} />;
+function Empty({ searched, clear, actions, sources }: {
+  searched: boolean; clear(): void; actions: FollowFeedActions; sources: number[];
+}) {
+  return <div data-follow-empty="" className="contents"><EmptyState
+    icon={spriteGlyph(searched ? 'search-x' : 'rss')} title={searched ? '当前筛选下没有更新' : '还没有抓到更新'}
+    actions={searched ? <Button size="small" onClick={clear}>清除筛选</Button>
+      : sources.length ? <FollowCheckButton sources={sources} report={actions.checkReport} />
+      : <ButtonLink size="small" href="/subscriptions?tab=add">添加关注</ButtonLink>}>
+    {searched ? '切换媒体类型、状态、来源或标签后再试。' : '检查来源更新后，这位创作者的新内容会出现在这里。'}
+  </EmptyState></div>;
 }

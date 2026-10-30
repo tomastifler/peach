@@ -71,6 +71,9 @@ describe('远端源只扫接触印相', () => {
     enter(el);
     const layer = el.querySelector<HTMLImageElement>('img.ui-hvframes');
     expect(layer?.getAttribute('src')).toBe('/poster?id=7&c=4');
+    expect(layer?.hidden).toBe(true);
+    layer?.dispatchEvent(new Event('load'));
+    expect(layer?.hidden).toBe(false);
     expect(el.querySelector('img.cover')?.getAttribute('src')).toBe('/cover?code=A');
     leave(el);
     expect(el.querySelector('img.ui-hvframes')).toBeNull();
@@ -137,6 +140,24 @@ describe('本地文件拉真视频', () => {
     vi.advanceTimersByTime(340);
     expect(first.querySelector('video.hv')).toBeNull();
     expect(second.querySelector('video.hv')).not.toBeNull();
+  });
+
+  it('预览视频取得首帧后才覆盖封面', () => {
+    const el = card();
+    wireHover(el, { id: 1, location: 'local' });
+    enter(el);
+    vi.advanceTimersByTime(340);
+    const video = el.querySelector<HTMLVideoElement>('video.hv')!;
+    let frame: (() => void) | undefined;
+    Object.defineProperty(video, 'requestVideoFrameCallback', { value: (done: () => void) => { frame = done; return 1 } });
+    video.dispatchEvent(new Event('loadedmetadata'));
+    expect(video.hasAttribute('data-playing')).toBe(false);
+    video.dispatchEvent(new Event('loadeddata'));
+    expect(video.hasAttribute('data-playing')).toBe(false);
+    frame?.();
+    expect(video.hasAttribute('data-playing')).toBe(true);
+    leave(el);
+    expect(el.querySelector('video')).toBeNull();
   });
 
   it('滚动中划过的卡不起；到点时正在滚动也不放', () => {

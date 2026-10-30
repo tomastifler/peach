@@ -10,14 +10,13 @@ from __future__ import annotations
 
 import json
 import re
-import time
 
 from urllib.parse import urlsplit
 
 from . import (company_profiles, entry_links, feeds, link_status, performer_header, web_feeds,
                web_follow)
 from .catalog_rules import (LENGTH_TAGS, dir_expr, photo_set_title, solo_performer_clause, tag_cat)
-from .entities import normalize_entity_name, resolve_entity, resolve_entity_id, rewrite_flat_projection
+from .entities import normalize_entity_name, resolve_entity, resolve_entity_id, prefer_entity_name
 from .social_links import ARCHIVE_HOSTS, is_archive
 from .media_sources import cost_for
 from .web_catalog import (
@@ -102,7 +101,9 @@ def _missing_entity_result(connection, kind: str, name: str, entity_id: int | No
 
 #: 资料页与索引页数作品的口径：视频，且没有标「已消失」（ADR-0087）。回收站里的照旧算；
 #: 代表作的取图不套这一条。
-COUNTED_VIDEO = "a.medium='video' AND COALESCE(a.disposal,'')<>'vanished'"
+COUNTED_VIDEO = (
+    "a.medium='video' AND COALESCE(a.disposal,'')<>'vanished' AND NOT peach_is_local_extra(a.name,a.path)"
+)
 
 
 def scope_predicate(kind: str, column: str, subject: str = "?") -> str:
@@ -145,7 +146,7 @@ def _tag_scope_visibility(kind: str, entity_column: str, asset_column: str) -> s
 #: 索引页地址 → `entity.kind`。有资料页就该有索引页：只靠女优页上那个名字进事务所页的话，
 #: 名下没有关系的几十家等于只能靠猜地址。标签不在这里，它走另一条分支。
 INDEX_ENTITY_KINDS = {"performers": "performer", "creators": "creator",
-                      "studios": "studio", "agencies": "agency"}
+                      "studios": "studio", "agencies": "agency", "series": "series"}
 
 
 def _performer_entries(contract: WebContract, c, d: dict, alias_rows) -> dict:
@@ -274,6 +275,9 @@ def q_entity(contract: WebContract, args):
         # 人物资料与按名义分组的别名。
         if kind in {"performer", "creator"}:
             d.update(performer_header.header(c, d["id"], d["canonical_name"]))
+            if 'japanese_av' in d['identity_categories']:
+                from .performer_name_display import display
+                d["name_display"] = display(c, d["id"], d["canonical_name"], alias_rows, d["name_groups"])
         elif kind in {'studio', 'agency'}:
             d['company_profile'] = company_profiles.public_profile(metadata)
         # 创作者在关注里的那一面（ADR-0096）：绑在名下的来源和同名等确认的那几组。
@@ -449,7 +453,11 @@ def q_entity_shapes(contract, args) -> dict:
             names = entities.get(int(alias["entity_id"]), {}).get("names")
             if names is not None and alias["alias"] not in names:
                 names.append(alias["alias"])
-    return {"ok": True, "home": home, "entities": list(entities.values())}
+        from .performer_name_display import variants
+        from .kanji import JP_KANJI_TO_SIMPLIFIED
+        name_variants = variants(connection)
+    return {"ok": True, "home": home, "entities": list(entities.values()), "name_variants": name_variants,
+            "name_glyphs": JP_KANJI_TO_SIMPLIFIED}
 
 # ────────────────────────────── 照片 ──────────────────────────────
 # 图集就是目录：账本没有图集实体，一个目录下的图片本来就是一份图集，
@@ -642,8 +650,38 @@ def _attach_index_favorites(connection, rows: list[dict]) -> None:
         row["favorite"] = row.get("entity_id") in favorites
 
 
+#: 索引页账本那一段读到的表：计数与代表作、分类、事务所成员与官网、片商旗下 label、
+#: 订阅状态，以及收藏（存在 `profile` 里，按别名与重定向解析成规范实体）。
+INDEX_TABLES = ("asset", "asset_entity", "asset_tag", "asset_tag_preference", "entity",
+                "entity_alias", "entity_redirect", "entity_classification", "entity_external_ref",
+                "entity_identity_link", "entity_link", "entity_membership", "label_maker",
+                "feed_source", "follow_source", "profile")
+
+
 def q_index(contract: WebContract, kind, q="", limit=600, offset=0, category=""):
-    """全部艺人 / 创作者 / 厂牌 / 事务所 / 标签的索引页数据。"""
+    """全部艺人 / 创作者 / 厂牌 / 事务所 / 标签的索引页数据。
+
+    账本那一段十来条 SQL，名册页合计三四百毫秒；没有搜索词时按 `INDEX_TABLES` 的版本缓存。
+    搜索词的键空间不封闭，带搜索词照旧现算。读目录索引的头像与标识标志在缓存之外现做。
+    """
+    def read():
+        return _index_rows(contract, kind, q, limit, offset, category)
+    if q or kind not in {"agencies", "tags", *INDEX_ENTITY_KINDS}:
+        rows, has_more, category_counts = read()
+    else:
+        rows, has_more, category_counts = contract.cached_until_changed(
+            repr(("index", kind, limit, offset, category)), read, tables=INDEX_TABLES)
+    # 下面还要往每行补目录索引的标志，不能写进缓存里那一份。
+    rows = [dict(row) for row in rows]
+    result = _decorate_index(contract, kind, rows, has_more, category_counts)
+    if kind == 'tags':
+        result['total'] = (category_counts.get(category, 0) if category and category != 'all'
+                           else sum(category_counts.values()))
+    return result
+
+
+def _index_rows(contract: WebContract, kind, q, limit, offset, category):
+    category_counts = None
     with contract.read_connection() as c:
         if kind == "agencies":
             # 事务所自己不挂作品，所以它排的是人：一家有多少艺人是它的规模，作品数是
@@ -707,7 +745,7 @@ def q_index(contract: WebContract, kind, q="", limit=600, offset=0, category="")
             clause, values = entity_classification.filter_sql(category,connection=c)
             sql += clause
             par.extend(values)
-            sql += "GROUP BY e.id,e.canonical_name ORDER BY n DESC LIMIT ? OFFSET ?"
+            sql += "GROUP BY e.id,e.canonical_name ORDER BY n DESC,e.id ASC LIMIT ? OFFSET ?"
             par.extend((limit + 1, offset))
             rows = [dict(r) for r in c.execute(sql, par)]
             has_more = len(rows) > limit
@@ -736,6 +774,10 @@ def q_index(contract: WebContract, kind, q="", limit=600, offset=0, category="")
             rows = all_rows[offset:offset + limit]
             has_more = offset + limit < len(all_rows)
         _attach_index_favorites(c, rows)
+    return rows, has_more, category_counts
+
+
+def _decorate_index(contract: WebContract, kind, rows, has_more, category_counts):
     if kind in INDEX_ENTITY_KINDS:
         entity_kind = INDEX_ENTITY_KINDS[kind]
         # 索引页一屏几十个圆头像，走的是和顶栏那排同一条两级链：规范实体图优先，
@@ -1134,9 +1176,6 @@ def q_suggest(contract: WebContract, q: str, limit: int = SUGGEST_GROUP_LIMIT,
     ]}
 
 
-#: 用户在资料页选定统称时，被换下的旧规范名记这个来源。合并留的是 `merge:*`，
-#: 刮削留的是站点名；分得开才答得出「这个名字是谁定的」。
-PREFERRED_NAME_SOURCE = "user:preferred-name"
 #: 用户自己敲进来的别名记这个来源。它是唯一允许在界面上删掉的一类——刮削和合并留下的
 #: 那些是这个人真的用过的名字，删掉就问不出这条实体当初为什么长这样。
 USER_ALIAS_SOURCE = "user:alias"
@@ -1226,28 +1265,4 @@ def w_entity_name(contract: WebContract, body):
         row = resolve_entity(c, kind, name)
         if not row:
             raise ValueError("entity not found")
-        entity_id, current = int(row["id"]), str(row["canonical_name"])
-        chosen_key = normalize_entity_name(chosen)
-        if chosen_key == normalize_entity_name(current):
-            return {"ok": True, "canonical_name": current, "changed": False}
-        known = {normalize_entity_name(str(item[0])): str(item[0]) for item in c.execute(
-            "SELECT alias FROM entity_alias WHERE entity_id=?", (entity_id,))}
-        if chosen_key not in known:
-            raise ValueError("canonical must be one of this entity's existing names")
-        taken = c.execute(
-            "SELECT canonical_name FROM entity WHERE kind=? AND normalized_name=? AND id<>?",
-            (kind, chosen_key, entity_id)).fetchone()
-        if taken:
-            raise ValueError(f"another {kind} is already named {taken[0]}")
-        stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        c.execute(
-            "UPDATE entity SET canonical_name=?,normalized_name=?,updated_at=? WHERE id=?",
-            (known[chosen_key], chosen_key, stamp, entity_id))
-        # 旧规范名留成别名：它是这个人真的用过的名字，也是选回去的入口。
-        c.execute(
-            "INSERT OR IGNORE INTO entity_alias(entity_id,alias,normalized_alias,source,confidence)"
-            " VALUES(?,?,?,?,1.0)",
-            (entity_id, current, normalize_entity_name(current), PREFERRED_NAME_SOURCE))
-        flat = rewrite_flat_projection(c, kind, entity_id, current, known[chosen_key])
-        return {"ok": True, "canonical_name": known[chosen_key], "changed": True,
-                "previous_name": current, "flat_rewritten": flat}
+        return prefer_entity_name(c, int(row["id"]), chosen)

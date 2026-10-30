@@ -22,14 +22,20 @@ const REACT_IMPORT_TIMEOUT_MS = 30_000;
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-beforeAll(async () => { await import('../../src/react/router/router') }, REACT_IMPORT_TIMEOUT_MS);
+beforeAll(async () => {
+  await import('../../src/react/router/router');
+  await (await import('../../src/react/router/route-chunk')).loadRouteChunks();
+}, REACT_IMPORT_TIMEOUT_MS);
 
 async function load(path = '/') {
   vi.resetModules();
   window.history.replaceState(null, '', path);
-  const [history, router, routes] = await Promise.all([
+  const [history, router, routes, chunks] = await Promise.all([
     import('../../src/history'), import('../../src/react/router/router'), import('../../src/react/router/managed-routes'),
+    import('../../src/react/router/route-chunk'),
   ]);
+  // 下面有用例直接调 `page()` 读 props，不经首屏取数；低频页的代码先装上。
+  await chunks.loadRouteChunks();
   return { ...history, ...router, ...routes };
 }
 type Loaded = Awaited<ReturnType<typeof load>>;
@@ -47,7 +53,7 @@ function shellActions(): ShellActions {
     openItem: vi.fn(), openEntity: vi.fn(), openTag: vi.fn(), openTasteSignal: vi.fn(), navigate: vi.fn(),
     openManage: vi.fn(), managePath: vi.fn((section: string) => sections[section] ?? ''), openFollow: vi.fn(),
     receipt: vi.fn(), toast: vi.fn(), failure: vi.fn(), revealSource: vi.fn(async () => ''),
-    reopenTutorial: vi.fn(async () => {}), requestConfigurationSection: vi.fn(),
+    reopenTutorial: vi.fn(async () => {}),
     routeReview: vi.fn(), routeFollowManage: vi.fn(), saveFollowPreference: vi.fn(), srcBadge: () => '',
     routeIndex: vi.fn(), savePeopleLayout: vi.fn(), exitSelectMode: vi.fn(),
     personAvatar: vi.fn(() => ({ html: '', face: '' })), authorAvatar: vi.fn(() => ''), showIndexTags: vi.fn(),
@@ -357,33 +363,24 @@ function element<P>(path: keyof Loaded['MANAGED_ROUTES'], r: Loaded, open: objec
     open, actions, go).props;
 }
 
-it('诊断页先选配置分栏再导航，作品与任务交给共享入口', async () => {
+it('诊断页的作品交给共享入口，各项去处由页内链接承担、不调用 go', async () => {
   const r = await load();
   const actions = shellActions();
-  const order: string[] = [];
-  const go = vi.fn((path: string) => { order.push(path) });
-  vi.mocked(actions.requestConfigurationSection).mockImplementation(section => { order.push(section) });
+  const go = vi.fn();
   const page = element<ConfigurationProps & { diagnostics: ReactElement<DiagnosticsProps> }>('/settings/diagnostics', r, {}, actions, go);
   const props = page.diagnostics.props;
-  props.configure('Network & access');
   props.openItem(12);
-  props.navigate('/tasks');
-  expect(order).toEqual(['Network & access', '/settings/network', '/tasks']);
   expect(actions.openItem).toHaveBeenCalledWith(12);
+  expect(go).not.toHaveBeenCalled();
 });
 
-it('统计页：点标签交壳回目录；「添加媒体目录」先交页签再换到配置页', async () => {
+it('统计页：点标签交壳回目录', async () => {
   const r = await load();
   const actions = shellActions();
-  const order: string[] = [];
-  const go = vi.fn((path: string) => { order.push(`go ${path}`) });
-  vi.mocked(actions.requestConfigurationSection).mockImplementation((section) => { order.push(`section ${section}`) });
-  const props = element<StatsProps>('/stats', r, { configurable: false }, actions, go);
+  const props = element<StatsProps>('/stats', r, {}, actions, vi.fn());
   props.onTag('痴女');
-  props.openMediaSettings();
   expect(vi.mocked(actions.openTag).mock.calls).toEqual([['痴女']]);
-  expect(order).toEqual(['section Library & import', 'go /settings/library']);
-  expect([props.configurable, props.tagLabel('JK制服')]).toEqual([false, 'JK制服']);
+  expect(props.tagLabel('JK制服')).toBe('JK制服');
 });
 
 it('口味页：总结里的下一步按路径走 go', async () => {

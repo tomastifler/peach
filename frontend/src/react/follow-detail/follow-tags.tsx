@@ -1,0 +1,44 @@
+/* 在线标签复用本地详情的标签行、选择器和名称编辑。 */
+import { apiSend } from '../../api';
+import { collectionItems, replaceFollowItem, type FollowGroup } from '../follow-feed/follow-feed';
+import { DetailTags } from '../components/detail-tags';
+import { Note } from '../components/note';
+import { rememberTag } from '../item-detail/item-detail';
+import { busyProps, useAction } from '../settings/use-action';
+import { queryClient } from '../query';
+import { detailTags, tagCategory, type FollowDetailActions, type FollowDetailData, type FollowDetailItem } from './follow-detail';
+
+export function FollowTags({ item, label, actions }: { item: FollowDetailItem; label(tag: string): string; actions: FollowDetailActions }) {
+  const action = useAction();
+  const refresh = () => queryClient.invalidateQueries({
+    predicate: query => ['follow-feed', 'follow', 'tag-management'].includes(String(query.queryKey[0])),
+  });
+  const apply = (result: { item: FollowDetailItem; group: FollowGroup }) => {
+    replaceFollowItem(result.item);
+    queryClient.setQueriesData<FollowDetailData>({ queryKey: ['follow-item'] }, current => {
+      if (!current) return current;
+      const member = collectionItems(result.group).find(value => value.id === current.item.id);
+      return member ? { ...current, item: member as FollowDetailItem, group: result.group } : current;
+    });
+  };
+  const write = (operation: 'add' | 'remove', tag: string) => { void action.run(`${operation}:${tag}`, async signal => {
+    const result = await apiSend<{ item: FollowDetailItem; group: FollowGroup }>('/api/follow/tag', { id: item.id, operation, tag }, 'POST', signal);
+    apply(result); await refresh();
+  }, () => {
+    if (operation === 'add') rememberTag(tag);
+    const inverse = operation === 'add' ? 'remove' : item.custom_tags?.includes(tag) ? 'add' : 'restore';
+    actions.toast(operation === 'add' ? `已添加标签「${label(tag)}」` : `已删除标签「${label(tag)}」`, {
+      undo: async () => {
+        const result = await apiSend<{ item: FollowDetailItem; group: FollowGroup }>('/api/follow/tag', { id: item.id, operation: inverse, tag });
+        apply(result); await refresh();
+      },
+    });
+  }) };
+  return <section aria-label="内容标签" data-follow-tag-editor="" data-follow-detail-tags="">
+    <DetailTags tags={detailTags(item, label).map(k => ({ k, cat: tagCategory(item, k) }))} scope="online" adding={!!action.busy}
+      candidates={[]}
+      label={label} onOpen={actions.openTag} onAdd={tag => write('add', tag)} onRemove={tag => write('remove', tag.k)}
+      busyAttrs={() => busyProps(!!action.busy)} />
+    {action.error ? <Note tone="error">{action.error}</Note> : null}
+  </section>;
+}

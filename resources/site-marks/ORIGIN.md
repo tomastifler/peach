@@ -4,6 +4,8 @@
 
 | 文件 | 来源 | 获取原因 |
 | --- | --- | --- |
+| f95zone.png | F95zone 的公开图标缓存：`https://www.google.com/s2/favicons?domain=f95zone.to&sz=64`，SHA-256 `2558C3BBBB80F2F71D210BD17A8FECAAEE63F1F73B5EF95C4A46899646BCC149` | 官方 `assets/favicon-32x32.png` 返回 Cloudflare 验证页 |
+| globe.svg | 项目已有 Lucide `i-globe` 字形，沿用 Lucide ISC 许可 | 来源图标未取得时的通用地球图标 |
 | javten.png | JAVten 的公开图标缓存：`https://www.google.com/s2/favicons?domain=javten.com&sz=64` | 官方首页与图标端点返回 Cloudflare 403，favicon.ico 返回空文件 |
 | fc2ppvdb.png | FC2PPV-DB 的公开图标缓存：`https://www.google.com/s2/favicons?domain=fc2ppv-db.com&sz=64` | 官方首页与图标端点返回 Cloudflare 403 |
 | avwikidb.png | `https://avwikidb.com/apple-touch-icon.png` | 首页有验证页，公开图标可读取 |

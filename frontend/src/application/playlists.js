@@ -92,7 +92,11 @@ export function rereadPlaylists(){
 }
 
 export function routeReview(params){
-  navigationState.route('/review'+(params.category?'?category='+encodeURIComponent(params.category):''));
+  const query = new URLSearchParams(location.search);
+  for(const key of ['category','queue']){
+    if(params[key])query.set(key,params[key]);else query.delete(key);
+  }
+  navigationState.route('/review'+(query.size?'?'+query:''));
 }
 
 export function openConfigurationSection(section){

@@ -16,6 +16,37 @@ def release(version, **extra):
 
 
 class ReleaseUpdateTests(unittest.TestCase):
+    def test_r2_release_is_available_when_github_is_unavailable_and_uses_verified_digest(self):
+        row = release("1.0.0")
+        row["assets"][0].update(size=123, digest="sha256:" + "a" * 64,
+                                browser_download_url="https://untrusted.invalid/package.zip")
+
+        def transport(request, *_args):
+            if request.url == release_updates.API_URL:
+                raise httpx.ConnectError("GitHub unavailable")
+            return HttpResponse(200, {}, json.dumps([row]).encode())
+
+        with patch.object(release_updates, "__version__", "0.9.0"):
+            result = release_updates.check(transport=transport)
+        self.assertEqual(result["state"], "available")
+        self.assertEqual(result["asset_url"], "https://downloads.peach.video/v1.0.0/Peach-1.0.0-windows-x64.zip")
+        self.assertEqual(result["asset_digest"], "sha256:" + "a" * 64)
+        self.assertEqual(result["release_url"], release_updates.RELEASES_URL + "/tag/v1.0.0")
+
+    def test_latest_version_can_come_from_either_source_and_r2_requires_a_digest(self):
+        r2 = release("1.0.0")
+        github = release("2.0.0")
+
+        def transport(request, *_args):
+            row = r2 if request.url == release_updates.DOWNLOADS_API else github
+            return HttpResponse(200, {}, json.dumps([row]).encode())
+
+        self.assertEqual(release_updates.check(transport=transport)["latest_version"], "2.0.0")
+        r2["assets"][0]["digest"] = "sha256:" + "a" * 64
+        r2["tag_name"] = "v3.0.0"
+        r2["assets"][0]["name"] = "Peach-3.0.0-windows-x64.zip"
+        self.assertEqual(release_updates.check(transport=transport)["latest_version"], "3.0.0")
+
     def check(self, rows, status=200):
         transport = Mock(return_value=HttpResponse(status, {}, json.dumps(rows).encode()))
         with patch.object(release_updates, "__version__", "0.9.0"):
@@ -43,10 +74,14 @@ class ReleaseUpdateTests(unittest.TestCase):
         self.assertEqual(self.check([row])["package_kind"], "full")
         row["assets"] += [{"name": f"Peach-1.0.0-windows-x64-tools-{tool}.zip", "state": "uploaded"}
                           for tool in ("ffmpeg", "untrunc", "cloudflared")]
+        self.assertEqual(self.check([row])["package_kind"], "full", "缺人脸模型工具包时不能只下应用更新包")
+        row["assets"].append({"name": "Peach-1.0.0-windows-x64-tools-face-models.zip", "state": "uploaded"})
         result = self.check([row])
         self.assertEqual(result["package_kind"], "update")
         self.assertTrue(result["asset_url"].endswith("-update.zip"))
         self.assertEqual(result["asset_size"], 123)
+        self.assertEqual(result["full_url"], release_updates.RELEASES_URL + "/download/v1.0.0/Peach-1.0.0-windows-x64.zip",
+                         "应用更新包准备不下去时改下的同版本完整包")
         row["assets"][1]["state"] = "new"
         self.assertEqual(self.check([row])["package_kind"], "full")
         row["assets"].pop(0)
@@ -59,6 +94,35 @@ class ReleaseUpdateTests(unittest.TestCase):
             result = release_updates.check(transport=Mock(side_effect=cause))
             self.assertEqual(result["state"], "error")
             self.assertIsNone(result["latest_version"])
+
+    def test_github_can_report_current_and_ahead_when_r2_is_unavailable(self):
+        def transport(github_version):
+            def answer(request, *_args):
+                if request.url == release_updates.DOWNLOADS_API:
+                    raise httpx.ConnectError("R2 unreachable")
+                return HttpResponse(200, {}, json.dumps([release(github_version)]).encode())
+            return answer
+
+        with patch.object(release_updates, "__version__", "0.48.2"):
+            for version, state in (("0.46.1", "ahead"), ("0.48.2", "current")):
+                with self.subTest(github=version):
+                    result = release_updates.check(transport=transport(version))
+                    self.assertEqual(result["state"], state)
+            self.assertEqual(release_updates.check(transport=transport("0.49.0"))["state"], "available",
+                             "GitHub 上真有更新的版本时照样可以升")
+
+    def test_identical_versions_prefer_github_downloads(self):
+        row = release("1.0.0")
+        row["assets"][0].update(size=123, digest="sha256:" + "a" * 64)
+        calls = []
+
+        def transport(request, *_args):
+            calls.append(request.url)
+            return HttpResponse(200, {}, json.dumps([row]).encode())
+
+        result = release_updates.check(transport=transport)
+        self.assertEqual(calls, [release_updates.API_URL, release_updates.DOWNLOADS_API])
+        self.assertEqual(result["asset_url"], release_updates.RELEASES_URL + "/download/v1.0.0/Peach-1.0.0-windows-x64.zip")
 
     def test_standalone_tray_checks_releases_without_git(self):
         execute = Mock(side_effect=AssertionError("Git must not run"))

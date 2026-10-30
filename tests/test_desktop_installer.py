@@ -195,6 +195,21 @@ class InstallerHandoffTests(unittest.TestCase):
         with patch.object(desktop_installer.distribution, "standalone", return_value=False):
             self.assertEqual(desktop_installer.main("--installer-stop"), 2)
 
+    def test_stop_gives_up_at_once_when_no_stop_message_reaches_the_tray(self):
+        with patch("peach.windows_restart.find_tray_windows", return_value=(TrayWindow(10, 20),)), \
+                patch("peach.windows_restart.post_stop", return_value=False), \
+                patch.object(desktop_installer.time, "sleep") as sleep:
+            self.assertFalse(desktop_installer.stop(self.root))
+        sleep.assert_not_called()
+
+    def test_a_tray_that_closed_before_the_message_counts_as_stopped(self):
+        windows = [(TrayWindow(10, 20),), (), ()]
+        with patch("peach.windows_restart.find_tray_windows", side_effect=lambda _: windows.pop(0)), \
+                patch("peach.windows_restart.post_stop", return_value=False), \
+                patch.object(desktop_installer, "_running_from", return_value=[]), \
+                patch.object(desktop_installer.time, "sleep"):
+            self.assertTrue(desktop_installer.stop(self.root))
+
     def test_stop_waits_for_the_tray_to_exit(self):
         windows = [(TrayWindow(10, 20),), (TrayWindow(10, 20),), ()]
         with patch("peach.windows_restart.find_tray_windows", side_effect=lambda _: windows.pop(0)), \

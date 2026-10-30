@@ -7,8 +7,9 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from peach import follow_providers
 from peach.follow import FollowSourceError
-from peach.follow_sources import FollowCandidate, SourceFetch
+from peach.follow_sources import FollowCandidate, IwaraConnector, SourceFetch
 from peach.follow_store import (
     FollowStore, ReleaseGroup, author_display_text, f95_author_handles,
     f95_author_name, normalized_author_name,
@@ -123,6 +124,27 @@ class RegistrationTests(_StoreCase):
 
 
 class RecordTests(_StoreCase):
+    def test_iwara_general_tags_enter_the_inventory_without_guessing_other_types(self):
+        from peach.web_follow import _item_tags, online_tag_inventory
+
+        candidate = IwaraConnector()._candidate({
+            "id": "Video123", "title": "Test animation", "tags": [
+                {"id": "dance", "type": "general"},
+                {"id": "blender", "type": "category"},
+                {"id": "series_title", "type": "source"},
+                {"id": "pose", "type": "unknown"},
+                {"id": "animation"}]}, {"name": "Test Creator"}, "creator")
+        source_id = self._source(provider="iwara", ref="creator")
+        self.store.record(source_id, _fetch([candidate], provider="iwara", ref="creator"),
+                          moment=MOMENT)
+        rows = online_tag_inventory(self.connection)
+        self.assertEqual([(row["k"], row["cat"]) for row in rows], [("dance", "general")])
+        item = self.store.items()[0]
+        self.assertEqual(_item_tags(item), ["dance"])
+        self.assertEqual(item.metadata["source_tag_types"], {
+            "dance": "general", "blender": "category", "series_title": "source", "pose": "unknown"})
+        self.assertEqual(item.metadata["tags"], ["dance", "blender", "series_title", "pose", "animation"])
+
     def test_booru_source_only_becomes_a_profile_when_the_handle_matches(self):
         source_id = self._source(
             provider="rule34xxx", ref="auxtasy", label="Auxtasy",
@@ -299,6 +321,56 @@ class RecordTests(_StoreCase):
                                     moment=MOMENT)
         self.assertIsNotNone(outcome.evidence_path)
         self.assertIsNone(outcome.evidence_error)
+
+    def test_identical_evidence_is_reused_without_overwriting_files(self):
+        source_id = self._source()
+        fetch = _fetch([_candidate("1", "A")])
+        first = self.store.record(source_id, fetch, moment=MOMENT)
+        evidence = self.root / "sources" / Path(first.evidence_path)
+        sidecar = evidence.with_suffix(".json")
+        before = [(path.read_bytes(), path.stat().st_mtime_ns) for path in (evidence, sidecar)]
+        again = self.store.record(source_id, fetch, moment=MOMENT)
+        self.assertEqual(again.evidence_path, first.evidence_path)
+        self.assertEqual(again.added, 0)
+        self.assertEqual([(path.read_bytes(), path.stat().st_mtime_ns)
+                          for path in (evidence, sidecar)], before)
+
+    def test_shared_response_body_keeps_distinct_snapshot_metadata(self):
+        for provider, spec in follow_providers.PROVIDERS.items():
+            if not spec.source_url:
+                continue
+            with self.subTest(provider=provider):
+                source_id = self._source(provider=provider, semantics=spec.semantics)
+                fetch = _fetch([_candidate("1", "A", provider=provider)],
+                               provider=provider, semantics=spec.semantics)
+                variants = (fetch, replace(fetch, request_url=fetch.request_url + "?firstId=1"),
+                            replace(fetch, candidates=()), replace(fetch, raw_body=b"different body"))
+                paths = []
+                for variant in variants:
+                    outcome = self.store.record(source_id, variant, moment=MOMENT)
+                    self.assertIsNone(outcome.evidence_error)
+                    paths.append(self.root / "sources" / Path(outcome.evidence_path))
+                self.assertEqual(len(set(paths)), 4)
+                for path, variant in zip(paths, variants):
+                    self.assertEqual(path.read_bytes(), variant.raw_body)
+                    sidecar = json.loads(path.with_suffix(".json").read_text(encoding="utf-8"))
+                    self.assertEqual(sidecar["provider"], provider)
+                    self.assertEqual(sidecar["request_url"], variant.request_url)
+                    self.assertEqual(sidecar["candidates"], len(variant.candidates))
+
+    def test_conflicting_evidence_still_rejects_overwriting(self):
+        source_id = self._source()
+        fetch = _fetch([_candidate("1", "A")])
+        outcome = self.store.record(source_id, fetch, moment=MOMENT)
+        evidence = self.root / "sources" / Path(outcome.evidence_path)
+        sidecar = evidence.with_suffix(".json")
+        original = sidecar.read_bytes()
+        sidecar.write_bytes(b"conflicting evidence")
+        with self.assertRaisesRegex(FollowSourceError, "immutable follow snapshot collision"):
+            self.store.record(source_id, fetch, moment=MOMENT)
+        self.assertEqual(sidecar.read_bytes(), b"conflicting evidence")
+        self.assertEqual(evidence.read_bytes(), fetch.raw_body)
+        sidecar.write_bytes(original)
 
     def test_approximate_precision_is_carried_through_from_the_connector(self):
         source_id = self._source()
@@ -954,6 +1026,27 @@ class ReleaseGroupTests(unittest.TestCase):
 class AuthorIdentityTests(_StoreCase):
     """作者别名表的写入口径。这些 SQL 归存储层，不写在 Web 处理函数里。"""
 
+    def test_preferred_name_preserves_all_spellings_and_the_group(self):
+        current = "Suzutaru 3D (鈴太郎3D)"
+        self.store.upsert_author_alias(current, "suzutaro3d", source="manual")
+        self.store.upsert_author_alias(current, "鈴太郎3D", source="manual")
+        result = self.store.rename_author_group(normalized_author_name(current), "鈴太郎3D")
+        mapping, groups = self.store.author_aliases()
+        self.assertEqual(result, {"previous": current, "canonical": "鈴太郎3D"})
+        self.assertEqual(groups[0]["canonical_name"], "鈴太郎3D")
+        self.assertEqual({row["name"] for row in groups[0]["aliases"]}, {current, "suzutaro3d"})
+        self.assertEqual(set(mapping.values()), {normalized_author_name("鈴太郎3D")})
+
+    def test_preferred_name_rejects_other_groups_and_missing_groups(self):
+        self.store.upsert_author_alias("作者 A", "alias A", source="manual")
+        self.store.upsert_author_alias("作者 B", "alias B", source="manual")
+        before = self.store.author_aliases()
+        for key, name in ((normalized_author_name("作者 A"), "alias B"), ("missing", "名称"),
+                          (normalized_author_name("作者 A"), "")):
+            with self.subTest(key=key, name=name), self.assertRaises(ValueError):
+                self.store.rename_author_group(key, name)
+            self.assertEqual(self.store.author_aliases(), before)
+
     def test_the_container_suffix_is_not_part_of_the_author_name(self):
         """F95 的线程标题说的是一个容器，不是另一个作者。
 
@@ -1065,6 +1158,13 @@ class AuthorIdentityTests(_StoreCase):
         self.assertIsNone(self.store.learn_official_author_alias(
             "kemono", "fanbox/30917150",
             (_candidate("1", "a", provider="kemono", author="Initiala"),)))
+
+    def test_iwara_author_profile_provides_a_trusted_handle_alias(self):
+        learned = self.store.learn_official_author_alias(
+            "iwara", "user_creator",
+            (_candidate("1", "Work", provider="iwara", author="Test Creator"),))
+        self.assertEqual(learned["alias"], "user_creator")
+        self.assertEqual(learned["source"], "official:iwara")
 
 
 class SourceRemovalTests(_StoreCase):

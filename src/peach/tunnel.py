@@ -831,6 +831,9 @@ class TunnelManager:
                     break
                 self._ready.clear()
         with self._lock:
+            # 等待期间被 `stop()` 收掉：状态归 stop 写，这里不再补一份 error。
+            if generation != self._generation:
+                return TunnelSnapshot(state="stopped")
             process = self._process
             url = self._url
             error = self._error

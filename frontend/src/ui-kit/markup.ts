@@ -30,7 +30,8 @@ function noteDetailsHtml({label='',items=[],footnote=''}:NoteDetails={}){
 
 /* Inline, persistent context beside the field/card/section it describes.
    恢复动作有两种形态：留在本页执行的走按钮，要离开本页才做得成的走链接。
-   两者占同一个格子、同一枚 `data-note-action`，Note 的版式不因为它是 <a> 改变。 */
+   两者占同一个格子、同一枚 `data-note-action`，Note 的版式不因为它是 <a> 改变；
+   都是次要样式，与 React `Note` 的 `action` 一致，主动作留给 Note 所在区域自己的那一枚。 */
 /** Geist Note：字段、卡片、分区旁的持久反馈。 */
 export function noteHtml(message:any,{variant='secondary',label='',className='',size='medium',filled=false,actionLabel='',actionHref='',details=null}:{
   variant?: 'secondary' | 'warning' | 'error' | 'success' | (string & {});
@@ -48,7 +49,7 @@ export function noteHtml(message:any,{variant='secondary',label='',className='',
   const role=kind==='error'?' role="alert"':' role="note"';
   const action=!actionLabel?''
     :actionHref?`<a class="geist-button" href="${esc(actionHref)}" data-note-action>${esc(actionLabel)}</a>`
-    :`<button type="button" class="geist-button primary" data-note-action>${esc(actionLabel)}</button>`;
+    :`<button type="button" class="geist-button" data-note-action>${esc(actionLabel)}</button>`;
   return `<div class="geist-note geist-note-${kind}${className?` ${esc(className)}`:''}${size==='small'?' geist-note-small':''}${filled?' geist-note-filled':''}"${role}>
     ${icon(symbol)}<p>${label?`<b>${esc(label)}</b>`:''}<span>${esc(kind==='error'?requestErrorMessage(message):message)}</span></p>${action}${details?noteDetailsHtml(details):''}</div>`;
 }
@@ -122,8 +123,15 @@ export function searchInputHtml({label,id='',name='',value='',placeholder='',att
     <input ${parts}></div>`;
 }
 
-/** Geist Loading Dots: indeterminate work continuing in the background. */
-export function loadingDotsHtml(label='Working', {className=''}={}):string{
+/**
+ * 列表续页时 Loading Dots 旁那一句：目录哨兵、垃圾文件队列等无限滚动列表共用。三颗点已经在动，
+ * 字不带省略号。
+ */
+export const LOAD_MORE_STATUS = '载入中';
+
+/** Geist Loading Dots: indeterminate work continuing in the background. The dots already say
+ *  "still going", so the label never ends in an ellipsis. */
+export function loadingDotsHtml(label='正在处理', {className=''}={}):string{
   return `<span class="ui-geist-loading${className?` ${esc(className)}`:''}" role="status">
     <span class="ui-geist-loading-dots" aria-hidden="true"><i></i><i></i><i></i></span>
     <span>${esc(label)}</span></span>`;

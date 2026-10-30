@@ -7,7 +7,7 @@ import { after, before, describe, it } from 'node:test';
 
 import type { Browser, Page } from 'playwright-core';
 
-import { launch, VIEWPORTS } from './harness.ts';
+import { launch, unmanagedScrollers, VIEWPORTS, withPageDiagnostics } from './harness.ts';
 import { openItemPage, type ItemVisit } from './item-fixture.ts';
 
 const DESKTOP = VIEWPORTS.find((viewport) => !viewport.mobile)!;
@@ -75,15 +75,74 @@ async function typeQuery(opened: Search, text = SUGGEST.q) {
   const { page } = opened;
   await page.locator('#q').click();
   await page.keyboard.type(text);
-  await page.locator(`${OPTION}[data-search-value="七海の夏"]`).waitFor({ timeout: 5_000 });
+  await withPageDiagnostics(page, () => `搜索建议（请求 ${opened.suggest.map(url => url.search).join('、')}）`,
+    () => page.locator(`${OPTION}[data-search-value="七海の夏"]`).waitFor({ timeout: 5_000 }));
 }
 
 describe('顶栏搜索', () => {
   let browser: Browser;
   before(async () => { browser = await launch(); });
   after(async () => { await browser?.close(); });
+  it('等待失败保留原异常以及输入、焦点和菜单现场，成功时返回原结果', async () => {
+    const context = await browser.newContext();
+    try {
+      const page = await context.newPage();
+      await page.setContent('<input id="q" value="取证词"><div id="searchMenu">测试建议</div>');
+      await page.locator('#q').focus();
+      const failure = new Error('原始等待失败');
+      await assert.rejects(withPageDiagnostics(page, '诊断夹具', async () => { throw failure }), error => {
+        assert.equal((error as Error).cause, failure);
+        assert.match((error as Error).message, /原始等待失败/);
+        assert.match((error as Error).message, /取证词/);
+        assert.match((error as Error).message, /测试建议/);
+        assert.match((error as Error).message, /focus/);
+        return true;
+      });
+      assert.equal(await withPageDiagnostics(page, '成功夹具', async () => 42), 42);
+    } finally { await context.close(); }
+  });
 
   for (const viewport of VIEWPORTS) {
+    it(`${viewport.name} 搜索长列表使用覆盖式滑块并可拖动，关闭重开保留一套轨道`, async () => {
+      const opened = await openSearch(browser, { viewport, limit: 30,
+        history: Array.from({ length: 30 }, (_, index) => `搜索记录 ${index + 1}`) });
+      const { page } = opened;
+      try {
+        if (viewport.mobile) await page.locator('#searchBtn').click();
+        await page.locator('#q').click();
+        await page.waitForFunction(() => {
+          const menu = document.querySelector<HTMLElement>('#searchMenu')!;
+          return menu.dataset.overlayScrollbar === 'true' && menu.scrollHeight > menu.clientHeight + 1;
+        });
+        const track = page.locator(`${MENU} > [data-overlay-track="y"]`);
+        await track.waitFor({ state: 'visible' });
+        assert.equal(await page.locator(MENU).evaluate(node => getComputedStyle(node).scrollbarWidth), 'none');
+        const start = (await track.boundingBox())!;
+        await page.locator(MENU).evaluate(node => { node.scrollTop = 100 });
+        await page.waitForFunction(() => document.querySelector<HTMLElement>('#searchMenu > .ov-y')!.style.transform.includes('100px'));
+        const moved = (await track.boundingBox())!;
+        assert.ok(Math.abs(start.y - moved.y) <= 1, '轨道应保持在下拉框可视边缘');
+        const thumb = (await track.locator('.ovthumb').boundingBox())!;
+        await page.mouse.move(thumb.x + thumb.width / 2, thumb.y + thumb.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(thumb.x + thumb.width / 2, thumb.y + thumb.height / 2 + 40, { steps: 5 });
+        await page.mouse.up();
+        assert.ok(await page.locator(MENU).evaluate(node => node.scrollTop > 100));
+        const beforeWheel = await page.locator(MENU).evaluate(node => node.scrollTop);
+        const menuBox = (await page.locator(MENU).boundingBox())!;
+        await page.mouse.move(menuBox.x + menuBox.width / 2, menuBox.y + menuBox.height / 2);
+        await page.mouse.wheel(0, 140);
+        await page.waitForFunction(previous => document.querySelector('#searchMenu')!.scrollTop > previous, beforeWheel);
+        await page.keyboard.press('Escape');
+        await page.locator(MENU).waitFor({ state: 'hidden' });
+        await page.locator('#q').click();
+        await track.waitFor({ state: 'visible' });
+        assert.equal(await track.count(), 1);
+        assert.deepEqual(await unmanagedScrollers(page), []);
+        assert.deepEqual(opened.problems, []);
+      } finally { await opened.close(); }
+    });
+
     it(`${viewport.name} 收起输入法保留搜索建议，焦点移出搜索区或点击页面关闭`, { timeout: 60_000 }, async () => {
       const opened = await openSearch(browser, { viewport, history: ['最近搜索'] });
       try {
@@ -151,7 +210,7 @@ describe('顶栏搜索', () => {
         await page.waitForTimeout(180);
         assert.equal(await page.locator(MENU).isVisible(), true, '菜单内键盘焦点关闭了推荐');
         await subscription.press('Enter');
-        await page.waitForURL('**/subscriptions?tab=feeds');
+        await page.waitForURL('**/subscriptions?tab=add');
         assert.ok(!new URL(page.url()).searchParams.has('q'));
       } finally { await opened.close(); }
     });

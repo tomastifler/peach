@@ -1,4 +1,4 @@
-import { useContext, useDeferredValue, useEffect, useLayoutEffect, useState } from 'react';
+import { useContext, useDeferredValue, useEffect, useId, useLayoutEffect, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useInRouterContext, useLocation } from 'react-router';
 import { useQueries, useQuery } from '@tanstack/react-query';
@@ -6,7 +6,7 @@ import type { Key, Selection } from 'react-aria-components';
 import { RiFolder3Line, RiFolderOpenLine, RiFolderSettingsLine, RiSearchLine, RiSideBarLine } from '@remixicon/react';
 import { Breadcrumb, BreadcrumbItem } from '@/components/base/breadcrumb/breadcrumb';
 import { TreeView, TreeViewItem } from '@/components/base/tree-view/tree-view';
-import { Button } from '@/components/base/buttons/button';
+import { Button, ButtonLink } from '@/components/base/buttons/button';
 import { IconButton } from '@/components/base/buttons/icon-button';
 import { Input } from '@/components/base/input/input';
 import { Checkbox } from '@/components/base/checkbox/checkbox';
@@ -29,7 +29,7 @@ export function FolderBrowseToggle() {
 function FolderBrowseControl() {
   const address = useLocation();
   const actions = useContext(ShellActionsContext);
-  if (!isCatalogPath(address.pathname)) return null;
+  if (!isCatalogPath(address.pathname) && !/^\/(performers|creators|studios|series|agencies|tags)\/[^/]+$/.test(address.pathname)) return null;
   const params = new URLSearchParams(address.search);
   const active = params.get('browse') === 'folders' || !!params.get('folder');
   return <IconButton size="small" data-folder-mode-toggle="" aria-label="Folder mode" title="Folder mode" aria-pressed={active}
@@ -38,29 +38,48 @@ function FolderBrowseControl() {
       active ? { browse: null, folder: null, folder_recursive: null } : { browse: 'folders' }))} />;
 }
 
-export function CatalogFolders() {
+export function EntityFolderWorkspace({ children, enabled }: { children: ReactNode; enabled: boolean }) {
+  return useInRouterContext() ? <RoutedFolderWorkspace enabled={enabled}>{children}</RoutedFolderWorkspace> : <>{children}</>;
+}
+
+function RoutedFolderWorkspace({ children, enabled }: { children: ReactNode; enabled: boolean }) {
+  const [tree, setTree] = useState<HTMLElement | null>(null);
+  const [header, setHeader] = useState<HTMLDivElement | null>(null);
+  const address = useLocation();
+  const params = new URLSearchParams(address.search);
+  const active = enabled && (params.get('browse') === 'folders' || !!params.get('folder'));
+  return <div className="entity-folder-workspace" data-folder-workspace="" data-folder-browse={active ? '' : undefined}>
+    <aside ref={setTree} data-folder-tree-host="" hidden={!active} />
+    <div className="min-w-0"><div ref={setHeader} data-folder-header-host="" hidden={!active} />{children}</div>
+    {tree && header ? <CatalogFolders treeTarget={tree} headerTarget={header} enabled={enabled} /> : null}
+  </div>;
+}
+
+export function CatalogFolders({ treeTarget, headerTarget, enabled = true }: {
+  treeTarget?: HTMLElement; headerTarget?: HTMLElement; enabled?: boolean;
+} = {}) {
   const address = useLocation();
   const actions = useContext(ShellActionsContext);
   const params = new URLSearchParams(address.search);
-  const active = params.get('browse') === 'folders' || !!params.get('folder');
+  const active = enabled && (params.get('browse') === 'folders' || !!params.get('folder'));
   const scope: FolderScope = { loc: params.get('loc') ?? '', library: params.get('library') ?? '' };
-  useFolderStickyOffset(active);
+  useFolderStickyOffset(active, treeTarget);
   const key = params.get('folder') || '';
   const query = useQuery({ ...folderQuery(scope, key), enabled: active });
   const [drawer, setDrawer] = useState(false);
   const [editing, setEditing] = useState(false);
-  const treeHost = document.getElementById('catalogFoldersTree');
-  const headerHost = document.getElementById('catalogFolderHeader');
+  const treeHost = treeTarget ?? document.getElementById('catalogFoldersTree');
+  const headerHost = headerTarget ?? document.getElementById('catalogFolderHeader');
   useLayoutEffect(() => {
     if (treeHost) treeHost.hidden = !active;
     if (headerHost) headerHost.hidden = !active;
-    document.body.toggleAttribute('data-folder-browse', active);
+    if (!treeTarget) document.body.toggleAttribute('data-folder-browse', active);
     return () => {
       if (treeHost) treeHost.hidden = true;
       if (headerHost) headerHost.hidden = true;
-      document.body.removeAttribute('data-folder-browse');
+      if (!treeTarget) document.body.removeAttribute('data-folder-browse');
     };
-  }, [active, treeHost, headerHost]);
+  }, [active, treeHost, headerHost, treeTarget]);
   useEffect(() => { setDrawer(false); setEditing(false) }, [key, active]);
   if (!active || !treeHost || !headerHost || !actions) return null;
   const go = (id: string) => {
@@ -68,9 +87,9 @@ export function CatalogFolders() {
     actions.navigate(folderHref(address, { browse: 'folders', folder: id }));
   };
   const data = query.data;
-  const navigation = <FolderTree scope={scope} selected={key} current={data} go={go} />;
+  const navigation = <FolderTree scope={scope} selected={key} current={data} go={go} reportedError={drawer ? null : query.error} />;
   return <>
-    {createPortal(<div className="min-w-0">{navigation}</div>, treeHost)}
+    {createPortal(navigation, treeHost)}
     {createPortal(<div className="catalog-folder-heading">
       <div className="flex min-w-0 items-center gap-2">
         <span className="folder-drawer-trigger"><IconButton aria-label="Open folder directory" icon={RiSideBarLine} size="small"
@@ -83,17 +102,15 @@ export function CatalogFolders() {
         {data?.selected ? <IconButton aria-label="Set folder purpose" icon={RiFolderSettingsLine} size="small"
           onClick={() => setEditing(true)} /> : null}
       </div>
-      {query.error ? <Note tone="error" action={<Button variant="secondary" size="small" onClick={() => { void query.refetch() }}>Retry</Button>}>{errorMessage(query.error)}</Note> : null}
-      {data?.conflicts?.length ? <Note tone="warning" action={<Button variant="secondary" size="small" onClick={() => setEditing(true)}>View assignment conflicts</Button>}>{data.conflicts.length} kept with existing assignment</Note> : null}
+      {query.error && !drawer ? <Note tone="error" action={<Button variant="secondary" size="small" onClick={() => { void query.refetch() }}>立即重试</Button>}>{errorMessage(query.error)}</Note> : null}
+      {data?.conflicts?.length ? <Note tone="warning" action={<Button variant="secondary" size="small" onClick={() => setEditing(true)}>查看归属冲突</Button>}>{data.conflicts.length} 项保留现有归属</Note> : null}
       {data?.selected ? <div className="folder-scope-row">
         <Checkbox size="sm" isSelected={params.get('folder_recursive') !== '0'}
           onChange={on => actions.navigate(folderHref(address, { folder_recursive: on ? null : '0' }))}>Include subfolders</Checkbox>
         <span className="text-caption-1-regular text-text-tertiary">{data.rule ? `${PURPOSES[data.rule.purpose]}${data.rule.name ? ` · ${data.rule.name}` : ''}` : 'Personal category'}</span>
       </div> : null}
-      {query.isPending ? <div data-skeleton="" aria-busy="true" aria-label="Loading folders" className="h-8 w-full rounded-md skeleton-sheen" /> : null}
-      {data?.children.length ? <div className="folder-children" aria-label="Subfolders">{data.children.map(node =>
-        <Button key={node.id} variant="secondary" size="small" leadingIcon={RiFolder3Line}
-          onClick={() => go(node.id)}><span className="truncate">{node.name}</span></Button>)}</div> : null}
+      {query.isPending ? <div data-skeleton="" aria-busy="true" aria-label="正在读取文件夹" className="folder-children">{Array.from({ length: 6 }, (_, i) => <span key={i} className="skeleton-sheen h-8 w-28 rounded-lg" />)}</div> : null}
+      {data?.children.length ? <FolderChildren key={key} nodes={data.children} go={go} /> : null}
     </div>, headerHost)}
     <ModalFrame isOpen={drawer} onOpenChange={setDrawer} width="form" label="Folder directory">
       <div className="flex items-center justify-between border-b border-separator-border p-4">
@@ -106,8 +123,21 @@ export function CatalogFolders() {
   </>;
 }
 
-function FolderTree({ scope, selected, current, go }: {
-  scope: FolderScope; selected: string; current: FolderPage | undefined; go(id: string): void;
+function FolderChildren({ nodes, go }: { nodes: MediaFolder[]; go(id: string): void }) {
+  const [expanded, setExpanded] = useState(false);
+  const id = useId();
+  const visible = expanded ? nodes : nodes.slice(0, 12);
+  return <div className="flex min-w-0 flex-col items-start gap-2">
+    <div id={id} className="folder-children" aria-label="子文件夹">{visible.map(node =>
+      <Button key={node.id} variant="secondary" size="small" leadingIcon={RiFolder3Line}
+        onClick={() => go(node.id)}><span className="truncate">{node.name}</span></Button>)}</div>
+    {nodes.length > 12 ? <Button variant="ghost" size="small" aria-expanded={expanded} aria-controls={id}
+      onClick={() => setExpanded(value => !value)}>{expanded ? '收起文件夹' : `展开全部 ${nodes.length} 个文件夹`}</Button> : null}
+  </div>;
+}
+
+function FolderTree({ scope, selected, current, go, reportedError }: {
+  scope: FolderScope; selected: string; current: FolderPage | undefined; go(id: string): void; reportedError: unknown;
 }) {
   const roots = useQuery(folderQuery(scope));
   const [expanded, setExpanded] = useState<Set<Key>>(new Set());
@@ -126,7 +156,7 @@ function FolderTree({ scope, selected, current, go }: {
   const render = (node: MediaFolder) => {
     const loaded = childMap.get(node.id);
     return <TreeViewItem key={node.id} id={node.id} label={node.name} icon={RiFolder3Line} expandedIcon={RiFolderOpenLine}
-      trailingContent={node.parent ? undefined : node.location === 'local' ? 'Local' : node.location}>
+      iconClassName="size-(--icon-inline)" trailingContent={node.parent ? undefined : node.location === 'local' ? '本地' : node.location}>
       {node.has_children ? loaded ? loaded.map(render)
         : <TreeViewItem id={`${node.id}:loading`} label="Loading folders" isDisabled /> : null}
     </TreeViewItem>;
@@ -134,20 +164,23 @@ function FolderTree({ scope, selected, current, go }: {
   const choose = (selection: Selection) => {
     if (selection !== 'all') { const id = selection.values().next().value; if (id && !String(id).endsWith(':loading')) go(String(id)); }
   };
-  const failed = roots.error || branches.find(branch => branch.error)?.error;
-  return <section aria-label="Folder navigation" className="flex min-w-0 flex-col gap-3">
-    <Input aria-label="Find folder" placeholder="Find folder" leadingIcon={RiSearchLine} value={search}
+  const failed = [roots.error, ...branches.map(branch => branch.error)].find(error => error && error !== reportedError);
+  return <section aria-label="文件夹导航" className="catalog-folder-navigation flex min-h-0 min-w-0 flex-col gap-3">
+    <Input aria-label="查找文件夹" placeholder="查找文件夹" leadingIcon={RiSearchLine} value={search}
       onChange={setSearch} size="small" />
-    {failed ? <Note tone="error" action={<Button variant="secondary" size="small" onClick={() => { void roots.refetch(); branches.forEach(branch => { if (branch.error) void branch.refetch() }) }}>Retry</Button>}>{errorMessage(failed)}</Note> : null}
-    <div className="relative"><div ref={scroll} className="folder-tree-scroller">
-      {roots.isPending ? <div data-skeleton="" aria-busy="true" aria-label="Loading folder tree" className="h-60 w-full rounded-xl skeleton-sheen" />
-        : deferredSearch ? <div className="flex flex-col gap-1">{searchQuery.isPending ? <div data-skeleton="" aria-busy="true" className="h-8 skeleton-sheen" aria-label="Searching folders" />
+    {failed ? <Note tone="error" action={<Button variant="secondary" size="small" onClick={() => { void roots.refetch(); branches.forEach(branch => { if (branch.error) void branch.refetch() }) }}>立即重试</Button>}>{errorMessage(failed)}</Note> : null}
+    <div className="folder-tree-frame relative flex min-h-0 flex-col overflow-hidden rounded-3xl"><div ref={scroll} className="folder-tree-scroller">
+      {roots.error ? null : roots.isPending ? <div data-skeleton="" aria-busy="true" aria-label="正在读取目录树" className="flex flex-col gap-2">{Array.from({ length: 8 }, (_, i) => <div key={i} className="flex h-8 items-center gap-2 px-3"><span className="skeleton-sheen size-4" /><span className="skeleton-sheen h-4 flex-1" /></div>)}</div>
+        : deferredSearch ? <div className="flex flex-col gap-1">{searchQuery.isPending ? <div data-skeleton="" aria-busy="true" className="h-8 skeleton-sheen" aria-label="正在查找文件夹" />
           : searchQuery.error ? <Note tone="error">{errorMessage(searchQuery.error)}</Note>
           : searchQuery.data?.matches.length ? searchQuery.data.matches.map(node => <Button key={node.id} variant="secondary" size="small" leadingIcon={RiFolder3Line}
-            onClick={() => { setSearch(''); go(node.id) }}>{node.name}</Button>) : <EmptyState shell="plain" icon={RiSearchLine} title="No matching folders">Try a different folder name.</EmptyState>}</div>
-        : <TreeView aria-label="Media folders" size="sm" expandedKeys={expanded} onExpandedChange={setExpanded}
+            onClick={() => { setSearch(''); go(node.id) }}>{node.name}</Button>) : <EmptyState size="compact" icon={RiSearchLine} title="没有匹配的文件夹"
+              actions={<Button size="small" onClick={() => setSearch('')}>清除搜索</Button>}>换个目录名称试试。</EmptyState>}</div>
+        : !roots.data?.roots.length ? <EmptyState size="compact" icon={RiFolder3Line} title="尚未添加媒体目录"
+          actions={<ButtonLink size="small" href="/settings/library">添加媒体</ButtonLink>}>在媒体库设置中添加目录并扫描。</EmptyState>
+        : <TreeView aria-label="媒体目录" size="sm" expandedKeys={expanded} onExpandedChange={setExpanded}
           selectedKeys={new Set(selected ? [selected] : [])} onSelectionChange={choose}
-          renderEmptyState={() => <EmptyState shell="plain" icon={RiFolder3Line} title="No media folders added">Add folders in the library settings and scan.</EmptyState>}>
+          >
           {roots.data?.roots.map(render)}
         </TreeView>}
     </div></div>

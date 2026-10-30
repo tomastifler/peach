@@ -35,6 +35,8 @@ Search existing issues first. Report security vulnerabilities privately at the l
 <!--
 粘贴完整报错，或附截图、相关日志、诊断报告。不需要自行判断根因。
 上传前检查并遮盖本机路径、网络地址、账号及凭据等隐私信息。
+公开截图和录屏请使用不含露骨画面的演示资料；不要上传影片、封面原图或数据库。
 Paste the full error or attach screenshots, relevant logs, or a diagnostic report. No root-cause analysis is required.
 Review attachments and redact private information such as local paths, network addresses, accounts, and credentials.
+Use demo data without sexually explicit imagery in public screenshots and recordings. Do not upload videos, original cover images, or databases.
 -->

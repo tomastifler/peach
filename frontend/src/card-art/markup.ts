@@ -5,6 +5,7 @@
  * 加载后往图上写内联样式与类名。React 看不见这些改动：节点归它管，重画一次就冲掉取景，
  * 被兜底链摘掉的节点再交给它更新还会报错。 */
 import { esc, firstGrapheme } from '@peach/legacy/core';
+import { entityDisplayName } from '../core/entity-names';
 
 import { javImageKind } from '../jav-artwork';
 import { imageFallbackAttrs } from './image-fallback';
@@ -38,9 +39,29 @@ export const STAND_IN_TITLE = 'Frame from a representative work, not the person'
 export const withVersion = (url: string, version: string | null | undefined): string =>
   version ? `${url}&v=${encodeURIComponent(version)}` : url;
 
-/** 封面地址。`thumb` 是派生档，`upgradeCover` 把它摘掉换原件，版本号留在后面。 */
-export const coverUrl = (item: { code?: string | null; cover_key?: string; cover_version?: string }, thumb = false): string =>
-  withVersion(`/cover?code=${encodeURIComponent(item.cover_key || item.code || '')}${thumb ? '&thumb=1' : ''}`, item.cover_version);
+/** 封面派生档（`/cover?thumb=`）：`1` 长边 1600，`2` 长边 800；`0` 是原件。 */
+export type CoverTier = 0 | 1 | 2;
+
+/** 封面地址。`thumb` 是派生档，`true` 即 1600 那一档；`upgradeCover` 按显示尺寸往上换，版本号留在后面。 */
+export const coverUrl = (item: { code?: string | null; cover_key?: string; cover_version?: string },
+  thumb: boolean | CoverTier = false): string => {
+  const tier = thumb === true ? 1 : thumb || 0;
+  return withVersion(`/cover?code=${encodeURIComponent(item.cover_key || item.code || '')}${tier ? `&thumb=${tier}` : ''}`,
+    item.cover_version);
+};
+
+/** 卡片网格起步取 800 那一档的屏幕像素密度上限。 */
+export const CARD_COVER_SMALL_DPR = 1.5;
+
+/* 卡片网格的封面先取哪一档。卡片在 1440 宽桌面上铺开 168–360 CSS px，一倍屏要不到 400
+   设备像素，800 那一档就够；更密的屏起步取 1600 那一档，大位封面不必先糊后清、多下一张。
+   起步档不够清楚的，由 `upgradeCover` 量过显示尺寸再往上换。 */
+export const cardCoverUrl = (item: { code?: string | null; cover_key?: string; cover_version?: string }): string =>
+  coverUrl(item, (window.devicePixelRatio || 1) <= CARD_COVER_SMALL_DPR ? 2 : 1);
+
+/** 库外作品的官方封面：`/cover-image` 按番号在服务端查地址，经 Peach 的出网设置取图，浏览器不直连图床。 */
+export const remoteCoverUrl = (item: { code?: string | null }): string =>
+  `/cover-image?code=${encodeURIComponent(item.code || '')}`;
 
 /** 厂牌标识地址，`variant` 跟着位置走：大位要字标、小位要方形图标。 */
 export const logoUrl = (studio: string, variant: string, version?: string | null): string =>
@@ -70,7 +91,9 @@ export function performerLabel(item: { is_jav?: boolean } | null | undefined): s
    兜底链最后一环必须真的把 `<img>` 拿掉（`data-drop="self"`）：留着取不到图的
    `<img>`，`:has(img)` 仍然匹配，首字母垫底回不来，浏览器还会把 alt 画出来。
 
-   `thumb` 要的是实体图缩到长边 640 的那一份。资料页仍取原件——那里就是要看清。
+   `thumb` 要的是实体图缩到长边 640 的那一份，默认就取它：顶栏、卡片署名、同台艺人、
+   身份格这些圆框都在 70 CSS px 以内，640 在三倍屏上也有富余。只有资料页大位传 `false`
+   取原件——那里就是要看清，人脸放大也要原件的像素。
 
    `version` 是服务端随 `has_image` 下发的 `image_version`，`logoVersion` 是 `logo_version`。
 
@@ -79,7 +102,7 @@ export function performerLabel(item: { is_jav?: boolean } | null | undefined): s
    取图失败退到代表作时再补上。 */
 export function entityFaceImg({
   kind = 'performer', id = null, hasImage = false, version = '', rep = null, mark = null, logo = '',
-  logoVersion = '', logoVariant = 'logo', alt = '', lazy = true, style = '', dropStyle = false, focus = null, thumb = false,
+  logoVersion = '', logoVariant = 'logo', alt = '', lazy = true, style = '', dropStyle = false, focus = null, thumb = true,
   standIn = false,
 }: {
   kind?: string; id?: number | null | undefined; hasImage?: boolean | undefined; version?: string | null | undefined;
@@ -134,14 +157,14 @@ export function entityFaceImg({
    一个个看才发现得了。公司那一格要的是「明确不取景」，传 `null` 覆盖掉。 */
 export function avatarInner(name: string, ref: FaceRef | null | undefined, repId: number | null | undefined,
   kind = 'performer', markId: number | null = null, logoName = '', logoVariant = 'icon',
-  focus: unknown = undefined, thumb = false): string {
+  focus: unknown = undefined, thumb = true): string {
   // 这一层大多是小圆框和窄格子，厂牌标识在那里要方形图标而不是横着的字标；索引页的
   // 厂牌大格是同一个模板里的例外，由调用方点名要 `large`。
   const hint = focus === undefined ? (ref && ref.avatar_focus) || null : focus;
   const sourceFace = !ref?.has_image && !logoName && ref?.source_avatar_url
     ? `<img src="${esc(ref.source_avatar_url)}" width="128" height="128" alt="" loading="lazy" decoding="async" ${
       imageFallbackAttrs({ fallbacks: ref.source_avatar_fallbacks || [] })}>` : '';
-  return `<span class="ini">${esc(firstGrapheme(name))}</span>`
+  return `<span class="ini">${esc(firstGrapheme(entityDisplayName(kind, name, ref?.id)))}</span>`
     + (sourceFace || entityFaceImg({
       kind, id: ref && ref.id, hasImage: !!(ref && ref.has_image), version: ref && ref.image_version,
       rep: ref?.has_avatar && ref.rep ? ref.rep : repId, mark: markId,
@@ -211,7 +234,7 @@ export interface CoverItem {
    要推多远，只有同时拿到图片和容器的比例才知道。人物在画面里的位置差别很大，写死的锚点会
    把一部分作品裁掉下巴或整个切出画外；取不到人脸就退回固定取景。 */
 export function coverImage(item: CoverItem, layout: 'big' | 'small', eager = false): string {
-  const src = coverUrl(item, true);
+  const src = cardCoverUrl(item);
   const wide = /ブルーレイ|blu[\s-]?ray/i.test(String(item.title || item.display_title || item.name || ''));
   const f = item.cover_frame || {};
   const still = item.poster_box?.method !== 'manual' && (f.layout === 'still'
@@ -226,7 +249,7 @@ export function coverImage(item: CoverItem, layout: 'big' | 'small', eager = fal
   const box = pb ? ` data-posterbox="${[pb.x0, (pb.px || [])[0], (pb.px || [])[1], pb.y0, pb.x1, pb.y1].map(Number).join(' ')}"` : '';
   // 小图看整张（含剧照拼贴），大图只取右侧正封。
   return `<img class="poster cover ${layout === 'small' ? 'whole' : 'front'}" src="${src}"
-    width="640" height="360" alt="" loading="${eager ? 'eager' : 'lazy'}" data-cover-code="${esc(item.code || '')}"${wide ? ' data-wide-sleeve="1"' : ''}${still ? ' data-cover-layout="still"' : ''}${face}${box} data-drop="self">`;
+    width="640" height="360" alt="" loading="${eager ? 'eager' : 'lazy'}" decoding="async" data-cover-code="${esc(item.code || '')}"${wide ? ' data-wide-sleeve="1"' : ''}${still ? ' data-cover-layout="still"' : ''}${face}${box} data-drop="self">`;
 }
 
 /** 封面格的两种图：官方封套（取景链接管）或预览图。空串是这一条没有可用的图。 */
@@ -244,13 +267,13 @@ const NO_ARTWORK: Artwork = { kind: '', html: '' };
 export function javArtwork(item: CoverItem, layout: 'big' | 'small', eager: boolean, javImage: unknown): Artwork {
   const kind = javImageKind(item, javImage);
   if (!kind) return NO_ARTWORK;
-  const cover = item.has_cover && item.code ? coverUrl(item, true) : '';
+  const cover = item.has_cover && item.code ? cardCoverUrl(item) : '';
   const thumb = item.has_thumb || item.has_local_poster ? `/poster?id=${item.id}&c=4` : '';
   const coverMarkup = coverImage(item, layout, eager);
   const frame = (coverMarkup.match(/ data-(?:c[xy]|posterbox)="[^"]*"/g) || []).join('');
   const image = kind === 'cover'
     ? coverMarkup
-    : `<img class="poster" src="${thumb}" width="640" height="360" alt="" loading="${eager ? 'eager' : 'lazy'}"${frame}>`;
+    : `<img class="poster" src="${thumb}" width="640" height="360" alt="" loading="${eager ? 'eager' : 'lazy'}" decoding="async"${frame}>`;
   return {
     kind: kind === 'cover' ? 'cover' : 'thumb',
     html: image.replace('<img ', `<img data-jav-image="${item.id}" data-jav-cover="${esc(cover)}" data-jav-thumb="${esc(thumb)}" data-jav-image-layout="${layout}" `),
@@ -265,7 +288,7 @@ export function cardArtwork(item: CoverItem & { follow_thumb_url?: string | null
   if (item.follow_thumb_url) {
     return {
       kind: 'thumb',
-      html: `<img class="poster" src="${esc(item.follow_thumb_url)}" width="640" height="360" alt="" loading="${eager ? 'eager' : 'lazy'}" referrerpolicy="no-referrer">`,
+      html: `<img class="poster" src="${esc(item.follow_thumb_url)}" width="640" height="360" alt="" loading="${eager ? 'eager' : 'lazy'}" decoding="async" referrerpolicy="no-referrer">`,
     };
   }
   return mixFace(item, size, eager, javImage);
@@ -276,8 +299,15 @@ export function cardArtwork(item: CoverItem & { follow_thumb_url?: string | null
 export function mixFace(item: CoverItem, size: 'big' | 'small', eager: boolean, javImage: unknown): Artwork {
   if (item.is_jav) return javArtwork(item, size, eager, javImage);
   if (item.has_cover && item.cover_key) return { kind: 'cover', html: coverImage(item, size, eager) };
+  return frameArtwork(item, eager);
+}
+
+/** 视频自己的画面：本地预览格切出的帧图。没有帧图就是空，卡片写「无预览」。
+ *  竖屏格（竖屏带与筛竖屏的网格）只展示竖屏比例的视频，番号作品在那里也只用它，不借番号官方
+ *  封面：封面是整部作品的宣传图，多是横图，和这一卷竖屏视频不是同一个画面。 */
+export function frameArtwork(item: CoverItem, eager: boolean): Artwork {
   if (!item.has_thumb && !item.has_local_poster) return NO_ARTWORK;
-  return { kind: 'thumb', html: `<img class="poster" src="/poster?id=${item.id}&c=4" width="640" height="360" alt="" loading="${eager ? 'eager' : 'lazy'}">` };
+  return { kind: 'thumb', html: `<img class="poster" src="/poster?id=${item.id}&c=4" width="640" height="360" alt="" loading="${eager ? 'eager' : 'lazy'}" decoding="async">` };
 }
 
 /** 播放队列一行的小图：Mix 画面按小图取，没有可用的图就写「无预览」占住那一格。 */
@@ -354,6 +384,8 @@ export function queueAvatarHtml(item: IdentityItem): string {
 /** Mix 的署名：番号作品先认女优，其余先认创作者。 */
 export function mixLabel(item: IdentityItem, tagLabel: (tag: string) => string): string {
   const performer = (item.performers || [])[0];
-  return (item.is_jav && performer ? performer : item.creator) || performer || item.studio || item.code
-    || tagLabel((item.tags || [])[0] || '') || 'Recommended for you';
+  if (item.is_jav && performer) return entityDisplayName('performer', performer);
+  if (item.creator) return entityDisplayName('creator', item.creator);
+  return (performer ? entityDisplayName('performer', performer) : '') || item.studio || item.code
+    || tagLabel((item.tags || [])[0] || '') || '为你推荐';
 }

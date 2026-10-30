@@ -107,7 +107,14 @@ def parse_capture(payload: dict) -> dict[str, str] | None:
 
 
 def _attended_browser(executable: str, profile: Path) -> _Browser:
-    return _Browser(executable, profile, (), attended=True)
+    from . import peach_proxy
+    from .browser_transport import proxy_flags
+    options = peach_proxy.client_options(profile.parent)
+    flags = proxy_flags(direct=not options.get('trust_env') and not options.get('proxy'),
+                        proxy=options.get('proxy', ''))
+    if flags is None:
+        raise BrowserUnavailable('浏览器登录不支持带凭据的代理地址，请选择系统代理或无需认证的本机代理')
+    return _Browser(executable, profile, flags, attended=True)
 
 
 class BrowserLogin:
@@ -184,8 +191,9 @@ class BrowserLogin:
                 self._state = {"id": run_id, "state": state, "message": message}
 
     def _run(self, run_id: str, executable: str, cancel: threading.Event) -> None:
-        browser = self._browser(executable, self.profile)
+        browser = None
         try:
+            browser = self._browser(executable, self.profile)
             browser.start()
             assert browser.socket is not None
             browser.socket.call("Page.addScriptToEvaluateOnNewDocument", source=_FORGET_ON_FIRST_DOCUMENT)
@@ -199,7 +207,8 @@ class BrowserLogin:
             LOGGER.error("PikPak browser sign-in error: %s", type(error).__name__)
             self._finish(run_id, FAILED, f"Browser sign-in error: {type(error).__name__}")
         finally:
-            browser.close()
+            if browser is not None:
+                browser.close()
         if self.status()["state"] == DONE and self.on_done is not None:
             self.on_done()
 

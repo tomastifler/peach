@@ -24,6 +24,9 @@
   border-radius: var(--radius-2lg);
   background: var(--color-dropdown-item-hover-background);
 }
+.peach-react [data-processing-maintenance] {
+  --color-dropdown-item-hover-background: var(--color-background-secondary-hover);
+}
 @media (hover: hover) and (pointer: fine) {
   .peach-react [data-surface-host="hover"][data-surface-ready] button:is(:hover, :focus-visible) {
     background: transparent;

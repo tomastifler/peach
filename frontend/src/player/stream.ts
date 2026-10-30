@@ -4,10 +4,11 @@
  * 已经没人看的读取不再占着 115 或本地盘。详情与沉浸模式共用这一套（沉浸模式每格一个会话）。 */
 import { api } from '@peach/legacy/core';
 
+import { randomId } from '../core/random-id';
 import type { PlayerItem, PlayerSource } from './types';
 
 export function newStreamSession(): string {
-  return globalThis.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return randomId();
 }
 
 export function directStreamSource(item: PlayerItem, session: string): PlayerSource {

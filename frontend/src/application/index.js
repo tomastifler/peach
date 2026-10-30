@@ -1,5 +1,5 @@
 import { indexPath as pathForIndex, personAvatar as avatarForPerson, onlineAuthorRingHtml as avatarForOnline, createIndexController } from '../react/index/index-controller';
-import { followManageParams as manageParams, followManagePath as managePath, followManageEntry as manageEntry } from '../react/follow-manage/manage-route';
+import { followManageParams as manageParams, followManagePath as managePath, followManageEntry as manageEntry, FOLLOW_MANAGE_TABS } from '../react/follow-manage/manage-route';
 import { followView, adoptFollowView } from './follow.js';
 /* index 域控制器：本域状态与动作，启动由 Application 的生命周期统一安装。 */
 import { $, esc, leadingGraphemes } from '../core';
@@ -52,13 +52,9 @@ export function openFollowAuthorFromIndex(key){indexState.controller.openFollowA
 export function openFollowTagFromIndex(tag){indexState.controller.openFollowTag(tag)}
 
 export function installIndex16() {
-followState.FOLLOW_MANAGE_TABS = ['list','add','feeds'];
+followState.FOLLOW_MANAGE_TABS = FOLLOW_MANAGE_TABS;
 applicationEffects.listen(document, 'click', event=>{
-  if(event.target.closest?.('[data-empty-settings]')){openConfigurationSection('Library & import');return}
-  const link=event.target.closest?.('a[href="/subscriptions?tab=add"]');
-  if(!link||event.defaultPrevented||event.button||event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
-  event.preventDefault();
-  navigationState.navigatePath(followManageEntry('add'));
+  if(event.target.closest?.('[data-empty-settings]')){openConfigurationSection('媒体库与入库');return}
 });
 indexState.peopleIndexLayout = ()=>peopleLayoutOf(preferencesState.appSettings.peopleLayout);
 indexState.personAvatar = avatarForPerson;

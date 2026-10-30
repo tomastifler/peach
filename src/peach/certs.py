@@ -77,7 +77,7 @@ def _openssl(*args: str, stdin: bytes | None = None) -> str:
 def subject_alt_names(cert: Path) -> tuple[set[str], set[str]]:
     """返回 (DNS 名字集合, IP 集合)。读不出来就当成空，调用方会据此重签。"""
     try:
-        text = _openssl("x509", "-in", str(cert), "-noout", "-ext", "subjectAltName")
+        text = _openssl("x509", "-in", str(cert), "-noout", "-text")
     except (RuntimeError, OSError):
         return set(), set()
     return set(_SAN_DNS.findall(text)), set(_SAN_IP.findall(text))
@@ -96,12 +96,23 @@ def not_after(cert: Path) -> datetime | None:
         return None
 
 
+def has_authority_key_identifier(cert: Path) -> bool:
+    """叶子证书包含严格 X.509 校验要求的颁发者密钥标识。"""
+    try:
+        text = _openssl("x509", "-in", str(cert), "-noout", "-text")
+    except (RuntimeError, OSError):
+        return False
+    return "Authority Key Identifier" in text
+
+
 def reissue_reason(
     files: CertificateFiles, names: set[str], addresses: set[str], now: datetime | None = None,
 ) -> str | None:
     """需要重签就返回原因，不需要返回 None。"""
     if not files.cert.is_file() or not files.key.is_file():
-        return "Server certificate does not exist"
+        return "服务器证书不存在"
+    if not has_authority_key_identifier(files.cert):
+        return "证书缺少颁发者密钥标识"
     have_names, have_addresses = subject_alt_names(files.cert)
     missing = (names - have_names) | (addresses - have_addresses)
     if missing:
@@ -132,6 +143,8 @@ def reissue(
         "keyUsage = critical, digitalSignature, keyEncipherment\n"
         "extendedKeyUsage = serverAuth\n"
         "basicConstraints = critical, CA:FALSE\n"
+        "subjectKeyIdentifier = hash\n"
+        "authorityKeyIdentifier = keyid, issuer\n"
     )
     with tempfile.TemporaryDirectory() as raw:
         work = Path(raw)

@@ -1,15 +1,18 @@
 /* 首页筛选条岛：空馆藏与首屏等待时两排、标签条摆什么。
  *
  * 点选、续页、排序、版式与详情往返要真的取数和量布局，由 `frontend/e2e/catalog-filter.test.ts` 在真浏览器里走。 */
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { CatalogFilterPage } from '../../src/react/catalog-filter/catalog-filter-page';
-import { EMPTY_SLOTS, type CatalogFilterProps, type TierPerformer } from '../../src/react/catalog-filter/catalog-filter';
+import {
+  EMPTY_SLOTS, rememberedTiers, rememberTiers, TIERS_SHAPE_KEY, type CatalogFilterProps, type TierPerformer,
+} from '../../src/react/catalog-filter/catalog-filter';
+import { catalogFilterSkeletonHtml } from '../../src/catalog-filter-skeleton';
 import { mount, mountRoot, pending, settle } from './render';
 
 function props(patch: Partial<CatalogFilterProps> = {}): CatalogFilterProps {
   return {
-    tiers: { key: 'k', performers: [], studios: [] }, empty: false, tags: [], tagFirst: 0,
+    tiers: { key: 'k', performers: [], studios: [] }, tiersPending: false, empty: false, tags: [], tagFirst: 0,
     views: [{ k: '', label: '全部', href: '/' }], state: '', count: { total: 0, shown: 0 }, trash: false,
     sorts: [], layout: null, refreshing: false, offscreen: false, combo: [], comboHidden: true, comboHost: null,
     actions: {
@@ -41,6 +44,65 @@ describe('空馆藏', () => {
     const host = await mount(<CatalogFilterPage {...props({ empty: true, offscreen: true })} />);
     expect(count(host, '[data-catalog-placeholder="performer"]')).toBe(EMPTY_SLOTS);
     expect(host.querySelector('[data-catalog-frame]')).toBeNull();
+  });
+});
+
+describe('首屏等待两排头像', () => {
+  beforeEach(() => localStorage.clear());
+  const rows = (host: HTMLElement) => [...host.querySelectorAll('[data-catalog-tier]')].map((row) => row.getAttribute('data-catalog-tier'));
+
+  it('本机没有记录或记录坏了时两排都铺占位，壳在取数时整块挂忙态', async () => {
+    for (const saved of [null, 'broken', 'null']) {
+      if (saved !== null) localStorage.setItem(TIERS_SHAPE_KEY, saved);
+      const host = await mount(<CatalogFilterPage {...props({ tiers: null, tiersPending: true })} />);
+      expect(rows(host)).toEqual(['performers', 'studios']);
+      expect(host.querySelector('[data-catalog-tiers]')?.getAttribute('aria-busy')).toBe('true');
+      document.body.innerHTML = '';
+    }
+  });
+
+  it('不取头像的页面与收起的筛选条不挂忙态：没有一趟取数会来撤它', async () => {
+    for (const patch of [{ tiersPending: false }, { tiersPending: true, offscreen: true }]) {
+      const host = await mount(<CatalogFilterPage {...props({ tiers: null, ...patch })} />);
+      expect(host.querySelector('[data-catalog-tiers]')?.hasAttribute('aria-busy'), JSON.stringify(patch)).toBe(false);
+      document.body.innerHTML = '';
+    }
+  });
+
+  it('照上次画好时的结构铺：上次没人的那排不画，两排都没人时整块不占位', async () => {
+    rememberTiers({ performers: false, studios: true });
+    const studiosOnly = await mount(<CatalogFilterPage {...props({ tiers: null })} />);
+    expect(rows(studiosOnly)).toEqual(['studios']);
+    document.body.innerHTML = '';
+    rememberTiers({ performers: false, studios: false });
+    const none = await mount(<CatalogFilterPage {...props({ tiers: null })} />);
+    expect(rows(none)).toEqual([]);
+    expect(none.querySelector<HTMLElement>('[data-catalog-tiers]')?.hidden).toBe(true);
+  });
+
+  it('取回后撤掉忙态，并记下这次画了哪几排；空馆藏两排占位都算画了', async () => {
+    const { host, rerender } = await mountRoot(<CatalogFilterPage {...props({ tiers: null, tiersPending: true })} />);
+    await rerender(<CatalogFilterPage {...props({ tiers: { key: 'k', performers: [], studios: [{ name: 'S1', logo: '', fallback: 'S1' }] } })} />);
+    expect(host.querySelector('[data-catalog-tiers]')?.hasAttribute('aria-busy')).toBe(false);
+    expect(rows(host)).toEqual(['studios']);
+    expect(rememberedTiers()).toEqual({ performers: false, studios: true });
+    await rerender(<CatalogFilterPage {...props({ empty: true })} />);
+    expect(rememberedTiers()).toEqual({ performers: true, studios: true });
+  });
+
+  it('岛挂上之前的壳骨架读同一份记录', () => {
+    const skeleton = () => {
+      const host = document.createElement('div');
+      host.innerHTML = catalogFilterSkeletonHtml([{ k: '', label: '全部', href: '/' }], '');
+      return host;
+    };
+    expect(rows(skeleton())).toEqual(['performers', 'studios']);
+    rememberTiers({ performers: true, studios: false });
+    expect(rows(skeleton())).toEqual(['performers']);
+    rememberTiers({ performers: false, studios: false });
+    const none = skeleton();
+    expect(rows(none)).toEqual([]);
+    expect(none.querySelector<HTMLElement>('[data-catalog-tiers]')?.hidden).toBe(true);
   });
 });
 

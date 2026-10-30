@@ -83,7 +83,7 @@ FC2CMADB_ACTRESS = "https://fc2cmadb.com/actresses/{id}"
 MAX_KEYS, MAX_PERSON_PAGES, MAX_REQUESTS = 3, 3, 8
 #: 入口判据的版本，进指纹（`fingerprint`）。换了入口就加一：跑过的女优按新入口各再问一次。
 #: 2 是 ADR-0063 的 av_neme 按页名直取与摘要排序。
-ENTRY_RULE = 2
+ENTRY_RULE = 3
 #: fc2cmadb 最多翻她几部作品的女优栏：一部两次请求（作品页、女优栏），同一个人每部都一样。
 MAX_WORKS = 3
 #: minnano-av 的间隔与超时：与链接采集那一趟同一档，再放宽一点，这条后继不赶时间。

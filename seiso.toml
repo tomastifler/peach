@@ -18,6 +18,10 @@ path = "README*.md"
 kind = "readme"
 
 [[kinds]]
+path = "docs/dockerhub/README.md"
+kind = "readme"
+
+[[kinds]]
 path = "**/CHANGELOG.md"
 kind = "changelog"
 

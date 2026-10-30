@@ -31,6 +31,8 @@ class MountRoot:
     label: str
     declared: str
     path: Path | None
+    root_id: str = ""
+    library_id: str = ""
 
 
 def source_roots() -> list[MountRoot]:
@@ -38,14 +40,17 @@ def source_roots() -> list[MountRoot]:
     from .config import LOCATION_ROOT_DECLARATIONS
     from .media_configuration import SOURCE_OPTIONS
     from .platform import is_unmapped, translate_ledger_path
+    from . import media_identity, settings_file
 
     labels = dict(SOURCE_OPTIONS)
     roots = []
     for location, declared_roots in LOCATION_ROOT_DECLARATIONS.items():
         for declared in declared_roots:
-            resolved = translate_ledger_path(declared)
+            from .smb_media import resolve
+            resolved = resolve(declared) or translate_ledger_path(declared)
             roots.append(MountRoot(location, labels.get(location, location), declared,
-                                   None if is_unmapped(resolved) else resolved))
+                                   None if is_unmapped(resolved) else resolved,
+                                   **media_identity.ownership(settings_file.active(), declared)))
     return roots
 
 
@@ -149,6 +154,7 @@ class MountReachability:
                     "location": root.location, "label": root.label, "roots": [],
                 })
                 row["roots"].append({
+                    "root_id": root.root_id, "library_id": root.library_id,
                     "declared": root.declared,
                     "resolved": str(root.path) if root.path is not None else None,
                     "mapped": root.path is not None, "online": online, "state": state,
@@ -160,7 +166,7 @@ class MountReachability:
             unknown = next((root for root in roots if root["online"] is None), None)
             status = failed or unknown
             row.update(mapped=all(root["mapped"] for root in roots),
-                       online=False if failed else None if unknown else True,
+                       online=True if any(root["online"] is True for root in roots) else None if unknown else False,
                        state=status["state"] if status else "ok",
                        message=f"{row['label']}：{status['message']}" if status else "",
                        checked_at=min((root["checked_at"] for root in roots
@@ -170,6 +176,6 @@ class MountReachability:
     def summary(self) -> dict:
         rows = [{key: row[key] for key in ("location", "label", "online", "state", "message", "checked_at")}
                 for row in self.sources()]
-        warnings = [row["message"] for row in rows if row["online"] is False]
+        warnings = [row["message"] for row in rows if row["state"] in FAILURES]
         return {"state": "degraded" if warnings else "checking" if any(
             row["online"] is None for row in rows) else "ok", "sources": rows, "warnings": warnings}

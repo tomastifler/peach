@@ -466,8 +466,8 @@
 }
 .peach-react [data-photo-reveal] svg {
   display: block;
-  width: 16px;
-  height: 16px;
+  width: var(--icon-inline);
+  height: var(--icon-inline);
   fill: none;
   stroke: currentColor;
   stroke-width: 2;

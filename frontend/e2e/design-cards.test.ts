@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import type { Browser, Locator } from 'playwright-core';
 import { expectBody, settle, visit } from './harness.ts';
 import {
-  DESKTOP, MOBILE, tokenColor, openReview, lightness, WIDE, JUNK_COUNT, openJunk, junkItem, openJunkWith,
+  DESKTOP, MOBILE, tokenColor, openReview, REVIEW_ROW, lightness, WIDE, JUNK_COUNT, openJunk, junkItem, openJunkWith,
   openCatalog, openCatalogFixture, openFollowManage, stubFollowManage, holdApi, controlFaces, disabledTokens,
   waitingActionFaces, assertDisabledFace, installDesignBrowser, PIXEL,
 } from './design-fixture.ts';
@@ -159,17 +159,30 @@ describe('设计决定：作品卡、管理页与复核', () => {
         const card = node.getBoundingClientRect(), row = node.closest('[data-shorts-row]')!.getBoundingClientRect();
         const style = getComputedStyle(node);
         return { background: style.backgroundColor, shadow: style.boxShadow, top: card.top - row.top,
-          bottom: row.bottom - card.bottom };
+          bottom: row.bottom - card.bottom, strip: getComputedStyle(node.closest('[data-shorts-strip]')!).backgroundColor };
       });
       assert.notEqual(feedback.background, 'rgba(0, 0, 0, 0)');
       assert.notEqual(feedback.shadow, 'none');
+      /* 浅色下全站悬停面与带子底色同为 #F7F7F7，铺出去等于没铺。 */
+      assert.notEqual(feedback.background, feedback.strip, '竖屏带里卡片的悬停面和带子底色同色');
       assert.ok(feedback.top >= 8 && feedback.bottom >= 8, JSON.stringify(feedback));
+      /* 长悬停上移再放大，连同外铺的悬停面都要落在横滚行的裁切框里。 */
+      const lifted = await shortCard.evaluate(async node => {
+        node.setAttribute('data-longhover', '');
+        await Promise.all(node.getAnimations().map(animation => { animation.finish(); return animation.finished }));
+        const card = node.getBoundingClientRect(), row = node.closest('[data-shorts-row]')!.getBoundingClientRect();
+        const spread = parseFloat(getComputedStyle(node).boxShadow.split(' ').at(-1)!) * 1.065;
+        node.removeAttribute('data-longhover');
+        return { top: card.top - spread - row.top, bottom: row.bottom - card.bottom - spread };
+      });
+      assert.ok(lifted.top >= 0 && lifted.bottom >= 0, `放大的竖屏卡被横滚行裁掉：${JSON.stringify(lifted)}`);
       await page.mouse.move(0, 0);
       assert.equal(catalog.progress?.background, catalog.tungsten.background, '观看进度条不是钨丝蓝');
       assert.deepEqual([catalog.mixGlyph?.background, catalog.mixGlyph?.borderWidth, catalog.mixGlyph?.borderColor],
         [catalog.overlay.background, '1px', catalog.overlay.borderColor], 'Mix 署名位那枚字形不是半透明底加细边');
-      /* 居中的快退快进和右下角「稍后看」是同一种控件，只是尺寸不同：58px 配 34px 图标，36px 配 21px。 */
-      assert.deepEqual([catalog.seekGlyph?.width, catalog.laterButton?.width, catalog.laterGlyph?.width], ['34px', '36px', '21px'],
+      /* 居中的快退快进和右下角「稍后看」是同一种控件，只是尺寸不同：58px 配 34px 图标；稍后看是卡片悬浮动作，
+         取紧凑档 32px 配 18px 图标。 */
+      assert.deepEqual([catalog.seekGlyph?.width, catalog.laterButton?.width, catalog.laterGlyph?.width], ['34px', '32px', '18px'],
         '悬停控件的尺寸和图标比例变了');
       const denseShort = await page.evaluate(() => {
         document.body.dataset.density = 'dense';
@@ -329,7 +342,7 @@ describe('设计决定：作品卡、管理页与复核', () => {
     }
   });
 
-  it('批量条的键是 17px 字形、计数是 --ink-2；批量条与清空回收站两颗危险键读同一组红', { timeout: 90_000 }, async () => {
+  it('批量条的键是行内字形、计数是 --ink-2；批量条与清空回收站两颗危险键读同一组红', { timeout: 90_000 }, async () => {
     const opened = await openCatalogFixture(browser, (payload, url) => {
       if (url.searchParams.get('state') !== 'trash') return;
       for (const item of payload.items) Object.assign(item, { disposal: 'trash' });
@@ -356,9 +369,11 @@ describe('设计决定：作品卡、管理页与复核', () => {
         };
         const paint = (key: Element) => [getComputedStyle(key).backgroundImage, getComputedStyle(key, '::before').backgroundImage];
         return {
+          // 与文字同行的字形取 `--icon-inline`（1.2em），按所在文字字号算出应有的边长。
           glyphs: [...dock.querySelectorAll('button svg')].map((svg) => {
             const box = svg.getBoundingClientRect();
-            return [box.width, box.height];
+            const inline = parseFloat(getComputedStyle(svg).fontSize) * 1.2;
+            return [Math.abs(box.width - inline) < 0.5, Math.abs(box.height - inline) < 0.5];
           }),
           count: getComputedStyle(dock.querySelector('[role="status"]')!).color,
           batch: paint(dock.querySelector('[data-batch-action="delete"]')!),
@@ -366,7 +381,7 @@ describe('设计决定：作品卡、管理页与复核', () => {
           tokens: [probe('--board-red'), probe('--board-red-hover')],
         };
       });
-      assert.deepEqual(read.glyphs, [[17, 17], [17, 17], [17, 17]], `批量条的字形不是 17px：${JSON.stringify(read.glyphs)}`);
+      assert.deepEqual(read.glyphs, [[true, true], [true, true], [true, true]], `批量条的字形没按行内字号缩放：${JSON.stringify(read.glyphs)}`);
       assert.equal(read.count, await tokenColor(page, 'body', '--ink-2'), '批量条的计数不是次级墨色');
       assert.match(read.tokens[0], /^linear-gradient/, `--board-red 没解析成渐变：${read.tokens[0]}`);
       assert.deepEqual(read.batch, read.tokens, `批量条「彻底删除」的红不是 --board-red 那一组：${JSON.stringify(read)}`);
@@ -386,12 +401,17 @@ describe('设计决定：作品卡、管理页与复核', () => {
       const read = await page.evaluate(() => {
         const items = [...document.querySelectorAll<HTMLElement>('[data-manage-crumb] li')];
         const pressed = document.querySelector<HTMLElement>('[data-manage][aria-pressed="true"]')!;
+        const thumb = pressed.parentElement!.querySelector('[data-pill-thumb]')!;
+        const selectedBox = pressed.getBoundingClientRect(), thumbBox = thumb.getBoundingClientRect();
         return {
           colors: items.map((item) => getComputedStyle(item).color),
           separators: items.map((item) => item.querySelector('svg') ? getComputedStyle(item.querySelector('svg')!).stroke : null),
           gap: getComputedStyle(document.querySelector('[data-manage-crumb] ol')!).columnGap,
           tab: getComputedStyle(pressed).color,
-          fill: getComputedStyle(pressed).backgroundColor,
+          fill: getComputedStyle(thumb).backgroundColor,
+          buttonFill: getComputedStyle(pressed).backgroundColor,
+          selectionDelta: [thumbBox.left - selectedBox.left, thumbBox.top - selectedBox.top,
+            thumbBox.width - selectedBox.width, thumbBox.height - selectedBox.height],
           navBeforeCrumb: document.querySelector('[data-manage-bar]')!.getBoundingClientRect().bottom <= document.querySelector('[data-manage-crumb]')!.getBoundingClientRect().top,
           crumbBeforeTitle: document.querySelector('[data-manage-crumb]')!.getBoundingClientRect().bottom <= document.querySelector('[data-manage-title]')!.getBoundingClientRect().top,
           titleLeft: Math.round(document.querySelector('[data-manage-title]')!.getBoundingClientRect().left - document.querySelector('#grid')!.getBoundingClientRect().left),
@@ -401,6 +421,8 @@ describe('设计决定：作品卡、管理页与复核', () => {
       assert.deepEqual(read.separators, [muted, null], '分隔符跟着当前项提亮了，或最后一项也带了分隔符');
       assert.equal(read.gap, '6px');
       assert.deepEqual([read.tab, read.fill], [ink, fill]);
+      assert.equal(read.buttonFill, 'rgba(0, 0, 0, 0)');
+      assert.ok(read.selectionDelta.every(value => Math.abs(value) < 1), '选中底板没有对齐当前导航项');
       assert.equal(read.navBeforeCrumb, true);
       assert.equal(read.crumbBeforeTitle, true);
       assert.equal(read.titleLeft, 0);
@@ -640,7 +662,7 @@ describe('设计决定：作品卡、管理页与复核', () => {
             const box = node.getBoundingClientRect();
             return box.top + box.height / 2;
           };
-          return middle(element.querySelector('label > span')!) - middle(element.querySelector('h4')!);
+          return middle(element.querySelector('label > span[aria-hidden="true"]')!) - middle(element.querySelector('h4')!);
         });
       assert.ok(Math.abs(offset) <= 1, `勾选框比标题偏了 ${offset.toFixed(1)}px，不在同一条中线上`);
       assert.deepEqual(opened.problems, []);
@@ -649,7 +671,158 @@ describe('设计决定：作品卡、管理页与复核', () => {
     }
   });
 
-  it('复核滚动边缘按方向出现，当前信息在分隔线之间居中', { timeout: 60_000 }, async () => {
+  it('来源依据使用无下划线的展开按钮，文字差异清晰可见', { timeout: 60_000 }, async () => {
+    const row = { ...REVIEW_ROW, field: 'title', field_label: '标题', current_value: '共同旧标题。',
+      candidates: ['dmm', 'javdb'].map(source => ({ candidate_key: `${source}:title`, source,
+        display_value: '共同新标题。', catalog_evidence: { title: { display_value: '共同新标题。' } } })) };
+    const opened = await openReview(browser, [row]);
+    try {
+      const card = opened.page.locator('section[data-review-key]').first();
+      const toggle = card.getByRole('button', { name: '展开 dmm 的来源依据', exact: true });
+      await toggle.hover();
+      const observed = await toggle.evaluate(node => ({ tag: node.tagName,
+        underline: [node, ...node.querySelectorAll('*')].some(element =>
+          getComputedStyle(element).textDecorationLine.includes('underline')) }));
+      assert.deepEqual(observed, { tag: 'BUTTON', underline: false });
+      const mark = card.locator('label:has(input[type="radio"]) mark').first();
+      assert.equal(await mark.textContent(), '新');
+      const color = await mark.evaluate(node => ({ text: getComputedStyle(node).color,
+        parent: getComputedStyle(node.parentElement!).color, background: getComputedStyle(node).backgroundColor }));
+      assert.notEqual(color.text, color.parent);
+      assert.notEqual(color.background, 'rgba(0, 0, 0, 0)');
+      assert.deepEqual(opened.problems, []);
+    } finally { await opened.close() }
+  });
+
+  for (const viewport of [DESKTOP, MOBILE]) {
+    it(`复核长资料只在正文滚动，卡头和判断操作仍在卡内 ${viewport.width}`, { timeout: 60_000 }, async () => {
+      const row = { ...REVIEW_ROW, current_value: '当前已登记的完整资料。'.repeat(20),
+        candidates: ['dmm', 'javdb'].map(source => ({ candidate_key: `${source}:studio`, source,
+          content_id: 'very-long-content-identifier'.repeat(8),
+          display_value: '来源提供的长资料。'.repeat(30) })) };
+      const opened = await openReview(browser, [row], viewport);
+      try {
+        const geometry = await opened.page.locator('section[data-review-key]').first().evaluate(node => {
+          const box = node.getBoundingClientRect();
+          const body = node.querySelector('[data-overlay-scrollbar]')!;
+          const footer = node.querySelector('footer')!.getBoundingClientRect();
+          return { areas: node.querySelectorAll('[data-overlay-scrollbar]').length,
+            scrolls: body.scrollHeight > body.clientHeight,
+            footerInside: footer.top >= box.top && footer.bottom <= box.bottom + 1,
+            overflow: node.scrollWidth > node.clientWidth,
+            pageOverflow: document.documentElement.scrollWidth > innerWidth,
+            currentInBody: body.contains(node.querySelector('[aria-label="当前信息"]')),
+            sourceOverflow: [...node.querySelectorAll('label:has(input[type="radio"])')]
+              .some(label => label.scrollWidth > label.clientWidth + 1) };
+        });
+        assert.deepEqual(geometry, { areas: 1, scrolls: true, footerInside: true,
+          overflow: false, pageOverflow: false, currentInBody: true, sourceOverflow: false });
+        assert.deepEqual(opened.problems, []);
+      } finally { await opened.close() }
+    });
+
+    it(`未收录词条之间使用分隔线 ${viewport.width}`, { timeout: 60_000 }, async () => {
+      const row = { ...REVIEW_ROW, candidates: [{ ...REVIEW_ROW.candidates[0]!,
+        unmapped_genres: ['アクメ・オーガズム', '美少女電影'] }] };
+      const opened = await openReview(browser, [row], viewport);
+      try {
+        const group = opened.page.getByRole('group', { name: '未收录 genre', exact: true });
+        const rows = group.getByRole('listitem');
+        assert.equal(await rows.count(), 2);
+        const dividers = await rows.evaluateAll(nodes => nodes.map(node => {
+          const style = getComputedStyle(node);
+          const parent = getComputedStyle(node.closest('[role="group"]')!);
+          return { width: style.borderTopWidth, solid: style.borderTopStyle === 'solid',
+            visible: style.borderTopColor !== parent.backgroundColor && style.borderTopColor !== 'rgba(0, 0, 0, 0)' };
+        }));
+        assert.deepEqual(dividers.map(row => row.width), ['0px', '1px']);
+        assert.ok(dividers[1]!.solid && dividers[1]!.visible, '词条分隔线不可见');
+        assert.equal(await rows.nth(0).getByRole('button', { name: '收录', exact: true }).count(), 1);
+        assert.equal(await rows.nth(1).getByRole('button', { name: '不是内容', exact: true }).count(), 1);
+        assert.deepEqual(opened.problems, []);
+      } finally { await opened.close() }
+    });
+
+    it(`复核来源切换只滚动证据正文，卡头与操作条固定 ${viewport.width}`, { timeout: 60_000 }, async () => {
+      const row = { ...REVIEW_ROW, candidates: ['dmm', 'javdb', 'mgs'].map(source => ({
+        candidate_key: `${source}:studio`, source, display_value: 'プレステージ',
+        catalog_evidence: {
+          title: { display_value: '隣の人妻と過ごす休日' },
+          runtime: { display_value: '120 分钟' },
+          director: { display_value: '田中' },
+          label: { display_value: 'プレステージ' },
+        },
+      })) };
+      const opened = await openReview(browser, [row], viewport);
+      try {
+        const card = opened.page.locator('section[data-review-key]').first();
+        const scroller = card.locator('div[data-overlay-scrollbar]').first();
+        const choices = card.locator('label:has(input[type="radio"])');
+        await card.scrollIntoViewIfNeeded();
+        const geometry = () => card.evaluate(node => {
+          const rect = (element: Element) => {
+            const box = element.getBoundingClientRect();
+            return { top: box.top, height: box.height };
+          };
+          return { page: window.scrollY, scroll: node.scrollTop, card: rect(node),
+            header: rect(node.querySelector('header')!), footer: rect(node.querySelector('footer')!) };
+        });
+        const before = await geometry();
+        const unanchored = await card.locator('input[type="radio"], input[type="checkbox"]')
+          .evaluateAll(inputs => inputs.flatMap(input => {
+            const native = input.getBoundingClientRect();
+            const label = input.closest('label')!.getBoundingClientRect();
+            const inside = native.top >= label.top - 1 && native.bottom <= label.bottom + 1
+              && native.left >= label.left - 1 && native.right <= label.right + 1;
+            return inside ? [] : [{type:(input as HTMLInputElement).type,native:native.toJSON(),label:label.toJSON(),parent:input.parentElement?.outerHTML.slice(0,500)}];
+          }));
+        assert.deepEqual(unanchored, [], '隐藏输入框未随所属单选或复选标签定位');
+        for (const at of [1, 2, 0]) {
+          const choice = choices.nth(at);
+          await choice.evaluate(node => {
+            const body = node.closest('div[data-overlay-scrollbar]')!;
+            body.scrollTop += node.getBoundingClientRect().top - body.getBoundingClientRect().top;
+          });
+          await choice.click();
+          assert.equal(await choice.locator('input').isChecked(), true);
+          assert.deepEqual(await geometry(), before, '点击来源移动了页面、卡片或操作条');
+        }
+        await choices.first().locator('input').focus();
+        for (const key of ['ArrowDown', 'ArrowDown', 'ArrowUp']) {
+          await opened.page.keyboard.press(key);
+          assert.deepEqual(await geometry(), before, '方向键移动了页面、卡片或操作条');
+          const visible = await scroller.evaluate(node => {
+            const input = node.querySelector<HTMLInputElement>('input:checked')!;
+            const box = input.getBoundingClientRect();
+            const body = node.getBoundingClientRect();
+            return box.top >= body.top - 1 && box.bottom <= body.bottom + 1;
+          });
+          assert.ok(visible, '键盘选中的来源没有进入正文可见区域');
+        }
+        const selected = await choices.locator('input').evaluateAll(inputs =>
+          inputs.map(input => (input as HTMLInputElement).checked));
+        for (const source of ['javdb', 'mgs']) {
+          await opened.page.keyboard.press('Tab');
+          const evidence = card.getByRole('button', { name: new RegExp(`^(展开|收起) ${source} 的来源依据$`) });
+          assert.equal(await evidence.evaluate(node => node === document.activeElement), true,
+            'Tab 应按文档顺序访问独立的来源依据');
+          await opened.page.keyboard.press('Space');
+          assert.equal(await evidence.getAttribute('aria-expanded'), 'true');
+          await opened.page.keyboard.press('Space');
+          assert.equal(await evidence.getAttribute('aria-expanded'), 'false');
+          assert.deepEqual(await choices.locator('input').evaluateAll(inputs =>
+            inputs.map(input => (input as HTMLInputElement).checked)), selected,
+            '展开依据不得改变已选来源');
+        }
+        await opened.page.keyboard.press('Tab');
+        assert.equal(await card.locator('footer').evaluate(node => node.contains(document.activeElement)), true,
+          '访问依据后 Tab 应离开正文并进入判断操作');
+        assert.deepEqual(opened.problems, []);
+      } finally { await opened.close() }
+    });
+  }
+
+  it('复核滚动边缘按方向出现，当前信息与候选共用正文滚动', { timeout: 60_000 }, async () => {
     const opened = await openReview(browser);
     try {
       const card = opened.page.locator('section[data-review-key]').first();
@@ -692,13 +865,14 @@ describe('设计决定：作品卡、管理页与复核', () => {
       await opened.page.waitForFunction(() => !document.querySelector('[data-review-key] .ui-can-scroll-bottom'));
       await scroller.locator('[data-scroll-test]').evaluate((node) => node.remove());
       await opened.page.waitForFunction(() => !document.querySelector('[data-review-key] [data-scroll-edges]'));
-      const spacing = await card.getByRole('region', { name: 'Current details' }).evaluate((node) => {
+      const current = await card.getByRole('region', { name: '当前信息' }).evaluate((node) => {
         const style = getComputedStyle(node);
-        const footer = node.closest('section')!.querySelector('footer')!.getBoundingClientRect();
-        return { top: parseFloat(style.paddingTop), bottom: parseFloat(style.paddingBottom), gap: footer.top - node.getBoundingClientRect().bottom };
+        return { inBody: !!node.closest('[data-overlay-scrollbar]'), overflow: style.overflowY,
+          areas: node.closest('section[data-review-key]')!.querySelectorAll('[data-overlay-scrollbar]').length };
       });
-      assert.equal(spacing.top, spacing.bottom);
-      assert.ok(Math.abs(spacing.gap) <= 1, `当前信息下方多出 ${spacing.gap}px`);
+      assert.equal(current.inBody, true, '当前资料不在候选共用的正文里');
+      assert.equal(current.areas, 1, '一张卡片出现多个独立滚动区');
+      assert.notEqual(current.overflow, 'auto', '当前资料不应再次单独滚动');
       assert.deepEqual(opened.problems, []);
     } finally { await opened.close() }
   });
@@ -987,12 +1161,12 @@ describe('设计决定：作品卡、管理页与复核', () => {
         await page.locator('[data-skeleton="board/subscriptions"] .ui-follow-skeleton-toolbar').waitFor({ timeout: 15_000 });
         const toolbar = '[data-skeleton] .ui-follow-skeleton-toolbar';
         const skeleton = await controlFaces(page, {
-          检查全部: `${toolbar} > button:nth-of-type(1)`,
+          检查全部: `${toolbar} [data-follow-toolbar-actions] > button:nth-of-type(1)`,
           默认视图: `${toolbar} [data-button-group] > button:first-child`,
           表格视图: `${toolbar} [data-button-group] > button:last-child`,
           排序框: `${toolbar} button[aria-haspopup="listbox"]`,
-          方向键: `${toolbar} [data-follow-toolbar-controls] > button:nth-of-type(1)`,
-          全部收起: `${toolbar} [data-follow-toolbar-controls] > button:nth-of-type(2)`,
+          方向键: `${toolbar} [data-follow-toolbar-controls] > span:last-of-type > button:last-child`,
+          全部收起: `${toolbar} [data-follow-toolbar-controls] > button`,
           移除来源: '[data-skeleton] .follow-skeleton-source [data-follow-source-controls] > span:last-child > button:last-child',
         });
         const expected = await disabledTokens(page);

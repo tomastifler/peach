@@ -67,6 +67,17 @@ class Clock:
 
 
 class MagnetTests(unittest.TestCase):
+    def test_payload_exposes_a_display_code_without_changing_the_task(self):
+        task = dl.DownloadTask(id=1, info_hash=HASH, provider="115", source_uri=MAGNET,
+                               display_name="ABC-123.mp4", target="/cloud", state=dl.SUBMITTED)
+        self.assertEqual(task.payload()["display_code"], "ABC-123")
+        self.assertIsNone(task.code)
+        task.remote_name = "XYZ-999.mp4"
+        self.assertIsNone(task.payload()["display_code"])
+        task.remote_name = None
+        task.display_name = "无编号作品.mp4"
+        self.assertIsNone(task.payload()["display_code"])
+
     def test_hex_and_base32_spellings_are_one_key(self):
         base32 = "ZHQVOY7XELZD5GFCTXWN7LRUDOMNKMCW"
         self.assertEqual(dl.normalise_info_hash(base32), HASH)
@@ -77,13 +88,20 @@ class MagnetTests(unittest.TestCase):
         magnet = dl.parse_magnet(MAGNET)
         self.assertEqual((magnet.info_hash, magnet.name, magnet.uri), (HASH, "ABC-123", MAGNET))
 
+    def test_scrambled_trackers_are_dropped_before_submission(self):
+        # DASD-911 的原始磁力：最后一个 tracker 被打乱，115 因此整条判为「错误的链接」。
+        good = "&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"
+        raw = f"magnet:?xt=urn:btih:{HASH}&dn=ABC-123{good}&tr=udp%3A%2F%2FexoduecnuonnaF2%9696A3%moc.cnysed.s"
+        self.assertEqual(dl.parse_magnet(raw).uri, f"magnet:?xt=urn:btih:{HASH}&dn=ABC-123{good}")
+        self.assertEqual(dl.parse_magnet(MAGNET).uri, MAGNET)
+
     def test_links_without_a_btih_are_refused(self):
         for bad in ("", "magnet:?dn=x", "magnet:?xt=urn:btmh:1220abcd", "https://example.com/a",
                     "abc"):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 dl.parse_magnet(bad)
 
-    def test_remote_messages_are_sorted_into_the_nine_kinds(self):
+    def test_remote_messages_are_sorted_into_the_eleven_kinds(self):
         cases = {
             "errno 50038 涉嫌违规": ("rejected", True),
             "本月离线配额已用完": ("quota", False),
@@ -97,7 +115,7 @@ class MagnetTests(unittest.TestCase):
                 self.assertEqual((error.failure, error.block), (failure, block))
         self.assertEqual(set(dl.FAILURE_KINDS), {
             "config", "quota", "rejected", "invalid_link", "no_source", "duplicate",
-            "not_landed", "mismatch", "network"})
+            "not_landed", "mismatch", "network", "not_accepted", "removed"})
         self.assertEqual([key for key, kind in dl.FAILURE_KINDS.items() if kind.retryable],
                          ["network"])
 
@@ -230,6 +248,17 @@ class PollingTests(_Deployment):
         task = self.service.store.get(task_id)
         self.assertEqual((task.state, task.failure), (dl.FAILED, "rejected"))
 
+    def test_a_network_blip_reason_lasts_only_until_the_next_good_poll(self):
+        task_id = self.submit()["task"]["id"]
+        self.provider.statuses = [dl.DownloadError("network", "连不上"), dl.RemoteStatus(dl.MISSING)]
+        self.tick(10)
+        task = self.service.store.get(task_id)
+        self.assertEqual((task.state, task.failure, task.failure_detail), (dl.SUBMITTED, None, "连不上"))
+        # 远端列表里暂时没有、还在宽限期里：这一次查通了，上一次的连不上不再是现状。
+        self.tick(30)
+        task = self.service.store.get(task_id)
+        self.assertEqual((task.state, task.failure_detail), (dl.SUBMITTED, None))
+
     def test_a_block_seen_while_polling_also_blacklists(self):
         task_id = self.submit()["task"]["id"]
         self.provider.statuses = [dl.RemoteStatus(dl.ERROR, "r1", "", None, "50038")]
@@ -245,13 +274,26 @@ class PollingTests(_Deployment):
         task = self.service.store.get(task_id)
         self.assertEqual((task.state, task.failure), (dl.STALLED, "no_source"))
 
-    def test_a_task_missing_from_the_list_waits_then_fails(self):
+    def test_a_task_the_cloud_never_listed_waits_longer_then_fails_as_not_accepted(self):
+        # 真实的 CloudDrive2 提交不回远端编号，编号要等离线列表里看见任务才有。
+        self.provider.submit_result = dl.RemoteStatus(dl.RUNNING, name="ABC-123")
         task_id = self.submit()["task"]["id"]
         self.provider.statuses = [dl.RemoteStatus(dl.MISSING)]
         self.tick(10)
-        self.assertEqual(self.service.store.get(task_id).state, dl.SUBMITTED)
         self.tick(dl.MISSING_GRACE)
-        self.assertEqual(self.service.store.get(task_id).failure, "no_source")
+        self.assertEqual(self.service.store.get(task_id).state, dl.SUBMITTED)
+        self.tick(dl.UNSEEN_GRACE)
+        task = self.service.store.get(task_id)
+        self.assertEqual((task.state, task.failure), (dl.FAILED, "not_accepted"))
+
+    def test_a_listed_task_that_disappears_fails_as_removed(self):
+        task_id = self.submit()["task"]["id"]
+        self.provider.statuses = [dl.RemoteStatus(dl.RUNNING, "r1", "ABC-123", 0.2), dl.RemoteStatus(dl.MISSING)]
+        self.tick(10)
+        self.assertEqual(self.service.store.get(task_id).state, dl.REMOTE_RUNNING)
+        self.tick(dl.MISSING_GRACE)
+        self.tick(dl.MISSING_GRACE)
+        self.assertEqual(self.service.store.get(task_id).failure, "removed")
 
     def test_a_task_missing_from_the_list_with_files_in_the_folder_counts_as_done(self):
         task_id = self.submit()["task"]["id"]
@@ -378,6 +420,46 @@ class LandingTests(_Deployment):
 
 
 class SettingsTests(_Deployment):
+    def test_service_addresses_validate_ports_and_preserve_supported_hosts(self):
+        for address in ("http://127.0.0.1:abc", "http://localhost:0", "http://localhost:65536",
+                        "http://localhost:", "http://localhost:19798#fragment", "http://[::1",
+                        "http://127.0.0.1:19 798", "http://@localhost:19798", "http://localhost\x00:19798",
+                        "C:\\CloudDrive2\\CloudDrive2.exe"):
+            with self.subTest(address=address), self.assertRaises(ValueError):
+                dl.clean_address(address)
+        for source, expected in (("localhost:19798", "http://localhost:19798"),
+                                 ("http://[::1]:19798", "http://[::1]:19798"),
+                                 ("https://example.test", "https://example.test")):
+            with self.subTest(source=source):
+                self.assertEqual(dl.clean_address(source), expected)
+
+    def test_invalid_saved_address_is_editable_and_preserves_other_preferences(self):
+        path = self.service.settings.path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        stored = {"clouddrive_address": "http://localhost:bad-port", "targets": {"115": "/115/Movies"},
+                  "pikpak_root": "P:\\", "wait_hours": 48}
+        payload = json.dumps(stored).encode()
+        path.write_bytes(payload)
+        loaded = self.service.settings.load()
+        self.assertEqual(loaded.payload(), stored)
+        self.assertIn("端口", loaded.problems[0])
+        self.assertEqual(path.read_bytes(), payload)
+        corrected = self.service.settings.save({**stored, "clouddrive_address": "localhost:19798"}, None)
+        self.assertEqual(corrected.problems, ())
+        self.assertEqual(corrected.targets, stored["targets"])
+
+    def test_snapshot_hides_remote_cancel_when_the_channel_cannot_cancel(self):
+        task_id = self.submit()["task"]["id"]
+        self.service.channel_catalog = lambda: {"providers": [{
+            "key": "115", "label": "影片库", "can_cancel": False}], "problems": []}
+        task = self.service.snapshot()["tasks"][0]
+        self.assertEqual(task["provider_label"], "影片库")
+        self.assertFalse(task["cancellable"])
+        stored = self.service.store.get(task_id)
+        stored.state = dl.REMOTE_DONE
+        self.service.store.save(stored)
+        self.assertTrue(self.service.snapshot()["tasks"][0]["cancellable"])
+
     def test_settings_hold_no_credentials_and_check_the_pikpak_root(self):
         with self.assertRaisesRegex(ValueError, "is not a declared PikPak media root"):
             self.service.save_settings({"pikpak_root": "Z:\\"}, self.declared)
@@ -400,6 +482,23 @@ class SettingsTests(_Deployment):
         self.credentials.save(dl.CLOUDDRIVE_CREDENTIAL, {"token": "t"})
         providers = {row["key"]: row["configured"] for row in self.service.snapshot()["providers"]}
         self.assertEqual(providers, {"115": True, "pikpak": False})
+
+    def test_snapshot_pages_keep_submission_order_during_status_updates(self):
+        for number in range(5):
+            self.service.store.save(dl.DownloadTask(
+                id=0, info_hash=f"{number:040x}", provider="115", source_uri=MAGNET,
+                display_name="ABC-123", target="/cloud", state=dl.SUBMITTED))
+        first = self.service.snapshot(2)
+        self.assertEqual([row["id"] for row in first["tasks"]], [5, 4])
+        self.assertTrue(first["has_more"])
+        changed = self.service.store.get(3)
+        changed.updated_at = "2099-01-01T00:00:00Z"
+        self.service.store.save(changed)
+        second = self.service.snapshot(2, before_id=first["next_before_id"])
+        self.assertEqual([row["id"] for row in second["tasks"]], [3, 2])
+        last = self.service.snapshot(2, before_id=second["next_before_id"])
+        self.assertEqual([row["id"] for row in last["tasks"]], [1])
+        self.assertFalse(last["has_more"])
 
 
 class CredentialSaveTests(unittest.TestCase):

@@ -23,13 +23,30 @@ In development notes, **candidate** means information that keeps its source and 
 
 ## Collection Connections and Cloud-Drive Reads
 
-"Sync media library" and `scripts/scrape_codes.py` share the official source chain. When a source is set to "direct", the direct client is used; when set to follow the Peach proxy, the direct, custom-proxy or follow-environment setting saved on the configuration page is used. Online covers use the same source transport, and the amane bridge passes the proxy and per-site direct settings to its subprocess. Browser page fetching also honors explicit direct and custom proxy; a proxy address containing a username falls back to the HTTP client.
+来源失败的问题记录保留阶段、规范番号、来源与脱敏异常链，完整问题日志和刮削诊断导出共用这些证据。界面仍显示简短失败原因；来源未取得不写成正常无结果，也不缓存成已经确认没有封面。模型加载等本地处理故障与来源登录、网络冷却分别定位。HTTP 客户端被拒绝后转用浏览器前，仍检查当前馆藏任务的暂停和停止意图；此控制不接管其他独立任务。
 
-When following the environment, the HTTP client reads the process proxy environment variables and the browser uses the system proxy; the two are not guaranteed to use the same egress. App-level direct cannot rule out an operating-system TUN. Some independently maintained scripts use `HttpxTransport` or `page_cache.Site` directly, read only the environment proxy, and are not wired to the Peach proxy saved on the page, so you cannot claim from this that all scripts are configured the same way.
+「同步媒体库」与 `scripts/scrape_codes.py` 共用正式来源链。来源设为「直连」时使用直连客户端；设为跟随 Peach 代理时，使用配置页保存的直连、自定义代理或跟随环境设置。在线封面使用同一来源传输，amane 桥把代理及逐站直连设置传给子进程。浏览器取页也遵循显式直连和自定义代理；代理地址带用户名时退回 HTTP 客户端。
+
+默认外网 HTTP 请求共用「Peach 代理」，覆盖发现页与作品详情资料、关注媒体、封面与头像、字幕搜索、PikPak API、更新检查与下载、模型下载和远程诊断。独立采集、链接检查、参考资料与发行下载脚本也复用这份设置。来源显式选择「直接连接」、自定义元数据的独立连接策略和注入的传输继续优先。
+`tests/test_outbound_proxy_policy.py` 扫描 `src/peach` 的每个客户端构造：要么展开 Peach 代理设置，要么写明 `trust_env=False`（回环、局域网服务与注入的传输）；裸 `urlopen`、不带 `ProxyHandler` 的 `build_opener` 和裸名导入的客户端一律拒收。`trust_env=False` 指向的是不是本机或局域网，扫描器判断不了，由评审核对。
+
+连不上外网时，每个页面顶部出现一条横幅，指向「网络与访问 → Peach 代理」。判定来自服务端：有页面读取 `/api/network-status` 后，后台按 Peach 代理设置访问 `www.msftconnecttest.com` 与 `captive.apple.com` 两个系统联网检测地址，任一个返回预期正文就算联网；正常十分钟、断网时一分钟复查一次，保存代理设置后立即重探。
+
+跟随环境时，HTTP 客户端读取进程代理环境变量，浏览器使用系统代理；两者不保证采用相同出口。应用直连不能排除操作系统 TUN。设置对新建客户端生效，已经运行的任务或长连接沿用创建时的设置。浏览器直接加载的外站图片与用户打开的外链由浏览器自身网络设置决定。
+
+本机健康检查、浏览器控制接口、writer 镜像、用户自配 Torznab 索引器和 CloudDrive 挂载连接使用各自的网络边界。CloudDrive 的 API／数据代理仍在媒体库设置中管理；Git、glab、rclone、cloudflared 与构建工具的联网由各工具配置负责。可独立构建的 FFmpeg 对应源码归档不包含 Peach 应用，归档内下载脚本使用系统环境代理。
 
 Probing, the 3x3 grid, the timeline and playback of cloud-drive media read video data; the network connection of a mounted path is the job of the CloudDrive2 or OpenList mount tool. Peach's directory "media read policy" limits background reads and the confirmation boundary, and does not modify the mount tool's proxy. Fetching work text and covers online uses the source settings above, configured separately from the cloud drive that holds the video.
 
-## Collection Criteria
+## Iwara 视频作者订阅
+
+在关注管理粘贴 Iwara 作者主页或作者的视频列表链接，或用 `provider=iwara` 与作者用户名登记来源。订阅按发布时间读取作者视频，支持检查更新和抓取更早内容；图片、播放列表和全站视频列表不属于这个来源。条目保留标题、作者、时间、标签、时长和封面；使用外部播放器的条目提示打开来源页面。
+
+通用标签词表与筛选仅接纳 Iwara 明确标为 `general` 的标签。`category`、`source`、未知及未提供类型的标签保留来源原词；分类对应关系未确认时不推断为题材。
+
+公开作者视频无需登录。有访问限制的视频须由具备访问权的账号提供有效 `access_token`，在「来源与订阅」设置中填写。令牌只保存在本机凭据文件，不进账本或同步；失效时重新登录并按设置页说明复制。Peach 不求解浏览器验证。播放时按需解析短效视频地址，默认选择最高分辨率，可切换来源提供的清晰度；私有或已删除视频、接口结构变化与限流会显示具体失败。没有更早内容是正常的历史终点。
+
+## 采集判据
 
 Collection results must keep the data source and the basis for the judgment. Data that code rules can determine and that can be withdrawn in bulk by source is saved under the existing rules; LLM output, source conflicts and multiple possible outcomes are kept as pending-confirmation data. A site name alone is never enough to judge data correct.
 
@@ -43,7 +60,13 @@ Example: to judge whether an X account is the person's own official account, fol
 in one the ledger's existing account pair was right and javdb's was wrong; in the other javdb's account was live and the ledger's existing one was already suspected dead. So a conflict cannot be settled with a blanket
 "the ledger wins" or "the new source wins".
 
-## Seesaa Wiki Work Evidence
+### 人工资料与身份边界
+
+修改资料编辑、候选采用或来源刷新时，分别说明来源事实、人工值和最终展示值的归属。人工采用不删除来源证据；来源刷新不能覆盖受保护字段，继续复用现有字段所有权与复核机制。
+
+清空字段、解除人工保护和恢复来源值分别定义。恢复需要可追溯的来源值，没有相应证据时不能用空值或猜测伪造恢复成功。显示名称或头像编辑、影片归属调整、人物/作品身份合并是不同操作，不通过改显示值暗中改变身份或关联。
+
+## Seesaa Wiki 作品证据
 
 This section covers how to pull a code's cast, title and date candidates from the amateur-identification wikis on Seesaa.
 
@@ -173,20 +196,21 @@ missed; for new releases of the current month, r18.dev often returns 404 while D
 
 ### Fewer Requests: Snapshots and the "Known-Miss" Memory
 
-- If the raw snapshot stored by the previous run (`<Peach data directory>/sources/library-metadata/<code>-<source>.json`) is still fresh, use it and send no request.
-  The validity period equals that of the "known-miss" memory, 7 days, and both expire together, so a stale "none" never lingers while a "have" is still held over an old value.
-  "Retry unfinished items" wants a fresh answer, so it forces a re-ask.
-- The "known-miss" memory is kept per site (`state/library-metadata-misses.json`, `library_processing._MissCache`): within a tier, sites that have said none are dropped, and the whole tier is skipped only when all have said none. The file records the moment each site first appeared;
-  for the "no cover" entry, if a site on the chain was wired in after it, the entry does not count. The memory for censored codes does not become void because a new site was added to the FC2 chain.
-- Fields that have only pending candidates still count as missing: review-free approval needs two sites to agree, and a field given by only one site is exactly what should be asked of the next site. Sources that have already given this row a candidate
-  are not asked again (`_answered_sources`), so each site yields at most one candidate per row; once every site on the chain has given a candidate or said none, the row
-  is skipped before the disk is read. Basis: on 2026-09-25 there were 410 FC2 cast candidates pending approval, and treating pending candidates as already settled would have shut
-  FC2PPV-DB out entirely.
-- The cover step continues with the snapshots from the metadata step: the work JSON in the r18.dev snapshot gives the original image address directly, and the snapshots of the community sites are handed straight to image-source
-  cross-confirmation; once a candidate as wide as 700 is in hand, r18.dev and MGS are no longer asked (`sites_when_needed` of `best_cover`). When r18.dev
-  is not on this code's chain, the cover step does not ask it either.
-- Browser sources (FC2PPV-DB, JAVten) get 45 seconds per request, not trimmed to the remaining budget. The time spent waiting for a person to click when the verification window first pops up
-  is recorded in `LibraryMetadataProvider.excused` and is not counted toward this title's action budget (ADR-0065, second clause).
+- 上一趟存下的原始快照（`<Peach 数据目录>/sources/library-metadata/<番号>-<来源>.json`）还新鲜就直接用，不发请求。
+  有效期与「说过没有」的记忆同为 7 天，两边同时到期，才不会出现「没有」已过期而「有」还压着旧值。
+  错误提示里的「立即重试」只补未完成项，要的就是新答复，强制重问。
+- 「说过没有」按站记（`state/library-metadata-misses.json`，`library_processing._MissCache`）：一档里说过没有
+  的站摘掉，全档都说过才整档跳过。文件记着每站第一次出现的时刻；「封面没有」那条的链上有一站晚于它接入，
+  这条就不作数。有码番号的记忆不会因为 FC2 链上接了新站而作废。
+- 只有待批候选的字段照样算缺：免复核要两家一致，只有一家给过的字段正该再问下一家。已经给过这一行候选的
+  来源不再问（`_answered_sources`），每家对一行最多问出一次候选；链上每站都给过候选或说过没有之后，这一行
+  在读盘之前就跳过。依据：2026-09-25 有 410 条 FC2 演员候选待批，把待批候选当成已有着落的话，它们会把
+  FC2PPV-DB 整个挡在门外。
+- 封面那一步接着用资料那一步的快照：r18.dev 快照里的作品 JSON 直接给出原图地址，社区那几家的快照直接交给
+  图源印证；手上有一张候选宽到 700 就不再问 r18.dev 与 MGS（`best_cover` 的 `sites_when_needed`）。r18.dev
+  不在这个番号的链上时，封面那一步也不问它。
+- 浏览器来源（FC2PPV-DB、JAVten）一条请求给 45 秒，不按剩余预算往下裁。第一次弹验证窗口时等人点的那段
+  时间记进 `LibraryMetadataProvider.excused`，不算进这部片的动作预算（ADR-0065 第二条）。
 
 ### Manually Replacing a Chain
 
@@ -201,8 +225,13 @@ The trade-offs of the source chains drew on amane's `docs/dev/content-routes.md`
 
 ### Sites Reached via the amane Bridge
 
-Some sites do not have a Peach parser of their own and are answered by amane through a subprocess under `tools/amane-bridge/` (ADR-0043). The bridge's venv is rebuilt on
-the card on the "Sources and Credentials" page, and the pinned versions are changed only by hand.
+有些站不是 Peach 自己的解析器，由 amane 经 `tools/amane-bridge/` 的子进程回答（ADR-0043）。桥的 venv 在
+「来源和凭证」页那张卡上重建，钉住的版本只由人改。venv 里读到 amane 的包元数据才算已安装，重建中途失败留下的
+半截环境照旧显示未安装。Docker 部署见 [Docker 部署](DOCKER.md#amane-刮削站点)。
+
+桥的标准输出与错误输出固定为 UTF-8，源码运行和独立制品使用相同协议。主程序严格解码；编码不符时记录 `bridge_stdio_decode`、番号、来源、运行方式、字节位置与 SHA-256，不把替换字符当成正常资料。来源快照中的 `collection_diagnostics` 随诊断包与刮削记录导出，包含编码和采集器版本，不包含代理凭据或响应正文。
+
+升级补修会定向失效包含 `�` 的来源文字快照，保留原文件供诊断，并安排受影响影片重新采集；已有旧补修回执或已完成断点不会挡住新规则。正常缓存和人工资料保留，付费或需下载的来源仍等待显式处理。已入库文字沿用升级补修与人工复核，不通过删字或猜测编码还原。
 
 - **Community tier `amane`**: avsox, plus fc2club, freejavbt and airav, which can be reached only when an override names them. The chain composes them into one tier, asked concurrently in one subprocess.
   An upstream-reported `rate_limited` is written to the same cooldown record as the 429 tier, and `cloudflare_*` and `ip_banned` as the 403 tier;
@@ -328,732 +357,744 @@ cannot be reached and does not replace it, because it is currently the only entr
 
 ### JavArchive
 
-- The work address embeds the in-site article number and title (`/926949-FC2-PPV-4137487-…-pn.html`), which cannot be assembled, so first ask
-  `/search?q=<code>` and then fetch the work page. Product numbers are compared on digit boundaries; `4137487` must not match `41374870`.
-- Search results have only a title and a thumbnail; tags, release date, runtime and the cover slot are only on the work page, so this hop cannot be skipped.
-- This tier gives the title, cover, and the tags, 発行日 and runtime that the re-uploader filled in the body metadata. Whether they are filled is up to the re-uploader, and in spot checks most leave the whole block empty.
-  The seller, product description and cast column are not on the site; the remaining paragraphs of the body are re-posted cloud-drive links, none of which are taken.
-- One product often has several entries on the site, each posted by a different re-uploader, with different article numbers, code spellings, titles and images, and the order carries no quality meaning.
-  Every hit in the search is fetched, since the first one's image may no longer exist. Titles in addresses are sometimes encoded and sometimes raw characters; encode them uniformly before assembling.
-- `robots.txt` allows the whole site.
-- Covers are on `img.javstore.net` and **are identified by position, not filename**: the one inside `div.fisrst_sc` goes first, and the schema.org `image` goes after.
-  Re-uploaders' naming is not uniform, and identifying by name would fetch not a single one in most cases. Those ending in `_s.jpg` are excluded; they are multi-frame strip collages marked `Preview`.
-- The filename is not used to identify, only to reject: when none of the standalone five-to-seven-digit segments in the name is this code, the image belongs to another work,
-  and `is_cross_product_cover` blocks on this.
-- The GIFs stored there are mostly preview animations. After downloading the whole file, `best_cover` of the official tier and `picture()` of the community tier reject them all, since card covers want static images only.
-- Its covers are usually a notch below the official originals, so it ranks last.
-
-### Covers
-
-- Once the metadata step has answered it stops, but the cover step asks the chain to the end. The tier that gives an address often cannot deliver the image: the site marks it as having no product image, or the address
-  is still there and the image on FC2 storage has been deleted. This layer cannot tell; it is only known after `best_cover` has measured, so the cover step wants every image source on the chain
-  and lets it pick the best; tiers already asked in the metadata step are not asked a second time, and asking that tier again incidentally brings a batch of extra tags (ADR-0030).
-- The covers of the official page, the mirror and JAVten all point to the file the seller uploaded on `storage*.contents.fc2.com`, so they are treated as official images and
-  do not go through the two-image-source cross-confirmation of community sources (ADR-0030). The two JAVten addresses are the same file as the publisher's product page, and after delisting it may have been deleted;
-  only the cover layer's measurement will tell.
-- The mirror sometimes gives an address wrapped as `contents-thumbnail*.fc2.com/w276/`, and the parser strips the wrapper to get the original.
-- Entries on the mirror with no product image carry its own `no-image.jpg` placeholder, still a relative in-site address; handing it down as a cover would only yield
-  "source connection not obtained", so the parser judges it as having no image.
-
-### Performers
-
-- Neither the official product page nor JavArchive has a cast column, and the names in the title are the seller's promotional wording. So when the official page has answered and this row still lacks cast,
-  fc2cmadb and FC2PPV-DB are asked next for this column (`FC2_CAST_SITES`).
-- **fc2cmadb's 女優 column** is shown in the browser only to logged-in users, so collection carries the login Cookie configured in "Sources and Credentials"; a guest follow-up for this column
-  returns it for now as well. That column is an Inertia deferred prop, not in the first-screen HTML; one must carry the handshake version number this page reports, name `actresses`,
-  and ask once more separately. The response also attaches a list of former names; take only the main name, otherwise one performer spread into the cast column becomes a dozen people.
-- **FC2PPV-DB's performer column** is organized by who is in the video, written in the original Japanese name, and ranks after fc2cmadb and before javdb.
-- In the cast column the mirror ranks ahead of javdb (`metadata_policy.FIELD_SOURCE_PRIORITY`): javdb's side is often a name given by a repost site
-  (an English nickname or a Chinese translation), while the mirror writes the original name.
-- If one site writes `Xちゃん` and another writes `X`, they count as agreeing and land automatically as `X`; for the conditions and the trace see ADR-0086.
-- Community-sourced cast already in the ledger is not replaced. Disagreements are listed by `scripts/fc2_cast_review.py` into
-  `generated/fc2-cast-candidates.csv` and approved one by one in "Metadata fields" on the review page.
-- The comment-section line goes through `scripts/fetch_fc2_metadata.py`, which also has the equivalence marker and the compilation judgment.
-- A code with a segment suffix (`FC2-PPV-3312576-1`) has no recognizable product number and is asked nowhere: a compilation cover applied to every segment would make each segment, whose contents all differ,
-  carry the same image.
-- freejavbt is not in this chain: after its redesign amane's parser cannot recognize the work page, and the cast column on the work page reads 「暫無女優資料」.
-
-## 1Pondo Work Metadata and Covers
-
-Uncensored codes are not on r18.dev; for date-style codes, the release date a catalog site gives is the reseller's listing date and does not match the date written in the code itself.
-1Pondo's frontend reads a public JSON, so no HTML parsing is needed and no credentials are required:
-`www.1pondo.tv/dyn/phpauto/movie_details/movie_id/<id>.json`.
-
-- One request gives the title, description, performers (Japanese and romanized), series, release date, runtime and in-site tags. The parser is in `peach.sources.onepondo`.
-- A delisted work simply returns 404 and falls to the community sources (javdb carries some).
-- **Whether to ask is decided by local evidence.** 1Pondo and カリビアンコム are both numbered `MMDDYY_nnn`, and the code itself cannot tell whose it is; the separator is
-  carried in by the filename from the encoding group, not a maker identifier. So the official site is asked only when `1pon`/`一本道` appears in this row's path, filename or ledger studio,
-  otherwise it goes down the community sources as before. Basis: local カリビアンコム codes all 404 on 1Pondo, while all 1Pondo codes hit.
-- The only cover is the site's own 16:9 still (`str.jpg`, 960×540). Uncensored makers issue no jackets, and `thum_b.jpg` is a 120×197 list
-  thumbnail; neither is a JAV-style portrait cover, so take the larger one and treat it as an official image.
-
-## Rate Limits and Bans on javdb, AVBase and JavBus
-
-This section covers when to ask the three community sources, how fast, and what to do when banned. In-library collection asks them by code only when the official channels come up empty; the comparison rules for metadata and covers are in
-ADR-0030 and ADR-0032.
-
-### Pace of In-Library Collection
-
-- The host interval for javdb is set by the user: in `library_processing.SOURCE_INTERVALS`, `javdb.com` and `jdbstatic.com` are both 3 seconds,
-  and the two hosts must be changed together.
-- **Of the three, only javdb is asked for FC2 product numbers** (`community_catalog.community_sources_for`). In the local source evidence AVBase and JavBus
-  never gave a single item for FC2; javdb can fill about half of the cast and release dates, but gives no studio, tags or cover, so it is asked slowly yet cannot be cut.
-- The length of one collection round is roughly the number of javdb requests times this interval (measured to differ by about 10 percent). `HostLimiter` waits for "N full seconds since the last one", and other sites'
-  round trips falling inside that window are absorbed, so skipping the other two saves quota and the number of Cloudflare hits, not time; making it parallel saves no time either.
-
-### After Hitting a 403 or Challenge Page
-
-- When javdb, AVBase or JavBus returns 403 or a challenge page, the whole source stops. AVBase returns a Cloudflare challenge page; the reason for JavBus's 403
-  was not obtained.
-- The pause doubles by count: the first stop is `scraping_access.FIRST_BLOCKED_PAUSE` (15 minutes), and it doubles only on consecutive hits, capped at
-  `blocked_pause` in `SOURCES` (javdb 24 hours, AVBase and JavBus 6 hours). One successful pass clears the record, and counting starts over.
-- **The cap must not be used as the first pause.** Real bans are often much shorter: in the instance where javdb recorded a 24-hour cooldown, everything returned 200 in under 7 hours, and all the failures
-  of that round read "source is cooling down".
-- A 403 where only the status code is available is not reported as a login wall: it may be invalid credentials, or the egress IP may be banned (javdb's ban that time lasted 3 to 7 days, and changing the Cookie did not help).
-  The wording of `metadata.auth_wall_reason` therefore names only the two possibilities and does not urge changing credentials; only when it carries a login-page address or body does it say outright to change credentials.
-- The cooldown period raises `SourcePaused` rather than `NotFound`, so the "do not ask again for 7 days" memory (`library-metadata-misses.json`)
-  records none of them, and the next round asks the same batch again from the start.
-- The issue list records such items as "not reached this run" (`severity: paused`). Failures of self-written sources carrying a `cooldown_action` (challenge pages,
-  bans, region restrictions, rate limits) also fall in this tier. Within a tier, it counts as not reached only if all the failed sites are in cooldown; if even one has another cause, it is "not obtained".
-
-### javdb's 403 Is a Per-Egress-IP Quota
-
-What javdb judges is "this egress is sending too fast", not "are you a bot". So **do not switch it to a curl_cffi fingerprint**.
-
-- Basis: outside the cooldown period, all four combinations of HTTPX and curl_cffi's `chrome136` fingerprint, with and without a Cookie, returned 200 for search pages, detail pages and profile pages,
-  with no challenge page and no login page, differing only in interface language (with Cookie it returns Simplified, without it Traditional). Fingerprint detection would reject at the very first request;
-  whereas a whole round of several hundred requests can finish and the ban only arrives after a certain volume, which is the shape of a per-egress-IP quota.
-- **Not obtained**: a comparison of the two transports during a ban. To obtain it one would first have to drive the egress IP into the block, which is not done, so "whether switching
-  fingerprint gets through immediately after a ban" remains unknown. The scripts and raw results are in `<private verification record>` outside the repo;
-  for what prompted the comparison see [docs/reference-snapshots/amane-crawlers-poc.md](reference-snapshots/amane-crawlers-poc.md).
-
-**A quota and a bot check are two different things and are handled differently.** Cloudflare and challenge walls judge "are you a bot", and getting around them means pretending to be another kind of
-client, which is always given up. The check javdb applies is on egress rate; changing node just moves to another line and recounts the quota, with no disguise, so changing egress is acceptable.
-But the quota itself is still respected: the source floor may not be lowered, a 403 still ends the whole source, and rotating nodes to keep hammering during a ban is not done, as that amounts to
-splicing multiple egresses into one over-speed batch.
-
-- Scripts may go out through the environment proxy: `via_proxy` of `Site` lets HTTPX read the environment proxy, with no guarantee of reading the system proxy or PAC. App routing and
-  the actual egress must be verified separately; the configuration boundary for new users is in ADR-0024.
-
-### Rate Limiting for Directory Collection on javdb
-
-`scripts/harvest_directory_links.py` asks javdb person by person by name (see "Directory-Type Sources and Social Links"), at a more conservative pace than in-library collection.
-
-- It was actually banned once: after fetching over a hundred pages at about a page a second, every path on the whole site returned 403, with the page reading 「基於你的異常行為」 and advising a change of node, and the
-  egress IP was banned for 3 to 7 days. Before the ban there was no `Retry-After`, no slowdown, no captcha, and pausing a few minutes midway did not recover the quota; the quota accumulates per egress
-  IP, not per path, and the trigger is on the order of 40 to 50 pages per minute.
-- So the rate limit is a hard-coded source floor, not a command-line default: `harvest_directory_links.SOURCE_INTERVAL` sets javdb at 5.0 seconds
-  (12 pages per minute), and `--interval` can only go higher, never below it.
-- **On a 403/429/503 the whole source ends.** `Site.request()` does not retry on status codes; paging on after a ban would only make each name spelling of each
-  performer hit a 403 once. A hit in `rate_limited()` does a `break`, and pages already fetched still go into judgment, so this round's results are not lost.
-- Fetched pages are cached in `state/directory-links/javdb/`, and judgments can be replayed offline. After the ban period, raise `--limit` and run on; cache hits
-  cost no requests, so no resume parameter is needed.
-
-### Reasons Covers Fail, and Age Gates
-
-- Every official version returns only a "preparing" placeholder image: the work has mostly been delisted (MIDE-594).
-- Both image sources have images but the dHash does not match: "not the same image", and it is not used.
-- When a community source's image comes from only one image source it is still installed, and an empty `verified_by` in `.scraping.json` means unconfirmed (IPX-060 has only javdb).
-- JavBus has an age gate: the code page without a Cookie answers with a quiz-style age verification page; javdb has a login wall. The cookies of both are pasted into the collection settings by the user after passing the gate in the browser
-  or logging in, and public collection carries them with requests.
-- The old JavBus and javdb snapshots under `sources/metadata/javinizer-go/` only borrow the studio to choose official channels, and their covers are not treated as official candidates: when JavBus cannot find
-  the original code it returns a different work.
-
-## Local Collection Entry Point
-
-This section covers the shared entry point by which the GUI and the command line fetch covers, and its connection, Cookie and write rules.
-
-The GUI and `scripts/fetch_jav_covers.py` share `peach.jav_cover_fetch`. The developer's mapping files and Cookies need not be copied to
-a new user's computer. Existing successful metadata snapshots take priority, and when a snapshot is missing, public sources may be queried online.
-
-- **Connection method**: the cover HTTP path of R18, DMM, Prestige and MGStage uses the system proxy, app-level direct or a custom proxy per source.
-  The DMM connection check reports the page and the HD CDN separately. HTTPX's environment proxy is not the same as the system PAC; app-level direct also cannot rule out TUN.
-- **Cookie**: pasting and Netscape file import for sources that take Cookies (JavDB, JavBus, FC2CMADB, Instagram) reuse
-  CredentialStore, saving only unexpired items within the current source domain. Saving itself does not verify whether the login session is valid.
-- **Per-task cap**: a GUI cover task accepts only one code hit in the library at a time and reuses BackgroundJob; at most 80 requests and 32 MiB,
-  with a 180-second deadline checked before a request is sent.
-- **Replacement rule**: atomic replacement happens only when the full image has the same probed size, decodes completely and has a larger area. Original bytes are not downsampled. A successful sidecar records
-  the original and the install digest, and a digest match within 24 hours does not download again.
-- **Failure and restart**: the Retry-After cooldown of a 429 is written to a local file and a newly created transport obeys it too; a failure does not delete an existing cover. Restarting the program
-  does not automatically replay write tasks, and the user restarts any unfinished ones.
-- Live r18 studio evidence and local snapshots use the same source routing, with both Prestige and MGS taking part in candidate comparison; original images have no derived downsampling.
-
-This connection configuration covers cover HTTP and the FC2 CLI. The amane bridge subprocess, other collection scripts and the curl_cffi connector each use their own configuration.
-An independent user login session for Instagram was not obtained, and no automatic adapter enters the formal dependencies.
-
-For test steps see [Windows test build](TESTING_DESKTOP.md), and for architecture requirements see [ADR-0024](adr/0024-mark-manifest-not-bundled-bytes.md).
-
-## Online Identification of Videos Without Codes
-
-`scripts/scrape_codes.py` recognizes only codes. Videos without codes (resources from Twitter, Telegram and the like) go through the two-stage flow in
-`scripts/identify_resources.py`, and the identification results likewise go into "Metadata fields" of `/review`, and are written to the corresponding data items in the database only after confirmation:
-
-1. `worklist` reads only the ledger and generates search spellings from the filename: the name as is, with promotional head and tail stripped, separators turned into spaces, unspaced English split by case,
-   and trailing quality tags stripped. It also flags companion images in the same directory, which can serve directly as posters. `metadata_hits` counts how many of creator, title, studio,
-   series and cast are already present, and by default puts those with fewer first; `--sparse-only` keeps only entries with none of them, and identification is done for those first.
-2. After an agent or a person checks online, fill the CSV back as `asset_id,field,value,source_url,confidence,note`.
-3. `ingest` merges it into `generated/library-metadata-field-candidates.csv`, recording the candidate source as `websearch`, with `asset_path` pinning
-   the specific file.
-
-- Fields are limited to title, original_title, performers, studio, series, release_date.
-- Videos with a code still go through the JAV sources of `scrape_codes.py`.
-- Web search runs on the agent side; the script sends no requests and does not write the ledger.
-
-## Naming and Identity Merging
-
-This section covers how canonical names are chosen, how aliases are registered, and how to merge when one person is stored as two entries.
-
-### Canonical Names and Aliases
-
-- The canonical name prefers a commonly used Simplified Chinese name with a source; when no reliable Chinese rendering exists, Japanese is kept. Former stage names, romanizations, kana and Traditional names become aliases.
-  `no_avatar` only means no qualifying image was obtained and does not block an already verified name from landing.
-- "This page has only one performer" is not evidence: the library has many BEST compilation codes, and pages with no search results also render recommended articles. An exact match-back
-  hit takes priority over any "only one" inference, and "only one" counts only when two codes agree.
-- The romanized field of r18.dev is rendered as "current name (former name, former name)", one field holding several stage names of one person; the kana and kanji
-  spellings each occupy their own row, with the romanization existing only once. On landing it is split by `peach.entities.split_composite_person_name`, whose signature is "a space
-  before the parenthesis, comma-separated inside the parenthesis, romanized on both sides". The same literal shape is also used in the ledger for studio disambiguation (`AV DEBUT（本物人妻）`),
-  role provenance (`アスナ(SAO)`), submission status and dedup suffixes, and only this signature narrows it.
-- `XX XX` is the source node's text duplicated, not a legitimate alias. Before person names enter CSVs, compatibility fields or `upsert_asset_entity`, fully duplicated strings are collapsed;
-  the cleanup also audits `asset.creator`, `演员:` tags and `entity_alias`.
-- To judge "the ledger already has this name", romanization must be considered too, and `peach.entities.name_chain` cannot be used. That chain by design drops romanization
-  (querying Japanese sites with romanization is wasted effort), and using it as the "already has" test would report the `Rin Natsuki` plainly sitting in `entity_alias` as a new alias again.
-  For the full set, read `canonical_name` plus `entity_alias` directly.
-- Zero-width characters in upstream names are stripped in one place, `canonicalize_entity_name`, not fixed separately in each script. `str.strip()` does not recognize them as
-  whitespace, so `normalized_name` would carry an invisible character: identical to an ordinary name in the UI, yet `upsert_asset_entity` looking up by
-  `normalized_name` cannot find the existing entity, so the same person is stored as two entries and cannot be found by name search either. U+200B/U+200C/U+2060/U+FEFF are stripped;
-  **U+200D is not stripped**, since emoji family and profession sequences use it to join, and stripping it would split a single glyph in a creator's name into two or three.
-
-Aliases fall into three classes by source, and in the UI only the class the user typed in themselves can be revoked (`user:alias`, write endpoint `/api/entity-alias`):
-
-- Those left by scraping (`r18:performer` etc.) and merging (`merge:*`, `avdb-actor-mapping@<rev>`) are the record of why this entity looks the way it does, and are not deleted with one click.
-- Free text is saved to the alias table; `canonical_name` is the person or studio name shown on the page, and can only be chosen from names already in that profile
-  (`/api/entity-name`).
-- The avatar gallery queries the whole name chain one by one and takes the union, so one fewer alias row means one fewer batch of candidates. The same person is often stored under several spellings each with its own batch, and stopping at the first hit
-  would leave the images under the later names entirely out.
-
-### Merging Entities
-
-- A unique-constraint conflict on `entity(kind, normalized_name)` is usually not a bug but a signal of one person's old and new stage names. Merging goes through
-  `peach.entities.merge_entity`: keep the side with more works, migrate relations, aliases, external references, links and search terms, and keep all old names as aliases.
-- The merged-in id leaves a tombstone in `entity_redirect` pointing to the surviving side, and chained merges are flattened to one hop on write; follow sources, Feed subscriptions and
-  discovery links are repointed with the merge. Entry points that fetch by id (`/entity-image`, avatar replacement, Feed discovery, review candidates) go through
-  `entities.resolve_entity_id`, which recognizes live entities first and then tombstones; when the target entity is deleted, a trigger deletes the tombstones pointing at it.
-- `entity_external_ref` keeps only one row per provider; a second row from the same source is discarded and reported, not silently overwritten.
-- Creator and performer cross-kind duplicates do not use the "side with more works" rule. They are merged automatically only when the non-empty work sets on both sides are exactly equal and either a performer alias
-  exactly hits the creator name, or the creator name is composed of the performer's real name plus an account alias.
-- `r18:performer`/`javbus:performer` are the performance metadata of formal releases, and the performer is kept; the generic `performer` is a flattened compatibility
-  assertion, and the creator is kept. A merge must synchronize `asset.creator` and the `演员:` projection, otherwise a deleted entity will still forge links on the detail page.
-- Two traps in `merge_entity`: the sqlite connection defaults to `foreign_keys=OFF`, so child-table rows must be explicitly DELETEd inside the function; counting uses
-  `SELECT changes()`, not the connection's cumulative `total_changes`. A merge is irreversible, and after merging `PRAGMA foreign_key_check` should be 0.
-
-### Automatic Registration of Performer Aliases and Profiles
-
-- The **alias backfill follow-up** (`peach.performer_alias_followup`, ADR-0055) automatically registers a performer's other stage names. `source` is the batch id
-  `auto:performer-alias@<task row id>`, and `revert_auto_landing.py --source auto:performer-alias` withdraws the whole batch. The verdicts are written to
-  `generated/performer-alias-landing.csv`, and spellings occupied by another entity are only recorded, not written.
-  - It reads only the 「別名」 row of the minnano-av profile table and the name column of the 「プロフィール」 section on the av_neme person page.
-  - On the minnano-av search page, several aliases of the same person each occupy a row, so uniqueness is judged by deduplicating on id; on a unique hit the site jumps straight to the profile page, and the id is taken from the page-head
-    canonical.
-  - av_neme's series pages and monthly pages also write 「名前(女優名)」, and it counts as a person page only if the page name equals the main name. An old page of a renamed person has only the sentence
-    「女優名が【甲】から【乙】へ変更」, and its first section is not 「プロフィール」, so it is not read.
-- **Performers with FC2 works ask the fc2cmadb performer column first** (ADR-0061): from her own work page, enter the person on the site, and take only the main name on the site;
-  the former-name string is mixed with seller product names and is not taken. Entities whose canonical name is a seller's handle (`たぬき顔サラサラ黒髪ロング`) get linked to the real name through this site.
-- GirlsDelta (`girlsdelta.com/model/<id>`) has a roster and promo photos, but too little to confirm by face, so it serves only as a single-person corroborating link and does not enter the pipeline.
-- The **performer profile backfill follow-up** (`peach.performer_profile_followup`, ADR-0067) writes profiles into `performer_profile`, with batch id
-  `auto:performer-profile@<task row id>`, withdrawn with `revert_auto_landing.py --source auto:performer-profile`. The verdicts are in
-  `generated/performer-profile-landing.csv`.
-  - minnano-av profile page `actress<id>.html`: each cell of the table starts with `<span>label</span>` and the value runs to `</td>`; only the
-    `act-profile` block is read, and same-named cells in the comment section do not count.
-  - The `<p>` of the `生年月日` cell contains a stray `</td>`, and cutting the value there happens to exclude the miscellany after the zodiac sign.
-  - `サイズ` looks like `T156 / B86( Eカップ ) / W58 / H85 / S`, the numbers being centimeters; the meaning of the trailing `S` was not obtained, and only the original text is kept.
-    Pages where the profile was not filled in lack the rows for birth date, blood type and birthplace.
-  - The `ブログ` cell displays `http://` while the `href` is `https://`; take the `href`. The in-site avatar `/p_actress_125_125/` is only 125×125.
-  - avwikidb.com returns the full page to a direct httpx connection with a Chrome UA (registered in `scraping_access.SOURCES`, stopping 6 hours on access denial). The JSON-LD `Movie.actor` in the head of the work page
-    `/work/<code>/` gives each item a `name`, a romanized `alternateName` and `/actor/<id>/`, and the id is taken from here. The first two items of the performer page's JSON-LD `Person.alternateName` are the reading and the romanization, followed by other credits merged on the site (including male
-    performer names), which are not taken. The three measurements are only in a single cell of the body, 「身長・スリーサイズ」 (`T148 B83(B) W55 H85`). The performer image is the DMM `actjpgs`
-    125×125 and is not used as an avatar; the site search is a `⌘K` overlay, and its address form was not obtained.
-  - When birth date and height disagree with minnano-av, they are recorded only in the external ref's `metadata_json.conflicts`.
-
-## Code Catalogs, Creators and Watermarks
-
-This section covers how to recognize codes from filenames and directories, how to confirm a source returned the same title, and who counts as a creator.
-
-### Extracting Codes from Filenames
-
-- When a code directory is projected as a creator, the criterion can only be file-level evidence and never name shape: the only reliable distinction is whether the media filenames inside the directory
-  parse out the same code (`scripts/audit_code_creators.py`), and anything doubtful is left in a review CSV.
-- Codes are filled in only for videos in the directory. Release directories are also mixed with forum promo files, downloader ads and cover images (`Tokyo-Hot n0780-HD` has two).
-  Writing a code onto them has two consequences: in the library they pass for files of this title; and junk review, because "carries a real code itself", judges the directory evidence invalid
-  and keeps them out of the queue. Writes go through `field_owners` signed `script:code-creators`, and cells the user has edited are no longer overwritten.
-- Promo clips in release directories are scored by `scripts/find_ads.py` on five criteria and output only as a CSV for a person to handle; javm's `find_ad_videos` identifies by keyword and can serve as a cross-check (ADR-0092).
-- Quality prefixes (`HD`/`FHD`/`4K`/`1080P`) and version suffixes (`-C`/`-CH`/`-UC`/`-SUB`) are not part of the code, and the extractor strips
-  these two layers before matching. The UI projects version semantics as 「中字」(Chinese subtitles), 「无码」(uncensored) and 「无码破解」(decensored), and the original `name`/`code` is kept for file operations. A compact code missing the hyphen
-  is restored only when there is evidence of a maker, release date, or performer/studio/series entity.
-- Promo domains appear at the head, tail and inside square brackets of a code (`www.98t.la@ABW-358-U`, `ABP-762-fuckbe.com`, `[xxx.cc]ABC-123`).
-  Code extraction and directory dedup share the `strip_promo_markers` layer; if each stripped half, a double-layered `[98t.tv][98t.tv]ABW-251` would slip through
-  at one of the two places.
-- Words that only say "what kind of file this is" (`IMG`, `VID`, `VIDEO`, `NO`, `PART`) have the same shape as a code body and are collected in
-  `catalog_rules.CODE_BODY_STOPWORDS`; quality words belong to `_QUALITY_HEAD`, and repost-site labels to `REPOST_SITE_LABELS`. The three lists
-  each handle one class, and extraction passes through them in turn. A new entry should first be checked for false-positive evidence with `stems` of the local temporary tool `build/parse_shapes_audit.py` (not distributed with the repo).
-  Creator nicknames may also collide with this shape, and stuffing them in one by one would only yield
-  a table that never converges.
-
-### Date-Style, Tokyo-Hot and Western Numbering
-
-- The separator of amateur-series date-style codes (`MMDDYY_NNN`/`MMDDYY-NNN`) is a maker identifier and part of identity: 1Pondo, パコパコママ and
-  カリビアンコムPR use `_`, and カリビアンコム uses `-`; the same sequence number on the same day is two different films. JavDB also stores them separately (outside the repo,
-  `<private verification record>`: searching `092415-001`, the first result returned is 1Pondo's `092415_001`).
-- So the normalization, identity comparison and query variants of `catalog_rules` all keep the separator as is, and do not generate variants with the other spelling: searching with the wrong separator
-  finds another title. Only when a source gives a pure digit string without a separator do both count as a hit, and a missing character is not counter-evidence.
-- The spellings of wild filenames drift (the same 1Pondo title appears as both `1pon-092415-001-fhd1` and `1pondo-092415_001-FHD`), so when stripping the code
-  to display a title both separators are let through, and the value landing in `code` keeps the one the filename gave.
-- The six digits of a date-style code are `MMDDYY`, and month and day must be valid for it to count as this shape. Looking only at digit count, the `125735_816` in the phone recording
-  `VID_20220818_125735_816.mp4` (month 12, day 57) would become a 1Pondo code.
-- Tokyo-Hot numbers have no maker letter segment, and the canonical form is lowercase: the main line `n1234`/`k1234` is zero-padded to four digits, and the Red Hot branch is written
-  `red-123`. The javbus work page address is just `/n1234`, and the reference implementation NeoAVDC (MIT)'s `TOKYOHOT_NUM_RE` likewise outputs lowercase
-  `n####`. The `k` and `red` branches have no entry in the local ledger, and their spelling on javdb/javbus is **not obtained** as evidence. The number has only one letter,
-  and shape cannot keep out names like `no0037_01`, so it is recognized in only two positions: at the start of the name, or when the name already contains `tokyo-hot`.
-- Western titles are named "studio/series + release date" (`DorcelClub.24.12.02.Christy.White.XXX.1080p`), which is an identity and not a code:
-  `catalog_rules.western_release_identity` yields `DORCELCLUB.2024-12-02`, `release_identity` recognizes it, and code extraction always
-  returns empty. Two-digit years expand with a cutoff at 70, and four-digit years are used as is. It is recognized only at the start of a token, not searched mid-token: in the ledger's
-  `E078. Redhead.Sucking.Big.Cock.And.Hard.Sex.2019.10.15`, a mid-token search would yield the series name `Sex`.
-
-### Confirming a Source Returned the Same Title
-
-- A code returned by a source must be compared against the queried code to count as a hit. On the javbus side a code is used as a keyword search taking the first result, and when nothing is found it returns
-  an approximate someone else (`SA-104 → AVSA-104`, `AR-301 → STAR-3016`). Without comparison most matched codes are simply wrong, and the entire MIB catalog
-  (Korean content) was once stamped with Japanese studios, series and titles because of this, and even upgraded to JAV on that false evidence.
-- The criterion is `catalog_rules.same_release_code()`. It normalizes only benign differences: verified prefix aliases, DMM's `h_` marker, zero padding and remake trailing letters;
-  a source that gives no id is not blocked (missing evidence is not counter-evidence). The review queue removes candidates by the same criterion (ADR-0035): rows whose candidates are all removed
-  stay out of the queue entirely, since putting things in front of people that cannot be written even when clicked only makes them confirm it again.
-- javbus is a fallback source (`metadata_policy.FALLBACK_SOURCES`): when another site can supply the same field, its value is not treated as evidence; it gets its turn only when it is the
-  sole source. This step ranks after the code-date criterion. For fields whose sources are all official after removal, automatic writes may replace the value already in the ledger,
-  with the rule name recorded as `adr-0035-official-replaces-*`; community sources still only fill empties (ADR-0035).
-- Korean MIB numbers (`catalog_rules.KOREAN_MIB_PREFIXES`) ask no JAV source for either metadata or covers. `HA-101` and `MY-102` collide with Japanese works having
-  exactly the same code, so code verification passes all the same, and the only way is to not ask by number prefix as a whole. The five entry points of scraping, scanning and collection, page cover fetching, cover batches and
-  log-based recovery are all blocked by `is_korean_mib_code()`. The cross-work criterion for covers compares both the letter segment and the digit segment: `YUJ-101 → yuj00011` and
-  `435MFC-135 → h_1711mfcc00027` match on letters and not on digits, and both are different titles.
-- `catalog_rules.code_query_variants()` only expands search terms, every return is verified against the ledger's original number, and cached and network results are checked alike.
-
-The prefix-equivalence table and the query table are two separate tables:
-
-- Verified LUXU, BAZX, HA and 9 MGStage prefixes (`_RELEASE_PREFIX_ALIASES`) can be normalized; other numeric prefixes are kept.
-- Registering a row requires evidence group by group: compare the MGStage product page against the r18dev snapshot on title, runtime, cast and cover; avbase groups the two stores' entries as the same work;
-  and in the ledger that letter segment hangs under only one studio.
-- The full number in MGStage's official product-detail path can corroborate its display id with the prefix omitted; covers, titles and search URLs are not identity evidence.
-- When DMM/r18dev give only a `content_id`, the studio segment in it can be used to check a bare code, but cannot erase the MGStage prefix in the query.
-- `390JAC-040` is an MGStage distribution, while `JAC-040`/DMM `118jac040` is a different DVD compilation, and JNT likewise must not be merged by bare number.
-- Variants that cannot be confirmed return `identity_mismatch`, keep the raw snapshot, but generate no field candidates.
-
-### Who Is a Creator
-
-- A creator is the channel owner, not the person on camera. The only ones in a filename from which a creator can be created are `RT_@X - body…`, an explicitly marked `女主@X`, and a Chinese name in the body;
-  a trailing string of bare `@A @B @C` is cross-promotion, and `📷：@X` is the photographer, neither of which creates one.
-- **A distribution platform is neither a studio nor a creator.** FC2 and myfans are places that sell things, and the account on the site that is the actual seller (producer) is the
-  creator. The platform itself can only be a source/platform entity, with links registered under `catalog`, and no "studio official site" is sought for it:
-  `studio_sites.PLATFORM_ENTITIES` directly judges "not applicable (distribution platform)", sending no request at all, and not silently skipping either.
-- Some FC2 works in the ledger are marked with a performer and some comments mention a person; that is **performer** identity, and the platform must not casually be recorded as a creator. Once recorded,
-  the works of every seller under the platform would hang under one "creator", the same class of incident as stamping an aggregate directory with a uniform tag.
-- A repost channel's watermark is not a creator watermark, and a directory name may also be a disguise. Judgment priority: on-screen watermark > online reverse lookup of the work name > filename text.
-- Before applying a creator-level tag, first confirm from the distribution of subdirectories under the ledger path that this creator is not an aggregate directory. Stamping an aggregate directory with a uniform-style tag
-  is a replay of the `asce` incident.
-- **The release naming of rotating performers is a studio or series.** The same release name may rotate performers by number, and it cannot be taken as a personal account on the directory name alone. `classification.numbered_cast_shape` recognizes three namings
-  (prefix + number + person name, performer combination - number - title, camel-case person names run together plus number), and reports only if the same account has at least 3 works, over half of the files hit, and at least
-  3 performers; for the prefix form, 3 of the names must be performers already in the ledger, and one where the same person appears in over eighty percent of the hit files is a personal or couple account.
-  The ownership audit reports it as `label_shape`, goes only to review, and generates no repair plan.
-- **Identity research first looks up Japanese reference sites by page name.** Generic search does not index sites like sougouwiki and av_neme, so a "not obtained" from generic engines alone
-  does not count as having looked. `research_creator_identity_wikis.py` reads only the ledger and, for creators whose identity awaits verification, directly fetches the two sites by EUC-JP page name using the canonical name, the name with code prefix removed, and the
-  filename prefix (the fetch layer is the alias-backfill follow-up's `WikiSitePages`, whose page cache, 404 memory and source cooldown are shared with the service).
-  A same-named page that is a work list of 3 or more performers is recorded as an observed `identity=release` and negates `unknown`; when none exists, the unknown candidate states
-  which pages were asked; a fetch failure other than a missing page is "not obtained" and does not enter the list. The list goes to `apply_entity_identity_research.py` for a frozen preview and backup-then-write.
-  When a processing task ends, the "check creator identity" follow-up automatically asks about newly registered and existing creators by the same criterion, and hits land directly as observed with the batch source (ADR-0098).
-  Changing an entity's type remains a user review. 裏DVD村 (uradvd-mura.com) is a DVD/download store with member login and no series pages addressable by page name,
-  so it is not wired in and serves only as a manual lookup clue.
-
-## Performer Name and Avatar Sources
-
-This section covers where avatars are fetched from, how they are picked and replaced, and what each performer-profile site can offer.
-
-### Source Direction and Size Thresholds
-
-- Avatars are fetched from carefully curated galleries; logos conversely recognize only the brand itself, and official sites and the studio's own social accounts are the authoritative sources.
-- Candidates are judged by measured pixels (`peach.images.classify`): a short side < 128 is rejected; avatars are additionally judged by long side ≥ 500 and short side ≥ 300, since applying a square-image threshold to
-  portrait shots would reject the best sources. Those with only a URL and no measured size do not count as candidates.
-- **"Long side ≥ 500" is a source threshold, not a display threshold.** It blocks thumbnail-grade sources. Using it as a display threshold would shut out a 382×382 image whose face is 208px wide,
-  leaving a cover crop whose face is only 55px to keep occupying the slot. The size convention on the display side is in [docs/FRONTEND.md](FRONTEND.md).
-- Usable sources: r18.dev, av-wiki.net, Gfriends. javlibrary, missav and xslist are blocked by Cloudflare, njav has a challenge wall, and jav321 has no
-  separate performer field. Sites blocked by Cloudflare are always given up on, and bot detection is never bypassed. javdb.com can be fetched, but is rate-limited per egress IP; see
-  "Rate Limits and Bans on javdb, AVBase and JavBus".
-- Gfriends is used as an external provider only through `Filetree.json` and single raw media files; the image library is not cloned and no images are put into Git. The index cache ages by
-  mtime (one day), and when a new index cannot be fetched the old cache is used with a warning in the output; for that round "not listed" is recorded as error and not as no_match, otherwise
-  `--resume` would harden a single network failure into a permanent answer. Gfriends has a median of 1 image per person, a median cached image of 500×600, and is not grouped by work.
-
-### Auditing and Filling Gaps
-
-- `audit_performer_portraits.py` puts qualifying images into a candidate-only content-addressed cache, and for each saves provider, name-match tier, upstream
-  ID/URL, size, MIME, SHA-256 and policy version. Those whose bytes equal the current avatar keep only audit evidence and do not enter `/review`. This script
-  has no path that writes the ledger.
-- `fill_portrait_gaps.py` covers the stretch from gap to installed: among people who have never had an avatar installed, those whose name chain hits exactly one image in the gallery get it installed directly;
-  those hitting several get none installed and instead produce a comparison sheet (`--sheet`), with candidate images side by side and, next to them, links to her works in this library. Installing
-  reuses the three steps of the picker overlay (`avatar_picker.choices`/`resolve`/`install`), and the evidence, cache and framing sidecar follow exactly the same conventions as manual image replacement.
-  It is dry-run by default and writes avatar files only with `--apply`; the ledger is opened read-only, and this run does not write the ledger.
-- **The gallery stores images by name, and people with the same name are different people.** The twenty-odd images hit by a single name like `ななみ` are twenty-odd people, and auto-picking amounts to randomly installing
-  someone else's face on her, so "found exactly one" is the only criterion bold enough for automatic installation. Even when a single name hits just one, the evidence is only "keys are exactly identical",
-  and after installing it still needs a look on the profile page; recognizing a person from their works is something a machine cannot do.
-- **The gap criterion is "`performer-<id>.img` is not on disk", so one poor image shuts better sources out permanently.** Example: social-media collection installed cropped work
-  covers into a batch of empty slots; those people have not counted as gaps since, while Gfriends has high-definition face shots for some of them. The gap audit cannot answer
-  "is the one in place good enough", and switching sources needs another survey round: recognize cover
-  crops by `provider` in provenance, recognize no-face-detected, face-too-small and source-image-too-small by the sidecar, then ask the gallery for each.
-
-### Picking Images: By Face Width, Not Canvas
-
-An avatar ultimately sits in a 64-160 px circle, and whether you can tell who it is depends on how many pixels the face has, not on how big the whole image is.
-
-- The criterion is in `harvest_social_avatars.rank_key`; face width is measured by YuNet in `peach.face_detect` (once per SHA) and written to the `face_width` column of the candidate
-  CSV for reviewers to see directly.
-- Counterexample: a full-body standing shot has a bigger canvas but a face of only a few dozen pixels; a half-length shot of the same person has a smaller canvas and a face more than twice as wide. Picking by canvas, the winner is
-  the one whose face can't be seen. The face in a group shot can likewise be far smaller than in a solo shot.
-- No face detected is recorded as 0 and ranks behind any measurable candidate; those with no face detected are never installed, official images included. When the whole batch is 0 (model absent, all
-  side profiles), ranking falls back to canvas and the run statistics state that this round picked by canvas. The fallback of a solo work cover uses the same yardstick: in the right-half still of a JAV two-panel cover
-  the face is often only a few dozen pixels.
-- A replacement happens only when the winner's face is wider. A winner that doesn't fill the circle is installed as a fallback only when the one in place has no detectable face.
-- **The avatar directory is shared by several pipelines, and `--apply` only changes things for the better.** `--force` means "avatars already present also enter the contest", yet it overwrites
-  **all** installed avatars, including those installed by other pipelines; and the candidate pool of `harvest_social_avatars.py` (X avatars, directory portraits, work covers) is far worse than
-  full-frame portraits of the `verified-photo-page` kind, so overwriting without judgment would shrink the face in most avatars. So before writing to disk the one on disk is measured with the same
-  `rank_key`, and if the face is not larger it is not overwritten, and the run statistics report how many were "in place is better, not overwritten". The face width of the one in place
-  is read from the existing framing sidecar first and only truly detected if there is none.
-- **Replacing an image must replace the sidecar.** The framing sidecar and the image-selection criterion come from the same YuNet detection (`peach.avatar_face`) and are written together when the avatar is installed;
-  if no new record can be produced the old one is deleted. Leaving the previous image's face box would make the page use it to frame this image, zoomed onto an empty spot, and in the UI this looks no different from
-  "this image was supposed to display that way". `/review` approval landing also detects the face once. `scripts/detect_avatar_faces.py` is only a
-  backfill entry; neither the detection nor the sidecar shape is defined by it.
-
-### Watermark Removal
-
-Avatars fetched back carry someone else's watermark (the `PRIVATE.com` and `TEAMSKEET.COM` strips at the bottom), which must be removed in the bytes and cannot be hidden by framing:
-export, a changed framing rule or any place that switches to the full image would bring it back out.
-
-1. `scripts/scrub_avatar_watermarks.py` looks without writing by default, producing a candidate CSV plus a stack of side-by-side annotated images.
-2. The detector cannot catch semi-transparent watermarks, so adding boxes by hand is the proper way: add a row `file,x,y,w,h` to the CSV given to `--marks`. Manual boxes are not bound by score, size
-   or position priors; those criteria exist to question the detector and should not overturn a judgment made by someone who has already looked at the image. A manual box covering a whole edge strip can often crop several watermarks
-   at once.
-3. After a person confirms, run `--apply`: the original together with its three sidecars is moved as a set into `avatars-superseded/`, provenance gets a `watermark_scrubbed` segment added,
-   and the framing sidecar is recomputed for the new image.
-
-- **Crop edges rather than inpaint where possible.** Cropping fabricates not a single pixel, whereas inpainting does, and often wipes out only half, leaving semi-transparent remnant text. The crop line is subject to
-  two constraints: it may not cut into the face box plus margin (the face box comes from `peach.face_detect`), and it may not crop the image below 70% of its area. Each edge is judged independently,
-  and one edge that cannot be cropped does not affect the others.
-- **An image with more than 4 text detections is passed over entirely, without changing a single pixel.** That is not an avatar with a watermark; it is a work cover installed as an avatar,
-  and what's needed is a source switch; see the cover crops in the previous subsection.
-- The detection and removal criteria, model source and measured figures are in REUSE.md under "Avatar watermark detection".
-
-### What Each Site Can Provide
-
-- **The DMM performer index page is reachable, but its avatars are only 125×125, suitable only for the first avatar bound to an identity.**
-  `https://www.dmm.co.jp/mono/dvd/-/actress/=/keyword=<kana row>/` returns the complete list page through Peach's `dmm` source setting (with the in-site
-  actress id and old stage names in parentheses), with no region block; `pics.dmm.co.jp/mono/actjpgs/<romaji>.jpg` returns 200 even without a Referer.
-  - The problem is size: `actjpgs/<name>.jpg` is 125×125 and `actjpgs/medium/<name>.jpg` is 100×100, which cannot pass the HD candidate threshold or the display threshold.
-    Gfriends already holds this whole batch, ranking in the last quality tier, so no separate HD provider is started for it. The evidence and replay scripts are in `<private verification record>` outside the repo.
-  - Exception: at a fresh import, r18.dev's same person object gives the DMM id, name and filename directly, and an entity lacking an avatar can first install this official thumbnail,
-    which the avatar-change page upgrades afterward. The Japanese name, old stage names and in-site ID on the page continue to be used for the name chain and disambiguation.
-- **The entry to javdatabase must be a code in the ledger, and slugs cannot be assembled from names.** It has one page per stage name, and slugs are not one-to-one with people:
-  `/idols/rin-natsuki/` opens the profile page of `Rin Oka`; the in-site search also gives no idol page and returns only a work list.
-  - The query order is fixed as code → `/movies/<code>/` → the idol link the page gives → name, with each step supplied by the page from the previous step
-    (`scripts/harvest_javdatabase_names.py`).
-  - A work can carry several performers, and a code match does not mean all the names on the page belong to this person: it is accepted only if at least one name on the idol page is already on this person's name chain in the ledger,
-    and when it matches several people in the ledger it is recorded as 「需人工消歧」 (needs manual disambiguation).
-  - It can give the original Japanese name plus the romanization of old stage names. It cannot be used for studio names; it itself writes `セレブの友` as `Celeb no Tomo`.
-
-## Directory-Type Sources and Social Links
-
-Filling in performer social media goes by "fetch the whole directory-type source once, compare names offline, install via a review CSV", with no per-person search (`scripts/harvest_directory_links.py`).
-This section covers how each directory site is fetched, how names are matched, how links are judged and how agencies are built.
-
-### Fetching and Name Matching
-
-- laoshi.ink is fetched in full by sitemap for all performer pages (ld+json `sameAs` plus external links in the body); bstar-pro.com passes the age gate once, then fetches the models list and
-  every page. HTML is cached by URL sha1 in `peach-data/state/directory-links/<source>/`, and reruns no longer hit the external site.
-- Names on a page (Chinese name, Japanese name, aliases) are matched against the ledger's `canonical_name` and `name_chain` by `peach.social_links.name_key` (NFKC, casefold, whitespace removed).
-  A page hitting two entities is recorded as 「需人工消歧」 (needs manual disambiguation), with no guessing.
-- The site's own social accounts (the few on laoshi's home page) are subtracted from each page's external links first, otherwise every performer would get the site's X installed.
-- javmodel.com is not a social source and need not be tried again: through a proxy it returns 200 (direct connection times out), but the only twitter link is a share button, and there is not
-  one of the person's own accounts. Instagram↔X complementing waits until after the directory data is installed and is done from the ledger itself, not in the collection scripts.
-
-### Link Judgment and Liveness Checks
-
-- Four verdicts: `ok` enters the install queue; `已有` (already present: same platform, same handle, regardless of host spelling and case); `conflict` (the ledger has a different handle on the same
-  platform); `未取得` (not obtained: page failed or no social media).
-- The source itself may be stale data: many X accounts copied by directory sites have been suspended, and the person long since moved to a new one. So X `ok`/`conflict` rows are all liveness-checked via the logged-out
-  page's og tags: a live account has `og:title` and an `og:image` pointing at `profile_images`; a nonexistent handle returns only a JS shell without any og, so live or dead can't be told. When no og is obtained, the control account `x.com/X` is fetched without cache:
-  only if the control is normal is it judged 「疑似失效」 (suspected dead); if the control is also empty it is rate limiting, and 「未取得」 is written. The logged-out pages of Instagram, TikTok and YouTube give nothing at all, so only 「未验」 (unverified) can be written.
-- **An X display name containing 「応援」 is a fan account, not the person.** Directory pages hang accounts like `篠田ゆう様💝応援アカウント` as the person's own account,
-  and liveness checks them as "live" too. Marking a note in the evidence is not enough, since `installable()` looks only at verdict and alive, so the criterion lives in `probe_rows`
-  (`FAN_ACCOUNT`), and a hit downgrades to the separate verdict `应援账号` (fan-support account). Directory-type sources do not verify social-media ownership, and this check can only be done ourselves.
-- The criteria (platform list, handle normalization, the `twitter.com→x.com` alias, label spelling, X liveness) are centralized in `peach.social_links`,
-  and `normalize_link_hosts.py` and `harvest_performer_links.py` both take from it; `harvest_social_avatars.py` still keeps an old copy.
-- **Hostnames are always lowercase.** jae's profile pages write `https://Instagram.com/…`, while the UNIQUE on `entity_link` recognizes only the literal, so copying it verbatim
-  makes a second record for the same account (`social_links.canonical_url`). Paths and handles are untouched: X handles are case-insensitive, but that
-  is the spelling the user reviewed in the first place.
-- **If the page states it is a blog, treat it as a blog regardless of hostname.** `classify()` recognizes only `BLOG_HOSTS`, yet subdomains of `alicejapan.co.jp`,
-  `plaza.rakuten.co.jp` and `takasyo.blog.jp` are all the person's own blogs and are not on the list; the line 「公式ブログ」 on the page is closer to
-  the fact than the hostname. The label is recorded as 「博客」 (blog) following the ledger's existing spelling, and only when the page additionally names the blog (`公式ブログ「旬の果実」`) is that name appended;
-  copying a generic term like `オフィシャルブログ` verbatim would make the same thing appear in three spellings in the UI (`harvest_directory_links.owned_link`).
-- Installation uses `install_entity_links.py` to read `directory-links-<date>.csv`; `-review.csv` holds all verdicts, for people to look at. Neither writes the
-  ledger directly.
-
-### Labels and Agencies for Official Links
-
-- **A field's value describes only its own row.** In the minnano-av profile table, 「所属事務所」 and 「公式サイト」 are two different things: Ako Shiraishi's agency is T-POWERS,
-  but the 公式サイト filled in is Prestige's exclusive promo page. Using the agency name as the label of the official link would produce a control whose text says T-POWERS while its icon and destination are
-  Prestige's.
-- So the label of an official link is written by domain ownership (`peach.social_links.host_owners`). Evidence in order: the official-site link the studio entity itself carries identifies it directly; next
-  is consensus among performers' official links (at least `OWNER_QUORUM` rows on the same domain writing the same name). A single piece of evidence confirms itself and does not count as consensus. Only when ownership is not obtained is
-  the agency name used.
-- The agency name is stored in `entity.metadata_json.agency`, with `source` and `checked_at`, and a performer's transfer overwrites with the latest. Mislabels already in the database are repaired by
-  `scripts/repair_link_labels.py`, which by default produces only a review CSV.
-- `scripts/install_agencies.py` installs these names as `entity.kind='agency'`, with the affiliation written to `entity_membership` (the primary key is on the member side, a person has only one
-  active affiliation, and a transfer is an overwrite). The original text stays in `metadata.agency` as evidence so there is something to trace back if the conclusion was wrong. Agencies do not enter `asset_entity`: storing a separate agency
-  field for works would drift, and nobody would notice the drifted copy.
-- Parentheses in agency names are split by the same rule: outside the parenthesis is the current name, and the reading inside the parenthesis and the `旧・`/`元・` after it are aliases. When an old name collides with another company's current name, no
-  alias is written: the old name of `GG(旧・Prime Agency)` is precisely the still-operating `Prime Agency`.
-- An agency's official site takes those of its members' official links whose label equals its own name, using the domain root address and not some performer's personal page. After a name is split, it must be looked up again by the original text,
-  otherwise sites like `ACT(アクト)` cannot be found.
-- A company whose current site won't open can have a Wayback snapshot registered: link_kind stays `official`, the url is the full `web.archive.org/web/<timestamp>/<original address>`, and the label is
-  `官网存档（YYYY-MM）` (official site archive; no company name, as the page header already has it), preferring the affiliated-roster page. `peach.social_links.ARCHIVE_HOSTS` makes domain ownership, the agency storefront round icon
-  and studio mark collection all skip it; when a mark is to be taken from the snapshot, register the `id_` original address of the image in the snapshot in the designated-source table of `studio_icons.py`. When the review sheet changes the
-  label, rerunning `install_entity_links.py` realigns it.
-
-### Agency Rosters and Transfers
-
-- "Who is at this agency" goes through `scripts/harvest_agency_rosters.py`, one agency at a time, with two orders of magnitude fewer requests than asking person by person.
-  - minnano-av has no agency index page, and the in-site id appears only in the link in the 「所属事務所」 cell of the performer page. So first search out the id with this agency's known members, and check by the parenthesis rule above
-    that the cell indeed names this agency (`KRONE(クローネ)` matches only once split; the old name inside `GG(旧・Prime Agency)` does not count). The id is written to
-    `entity_external_ref(provider='minnano-av', external_kind='production')` so the next run need not ask again.
-  - The roster page `actress_list.php?production=<id>` has 30 people per page, and names are read from the JSON-LD `CollectionPage`; the text of the body `<a>` is
-    "name + 女優情報", which can't be matched to the ledger.
-  - The paging address is taken from `<link rel="next">` with `&amp;` restored, but the endpoint can't be trusted to it: after the last page the site still gives a next page whose content is a
-    repeat of the last page's few people, so walking stops at "this page has no new people". When the headcount doesn't match `numberOfItems`, distinguish whether the page count is capped or the site roster has duplicate numbers.
-  - Names are matched back to the ledger together with aliases: those that don't match are recorded as 「不在库」 (not in library; collapsed into a single count line by default); a spelling matching two people is recorded as
-    「重名」 (duplicate name); one already affiliated elsewhere is recorded as 「另有归属」 (belongs elsewhere), left for a person to judge. `--apply` only fills the empty one.
-- Agencies split and rename. Transfers go through `scripts/resync_performer_agency.py`: pick a whole agency with `--agency` or name people with `--only`, re-ask the performer page's 「所属事務所」,
-  and overwrite only `entity.metadata_json.agency`; entities and affiliation are still landed by the REPLACE of `install_agencies.py`, so the two sides don't each split the name and reach two conclusions.
-  - Searches must go through `name_chain`: the ledger canonical name is Simplified Chinese while the site recognizes only Japanese spellings, so asking with the canonical name alone mostly ends in "not obtained".
-  - An empty cell on the site is recorded as 「站上没有事务所」 (no agency on site), and the ledger is not cleared: contract termination and the site not displaying that cell that day can't be told apart on the page.
-- 「所属事務所」 records only who she is currently signed to. For someone who retired and moved to a personal management company, that cell holds her own company (三上悠亜 → 株式会社Miss), not an AV
-  agency. These are rejected by `scripts/reject_agency.py` per a review CSV: the rejection is recorded in her `metadata.agency_rejected` and the affiliation is removed, and if the agency is left with no one the
-  entity is deleted; if the AV-era agency has been verified, write it in the `replacement` column and it is switched in the same pass. The rejection is recorded on the person; the three paths of writing metadata, creating entities and filling rosters all skip it through `peach.entities.rejected_agencies`, and the verdict is recorded as 「已驳回」 (rejected).
-- When one agency splits into two, both write 「旧・某某」 after the parenthesis. The roster collector, per the parenthesis rule, refuses to recognize either as the one that was split, and that is correct: the old name
-  belongs to both successors (example: LIGHT split into `ELTRA(エルトラ)旧・LIGHT` and `EST(エスト)旧・LIGHT`).
-
-### jae.tokyo Performer Directory
-
-jae.tokyo (Japan Adult Expo) is the third directory source designated by hand; for the same site's studio directory see "Studio Names and Studio Marks".
-
-- The profile-page structure differs across the three editions: 2014 is `jae2014/actress/NNN.html`, with social media and blogs mixed into the body's `<a>`; 2015 is the
-  `offActress` overlay of `jae2015/actress.html`, with one `actressLinkBtn` button per link; 2017 is `jae2017/actress/NNN.html`, with the portrait in `img_area` and links in `link_area`.
-- **`jae2014/*` gets reset on direct connection** (`WinError 10054`), so jae as a whole went into `PROXY_SOURCES`; the same source does not use two different egresses by edition.
-- **Links inside comments don't belong to this person.** Some pages leave in their HTML comments the blogs and Instagram of other performers from the previous edition's template, and hard-fetching by `<a>` would
-  install several people's accounts on one person, so comments are stripped before parsing.
-- **Directory portraits enter the avatar contest, not a separate install path.** `-portraits.csv` is read by the `jae` route of `harvest_social_avatars.py` and competes on size with candidates from X and
-  babepedia in the same content-addressed cache; the framing of tall full-body promo photos is left to the face sidecar, see REUSE.md under "Face framing".
-
-### javdb Performer Pages
-
-- **javdb.com is a source entered by name, not a directory you can page through.** The site has no enumerable performer list, and the entry is names in the ledger: search each spelling with
-  `search?f=actor&q=`, and the `title` column of the result card is all the spellings of this person on the site, so identity can be judged without clicking in. The name chain must be searched through before giving up: the ledger
-  canonical name is mostly Simplified, `name_key()` does no Simplified/Traditional conversion, and searching with only the canonical name often finds nothing at all (`harvest_directory_links.collect_javdb`).
-- **The performer id is available on the work detail page, with no need for a separate profile-page trip.** Every name in the 演員 column carries `/actors/<id>`, and `sources.javdb.actresses` brings it out in passing;
-  only when a name matches exactly a person entity already linked to this asset is it registered as `entity_external_ref(provider='javdb', external_kind='performer')`, and the person page's
-  JavDB entry is assembled from it (`peach.entry_links`). Historical data goes through `scripts/backfill_performer_entry_ids.py`: the javdb page cache and the `actress_id` of
-  `review/agency-rosters.csv` each fill one way, producing a dry-run CSV first and then `--apply`.
-- **For works whose performer wasn't scraped from javdb, the performer-profile backfill follow-up searches performer cards by name to fill the id (ADR-0081).** The id on the card is the profile-page id,
-  and the avatar of the uncensored record has `<span class="info">無碼</span>`; matched cards count as the same person only if there is at most one per record type (`javdb.one_person`).
-  The backfill script uses the same criterion when reading the search-page cache.
-- **Two records of the same name: don't take the first.** The same performer often has two records on the site, 「有碼」 (censored) and 「無碼」 (uncensored); both pages enter judgment, and colliding accounts land as `conflict` in the review sheet.
-- **Some profile pages require login, and return a login page rather than 401.** No account is registered. That page is recorded as 「未取得」 with the reason stated: "searched, not on the site", "found
-  but needs login" and "not searched" are three different things, and not writing them separately means the next round has to search again. The pages that require login are all the 「無碼」 twin record; the censored one is public, and the Chinese name can be
-  obtained from it, so logging in just to get the name adds nothing; the work list of the uncensored record is still behind the wall.
-- **The social-media buttons are only inside the `section-addition` block.** Outside links elsewhere on the page are ads, sister sites and RTA labels. Instagram is the main increment of this source.
-- **javdb's round avatar is 250×250 and cannot enter the avatar contest** (square needs ≥400), so `harvest_social_avatars.py` does not take this source.
-- For rate limits and bans see "Rate Limiting for Directory Collection on javdb" under "Rate Limits and Bans on javdb, AVBase and JavBus".
-
-### Name Discovery for Follow Sources
-
-When discovering follow sources by name, the spelling of the site's identifiers follows the site's API and is not inferred from handles.
-
-- **Only two places can offer suggestions as you type half a name: the local list and rule34.xxx's public autocomplete**, and neither needs credentials.
-  - The local one is the whole-site creator list that `discover` downloads along the way (kemono, pawchive, coomer), sorted by casefold and then binary-searched for the prefix range.
-    The typing path **does not download the list**, and if it was never downloaded that group is simply missing.
-  - The on-site one goes through `api.rule34.xxx/autocomplete.php?q=`. The same path under the main domain is blocked with a 403 by Cloudflare, and only the `api.` subdomain returns 200 JSON.
-    What it returns is tags, not an author directory, and the UI must say this group is tags. It returns only ten at a time, and popular prefixes crowd out the full spelling, so with credentials switch to a direct tag query.
-    Only the one that equals the query after stripping separators and folding case is accepted, and others sharing the prefix don't count as a hit.
-- **Who the author is on rule34.xxx is told accurately only by the site's classification, and that requires credentials.** Guessing by word shape would be wrong (names containing `artist` can be coincidence). The classification is at
-  `index.php?page=dapi&s=tag&q=index&name=`, which without `user_id`+`api_key` returns `"Missing authentication"`. Three pitfalls: `json=1` is ignored and only XML is returned;
-  `names=` is not recognized and spits out a batch of unrelated tags; `name_pattern=` is a two-sided wildcard substring match truncated by id, and `orderby` has no effect either. So the only way is to ask
-  one by one by exact name (about 0.3 seconds each, can be concurrent). A classification is a fact fixed once the site changes it, so once asked it is remembered.
-- **gelbooru is not a superset of rule34.xxx and cannot replace or precede it.** The two sites share an origin but each collects its own, and post counts for same-named tags also differ. gelbooru's
-  `index.php?page=autocomplete2&term=` is public and carries its own `category`, but `limit` has no effect and it always returns 10, so using it to tag rule34.xxx's candidates with categories can
-  cover only a very few. The candidate list must come from rule34.xxx: Peach creates the subscription on that site, and offering names it does not have is misleading.
-- **f95zone**'s `latest_data.php` indexes only the five categories of Latest Updates, and artists' Collection posts are visible only through the in-site
-  search with a login cookie (without a cookie `/search/` returns 403). Without a cookie it is skipped and the Google external link is kept, and "could not find" is not written as
-  "not on the site".
-  - The in-site search matches whole words: `strauz` hits 0, while `strauz*` and the full spelling hit the same posts. So after all spellings come back empty, add a round of `word*`; add it only at four characters
-    or more, since three letters plus a wildcard amounts to searching half the site back.
-  - The author in a thread title is in the trailing square brackets, by the convention `work name [version or date] [author]`. Going right to left, find the first bracketed segment that doesn't look like a version number, a date or
-    a site label such as `Completed`/`Unity`; when two handles are listed side by side (`[LazyProcrastinator/LazyProcrast]`), the first is the display name and the rest are
-    alias candidates. Only when there is no usable bracket is the body used, stripping prefix labels such as `[Collection Request]` and container wording such as `Models Collection`
-    (`follow_store.f95_author_name`).
-  - The author's avatar and other identities are only in the body link area of the first post, and visible only when logged in. The first-post poster is a re-uploader and not the author, and XenForo's poster avatar can't be used as the
-    author's avatar. In guest mode, all outside links in the body are replaced with `/login/`, and some boards are closed to guests entirely.
-  - When the profile card has a FANBOX creator id or a pixiv numeric id, the avatar is taken from FANBOX; otherwise X and Patreon, neither carrying credentials: the og:image of the X logged-out page steps down by the
-    `pbs.twimg.com` size-suffix rule in "Studio Names and Studio Marks", and Patreon's public `api/campaigns?filter[vanity]=` gives
-    `avatar_photo_image_urls.original`. Each takes the largest usable tier and then compares actual pixels, keeping the larger. SubscribeStar is **not obtained**.
-  - Which hosts count as identity is hard-coded in `follow_sources.profile_link_identity`: anyone can paste links in a forum body, and opening up hosts amounts to treating addresses pasted by others
-    as the author's.
-
-### Fetching Chinese Names from javdb (`harvest_javdb_cn_names.py`)
-
-- **Page structure: `actor-section-name` is the current name, the `section-meta` right after it is the old stage names, and the last is the film count.** The two must be taken separately:
-  the old names on the `JULIA` page include `京香じゅりあ`, and mixed into one string you can't tell "this is her Chinese name" from "this is an old stage name she used". Parsing is in
-  `peach.javdb`, shared with `harvest_directory_links.py`.
-- **Two names side by side in the current-name column are not necessarily two spellings of the same name; they may be two stage names.** The current-name column of the `美空あやか` page is
-  `一之瀨亞美莉, 美空あやか`, and treating it as "Chinese spelling + Japanese spelling" would install 一之濑亚美莉 as 美空あやか's Chinese name. The criterion is that the first
-  kanji string must be found on the other side (`same_person`); mismatches land as `不同名` (different names), and cases where the canonical name is not in the current-name column land as `改艺名` (renamed stage name) for separate review.
-- **When comparing names, glyphs must be folded twice; opencc once is not enough.** It handles only Traditional/Simplified, not Japanese shinjitai: `永瀬` won't convert to `永濑`, `姫川` won't convert to
-  `姬川`, and with one layer fewer the same person is judged as two. Both layers go through `peach.kanji` + opencc `t2s`, and the spelling stored in the database goes separately through `simplify_kanji`.
-- **`?locale=zh-CN` switches only the interface language.** Performer names are data and don't follow: `愛音麻里亞` is still Traditional under the Simplified interface, and Simplified must be converted yourself.
-- Verdict tiers: `ok`, `同形` (same form; the site has only the Japanese name), `要登录` (needs login), `旧名` (old name), `改艺名`, `未取得`, `不同名`. For landing, three tiers are taken: `ok`, `改艺名` and
-  `旧名`.
-- **Chinese renderings of old stage names are only on the profile page, and the ledger has not a word of them.** Scraping sources give Japanese and romanization; the avdb mapping table gives only one `zh_cn` per person, its
-  `keyword` comma list is used only for matching and is never written to `entity_alias`; and what gets demoted to an alias when the umbrella name is changed is the original Japanese canonical name. So `橋本ありな`
-  is in the ledger and `桥本有菜` isn't, and searching by the latter finds no one.
-  - `--aliases` in the same fetch pass takes the Chinese spellings in the column under the current name as candidates. The site gives no labels for that column, with old stage names and nicknames mixed,
-    and the parsing layer neither separates nor filters them; candidates record only `origin=别名栏` (alias column), and whether to accept the spelling is for the reviewer.
-  - `--scope all` widens the scope to people who already have a Chinese canonical name, who are precisely the batch lacking a second spelling; `--only` names one person by any spelling on the name chain or by
-    entity id, unrestricted by scope, reaching a conclusion in two requests.
-  - **When the search yields multiple pages, not a single alias candidate is produced (`多页`, multiple pages).** The canonical-name pass records both pages for a person to pick, but aliases can't: aliases go into identity, and a wrongly matched
-    person is harder to trace back than a missing spelling. A spelling colliding with one under another entity's name is recorded as `占用` (occupied); that is a question of whether the two should be merged and not for collection to decide. Pages where
-    there is no new spelling still leave a row `无新写法` (no new spelling): having looked and found nothing is a different thing from not having reached her yet.
-- Landing is a different script and a separate authorization: `apply_alias_candidates.py --candidates <csv> --revision <batch> --apply --backup`.
-  - The source is recorded as `javdb-actor-page@<batch>` (`peach.javdb.ALIAS_SOURCE` is this prefix), the same shape as the `javdb-actor-page@javdb-202609` written by `localize_performer_names.py`, and distinguishable from the
-    revocable `user:alias` in the UI.
-  - The batch id must be given on the command line: when parsing was misjudged, only if the batch can be recognized can that whole run be withdrawn by `source`.
-  - Four cases are not written: this entity already has the spelling; the spelling belongs to another entity; the umbrella name in the ledger is no longer the one in the CSV (stale snapshot, should refetch); the entity
-    is missing or is not a performer.
-
-## Studio Names and Studio Marks
-
-This section covers where a studio's original Japanese name, official site and logo come from, and how to judge that what was found really belongs to this studio.
-
-### Original Japanese Names
-
-A studio's original Japanese name is looked up, not transliterated: there is no unique way back from romanization to Japanese (`Hon Naka` can be `本中` or `ほんなか`).
-So `scripts/localize_studio_names.py` does no transliteration, and instead takes the codes of that studio's works to `www.javbus.com/<CODE>` and reads the `製作商` field.
-
-- For one studio, take codes with two different prefixes where possible, and propose a rename only if the two pages agree. The same prefix is necessarily the same company and proves nothing.
-- javbus has an age gate, and without `age=verified` it returns only a confirmation page; code pages must go through the proxy, and direct connection times out.
-- A 404 on a code page is that page's problem, not that this studio can't be found. Corroboration relies on cross-prefix, and substituting for a 404 relies on same-prefix: `code_groups` is one group per prefix, with at most
-  `--depth` (default 3) per group, and later ones in the group don't take part in corroboration but take over only when the previous one can't be fetched.
-- When codes of every prefix of a studio all 404, suspect the ledger first: often the films with English filenames or Korean performers have been given a same-prefix JAV studio name by the scraper
-  (`Crystal Eizo`/HA), and that studio name never belonged to those films.
-
-The seven verdicts are each a separate matter:
-
-- Rename only if the source gives kanji or hiragana (`Celeb no Tomo→セレブの友`).
-- Pure katakana is just the loanword spelling of an English brand, and the English original in the ledger is kept by default (`ムーディーズ` does not replace `MOODYZ`).
-- When the source itself also writes Latin (`V＆R PRODUCE→V＆RPRODUCE`), the difference is only spaces and symbols, not de-romanization.
-- Western studios and FC2-PPV with no JAV code in the ledger at all are recorded as 「不适用（非番号体系）」 (not applicable: not a code system), and cannot be written as "not obtained" and pass for a failed lookup.
-- Two codes giving different 製作商 are recorded as 「不一致」 (inconsistent) and handed to a person: `K M Produce` yields ケイ・エム・プロデュース and スクープ, meaning one ledger name
-  has two companies mixed under it.
-
-Romanization and free translation transcribed by code sites do not count as English, and rank below the original Japanese name; only English names the studio itself uses are kept (the user's example: `PREMIUM`
-uses English, `Celeb no Tomo` uses Japanese). The criterion is the studio's self-designation: where the official site or official X display name writes katakana and the Latin name is merely its romanization, it is likewise changed back to Japanese
-(`Akinori→アキノリ`, `Milu→ミル`, `Das→ダスッ！`); where the official site itself writes Latin, it is kept (`BALTAN`, `GENEKI`). So the "pure katakana"
-verdict is only a default, and an override is written directly in the verdict column of the review sheet. `merge_studio_name_variants.py` class B uses the same standard: if the Japanese side contains kanji
-or hiragana the Japanese side is kept, and for pure katakana the English side is kept.
-
-Rows judged "rename" are landed by `scripts/apply_studio_name_localization.py`: the canonical name, the old spelling demoted to alias, the flat `asset.studio` and
-the marks under `--logo-root` are all changed together. Rows whose review sheet is stale (current name has changed, entities have been merged) or whose Japanese name collides with another company are reported and not changed.
-
-### Merging Duplicate Entities
-
-- Duplicate entities are merged in two classes, spelling and writing system (`merge_studio_name_variants.py`).
-- The comparison key for spelling variants (`AVS collector's` vs `AVS collector’s`) is NFKC plus symbol folding, **and not a single kana may be dropped**: an ASCII-only
-  folding would fold both `シロウトTV` and `ラグジュTV` to `tv`, and the merged result is two real studios mixed together, irreversibly.
-- The only identity guarantee between a Japanese name and a romanized name (`ムーディーズ` vs `MOODYZ`) is a shared code prefix: the prefix belongs to the studio and is locally verifiable evidence.
-  Transliteration plays no part in the judgment. Anything colliding with two or more companies is handed to manual review.
-- A merge also rewrites the flat `asset.studio`, otherwise the next scrape would rebuild the old entity from the projection.
-- **After a merge the mark must be re-hung.** Marks are stored on disk named by `logo_key(canonical_name)`, and the square mark of the discarded side is claimed by no one from the moment of the merge,
-  while the kept side's prime slot, left empty, falls back to the filler wordmark.
-  `merge_studio_name_variants.py --logo-root` relocates per the review sheet: for whichever variants the kept side lacks it fills them in, and what it already has is not touched by a single byte; `.ct` and
-  `.provenance.json` travel with the image (without `.ct`, `/logo` can't answer the Content-Type).
-
-### Finding Official Sites
-
-Studio official sites and social links are registered separately. `find_studio_socials.py --db <ledger> --output <scan sheet>
---review-output <link review sheet>` reads only existing official sites, and checks studios together with those that already have social links, dedups by account case, and lists missing items.
-The review sheet keeps the source URL, page SHA-256, anchor text and context; after ownership is confirmed it is handed to `install_entity_links.py` for installation.
-All accounts on an official site cannot be automatically attributed to the studio: mall customer service, performers and the company's other studios each have their own ownership. On the S-Cute official site
-`SCute_av` is marked as S-Cute official, and `_scute` as the official account of its directly operated successor service nanairo, whose link label keeps nanairo.
-Collection recognizes only account-homepage anchors; posts, share buttons and script strings do not count. The age gate's text, image alt and inter-text whitespace all take part in the judgment,
-only affirmative entries on the same site are followed; HTTP failures and cross-domain redirects are recorded as not obtained. Progress is saved as each site completes, `--resume` reuses rows with account evidence,
-and empty results and failures are rechecked; collection itself does not write the ledger.
-
-- Search for official sites and X accounts with the Japanese name, not the romanization: open
-  `html.duckduckgo.com/html/?kl=jp-jp&q=<Japanese name> AVメーカー 公式` in the built-in browser. Google pops up a bot check, which is not bypassed; the built-in WebSearch
-  returns only US-filtered results, and searching by code or romanization yields only irrelevant results.
-- AV studio official sites generally show an age-confirmation page first, and without getting through it you get only a ~10 KB empty shell. The criterion must be the anchor text and not the URL: the negative link points
-  off-site (the 「いいえ」 of `dasdas.jp` and `muku.tv` both point to dmm.com), while the affirmative link 「はい（入室する）」 points on-site, and the hrefs of the two
-  look no different. See the implementation in `scripts/find_studio_socials.py`; `test_age_gate_is_crossed_by_the_affirmative_link_only` guards this line.
-
-`scripts/harvest_studio_sites.py` guesses domains from studio names to find official sites. Every rejection criterion must be able to state a counterexample, and also guard against hurting real sites:
-
-- Block parked pages (`kawaii.com - domain for sale`: the keyword is far down in the body yet written in the title).
-- Block pages that declare themselves unavailable (return 200, the body has all the adult words, and the title is only `Site Unavailable`). The alternative path of "domain derived from studio name + is an adult site" would
-  confirm them as official sites, so `BROKEN_TITLE` must block after the parked-page criterion.
-- Block generic sites whose title merely echoes the domain (`prestige.com`'s title is just `prestige.com`, and the real site is `prestige-av.com`). The criterion is "the title prints the domain verbatim
-  and says nothing besides the domain"; one cannot compare the normalised title against the normalised host, otherwise real sites like `NATURAL HIGH（ナチュラルハイ）`
-  would inevitably be judged as echoes.
-- Before judging "no official site", first tell whether it is the site's answer or a network blip. `probe` retries only transport-layer exceptions, by the convention of `page_cache.Site`
-  (`retries=2, backoff=2.0`); an HTTP status code is the site's answer and is not retried. A row marked `未取得` (not obtained) has each attempt's verdict concatenated in order into an evidence chain written into `note`.
-- Studios with no Latin letters in the name (`一本道`, `カリビアンコム` ...) take part in comparison through kanji and kana themselves: `normalise` keeps kanji, hiragana, katakana and
-  the long-vowel mark `ー`; `・` (U+30FB) is a separator, stripped like full-width parentheses and `【】`. The domain of such studios cannot be derived, and `--seeds` is the only entry.
-- `entity_alias` also takes part in the "page self-declares the studio name" check: the canonical name of `东京热` is Simplified, the page writes 「東京熱」, and the ledger has had that alias all along. Comparing against aliases does not
-  loosen the criterion. The verdict reads "matched alias 'X'" and not "page writes 'X'", because after normalise it is no longer the page's original text.
-- Adult-context words include 「アダルト動画」 and 「無修正」 written by uncensored sites. Non-adult sites with the same name (Hunter Engineering, Bazooka, Madonna) never contain these two words.
-- **Information not on the page can only be confirmed by hand.** The official site of `SOD Create` is the parent company's site `www.sod.co.jp`, and this string appears nowhere on the whole site; loosening the generic criterion to catch it
-  would let `hunter.com`, `bazooka.com` and `madonna.com` in as well. So it goes through `studio_sites.CONFIRMED_SITES`: one studio per row, stating the address,
-  the date of manual confirmation and the reason. It replaces only the last check, "the page must self-declare the studio name"; the four checks for status code, empty shell, parked page/self-declared unavailable, and domain echo still apply; confirmed
-  addresses rank ahead of all derived candidates.
-- A studio the ledger records in romanization but the site uses only in Japanese goes in no `CONFIRMED_SITES`: that is a wrong name in the ledger, and after changing it to the Japanese name the page's self-declaration will match (`えむっ娘ラボ`).
-  The allowlist keeps only information absent from the page such as "which company the studio belongs to"; if there is an alias, go through `aliases`.
-- Studios with few works still appear in the prime slot of the studio page. `--min-assets` is only the threshold for a full scan; targeted fills go through `--only <canonical_name>...`, where naming ignores
-  the work count, and a name that doesn't match fails outright and is not silently skipped.
-
-### Social Account Avatars as Logos
-
-The source of AV studio logos is the studio's own social account avatar: social avatars are naturally square and published by the brand itself.
-
-1. Evidence order: handle → `unavatar.io` resolves the platform CDN's real address → download from the CDN → measure. unavatar is used only to resolve the address, and provenance
-   records both (`scripts/fetch_studio_avatar_candidates.py`).
-2. Candidates use a content-addressed cache, SHA-256, a same-studio perceptual hash and a cross-studio exact-duplicate gate. A scaled or re-encoded same image is recorded as unchanged, and only a true upstream visual change
-   re-enters `/review`. No handle, no image, unchanged and duplicate are written only to the health report and do not occupy the manual queue.
-
-- Being resolvable does not mean it's the right brand: `@bazooka` does exist and yields a 400×400 avatar, but it is a generic account registered in 2007 and not this AV studio.
-  So handles must be confirmed with evidence one by one, and the script doesn't guess by default; the output of `--guess-handles` is always marked `needs_confirmation`, never adopted automatically, and left blank
-  if nothing is found.
-- The r18.dev detail JSON has only `maker.name`/`label.name` and work covers, with no logo asset.
-- **The size suffix on `pbs.twimg.com` is not evidence that "it's this big".** The suffix-less one is the uploaded original (the largest tier); a suffixed address returns the original when the original is smaller:
-  for `セレブの友`, both `_400x400` and the suffix-less are 242×242, while unavatar gives `_200x200` (8068 B vs 12302 B).
-  So always start from the suffix-less original and step down per the tiers of `peach.social_links.twimg_tiers` (some old avatars survive only as thumbnails), with `resolved_url` recording the tier actually
-  obtained, and image fetching counts as failed only when all tiers are missing. Studio logos (`fetch_studio_avatar_candidates.py`) and performer social avatars
-  (`harvest_social_avatars.py`) share this one criterion.
-
-### Directory Sources
-
-The studio directories of distribution platforms and publishers themselves are the breadth source for official wordmarks. Entries are registered in `harvest_maker_directories.DIRECTORIES`.
-**Store the directory entry, not image addresses**: image addresses often carry timestamps and change whenever the studio changes its mark, and a rerun fetches the current one.
-
-| Directory | Entry and spec | Notes |
+- 作品地址里夹着站内文章号和标题（`/926949-FC2-PPV-4137487-…-pn.html`），拼不出来，所以先问
+  `/search?q=<番号>` 再取作品页。商品号按数字边界比，`4137487` 不能命中 `41374870`。
+- 搜索结果只有标题和一张缩略图，标签、发行日、时长和封面位只在作品页，所以这一跳省不得。
+- 这一档给标题、封面，以及转存者在正文资料里填了的标签、発行日与时长。填不填由转存者决定，抽查多数整块空着。
+  卖家、商品说明和演员栏站上没有；正文余下几段是转载来的网盘链接，一概不取。
+- 同一个商品站上常有好几条，由不同转存者各发一次，文章号、番号写法、标题和图都不同，先后没有质量含义。
+  搜索命中的每一条都取，第一条那张未必还在。地址里的标题有的已编码、有的是原字，拼之前统一编一遍。
+- `robots.txt` 全站放行。
+- 封面在 `img.javstore.net` 上，**认位置不认文件名**：`div.fisrst_sc` 里那张排前，schema.org 的 `image` 排后。
+  转存者的命名不统一，按名字认的话多数一张都取不到。`_s.jpg` 结尾的排除，那是标着 `Preview` 的多帧长条拼图。
+- 文件名不用来认，只用来否：名字里五到七位的独立数字段都不是本番号时，那是别的作品的图，
+  `is_cross_product_cover` 按这条拦。
+- 那里存的 GIF 多是预览动画。官方档的 `best_cover` 与社区档的 `picture()` 下完整张后一律不收，卡片封面只要静态图。
+- 它的封面通常比官方原图差一档，所以排在最后。
+
+### 封面
+
+- 资料那一步答上就停，封面那一步把链问到底。给出地址的那一档常常下不来图：站上标着没有商品图，或者地址
+  还在、FC2 存储上那张已经删了。这一层判不出来，要等 `best_cover` 量过才知道，所以封面要的是链上全部图源，
+  由它择优；资料那步问过的档不再问第二遍，多问那一档顺带多一批标签（ADR-0030）。
+- 官方页、镜像与 JAVten 的封面都指向 `storage*.contents.fc2.com` 上卖家自己传的那个文件，所以按官方图对待，
+  不走社区来源的两图源印证（ADR-0030）。JAVten 那两处地址与发行方商品页是同一个文件，下架后可能已删，
+  由封面层量过才知道。
+- 镜像有时给的是 `contents-thumbnail*.fc2.com/w276/` 包装过的地址，解析器拆掉包装取原件。
+- 镜像上没有商品图的条目挂的是它自己那张 `no-image.jpg` 占位件，还是站内相对地址，当封面交下去只会换来
+  「来源连接未取得」，所以解析时就判成没有图。
+
+### 演员
+
+- 官方商品页和 JavArchive 都没有演员栏，标题里的名字是卖家写的宣传语。所以官方页答上、这一行还缺演员时，
+  接着问 fc2cmadb 和 FC2PPV-DB 要这一栏（`FC2_CAST_SITES`）。
+- **fc2cmadb 的女優栏**在浏览器里只对登录用户显示，采集带上「来源和凭证」里配的登录 Cookie；游客补问这一栏
+  眼下也回。那一栏是 Inertia 的延迟 prop，首屏 HTML 里没有，要带上这一页自报的握手版本号点名 `actresses`
+  单独再问一次。响应里另附一串曾用名，只取正名，否则一位女优摊进演员栏就成了十几个人。
+- **FC2PPV-DB 的女优栏**按片中人整理、写日文原名，优先级排在 fc2cmadb 之后、javdb 之前。
+- 演员栏上镜像排在 javdb 前面（`metadata_policy.FIELD_SOURCE_PRIORITY`）：javdb 那一侧常是转载站起的称呼
+  （英文昵称或中文译名），镜像写的是原名。
+- 一家写 `Xちゃん`、另一家写 `X` 算两家一致，按 `X` 自动落库，条件与留痕见 ADR-0086。
+- 账本里已有的演员社区来源换不动。两边不一的由 `scripts/fc2_cast_review.py` 列进
+  `generated/fc2-cast-candidates.csv`，在复核页「资料字段」里逐条批。
+- 评论区那条线走 `scripts/fetch_fc2_metadata.py`，另有等价标记与合集判定。
+- 带分段后缀的番号（`FC2-PPV-3312576-1`）认不出商品号，一处都不问：合集封面套给每一段，就是内容各不相同的
+  每一段都顶着同一张图。
+- freejavbt 不进这条链：它改版后 amane 的解析器认不出作品页，作品页上演员栏写的是「暫無女優資料」。
+
+## 一本道作品资料与封面
+
+无码番号在 r18.dev 上没有；目录站给日期式番号的发行日是转售商的上架日，和番号自己写的日期对不上。
+一本道的前端读的就是一份公开 JSON，不用解析 HTML，也不要凭据：
+`www.1pondo.tv/dyn/phpauto/movie_details/movie_id/<id>.json`。
+
+- 一次请求给标题、说明、女优（日文与罗马字）、系列、发行日、时长和站内标签。解析器在 `peach.sources.onepondo`。
+- 下架的作品直接 404，落到社区来源（javdb 收了一部分）。
+- **问不问由本机证据决定。** 一本道与カリビアンコム 都按 `MMDDYY_nnn` 编号，番号本身分不出是谁家的；分隔符是
+  压制组的文件名带进来的，不是片商标识。所以只有这一行的路径、文件名或账本厂牌里出现 `1pon`／`一本道` 时
+  才问官网，否则照旧走社区来源。依据：本机カリビアンコム 番号在一本道全部 404，一本道番号全部命中。
+- 封面只有站点自己那张 16:9 剧照（`str.jpg`，960×540）。无码片商不出封套，`thum_b.jpg` 是 120×197 的列表
+  缩略图；两张都不是 JAV 那种竖版封面，取大的那张，按官方图对待。
+
+## javdb、AVBase 与 JavBus 的限流与封禁
+
+这节讲三个社区来源什么时候问、多快问、被封了怎么办。库内采集只在官方渠道落空时按番号问它们；资料与封面的
+比对规则见 ADR-0030、ADR-0032。
+
+### 库内采集的节奏
+
+- javdb 的主机间隔由用户定：`library_processing.SOURCE_INTERVALS` 里 `javdb.com` 与 `jdbstatic.com` 都是 3 秒，
+  两个主机要一起改。这份间隔由 `SOURCE_LIMITER` 整个进程共用：资料处理、取想要的资料、取新作资料与订阅检查
+  同时跑时，问同一主机仍按一条队排。
+- **FC2 的商品号在三家里只问 javdb**（`community_catalog.community_sources_for`）。本机来源证据里 AVBase 与 JavBus
+  对 FC2 一份都没给过；javdb 能补约一半的演员与发行日，厂牌、标签、封面不给，所以它问得慢却砍不掉。
+- 一轮采集的长短约等于 javdb 请求数乘这个间隔（实测相差约一成）。`HostLimiter` 等的是「距上次满 N 秒」，别家的
+  往返落在这个窗口里被吸收，所以跳过两家省的是配额和撞 Cloudflare 的次数，不是时间；改成并行也省不出时间。
+
+### 撞上 403 或验证页之后
+
+- javdb、AVBase 与 JavBus 回 403 或验证页就整源停下。AVBase 回的是 Cloudflare 验证页；JavBus 那道 403 的原因
+  未取得。
+- 停多久按次数翻倍：第一次停 `scraping_access.FIRST_BLOCKED_PAUSE`（15 分钟），连着再撞才翻倍，上限是
+  `SOURCES` 里的 `blocked_pause`（javdb 24 小时，AVBase 与 JavBus 6 小时）。通了一趟就清掉记录，重新起算。
+- **上限不能当首停时长。** 实际封期常常短得多：javdb 记下 24 小时冷却的那次，不到 7 小时就全回 200，而那一轮
+  的失败全部写着「来源正在冷却」。
+- 只剩状态码可看的 403 不当登录墙报：它可能是凭据失效，也可能是出口 IP 被封（javdb 那次封了 3～7 日，换 Cookie 没用）。
+  `metadata.auth_wall_reason` 的措辞因此只说两种可能，不劝人换凭据；带着登录页地址或正文的才直说换凭据。
+- 冷却期抛的是 `SourcePaused` 而不是 `NotFound`，所以「7 天内不再问」的记忆（`library-metadata-misses.json`）
+  一条都不记，下一轮从头再问同样这批。
+- 问题清单把这类项记成「本趟没轮到」（`severity: paused`）。自写来源带 `cooldown_action` 的失败（验证页、
+  封禁、地区限制、限流）也归这一档。一档里出错的几家全在冷却才算没轮到；有一家是别的原因，就是「未取得」。
+
+### javdb 的 403 是按出口 IP 计的配额
+
+javdb 判的是「这个出口发得太快」，不是「你是不是机器人」。所以**不给它换 curl_cffi 指纹**。
+
+- 依据：不在冷却期时，HTTPX 与 curl_cffi 的 `chrome136` 指纹、带不带 Cookie 四种组合取搜索页、详情页和资料页
+  全部 200，没有挑战页也没有登录页，差别只在界面语言（带 Cookie 回简体，不带回繁体）。指纹识别会在第一次请求就拒；
+  而一整轮几百次请求能跑完、打到一定量才被封，是按出口 IP 计配额的形状。
+- **未取得**：封期之内两种 transport 的对照。要取得就得先把出口 IP 打进封锁，这一条不做，所以「被封之后换
+  指纹能不能立刻通」仍然未知。脚本与原始结果在仓库外的 `<私有验证记录>`；
+  对照起因见 [docs/reference-snapshots/amane-crawlers-poc.md](reference-snapshots/amane-crawlers-poc.md)。
+
+**配额和机器人判定是两件事，处理不同。** Cloudflare 与验证墙判的是「你是不是机器人」，绕过它要伪装成另一种
+客户端，一律放弃。javdb 这道判的是出口速率，换节点只是换一条线路重新计配额，没有伪装，所以换出口可以。
+但配额本身照守：来源下限不许压，撞 403 仍然整个来源收工，不在封禁期里换着节点连打，那等于拿多个出口凑一个
+超速批次。
+
+- 脚本允许经环境代理出网：`Site` 的 `via_proxy` 让 HTTPX 读环境代理，不保证读取系统代理或 PAC。应用路由与
+  实际出口要分开验证，新用户的配置边界见 ADR-0024。
+
+### 目录采集对 javdb 的限速
+
+`scripts/harvest_directory_links.py` 按名字逐人问 javdb（见「目录型来源与社媒链接」），节奏比库内采集更保守。
+
+- 实际被封过一次：约一秒一页连取一百多页后，整站每条路径都回 403，页面写「基於你的異常行為」并建议换节点，
+  出口 IP 被封了 3～7 日。封之前不发 `Retry-After`、不降速、不给验证码，中途停顿几分钟也没换回额度；额度按出口
+  IP 累计、不按路径，触发点在每分钟 40～50 页这个量级。
+- 所以限速是硬编码的来源下限，不是命令行默认值：`harvest_directory_links.SOURCE_INTERVAL` 给 javdb 定 5.0 秒
+  （每分钟 12 页），`--interval` 只能往上加、压不过它。
+- **撞上 403／429／503 就整个来源收工。** `Site.request()` 对状态码不重试；封了之后接着翻，只会让每位女优的
+  每个名字写法各撞一次 403。`rate_limited()` 命中即 `break`，已取到的页照常进判定，不丢这一轮的成果。
+- 已取的页缓存在 `state/directory-links/javdb/`，判定可以离线重放。封禁期过后调大 `--limit` 接着跑，缓存命中
+  不花请求，不需要断点参数。
+
+### 封面失败的几种原因与年龄门
+
+- 官方各版本只回「准备中」占位图：作品多半已下架（MIDE-594）。
+- 两个图源各有图但 dHash 对不上：「不是同一张图」，不用。
+- 社区来源的图只出自一个图源时照样装上，`.scraping.json` 的 `verified_by` 为空即未经印证（IPX-060 只有 javdb）。
+- JavBus 有年龄门，番号页不带 Cookie 回答题式年龄验证页；javdb 有登录墙。两家的 Cookie 由用户在浏览器里过门
+  或登录后贴进采集设置，公开采集随请求带上。
+- JavBus 的共享来源传输发送 `Accept-Language: zh-CN,zh;q=0.9`，连接检查、作品资料和本站封面请求共用这一语言偏好。年龄验证仍由用户在浏览器完成，请求头不代替登录或年龄确认。
+- `sources/metadata/javinizer-go/` 下的 JavBus、javdb 旧快照只借厂牌选官方渠道，封面不当官方候选：JavBus 搜不到
+  原番号时返回的是别的作品。
+
+## 本机采集入口
+
+这节讲 GUI 与命令行取封面的共用入口，以及它的连接、Cookie 和写入规则。
+
+GUI 与 `scripts/fetch_jav_covers.py` 共用 `peach.jav_cover_fetch`。不需要把开发者的映射文件或 Cookie 复制到
+新用户电脑。已有成功的元数据快照优先，缺快照时公开来源可以联网查询。
+
+- **连接方式**：R18、DMM、Prestige、MGStage 的封面 HTTP 路径按来源使用系统代理、应用直连或自定义代理。
+  DMM 连接检查分别报告页面与高清 CDN。HTTPX 的环境代理不等于系统 PAC；应用直连也不能排除 TUN。
+- **Cookie**：收 Cookie 的来源（JavDB、JavBus、FC2CMADB、Instagram）的粘贴与 Netscape 文件导入复用
+  CredentialStore，只保存当前来源域内未过期的项目。保存本身不校验登录会话是否有效。
+- **单次任务上限**：GUI 封面任务每次只接受馆藏命中的一个番号，复用 BackgroundJob；最多 80 个请求、32 MiB，
+  请求发出前检查 180 秒截止时间。
+- **替换规则**：只在完整图与探测尺寸相同、能完整解码且面积更大时原子替换。原始字节不降采样。成功边车记录
+  原图与安装摘要，24 小时内摘要匹配就不重复下载。
+- **失败与重启**：429 的 Retry-After 冷却写进本机文件，新建的 transport 也遵守；失败不删除已有封面。程序重启
+  不自动重放写入任务，未完成的由用户重新发起。
+- 即时 r18 厂牌证据与本机快照用同一套来源路由，Prestige 与 MGS 都参加候选比较；原始图片没有派生降采样。
+
+这套连接配置覆盖封面 HTTP 与 FC2 CLI。amane 桥子进程、其他采集脚本与 curl_cffi 连接器各用自己的配置。
+Instagram 的独立用户登录会话未取得，自动适配器不进正式依赖。
+
+测试步骤见 [Windows 测试版](TESTING_DESKTOP.md)，架构要求见 [ADR-0024](adr/0024-mark-manifest-not-bundled-bytes.md)。
+
+## 无番号视频的联网识别
+
+`scripts/scrape_codes.py` 只认番号。没有番号的视频（推特、Telegram 来源的资源等）走
+`scripts/identify_resources.py` 的两段式流程，识别结果同样进 `/review` 的「资料字段」，确认后才写入数据库中的对应资料项：
+
+1. `worklist` 只读账本，按文件名生成搜索写法：原样名、摘掉推广头尾、分隔符换空格、无空格英文按大小写拆词、
+   剥掉尾部画质标签。同时标出同目录的配套图片，可以直接当海报。`metadata_hits` 数出创作者、标题、厂牌、
+   系列、演员里已有几项，默认把少的排前面；`--sparse-only` 只留一项都没有的条目，识别优先做这些。
+2. 智能体或人联网核对后，按 `asset_id,field,value,source_url,confidence,note` 填回 CSV。
+3. `ingest` 合并进 `generated/library-metadata-field-candidates.csv`，候选来源记 `websearch`，`asset_path` 钉住
+   具体文件。
+
+- 字段限于 title、original_title、performers、studio、series、release_date。
+- 有番号的视频仍走 `scrape_codes.py` 的 JAV 来源。
+- 网页搜索在智能体一侧执行，脚本不发请求、不写账本。
+
+## 命名与身份合并
+
+这节讲规范名怎么选、别名怎么登记、同一个人存成两条时怎么合并。
+
+### 规范名与别名
+
+- 规范名优先用有出处的简体中文通行名，暂无可靠中译时保留日文。旧艺名、罗马字、假名和繁体名降为别名。
+  `no_avatar` 只表示没取得合格图片，不阻止已核实的姓名落库。
+- 「这一页只有一位女优」不构成证据：库里大量番号是 BEST 合集，搜索无结果的页面也会渲染推荐文章。精确回配
+  命中优先于任何「唯一」推断，「唯一」要两个番号同证才作数。
+- r18.dev 的罗马字字段是「现用名 (曾用名, 曾用名)」这种渲染格式，一个字段装着一个人的几个艺名；假名与汉字
+  写法各自成行，罗马字只有这一份。落库时按 `peach.entities.split_composite_person_name` 拆开，签名是「括号前
+  有空格、括号内逗号分隔、两侧都是罗马字」。同一个字面形状在账本里还用于厂牌消歧（`AV DEBUT（本物人妻）`）、
+  角色出处（`アスナ(SAO)`）、接稿状态和去重后缀，只能靠这条签名收窄。
+- `XX XX` 是来源节点文字重复，不是合法别名。person 名进入 CSV、兼容字段或 `upsert_asset_entity` 之前先收敛
+  完整重复串；清理时同时审计 `asset.creator`、`演员:` 标签和 `entity_alias`。
+- 判断「账本已经有这个名字」要连罗马字一起看，不能用 `peach.entities.name_chain`。那条链按设计剔掉罗马字
+  （拿罗马字去日文站查是白跑），拿它当「已有」判据会把 `entity_alias` 里明摆着的 `Rin Natsuki` 再报一遍新别名。
+  要全量就直接读 `canonical_name` 加 `entity_alias`。
+- 上游名字里的零宽字符在 `canonicalize_entity_name` 一处剥掉，不在各脚本里各修一遍。`str.strip()` 不认它们是
+  空白，`normalized_name` 就会带着一个看不见的字符：界面上和普通名字一模一样，`upsert_asset_entity` 却按
+  `normalized_name` 找不到已有实体，同一个人存成两条，按名字搜也搜不到。剥 U+200B／U+200C／U+2060／U+FEFF；
+  **U+200D 不剥**，emoji 的家庭与职业序列靠它连字，剥掉会把创作者名字里的一个字形拆成两三个。
+
+别名按来源分三类，界面上只有用户自己敲的那一类可撤销（`user:alias`，写入端点 `/api/entity-alias`）：
+
+- 刮削（`r18:performer` 等）和合并（`merge:*`、`avdb-actor-mapping@<rev>`）留下的是这条实体为什么长这样的
+  记录，不给一次点击删掉。
+- 自由文本保存到别名表；`canonical_name` 是页面显示的人物或厂牌名称，只能从该档案已有的名字中选择
+  （`/api/entity-name`）。
+- 头像图库按整条名字链逐个查、取并集，所以少一行别名就少一批候选。同一个人常按好几种写法各存一批，命中即停
+  会让排在后面那几个名下的图整批出不来。
+
+### 合并实体
+
+- `entity(kind, normalized_name)` 的唯一约束冲突通常不是 bug，而是同一人新旧艺名的信号。合并走
+  `peach.entities.merge_entity`：保留作品多的一侧，迁移关系、别名、外部引用、链接和搜索词，旧称全留作别名。
+- 被并入的 id 在 `entity_redirect` 留一条墓碑指向保留的一侧，链式合并写入时压平成一跳；关注源、Feed 订阅与
+  发现关联随合并改指。按 id 取数的入口（`/entity-image`、换头像、Feed 发现、复核候选）经
+  `entities.resolve_entity_id` 先认活实体、再认墓碑；目标实体被删时触发器删掉指向它的墓碑。
+- `entity_external_ref` 每个 provider 只留一条，同源的第二条被丢弃并报告，不静默覆盖。
+- creator 与 performer 跨类重复不用「作品多的一侧」规则。只有两边非空作品集合完全相同，并且 performer 别名
+  精确命中 creator 名、或 creator 名由 performer 本名与账号别名组成时，才自动归并。
+- `r18:performer`／`javbus:performer` 是正式发行的出演元数据，保留 performer；通用 `performer` 是压平后的兼容
+  断言，保留 creator。合并要同步 `asset.creator` 与 `演员:` 投影，否则已删的实体仍会在详情页伪造链接。
+- `merge_entity` 的两个陷阱：sqlite 连接默认 `foreign_keys=OFF`，子表行必须在函数内显式 DELETE；计数用
+  `SELECT changes()`，不用连接累计的 `total_changes`。合并不可逆，合并后 `PRAGMA foreign_key_check` 应为 0。
+
+### 女优别名与资料的自动登记
+
+- **补别名后继**（`peach.performer_alias_followup`，ADR-0055）自动登记女优的其他艺名。`source` 是批次号
+  `auto:performer-alias@<任务行 id>`，`revert_auto_landing.py --source auto:performer-alias` 整批撤回。判词写进
+  `generated/performer-alias-landing.csv`，被别的实体占用的写法只记不写。
+  - 只读 minnano-av 资料表的「別名」行，与 av_neme 人物页「プロフィール」一节的名字栏。
+  - minnano-av 检索页上同一人的几个别名各占一行，判唯一按编号去重；唯一命中时站点直接跳到资料页，编号看页头
+    canonical。
+  - av_neme 的系列页、月份页也写「名前(女優名)」，页名等于主名才算人物页。改过名的旧页只剩一句
+    「女優名が【甲】から【乙】へ変更」，第一节不是「プロフィール」，不读。
+- **有 FC2 作品的女优先问 fc2cmadb 女优栏**（ADR-0061）：从她自己的作品页进到站上那位人物，只收站上主名；
+  曾用名串里混着卖家商品名，不收。卖家称呼当规范名的实体（`たぬき顔サラサラ黒髪ロング`）靠这一站接上真名。
+- GirlsDelta（`girlsdelta.com/model/<id>`）有名录与宣传照，但比脸能确认的太少，只当单人佐证链接，不进流水线。
+- **补女优资料后继**（`peach.performer_profile_followup`，ADR-0067）把资料写进 `performer_profile`，批次号
+  `auto:performer-profile@<任务行 id>`，`revert_auto_landing.py --source auto:performer-profile` 撤回。判词在
+  `generated/performer-profile-landing.csv`。
+  - minnano-av 资料页 `actress<编号>.html`：表的每格以 `<span>标签</span>` 起头、值到 `</td>`；只读
+    `act-profile` 那一块，评论区的同名格子不算。
+  - `生年月日` 那格的 `<p>` 里夹着一个多余的 `</td>`，值截到那里正好不带星座后的杂项。
+  - `サイズ` 形如 `T156 / B86( Eカップ ) / W58 / H85 / S`，数字就是厘米；末尾那个 `S` 含义未取得，只留原文。
+    资料没填的页没有生年月日、血液型、出身地那几行。
+  - `ブログ` 那格显示 `http://`、`href` 是 `https://`，取 `href`。站内头像 `/p_actress_125_125/` 只有 125×125。
+  - avwikidb.com 直连 httpx 带 Chrome UA 就回整页（登记在 `scraping_access.SOURCES`，拒绝访问停 6 小时）。作品页
+    `/work/<番号>/` 头里的 JSON-LD `Movie.actor` 每项给 `name`、罗马字 `alternateName` 与 `/actor/<编号>/`，编号
+    从这里取。女优页 JSON-LD `Person.alternateName` 前两项是读音与罗马字，后面混着站上归并的其他名义（含男优
+    名），不收。三围只在正文「身長・スリーサイズ」一格（`T148 B83(B) W55 H85`）。女优图是 DMM `actjpgs` 的
+    125×125，不作头像；站内搜索是 `⌘K` 弹层，地址形态未取得。
+  - 出生日期与身高和 minnano-av 不一致时，只记进外部编号的 `metadata_json.conflicts`。
+
+## 番号目录、创作者与水印
+
+这节讲怎样从文件名和目录里认出番号、怎样确认来源返回的是同一部片，以及谁算创作者。
+
+### 从文件名提取番号
+
+- 番号目录被投影成创作者时，判据只能是文件级证据，不能看名字形态：唯一可靠的区分是目录内媒体文件名是否
+  解析出同一个番号（`scripts/audit_code_creators.py`），存疑一律留复核 CSV。
+- 番号只补给目录里的视频。发行目录里还混着论坛文宣、下载器广告和封面图（`Tokyo-Hot n0780-HD` 里有两张）。
+  番号写到它们头上有两个后果：库里它们冒充这部片的文件；垃圾复核又因为「自己带真番号」判定目录证据不成立，
+  把它们挡在队列外。写入走 `field_owners` 署名 `script:code-creators`，用户改过的格子不再被覆盖。
+- 发行目录里的推广短片由 `scripts/find_ads.py` 按五条判据记分、只出 CSV 交人处置；javm 的 `find_ad_videos` 按关键词识别，可作对照（ADR-0092）。
+- 画质前缀（`HD`／`FHD`／`4K`／`1080P`）和版本后缀（`-C`／`-CH`／`-UC`／`-SUB`）不是番号的一部分，提取器先剥
+  这两层再匹配。界面把版本语义投影成「中字」「无码」「无码破解」，原始 `name`／`code` 留给文件操作。缺连字符
+  的紧凑 code 只有同时具备片商、发行日或 performer／studio／series 实体证据才恢复。
+- 推广域名会出现在番号的头、尾和方括号里（`www.98t.la@ABW-358-U`、`ABP-762-fuckbe.com`、`[xxx.cc]ABC-123`）。
+  番号提取与目录判重共用 `strip_promo_markers` 这一层；各剥一半，叠了两层的 `[98t.tv][98t.tv]ABW-251` 就会在
+  其中一处漏网。
+- 只说明「这是什么文件」的词（`IMG`、`VID`、`VIDEO`、`NO`、`PART`）与番号主体同形，集中在
+  `catalog_rules.CODE_BODY_STOPWORDS`；画质词归 `_QUALITY_HEAD`，转载站标识归 `REPOST_SITE_LABELS`。三份名单
+  各管一类，提取时依次过一遍。新增条目先用本机临时工具 `build/parse_shapes_audit.py`（不随仓库分发）的
+  `stems` 核对误判证据。创作者昵称也可能撞这个形态，逐个塞进名单只会得到
+  一张不收敛的表。
+
+### 日期式、Tokyo-Hot 与西片的编号
+
+- 素人系日期式番号（`MMDDYY_NNN`／`MMDDYY-NNN`）的分隔符是片商标识，属于身份：一本道、パコパコママ、
+  カリビアンコムPR 用 `_`，カリビアンコム 用 `-`，同一天同一序号是两部不同影片。JavDB 自己也分开保存（仓库外
+  `<私有验证记录>`：搜 `092415-001`，首位返回的是一本道的 `092415_001`）。
+- 所以 `catalog_rules` 的归一化、身份比对和查询变体一律原样保留分隔符，也不生成另一种写法的变体：用错分隔符
+  搜到的是别的片。只有来源给出不带分隔符的纯数字串时两种才都算命中，缺一个字符不是反证。
+- 野生文件名的写法会漂移（同一部一本道既有 `1pon-092415-001-fhd1`，也有 `1pondo-092415_001-FHD`），所以剥番号
+  显示标题时两种分隔符都放行，落进 `code` 的值保留文件名给出的那一个。
+- 日期式番号的六位是 `MMDDYY`，月日必须成立才算这一形态。只看位数的话，手机录像
+  `VID_20220818_125735_816.mp4` 里的 `125735_816`（12 月 57 日）就成了一条一本道番号。
+- Tokyo-Hot 的编号没有厂牌字母段，规范写法是小写：本编 `n1234`／`k1234` 补零到四位，Red Hot 支线写成
+  `red-123`。javbus 的作品页地址就是 `/n1234`，参考实现 NeoAVDC（MIT）的 `TOKYOHOT_NUM_RE` 同样输出小写
+  `n####`。`k` 与 `red` 两支在本机账本里一条没有，它们在 javdb／javbus 上的写法**未取得**实证。编号只有一个字母，
+  形态挡不住 `no0037_01` 这类名字，所以只在两个位置认它：名字开头，或名字里已经写着 `tokyo-hot`。
+- 西片按「厂牌／系列 + 发行日」命名（`DorcelClub.24.12.02.Christy.White.XXX.1080p`），这是身份不是番号：
+  `catalog_rules.western_release_identity` 给出 `DORCELCLUB.2024-12-02`，`release_identity` 认它，番号提取一律
+  返回空。两位年份按 70 分界展开，四位年份照原样。只在 token 开头认，不在 token 中段搜：账本里的
+  `E078. Redhead.Sucking.Big.Cock.And.Hard.Sex.2019.10.15` 中段搜会得到系列名 `Sex`。
+
+### 确认来源返回的是同一部片
+
+- JavDB 的相同番号可能对应多个来源 ID，不能靠番号、时长或搜索顺序认作同一作品。网页与匿名 API 都先汇总匹配的来源 ID；只有一个才取详情，多个时报告歧义。详情、图片及资源沿用这次确认的来源 ID，不在取资源时重新按番号选片。旧的番号缓存、发现边车和原始快照须通过来源专属规则才可复用。
+- JavDB 的 `origin-title` / `origin_title` 是原标题，`current-title` 是本地化显示标题。有原题时优先原题，显示标题独立留证；缺原题时保留显示标题，不凭文字语言猜测或删改星号片段。
+- 升级补修通过独立的文字规则回执定向失效旧 JavDB 库内快照，并选择对应影片重新取证；原 JSON、人工字段、既有取消和延期记录保留。旧 JavDB 候选不参与自动采纳，当前候选随来源身份和规则版本进入既有复核流程，不清空其他来源正常证据。
+- 来源返回的番号必须和查询的番号比对过才算命中。javbus 一侧是拿番号做关键词搜索取首个结果，搜不到就返回
+  近似的别人（`SA-104 → AVSA-104`、`AR-301 → STAR-3016`）。不比对时大部分匹配番号根本不对，整个 MIB 目录
+  （韩国内容）曾因此被写上日本厂牌、系列和标题，还靠这些假证据升级成 JAV。
+- 判据是 `catalog_rules.same_release_code()`。它只归一已核验的前缀别名、DMM 的 `h_` 标记、补零和重制尾字母
+  这些良性差异；来源没给 id 的不拦（缺证据不是反证）。复核队列按同一条判据剔候选（ADR-0035）：候选全被剔掉
+  的行整行不进队列，点了也写不进去的东西摆在那儿只是要人再认一遍。
+- javbus 是备选来源（`metadata_policy.FALLBACK_SOURCES`）：同一个字段上还有别家可用时，它的取值不当证据；只有
+  它一家时才轮到它。这一步排在番号日期判据之后。剔完之后来源全是官方的字段，自动写入可以替换账本已有的值，
+  规则名记 `adr-0035-official-replaces-*`；community 来源仍然只补空（ADR-0035）。
+- 韩国 MIB 的编号（`catalog_rules.KOREAN_MIB_PREFIXES`）资料与封面都不问 JAV 来源。`HA-101`、`MY-102` 撞上番号
+  完全相同的日本作品，番号核验照样通过，只能按编号前缀整体不问。刮削、扫描与采集、页面取封面、封面批次和
+  按日志恢复五个入口都按 `is_korean_mib_code()` 拦。封面的跨作品判据同时比字母段和数字段：`YUJ-101 → yuj00011`、
+  `435MFC-135 → h_1711mfcc00027` 字母对上、数字不对，都是别的片。
+- `catalog_rules.code_query_variants()` 只扩展搜索词，每次返回都以账本原始编号校验，缓存和网络结果同样受检。
+
+前缀等价表与查询表是两张表：
+
+- 已核验的 LUXU、BAZX、HA 与 9 个 MGStage 前缀（`_RELEASE_PREFIX_ALIASES`）可以归一，其他数字前缀保留。
+- 登记一行要逐组取证：MGStage 商品页对 r18dev 快照比标题、时长、出演与封面；avbase 把两店条目归为同一作品；
+  账本里该字母段只挂一个厂牌。
+- MGStage 官方商品详情路径里的完整编号可以佐证它省略前缀的展示 id；封面、标题和搜索 URL 不作身份依据。
+- DMM／r18dev 只给 `content_id` 时，其中的厂牌段可以用来核对裸番号，但不能抹掉查询里的 MGStage 前缀。
+- `390JAC-040` 是 MGStage 配信，`JAC-040`／DMM `118jac040` 是另一部 DVD 合集，JNT 同样不得按裸编号合并。
+- 无法证实的变体返回 `identity_mismatch`，保留原始快照，但不生成字段候选。
+
+### 谁是创作者
+
+- 创作者是频道主，不是出镜者。文件名里可以建创作者的只有 `RT_@X - 正文…`、明确标注的 `女主@X` 和正文里的
+  中文名；末尾成串的裸 `@A @B @C` 是互推，`📷：@X` 是摄影师，都不建。
+- **发行平台既不是厂牌也不是创作者。** FC2、myfans 这类是卖东西的地方，站上有实际卖主（出品者）的那个账号才是
+  creator。平台本身只能当来源／平台实体，链接按 `catalog` 登记，不给它找「厂牌官网」：
+  `studio_sites.PLATFORM_ENTITIES` 直接判「不适用（发行平台）」，一个请求都不发，也不静默跳过。
+- 账本里有些 FC2 作品标着女优、有些评论里提到人，那是 **performer** 身份，不能顺手把平台记成创作者。一旦记了，
+  这个平台下所有卖主的作品都会挂到同一个「创作者」名下，和给聚合目录打统一标签是同一类事故。
+- 转载渠道水印不是创作者水印，目录名也可能是伪装。判定优先级：画面水印 > 作品名联网反查 > 文件名文本。
+- 打创作者级标签之前，先按 ledger 路径的下级目录分布确认这个 creator 不是聚合目录。给聚合目录打统一风格标签
+  就是 `asce` 事故的重演。
+- **轮换出演者的发行命名是厂牌或系列。** 同一发行名称可能按编号轮换出演者，不能仅凭目录名认作个人账号。`classification.numbered_cast_shape` 认三种命名
+  （前缀+编号+人名、出演者组合-编号-标题、驼峰人名连写加编号），同一账号下至少 3 部、过半文件命中、出演者至少
+  3 位才报；前缀形态的人名须有 3 位是账本已有的出演者，同一人出现在八成以上命中文件里的是个人或情侣账号。
+  归属审计把它报成 `label_shape`，只进复核，不生成修复计划。
+- **身份调研先按页名查日本资料站。** 通用搜索不收 sougouwiki、av_neme 这类站，只搜通用引擎得出的「未取得」
+  不算查过。`research_creator_identity_wikis.py` 只读账本，对身份待核验的创作者按规范名、去掉番号前缀的名字和
+  文件名前缀，用 EUC-JP 页名直取两站（取页层是补别名后继的 `WikiSitePages`，页缓存、404 记忆与来源冷却与服务共用）。
+  同名页是 3 位以上出演者的作品一览就记 `identity=release` 的 observed 并否掉 `unknown`；都不存在时 unknown 候选写明
+  问过哪几页；没有页以外的取页失败是未取得，不进清单。清单交 `apply_entity_identity_research.py` 冻结预览、备份写入。
+  处理任务结束时「查创作者身份」后继按同一判据自动问新登记和存量的创作者，命中直接落批次来源的 observed（ADR-0098）。
+  改实体类型仍是用户复核。裏DVD村（uradvd-mura.com）是带会员登录的 DVD／下载商店，没有按页名寻址的系列页，
+  未接入，只作人工查证线索。
+
+## 女优名字与头像来源
+
+这节讲头像从哪里取、怎么挑、怎么换，以及各个女优资料站能给什么。
+
+### 取源方向与尺寸门槛
+
+- 头像去精心整理的图库取；Logo 反过来只认品牌自己，官网与厂牌自有社交账号才是权威来源。
+- 候选按实测像素判定（`peach.images.classify`）：短边 < 128 拒绝；头像另按长边 ≥ 500、短边 ≥ 300 判，竖构图
+  人像套用方图门槛会拒掉最好的来源。只有 URL、没有实测尺寸的不算候选。
+- **「长边 ≥ 500」是源头门槛，不是显示门槛。** 它拦的是缩略图级来源。拿它当显示门槛，会把一张脸宽 208px 的
+  382×382 挡在门外，让在位那张脸只有 55px 的封面裁片继续占着位子。显示侧的尺寸约定见 [docs/FRONTEND.md](FRONTEND.md)。
+- 可用来源：r18.dev、av-wiki.net、Gfriends。javlibrary、missav、xslist 被 Cloudflare 拦，njav 有验证墙，jav321 没有
+  独立的女优字段。被 Cloudflare 拦的站一律放弃，不绕过机器人检测。javdb.com 抓得到，但按出口 IP 限速，见
+  「javdb、AVBase 与 JavBus 的限流与封禁」。
+- Gfriends 只按 `Filetree.json` 和单张 raw 媒体当外部 Provider 用，不克隆图库，不把图片放进 Git。索引缓存按
+  mtime 计龄（一天），取不到新索引就用旧缓存并在输出里告警；那一轮的「未收录」记 error 不记 no_match，否则
+  `--resume` 会把一次网络失败固化成永久答案。Gfriends 每人中位 1 张、缓存图中位 500×600，不按作品分组。
+- 服务进程在头像框打开时检查索引缓存：缺失或过期就在后台取一份（`avatar_picker.IndexRefresher`），出网走采集
+  统一出口与 Peach 代理设置。这一次照旧按旧缓存列候选；取不到只记日志、15 分钟内不再试，不进任务中心。
+  索引不随安装包分发：上游每天更新，带快照会让快照之后收录的人一直显示查不到。
+
+### 审计与补缺口
+
+- `audit_performer_portraits.py` 把合格图放进候选专用的内容寻址缓存，每条另存 provider、名字命中档、上游
+  ID/URL、尺寸、MIME、SHA-256 与 policy version。与当前头像字节相同的只留审计证据，不进 `/review`。这个脚本
+  没有写 ledger 的路径。
+- `fill_portrait_gaps.py` 走完从缺口到装上的这一段：没装过头像的人里，名字链在图库只命中一张的直接装上；
+  命中好几张的一张都不装，改产一份对照表（`--sheet`），候选图并排摆着，旁边是她在这个库里的作品链接。装图
+  复用挑图弹层那三步（`avatar_picker.choices`／`resolve`／`install`），证据、缓存与取景 sidecar 的口径和手工换图
+  完全一致。默认 dry-run，`--apply` 才写头像文件；账本按只读打开，这一趟不写 ledger。
+- **图库按名字存图，同名的是不同的人。** `ななみ` 这种单名命中的二十多张是二十多个人，自动挑等于随机给她安一张
+  别人的脸，所以「只找出一张」是唯一敢自动装的判据。单名即使只命中一张，证据也只有「键完全相同」这一条，
+  装上后仍要在资料页上认一眼；对着作品认人这件事机器做不了。
+- **缺口的判据是「盘上没有 `performer-<id>.img`」，所以一张差图会把更好的源永久挡在门外。** 例：社媒采集把作品
+  封面裁片装进了一批空槽位，这些人从此不算缺口，而 Gfriends 里有其中一部分的高清正脸照。缺口审计答不了
+  「在位那张够不够好」，换源要另起一轮普查：按 provenance 的 `provider` 认出封面
+  裁片，按 sidecar 认出检不出脸、脸太小、源图太小，再逐个问一次图库。
+
+### 挑图：按脸的宽度，不按画布
+
+头像最终落在 64–160 px 的圆框里，认不认得出是谁取决于那张脸有多少像素，与整张图多大无关。
+
+- 判据在 `harvest_social_avatars.rank_key`，脸宽由 `peach.face_detect` 的 YuNet 量（同 SHA 只量一次），写进候选
+  CSV 的 `face_width` 列供复核的人直接看。
+- 反例：一张全身站姿照画布更大，脸却只有几十像素；同一个人的半身照画布小一些，脸宽大一倍多。按画布挑，赢的是
+  看不清脸的那张。合照里那张脸同样可能远小于单人照。
+- 检不出脸记 0，排在任何量得到的候选之后；检不出脸的一律不装，官方图也一样。整批都是 0（模型缺席、清一色
+  侧脸）时按画布排，并在运行统计里说明本轮是按画布挑的。单人作品封面这条退路也用同一把尺：JAV 双联封面
+  右半幅剧照里的脸常常只有几十像素。
+- 换图只在赢家那张脸更宽时才动手。填不满圆框的赢家，只在在位那张检不出脸时当保底装上。
+- **头像目录由几条管线共用，`--apply` 只往好里换。** `--force` 的意思是「已有头像也参加竞选」，它覆盖的却是
+  **所有**已装头像，包括别的管线装的；而 `harvest_social_avatars.py` 的候选池（X 头像、名录人像、作品封面）比
+  `verified-photo-page` 那类整版人像差一大截，不加判断地覆盖会让多数头像的脸变小。所以写盘前先按同一把
+  `rank_key` 量一次盘上那张，脸没有更大就不覆盖，运行统计里报「在位的更好未覆盖」多少张。在位那张的脸宽
+  优先读现成的取景 sidecar，没有才真检一遍。
+- **换图必须换 sidecar。** 取景 sidecar 与选图判据来自同一次 YuNet 检出（`peach.avatar_face`），装头像时一并写出；
+  给不出新记录就把旧的删掉。留着上一张图的脸框，页面会拿它给这一张取景、放大到一个空位置上，而这在界面上与
+  「这张图本来就该这么显示」看不出区别。`/review` 的批准落地也检一次脸。`scripts/detect_avatar_faces.py` 只是
+  补齐入口，检测与 sidecar 形状都不由它定义。
+
+### 去水印
+
+抓回来的头像带别人的水印（底部那条 `PRIVATE.com`、`TEAMSKEET.COM`），要在字节里去掉，不能靠取景遮住：
+导出、换取景规则或任何改用整图的地方都会把它带出来。
+
+1. `scripts/scrub_avatar_watermarks.py` 默认只看不写，产出一份候选 CSV 加一叠左右对照的标注图。
+2. 检出器抓不到半透明水印，人工补框是正路：往 `--marks` 的 CSV 里补一行 `file,x,y,w,h`。人工框不受分数、尺寸
+   和位置先验约束，那些判据是用来质疑检出器的，不该推翻已经看过图的判断。一个整条边框的人工框常能把几处水印
+   一次裁掉。
+3. 人确认后再 `--apply`：原图连三个边车整套搬进 `avatars-superseded/`，provenance 补一段 `watermark_scrubbed`，
+   取景 sidecar 按新图重算。
+
+- **能裁边就不 inpaint。** 裁切一个像素都不伪造，inpaint 会，而且常常只抹掉一半、留下半透明的残字。裁切线受
+  两条约束：不许切进人脸框加留白（脸框取自 `peach.face_detect`），不许把图裁得只剩 70% 面积以下。逐边独立判定，
+  一条边裁不动不影响别的边。
+- **一张图检出超过 4 处文字就整张放过，一个像素都不动。** 那不是带水印的头像，是作品封面被当成头像装了进去，
+  要的是换源，见上一小节的封面裁片。
+- 检出与移除的判据、模型来源和实测数字见 REUSE.md「头像水印检出」。
+
+### 各站能给什么
+
+- **DMM 女优一览页可达，但头像只有 125×125，只适合身份绑定的首次头像。**
+  `https://www.dmm.co.jp/mono/dvd/-/actress/=/keyword=<假名行>/` 经 Peach 的 `dmm` 来源设置回完整列表页（带站内
+  actress id 与括号里的旧艺名），没有区域拦截；`pics.dmm.co.jp/mono/actjpgs/<罗马字>.jpg` 不带 Referer 也回 200。
+  - 问题在尺寸：`actjpgs/<名>.jpg` 是 125×125、`actjpgs/medium/<名>.jpg` 是 100×100，过不了高清候选门槛和显示门槛。
+    这批图 Gfriends 已经整批收着，排在质量档位的最后一档，所以不为它另起高清 provider。取证与重放脚本在仓库外的
+    `<私有验证记录>`。
+  - 例外：新导入时，r18.dev 同一人物对象直接给 DMM id、名字和文件名，缺头像的实体可以先装这张官方缩略图，
+    随后由换头像页升级。页面上的日文名、旧艺名和站内 ID 继续用于名字链与消歧。
+- **javdatabase 的入口必须是账本里的番号，不能按名字拼 slug。** 它一个艺名一页，slug 与人不是一对一：
+  `/idols/rin-natsuki/` 打开的是 `Rin Oka` 的资料页；站内搜索也不给 idol 页，只回作品列表。
+  - 查询顺序固定为 番号 → `/movies/<code>/` → 页面给出的 idol 链接 → 名字，每一步都由上一步的页面给出
+    （`scripts/harvest_javdatabase_names.py`）。
+  - 一部作品可以挂多位女优，番号对上不等于整页名字都属于这个人：idol 页的名字里至少有一个已在账本这个人的
+    名字链上才收，对上账本多个人时记「需人工消歧」。
+  - 它能给日文原名加旧艺名的罗马字。厂牌名不能用它，它自己就把 `セレブの友` 写成 `Celeb no Tomo`。
+
+## 目录型来源与社媒链接
+
+补女优社媒走「目录型来源整站抓一遍、离线比名、复核 CSV 装入」，不逐人搜索（`scripts/harvest_directory_links.py`）。
+这节讲各目录站怎么抓、名字怎么对、链接怎么判、事务所怎么建。
+
+### 抓取与比名
+
+- laoshi.ink 按 sitemap 抓全部女优页（ld+json `sameAs` 加正文外链）；bstar-pro.com 过一次年龄门，抓 models 列表与
+  每一页。HTML 按 URL sha1 缓存在 `peach-data/state/directory-links/<来源>/`，重跑不再打外站。
+- 页面上的名字（中文名、日文名、别名）按 `peach.social_links.name_key`（NFKC、casefold、去空白）与账本
+  `canonical_name` 及 `name_chain` 匹配。一页命中两个实体记「需人工消歧」，不猜。
+- 站点自己的社媒账号（laoshi 首页那几枚）先从每页外链里减掉，否则会给每个女优都装上站方的 X。
+- javmodel.com 不是社媒来源，不用再试：走代理能取到 200（直连超时），但唯一的 twitter 链接是分享按钮，本人账号
+  一个都没有。Instagram↔X 互补要等目录数据装入后从账本自身做，不在采集脚本里做。
+
+### 链接判定与验活
+
+- 判词四种：`ok` 进装入队列；`已有`（同平台同 handle，不分主机写法与大小写）；`conflict`（账本同平台是另一个
+  handle）；`未取得`（页面失败或没有社媒）。
+- 来源本身可能是过期数据：目录站抄的 X 账号很多已封停，本人早换了新号。所以 X 的 `ok`／`conflict` 行都用登出
+  页 og 标签验活：活号有 `og:title` 和指向 `profile_images` 的 `og:image`；不存在的 handle 只回一个没有任何 og 的
+  JS 壳，看不出死活。拿不到 og 时，再不走缓存地取对照账号 `x.com/X`：对照正常才判「疑似失效」，对照也空就是
+  限流，写「未取得」。Instagram、TikTok、YouTube 的登出页什么都不给，只能写「未验」。
+- **X 显示名写着「応援」的是粉丝号，不是本人。** 名录页会把 `篠田ゆう様💝応援アカウント` 这种账号当本人账号
+  挂着，验活也是「活」。证据里标一句不够，`installable()` 只看 verdict 和 alive，所以判据落在 `probe_rows`
+  （`FAN_ACCOUNT`），命中就降级成 `应援账号` 这个单独的判定。名录型来源不核实社媒归属，这一道只能自己做。
+- 判据（平台名单、handle 归一、`twitter.com→x.com` 别名、标签写法、X 死活）集中在 `peach.social_links`，
+  `normalize_link_hosts.py`、`harvest_performer_links.py` 都从它取；`harvest_social_avatars.py` 还留着一份旧抄本。
+- **主机名一律小写。** jae 的资料页上写着 `https://Instagram.com/…`，而 `entity_link` 的 UNIQUE 只认字面，照抄
+  就是同一个账号的第二条记录（`social_links.canonical_url`）。路径和 handle 不动：X 的 handle 大小写不敏感，但那
+  是用户当初复核过的写法。
+- **页面写明是博客的就按博客算，不看主机名。** `classify()` 只认 `BLOG_HOSTS`，而 `alicejapan.co.jp` 的子域、
+  `plaza.rakuten.co.jp`、`takasyo.blog.jp` 都是本人博客却不在名单里；页面上那行「公式ブログ」比主机名更接近
+  事实。标签照账本现有写法记「博客」，页面另外点出博客名时（`公式ブログ「旬の果実」`）才带上那个名字；
+  `オフィシャルブログ` 这类泛称照抄进去，会让同一件东西在界面上出现三种写法（`harvest_directory_links.owned_link`）。
+- 装入用 `install_entity_links.py` 读 `directory-links-<日期>.csv`；`-review.csv` 是全部判词，供人看。两者都不直接
+  写账本。
+
+### official 链接的标签与事务所
+
+- **一个字段的值只描述它自己那一行。** minnano-av 资料表里「所属事務所」和「公式サイト」是两件事：白石亚子的事务所是 T-POWERS，
+  公式サイト填的却是 Prestige 的専属宣传页。拿事务所名当 official 链接的标签，就会出现一个文字写 T-POWERS、图标和落点都是
+  Prestige 的控件。
+- 所以 official 链接的标签按域名归属写（`peach.social_links.host_owners`）。证据按序：厂牌实体自己挂的官网链接直接指认；其次是
+  女优 official 链接里的共识（同一域名上 `OWNER_QUORUM` 条以上写同一个名字）。孤证会自我确认，不算共识。归属未取得时才用
+  事务所名。
+- 事务所名存在 `entity.metadata_json.agency`，带 `source` 与 `checked_at`，女优移籍按最新覆盖。已入库的错标由
+  `scripts/repair_link_labels.py` 修，默认只出复核 CSV。
+- `scripts/install_agencies.py` 把这些名字装成 `entity.kind='agency'`，归属写进 `entity_membership`（主键在成员一侧，一个人只有一条
+  现役归属，移籍是覆盖）。原文留在 `metadata.agency` 当证据，结论错了才有得回溯。事务所不进 `asset_entity`：给作品另存一个事务所
+  字段会漂移，而漂移的那份没人会发现。
+- 事务所名里的括号按同一条规则拆：括号外是现用名，括号里的读音和括号后的 `旧・`／`元・` 都是别名。旧称撞上另一家的现用名时不写
+  别名：`GG(旧・Prime Agency)` 的旧称正是仍在营业的 `Prime Agency`。
+- 事务所官网取成员 official 链接里标签等于本家名字的那些，用域名根地址，不用某位女优的个人页。名字拆过之后要按原文再查一次，
+  否则 `ACT(アクト)` 这类有站的会查不到。
+- 现站打不开的公司可以登记 Wayback 快照：link_kind 仍是 `official`，url 写完整的 `web.archive.org/web/<时间戳>/<原址>`，label 写
+  `官网存档（YYYY-MM）`（不带公司名，页头已有），优先所属名单页。`peach.social_links.ARCHIVE_HOSTS` 让域名归属、事务所门面圆标
+  和厂牌标识采集都跳过它；标识要从快照取时，把快照里那张图的 `id_` 原件地址登记进 `studio_icons.py` 的指定来源表。复核表改了
+  label，重跑 `install_entity_links.py` 即对齐。
+
+### 事务所名册与移籍
+
+- 「这家有哪些人」走 `scripts/harvest_agency_rosters.py`，一次取一家，比按人逐个问少两个数量级的请求。
+  - minnano-av 没有事务所索引页，站内编号只出现在女优页「所属事務所」那格的链接里。所以先拿这家已知成员搜出编号，并按上面的
+    括号规则核对那格写的确实是这家（`KRONE(クローネ)` 拆开才对得上；`GG(旧・Prime Agency)` 里的旧名不作数）。编号写进
+    `entity_external_ref(provider='minnano-av', external_kind='production')`，下一趟不必再问。
+  - 名册页 `actress_list.php?production=<编号>` 一页 30 位，人名读 JSON-LD 的 `CollectionPage`；正文 `<a>` 的文字是
+    「名字 + 女優情報」，对不上账本。
+  - 翻页地址取 `<link rel="next">` 并还原 `&amp;`，但终点不能听它的：最后一页之后站点照旧给出下一页，内容是最后一页那几位的
+    重复，所以走到「这一页没有新人」为止。人数和 `numberOfItems` 对不上时，分清是页数封顶还是站点名册有重号。
+  - 名字对回账本要连别名一起对：对不上的记「不在库」（默认收成一行计数）；一个写法对上两个人记「重名」；已归属别家的记
+    「另有归属」，留给人判。`--apply` 只补空着的那一位。
+- 事务所会拆、会改名。移籍走 `scripts/resync_performer_agency.py`：按 `--agency` 选整家或 `--only` 点名，重问女优页的「所属事務所」，
+  只覆盖 `entity.metadata_json.agency`；实体和归属仍由 `install_agencies.py` 的 REPLACE 落地，免得两边各拆一次名字得出两种结论。
+  - 检索必须走 `name_chain`：账本规范名是简体中文，站点只认日文写法，只拿规范名去问大多会「未取得」。
+  - 站上那格是空的记「站上没有事务所」，不清账本：解约和站点当天不显示这格，在页面上分不开。
+- 「所属事務所」只记现在签在谁名下。退役后转进个人经纪公司的人，那格写的是她自己的公司（三上悠亜 → 株式会社Miss），不是 AV
+  事务所。这种由 `scripts/reject_agency.py` 按复核 CSV 驳回：驳回记进她的 `metadata.agency_rejected` 并撤掉归属，那家没人了就删
+  实体；查实了 AV 时期的事务所就在 `replacement` 列写上，同一次改挂过去。驳回记在人身上，写元数据、建实体、补名册三条路径都经 `peach.entities.rejected_agencies` 跳过它，判词记「已驳回」。
+- 一家拆成两家时，两家都在括号后写「旧・某某」。名册采集器按括号规则拒绝把任何一家认成被拆的那家，这是对的：旧名
+  同时属于两家继承者（例：LIGHT 拆成 `ELTRA(エルトラ)旧・LIGHT` 与 `EST(エスト)旧・LIGHT`）。
+
+### jae.tokyo 女优名录
+
+jae.tokyo（Japan Adult Expo）是人工指定的第三个目录来源，同一站的厂牌名录见「厂牌名与厂牌标识」。
+
+- 三届的资料页结构各不相同：2014 是 `jae2014/actress/NNN.html`，社媒和博客混在正文的 `<a>` 里；2015 是 `jae2015/actress.html` 的
+  `offActress` 弹层，`actressLinkBtn` 一个按钮一条链接；2017 是 `jae2017/actress/NNN.html`，人像在 `img_area`、链接在 `link_area`。
+- **`jae2014/*` 直连会被重置**（`WinError 10054`），所以 jae 整个进了 `PROXY_SOURCES`，同一来源不分届走两套出口。
+- **注释里的链接不算这个人的。** 有的页面 HTML 注释里留着上一届模板里别的女优的博客和 Instagram，按 `<a>` 硬取会把几个人的账号
+  装到一个人头上，所以解析前先剥注释。
+- **名录人像进的是头像竞赛，不是另一条装入路径。** `-portraits.csv` 由 `harvest_social_avatars.py` 的 `jae` 路线读走，和 X、
+  babepedia 的候选在同一套内容寻址缓存里比大小；竖版全身宣传照的取景交给人脸 sidecar，见 REUSE.md「人脸取景」。
+
+### javdb 演员页
+
+- **javdb.com 是按名字进的来源，不是能翻的名录。** 站上没有可枚举的女优列表，入口是账本里的名字：逐个写法搜
+  `search?f=actor&q=`，结果卡片的 `title` 一栏就是这个人在站上的全部写法，不点进去就能判身份。名字链要整条搜完再放弃：账本
+  规范名多是简体，`name_key()` 不做简繁转换，只搜规范名常常一个都搜不到（`harvest_directory_links.collect_javdb`）。
+- **演员 id 在作品详情页就拿得到，不必另走一趟资料页。** 演員一栏每个名字都挂着 `/actors/<id>`，`sources.javdb.actresses` 顺手
+  带出；名字精确匹配到这条资产已关联的人物实体，才登记成 `entity_external_ref(provider='javdb', external_kind='performer')`，人物页
+  的 JavDB 入口靠它拼（`peach.entry_links`）。历史数据走 `scripts/backfill_performer_entry_ids.py`：javdb 页面缓存与
+  `review/agency-rosters.csv` 的 `actress_id` 各补一路，先出 dry-run CSV 再 `--apply`。
+- **作品不是从 javdb 刮的女优，由补女优资料后继按名字搜演员卡补 id（ADR-0081）。** 卡片上的 id 就是资料页的 id，
+  无碼那条的头像上有 `<span class="info">無碼</span>`；对上的卡每种记录类型至多一张才算同一个人（`javdb.one_person`）。
+  回填脚本读搜索页缓存时用同一份判据。
+- **同名两条记录不取第一个。** 同一位女优在站上常有「有碼」「無碼」两条，两页都进判定，撞上的账号落成 `conflict` 进复核表。
+- **一部分资料页要登录，回的是登入页而不是 401。** 不注册账号。那一页记「未取得」并写明原因：「搜过、站上没有这个人」「搜到了
+  但要登录」「没搜」是三件事，不分开写，下一轮还得重搜。要登录的那页都是「無碼」那条孪生记录，有碼那条公开，中文名从它就
+  取得到，所以为了取名字去登录没有增量；無碼记录的作品列表仍在墙后。
+- **社媒按钮只在 `section-addition` 那一块里。** 整页别处的站外链接是广告、姊妹站和 RTA 标签。Instagram 是这个来源的主要增量。
+- **javdb 的圆头像 250×250，进不了头像竞赛**（正方需 ≥400），`harvest_social_avatars.py` 不接这个来源。
+- 限速与封禁见「javdb、AVBase 与 JavBus 的限流与封禁」里的「目录采集对 javdb 的限速」。
+
+### 追更来源的名字发现
+
+按名字发现追更来源时，站上的标识符写法以站方接口为准，不由手柄推定。
+
+- **敲半个名字就能出建议的，只有本机清单和 rule34.xxx 的公开补全两处**，都不需要凭据。
+  - 本机那份是 `discover` 顺带下载的整站创作者清单（kemono、pawchive、coomer），按 casefold 排好表后二分取前缀区间。
+    敲字这条路**不下载清单**，没下过就少一组。
+  - 站上那份走 `api.rule34.xxx/autocomplete.php?q=`。同一路径挂在主域名下会被 Cloudflare 拦成 403，只有 `api.` 子域回 200 JSON。
+    它回的是标签不是作者名录，界面要写明这一组是标签。一次只回十条，热门前缀会把完整写法挤掉，有凭据时改用直接查标签。
+    只接受抹掉分隔符并折叠大小写后与查询词相同的那个，同前缀的别人不算命中。
+- **rule34.xxx 上谁是作者只有站方分类说得准，而那要凭据。** 按词形猜会错（名字里带 `artist` 的也可能是巧合）。分类在
+  `index.php?page=dapi&s=tag&q=index&name=`，不带 `user_id`＋`api_key` 回 `"Missing authentication"`。三个坑：`json=1` 被忽略、只回
+  XML；`names=` 不被识别，会吐一批无关标签；`name_pattern=` 是两边通配的子串匹配且按 id 截断，`orderby` 也不生效。所以只能按
+  精确名逐条问（每条约 0.3 秒，可并发）。分类是站上改一次就定的事实，问过就记住。
+- **gelbooru 不是 rule34.xxx 的超集，不能拿它替换或前置。** 两站同源但各收各的，同名标签的帖数也不同。gelbooru 的
+  `index.php?page=autocomplete2&term=` 公开且自带 `category`，但 `limit` 不生效、恒回 10 条，拿它给 rule34.xxx 的候选标分类只能
+  覆盖很少几条。候选名单必须来自 rule34.xxx：Peach 在那一站建订阅，给出它没有的名字就是误导。
+- **f95zone** 的 `latest_data.php` 只索引 Latest Updates 的五个分类，艺术家的 Collection 帖只有带登录 cookie 的站内
+  搜索看得到（无 cookie 时 `/search/` 回 403）。没有 cookie 就跳过它并保留 Google 外链，不把「查不到」写成
+  「站上没有」。
+  - 站内搜索按整词匹配：`strauz` 命中 0 条，`strauz*` 与完整写法命中同样的帖。所以各种写法都空手之后补一轮 `词*`；四个字符
+    以上才加，三个字母加通配等于把半个站搜回来。
+  - 线程标题的作者在末尾方括号里，约定是 `作品名 [版本或日期] [作者]`。从右往左找第一个不像版本号、日期和
+    `Completed`／`Unity` 这类站点标签的方括号段；并列两个手柄（`[LazyProcrastinator/LazyProcrast]`）时第一个当显示名、其余是
+    别名候选。没有可用方括号时才用主体，剥掉 `[Collection Request]` 这类前缀标签和 `Models Collection` 这类容器措辞
+    （`follow_store.f95_author_name`）。
+  - 作者的头像与别处身份只在首楼的正文链接区，而且要登录才看得见。首楼发帖人是搬运工不是作者，XenForo 的发帖人头像不能当
+    作者头像。游客态下正文的站外链接全被换成 `/login/`，有的版块对游客整个关闭。
+  - 名片里有 FANBOX 创作者 id 或 pixiv 数字 id 时头像取 FANBOX；没有时取 X 与 Patreon，两家都不带凭据：X 登出页的 og:image 按
+    「厂牌名与厂牌标识」里 `pbs.twimg.com` 尺寸后缀那条退档，Patreon 公开的 `api/campaigns?filter[vanity]=` 给
+    `avatar_photo_image_urls.original`。两家各取能用的最大一档后比实际像素，留大的。SubscribeStar **未取得**。
+  - 认哪些主机算身份写死在 `follow_sources.profile_link_identity`：论坛正文谁都能贴链接，放开主机等于把别人贴的
+    地址当成作者。
+
+### 从 javdb 取中文名（`harvest_javdb_cn_names.py`）
+
+- **页面结构：`actor-section-name` 是现名，紧随的 `section-meta` 是旧艺名，最后一个是影片数。** 两者必须分开取：
+  `JULIA` 那页的旧名里有 `京香じゅりあ`，混成一串就分不出「这是她的中文名」和「这是她用过的旧艺名」。解析在
+  `peach.javdb`，与 `harvest_directory_links.py` 共用一份。
+- **现名栏并列的两个名字不一定是同一个名字的两种写法，也可能是两个艺名。** `美空あやか` 那页的现名栏是
+  `一之瀨亞美莉, 美空あやか`，当成「中文写法 + 日文写法」就会给美空あやか安上一之濑亚美莉的中文名。判据是首个
+  汉字串必须能在对侧找到（`same_person`），对不上的落 `不同名`，规范名不在现名栏里的落 `改艺名` 单独看。
+- **比名字时字形要折两次，opencc 一次不够。** 它只管繁简，日本新字体不归它管：`永瀬` 转不成 `永濑`、`姫川` 转不成
+  `姬川`，少一层就把同一个人判成两个人。两层都走 `peach.kanji`＋opencc `t2s`，落库的写法另走 `simplify_kanji`。
+- **`?locale=zh-CN` 只切界面语言。** 女优名是数据，不跟着变：`愛音麻里亞` 在简体界面下仍是繁体，简体要自己转。
+- 判词分档：`ok`、`同形（站上只有日文名）`、`要登录`、`旧名`、`改艺名`、`未取得`、`不同名`。落库取 `ok`、`改艺名`、
+  `旧名` 三档。
+- **旧艺名的中译只有资料页有，账本一个字都没有。** 刮削源给日文与罗马字；avdb 映射表每人只给一个 `zh_cn`，它的
+  `keyword` 逗号列表只用于匹配、从不写进 `entity_alias`；改统称时降为别名的又是日文原规范名。于是 `橋本ありな`
+  在账本里、`桥本有菜` 不在，按后者搜不到人。
+  - `--aliases` 在同一趟抓取里把现名底下那一栏的中文写法取成候选。那一栏站上不给标签，旧艺名与昵称混放，
+    解析层分不开也不筛，候选只记 `origin=别名栏`，认不认得这个写法是复核的人的事。
+  - `--scope all` 把范围放开到已经有中文规范名的人，她们才是缺第二个写法的那一批；`--only` 按名字链上任一写法或
+    实体 id 点名一位，不受范围限制，两次请求出结论。
+  - **搜到多页时一个别名候选都不产（`多页`）。** 规范名那一份把两页都记下来让人挑，别名不能：别名进的是身份，配错
+    人比缺一个写法更难查回来。撞上另一条实体名下的写法记 `占用`，那是两条该不该合并的问题，不由采集决定。页面上
+    没有新写法的也留一行 `无新写法`：查过没查出东西，和还没轮到她是两件事。
+- 落库是另一个脚本、另一次授权：`apply_alias_candidates.py --candidates <csv> --revision <批次> --apply --backup`。
+  - 来源记 `javdb-actor-page@<批次>`（`peach.javdb.ALIAS_SOURCE` 是这个前缀），与 `localize_performer_names.py` 写的
+    `javdb-actor-page@javdb-202609` 同一形状，也与界面上可撤销的 `user:alias` 分得开。
+  - 批次号必须在命令行里给：解析判错时，认得出批次才能按 `source` 把那一趟整批撤回。
+  - 四种不写：这条实体已有这个写法；写法归另一条实体；账本里的统称已经不是 CSV 里那个（快照过期，该重抓）；实体
+    不在或不是 performer。
+
+## 厂牌名与厂牌标识
+
+这节讲厂牌的日文原名、官网、Logo 从哪里来，以及怎样判断找到的东西真属于这家厂牌。
+
+### 日文原名
+
+厂牌的日文原名是查出来的，不是转写出来的：罗马音回日文没有唯一解（`Hon Naka` 可以是 `本中` 也可以是 `ほんなか`）。
+所以 `scripts/localize_studio_names.py` 不做音译，而是拿该厂牌作品的番号打 `www.javbus.com/<CODE>`，读 `製作商` 字段。
+
+- 一个厂牌尽量取两个不同前缀的番号，两页一致才提改名。同前缀必然同一家，证明不了什么。
+- javbus 有年龄门，不带 `age=verified` 只回一张确认页；番号页必须走代理，直连超时。
+- 番号页 404 是那一页的事，不是这家厂牌查不到。印证靠跨前缀，顶替 404 靠同前缀：`code_groups` 一个前缀一组、组内最多
+  `--depth`（默认 3）个，组内后几个不参与印证，只在前一个取不到时接手。
+- 一个厂牌所有前缀的番号都 404 时，先怀疑账本：常是英文文件名或韩国演员的片子被刮削器套上了同前缀的 JAV 厂牌名
+  （`Crystal Eizo`／HA），那个厂牌名本来就不属于这些片子。
+
+七种判词各是一件事：
+
+- 来源给汉字或平假名才改名（`Celeb no Tomo→セレブの友`）。
+- 纯片假名只是英文品牌的外来语写法，默认保留账本里的英文原名（`ムーディーズ` 不顶 `MOODYZ`）。
+- 来源自己也写拉丁的（`V＆R PRODUCE→V＆RPRODUCE`）差的只是空格与符号，不是去罗马音。
+- 账本里根本没有 JAV 番号的西方厂牌与 FC2-PPV 记「不适用（非番号体系）」，不能写成「未取得」冒充取证失败。
+- 两个番号给出不同製作商记「不一致」交人处理：`K M Produce` 出 ケイ・エム・プロデュース 与 スクープ，是一个账本名
+  底下混了两家。
+
+番号站转写的罗马音和意译都不算英文，优先级低于日文原名；只有厂牌自己用的英文名才保留（用户定的例子：`PREMIUM`
+用英文，`Celeb no Tomo` 用日文）。判据是厂牌自称：官网或官方 X 显示名写片假名、拉丁名只是它罗马音的，同样改回日文
+（`Akinori→アキノリ`、`Milu→ミル`、`Das→ダスッ！`）；官网自己写拉丁的保留（`BALTAN`、`GENEKI`）。所以「纯片假名」
+判词只是默认值，改判直接写进复核件的 verdict 列。`merge_studio_name_variants.py` 的 class B 用同一口径：日文侧含汉字
+或平假名就保留日文侧，纯片假名保留英文侧。
+
+判「改名」的行由 `scripts/apply_studio_name_localization.py` 落库：规范名、旧写法降别名、扁平 `asset.studio` 与
+`--logo-root` 下的标识一起改。复核件过期（现名已变、实体已合并）或日文名撞上别家的行，只报不改。
+
+### 重复实体合并
+
+- 重复实体按写法与书写系统两类合并（`merge_studio_name_variants.py`）。
+- 写法变体（`AVS collector's` 对 `AVS collector’s`）的比较键是 NFKC 加符号折叠，**一个假名都不能丢**：只留 ASCII 的
+  折法会把 `シロウトTV` 与 `ラグジュTV` 双双折成 `tv`，合出来是两家真实厂牌搅在一起，不可逆。
+- 日文名与罗马字名（`ムーディーズ` 对 `MOODYZ`）唯一的身份保证是共用番号前缀：前缀属于厂牌，是本机可核验的证据。
+  转写不参与判断。撞上两家以上一律交人工。
+- 合并同时改写扁平 `asset.studio`，否则下一次刮削会照着投影把旧实体再建一遍。
+- **合并之后标识要跟着改挂。** 标识按 `logo_key(canonical_name)` 命名存盘，被丢弃那一侧的方标在合并那一刻起没人
+  认领，保留方的大位空着就回落到补白字标。
+  `merge_studio_name_variants.py --logo-root` 按复核件搬运：保留方缺哪个变体补哪个，已有的一个字节都不动；`.ct` 与
+  `.provenance.json` 随图走（少了 `.ct`，`/logo` 答不出 Content-Type）。
+
+### 找官网
+
+厂牌官网与社媒链接分别登记。`find_studio_socials.py --db <账本> --output <扫描表>
+--review-output <链接复核表>` 只读已有官网，连同已有社媒的厂牌一起查，按账号大小写去重并列出缺项。
+复核表保留来源 URL、页面 SHA-256、锚文本与上下文；确认归属后交 `install_entity_links.py` 安装。
+不能把官网上全部账号自动归给厂牌：商城客服、演员与旗下其他厂牌各有归属。S-Cute 官网的
+`SCute_av` 标为 S-Cute 官方，`_scute` 标为其直营后继服务 nanairo 官方，后者的链接标签保留 nanairo。
+采集只认账号主页锚点；帖子、分享按钮、脚本字符串不算。年龄门的文字、图片 alt 和文字间空白均参与判定，
+只跟同站肯定入口；HTTP 失败与跨域重定向记为未取得。每站完成即保存进度，`--resume` 复用有账号证据的行，
+空结果与失败重新检查；采集本身不写账本。
+
+- 搜官网与 X 账号用日文名，不用罗马音：内置浏览器打开
+  `html.duckduckgo.com/html/?kl=jp-jp&q=<日文名> AVメーカー 公式`。Google 弹机器人验证，不绕过；内置 WebSearch
+  只回美国过滤结果，拿番号或罗马音搜只会回无关结果。
+- AV 厂牌官网普遍先给年龄确认页，不穿过它只能拿到约 10 KB 的空壳。判据必须是锚文本而不是 URL：否定链接指向
+  站外（`dasdas.jp`、`muku.tv` 的「いいえ」都指向 dmm.com），肯定链接「はい（入室する）」指向站内，两者的 href
+  看不出区别。实现见 `scripts/find_studio_socials.py`，`test_age_gate_is_crossed_by_the_affirmative_link_only` 守这条线。
+
+`scripts/harvest_studio_sites.py` 从厂牌名猜域名找官网。每一道拒绝判据都要说得出反例，也要防它误伤真站：
+
+- 拦停放页（`kawaii.com - domain for sale`：关键词在正文很靠后，却写在标题里）。
+- 拦自述不可用的页（回 200、正文成人词齐全，标题只有 `Site Unavailable`）。「域名由厂牌名推出 + 是成人站」那条替代路径会把
+  它们确认成官网，所以 `BROKEN_TITLE` 必须拦在停放页判据之后。
+- 拦标题只回显域名的通用站（`prestige.com` 的标题就是 `prestige.com`，真站是 `prestige-av.com`）。判据是「标题照原样印着域名，
+  且除域名之外什么都没说」；不能拿 normalise 后的标题比 normalise 后的主机，否则 `NATURAL HIGH（ナチュラルハイ）` 这类真站
+  必然被判成回显。
+- 判「没有官网」之前先分清是站点的回答还是网络抖动。`probe` 只对传输层异常按 `page_cache.Site` 的口径重试
+  （`retries=2, backoff=2.0`），HTTP 状态码是站点的回答，不重试。`未取得` 的行把每次尝试的判词按顺序拼成证据链写进 `note`。
+- 名字里没有拉丁字母的厂牌（`一本道`、`カリビアンコム`……）靠汉字与假名自己参与比对：`normalise` 留下汉字、平假名、片假名和
+  长音符 `ー`；`・`（U+30FB）是分隔符，和全角括号、`【】` 一样剥掉。这类厂牌的域名推不出来，`--seeds` 是唯一入口。
+- `entity_alias` 一起参与「页面自述厂牌名」那一道：`东京热` 的规范名是简体，页面写「東京熱」，账本里早有这个别名。拿别名比不
+  放松判据。判词写「对上的是别名『X』」，不写「页面写作『X』」，因为 normalise 之后不再是页面原文。
+- 成人语境词包括无码站写的「アダルト動画」「無修正」。同名的非成人站（Hunter Engineering、Bazooka、麦当娜）不会出现这两个词。
+- **页面上没有的信息只能人工确认。** `SOD Create` 的官网是母公司站 `www.sod.co.jp`，这个串整站不出现；放宽通用判据去接住它，
+  等于把 `hunter.com`、`bazooka.com`、`madonna.com` 一起放进来。所以走 `studio_sites.CONFIRMED_SITES`：一行一个厂牌，写清地址、
+  人工确认的日期和理由。它只替掉最后那道「页面得自述厂牌名」，状态码、空壳、停放页／自述不可用、域名回显四道照旧要过；确认
+  地址排在所有推导候选前面。
+- 账本记罗马音、站上只用日文原名的，不进 `CONFIRMED_SITES`：那是账本名字错了，改成日文名页面自述就对得上（`えむっ娘ラボ`）。
+  白名单只留「厂牌属于哪家公司」这种页面上没有的信息；有别名就走 `aliases`。
+- 作品数少的厂牌也照样出现在厂牌页的大位上。`--min-assets` 只是全量扫描的阈值；定点补走 `--only <canonical_name>...`，指名就不看
+  作品数，名字对不上直接失败，不静默跳过。
+
+### 社交账号头像当 Logo
+
+AV 厂牌 Logo 的来源是厂牌自己的社交账号头像：社交头像天然是正方形，且由品牌本人发布。
+
+1. 取证顺序：handle → `unavatar.io` 解析出平台 CDN 真实地址 → 从 CDN 下载 → 实测。unavatar 只用来解析地址，provenance
+   两者都记（`scripts/fetch_studio_avatar_candidates.py`）。
+2. 候选用内容寻址缓存、SHA-256、同厂牌感知哈希和跨厂牌精确重复门槛。同图缩放或重编码记 unchanged，上游视觉真变化
+   才重新进 `/review`。无 handle、无图片、unchanged 和 duplicate 只写健康报告，不占人工队列。
+
+- 能解析不等于是对的品牌：`@bazooka` 确实存在且能取到 400×400 头像，但那是 2007 年注册的通用账号，不是这个 AV 厂牌。
+  所以 handle 必须逐个取证确认，脚本默认不猜；`--guess-handles` 的产出一律标 `needs_confirmation`、不自动采纳，查不到
+  就留空。
+- r18.dev 详情 JSON 只有 `maker.name`／`label.name` 和作品封面，没有 Logo 资源。
+- **`pbs.twimg.com` 的尺寸后缀不是「有这么大」的证据。** 无后缀的那一份是上传原图（最大档）；带后缀的地址在原图更小时
+  返回的仍是原图：`セレブの友` 的 `_400x400` 和无后缀都是 242×242，而 unavatar 给的是 `_200x200`（8068 B 对 12302 B）。
+  所以一律从无后缀原图起，按 `peach.social_links.twimg_tiers` 的档位往下退（旧头像有只剩缩略图的），`resolved_url` 记实际
+  取到的那一档，全档缺失才算取图失败。厂牌 Logo（`fetch_studio_avatar_candidates.py`）与演员社媒头像
+  （`harvest_social_avatars.py`）共用这一份判据。
+
+### 名录来源
+
+发行平台与发行商自己的厂牌名录是官方字标的广度来源。入口登记在 `harvest_maker_directories.DIRECTORIES`。
+**存名录入口，不存图片地址**：图片地址里常带时间戳，厂牌换一次标识地址就变，重跑一次拿到的才是当下那份。
+
+| 名录 | 入口与规格 | 注意 |
 | --- | --- | --- |
 | MGStage | `/ppv/makers.php` paged by the 50-sound kana order, uniformly 180×54 | The whole site has an age gate, and without `adc=1` it returns only the confirmation page; the `osusume` recommendation slot overlaps entirely with the syllable pages, deduped by slug; the 50-sound nav bar is also gif, excluded by filename; `【独占】` (exclusive) is a sales status and not a studio name |
 | Prestige | `/api/maker` returns all studio JSON at once, `codeName` is the romaji slug, and the image is the white-background wordmark `/api/media/maker/banner-<slug>.jpg` | `/maker` and `/maker/<slug>` are both client-rendered empty shells with identical titles, so go through the API and don't fetch pages |

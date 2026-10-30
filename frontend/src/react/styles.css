@@ -15,7 +15,9 @@
 @import "./preflight-scoped.css";
 @import "./boardui/styles/theme.css";
 @import "./boardui/styles/typography.css";
+@import "./components/selection-dock.css";
 @import "./components/media-card.css";
+@import "./components/detail-tags.css";
 @import "./components/surface-motion.css";
 @import "./junk-queue/junk-queue.css";
 @import "./entity-hero/entity-hero.css";
@@ -63,10 +65,20 @@
 /* 独立页面包（`pages/`）有自己的产物 `peach-pages.css`，它用到的工具类不进这一份。 */
 @source not "./pages";
 @source "../management-skeletons.ts";
+@source "../board-skeleton.ts";
+@source "../configuration-skeleton.ts";
+@source "../diagnostics-skeleton.ts";
+@source "../management.ts";
 @source "../catalog-filter-skeleton.ts";
 @source "../jav-skeleton.ts";
 @source "../island-skeleton.ts";
 @source "../index-skeleton.ts";
+@source "../tag-skeleton.ts";
+@source "../entity-skeleton.ts";
+@source "../filter-controls-skeleton.ts";
+.dark .peach-react [data-link-result="gone"] [data-link-code],
+.dark .peach-react [data-status-tone="error"]{color:var(--color-text-error-primary)}
+.peach-react [data-source-mark="rss"]{color:var(--feed-mark)}
 /* 扫描不分代码与注释：这几个词各在注释里出现过，生成出来就和旧样式表的 `.ring`、`.grid`、
  * `.sr-only` 同名。React 子树三个类都不用——只读屏的文字走 `VisuallyHidden`，它把样式写在
  * 元素上。直接不生成。 */
@@ -104,8 +116,6 @@
    * 来源图 220px、原视频封面 132px（窄屏 110px）、作品样本一格 92px。 */
   --container-review-tabs: 184px;
   --container-review-card: 340px;
-  --container-review-cover: 132px;
-  --container-review-cover-narrow: 110px;
   --container-review-asset: 92px;
   --spacing-review-card: 440px;
   --spacing-review-card-tall: 560px;
@@ -118,7 +128,6 @@
   --radius-glass-key: 7px;
   /* 分类列并回正文上方的那一档，以及药丸缩一号的那一档。 */
   --breakpoint-review-split: 900px;
-  --breakpoint-review-tight: 600px;
   /* 模态弹层的遮罩。注册表里没有模态弹层，也就没有它的底色；取值同
    * `ui-kit/modal.css` 里 `.ui-geist-modal::backdrop` 的黑 60%，深浅两档共用一个。 */
   --color-scrim: color-mix(in srgb, var(--color-black) 60%, transparent);
@@ -136,14 +145,14 @@
   --breakpoint-duplicate-narrow: 901px;
   /* 旧 `board.css` 600px 那条窄屏媒体查询：列表页汇总块改上下两行，重复文件的组头与行距收一档。 */
   --breakpoint-compact: 601px;
-  /* 旧 `board.css` 760px 那条窄屏媒体查询：下划线 Tabs 收紧，索引页头把开关另起一行。 */
+  /* 760px 以下下划线 Tabs 收紧，索引页头的名册读数独占次行。 */
   --breakpoint-board-narrow: 761px;
   /* 索引页的格宽：人格 150px，公司格放宽一档到 180px（给方标识换宽度），字母表一行一枚标签
    * 最窄 200px。壳铺的骨架（`web/css/06-index.css` 的 `.igrid` 与 `ui-kit/skeleton.css` 的 `.ui-alphalist`）用同一组宽。 */
   --container-index-person: 150px;
   --container-index-company: 180px;
   --container-index-tag: 200px;
-  /* 整页空态（`components/empty-state.tsx` 的 `page` 档）的三个值，同遗留层
+  /* 空状态两档（`components/empty-state.tsx`）共用三个值，同遗留层
    * `ui-kit/markup.css` 的 `.ui-emptystate`：图标盒子 54px 见方，说明最宽 340px、行高 1.55。 */
   --spacing-empty-glyph: 54px;
   --container-empty-copy: 340px;
@@ -258,7 +267,9 @@
   to { transform: translateX(-50%); }
 }
 @utility skeleton-sheen {
+  position: relative;
   overflow: hidden;
+  background-color: var(--hover);
   &::after {
     content: '';
     position: absolute;
@@ -310,25 +321,6 @@
     inset -1px 0 0 var(--glass-low), inset 0 -1px 0 var(--glass-low), var(--glass-lift);
 }
 
-.peach-react [data-selection-dock] {
-  position: fixed;
-  z-index: 180;
-  bottom: max(22px, env(safe-area-inset-bottom));
-  left: 50%;
-  display: flex;
-  width: max-content;
-  max-width: calc(100vw - 24px);
-  padding: 9px 11px;
-  transform: translateX(-50%);
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border-radius: 22px;
-  backdrop-filter: var(--glass-optic, blur(22px)) saturate(145%);
-  -webkit-backdrop-filter: var(--glass-optic, blur(22px)) saturate(145%);
-}
-
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   .peach-react :is([data-review-filter], [data-filter-glass], [data-selection-dock]) {
     background: var(--ground);
@@ -343,8 +335,9 @@
 }
 
 .peach-react:has([data-selection-dock]) {
-  padding-bottom: 96px;
+  padding-bottom: var(--selection-dock-space, 96px);
 }
+html:has([data-selection-dock]) { scroll-padding-bottom: var(--selection-dock-space, 96px); }
 
 /* 岛里的危险键（批量条的「移入回收站」「彻底删除」、回收站说明行的「清空回收站」）挂 `data-danger`，
  * 红色只在这里定义一份，与壳的 `button.danger`（`web/board.css`）读同一组 `--board-red` 三档渐变：
@@ -378,6 +371,10 @@
 
 /* 页面分区使用与遗留导航相同的中性填充。 */
 .peach-react [data-board-tab-list] > button[aria-selected="true"] { background: var(--hover); color: var(--ink); }
+/* 错误详情是次要文本动作，使用中性悬停面与常规字重。 */
+.peach-react [data-error-details-toggle]{font:var(--board-compact);color:var(--ink-2);background:transparent}
+.peach-react [data-error-details-toggle]:hover:not(:disabled,[aria-disabled="true"]){background:var(--control-hover);color:var(--ink)}
+.peach-react [data-error-details-toggle]:active:not(:disabled,[aria-disabled="true"]){background:var(--hover);color:var(--ink)}
 
 /* 玻璃浮层上分段控件选中的那一格（`components/segmented.tsx` 的 `SEGMENT_GLASS`）：
  * 白填充垫底、斜光一道、整圈 rim 描边，与浮层上其余「当前在哪儿」的那块同一副料。 */
@@ -386,9 +383,21 @@
   box-shadow: inset 0 0 0 1px var(--glass-rim), var(--glass-pick-shadow);
 }
 
-.peach-react [data-filter-glass] :is(button, a[aria-pressed], [data-glass-segment]) { height: 30px; min-height: 30px; }
+/* BoardUI 带字按键与链接键的字形和文字同行，画框取 `--icon-inline`，随所在文字字号缩放；纯图标键
+ * 没有文字那一格，仍按档位取 20、18、14px。`button-press-motion` 只在 Button 与 ButtonLink 上，
+ * `underline-offset-3` 只在 LinkButton 上，上游副本不改（`boardui/ORIGIN.md`）。 */
+.peach-react .button-press-motion:has(> span) > svg,
+.peach-react .underline-offset-3 > svg { width: var(--icon-inline); height: var(--icon-inline); }
+
+/* 玻璃筛选条整条取紧凑档：页签、药丸、排序、分段与图标键同高。实体页标题右侧那一行有默认档的
+ * 过滤输入框与分段器外框，同一枚收藏键和管理标签键在那里取默认档。 */
+.peach-react [data-filter-glass] :is(button, a[aria-pressed], [data-glass-segment]) { height: var(--control-h-compact); min-height: var(--control-h-compact); }
+.peach-react [data-filter-glass] .tag-skeleton-view { padding:0;border:0;gap:2px;height:var(--control-h-compact);background:none; }
+.peach-react [data-filter-glass] .tag-skeleton-view > label { width:var(--control-h-compact);height:var(--control-h-compact);min-height:var(--control-h-compact);padding:0;border-radius:8px; }
+.peach-react [data-filter-glass] .tag-skeleton-view svg { width:16px;height:16px; }
 .peach-react button[data-filter-action] {
-  width: 30px; min-width: 30px; height: 30px; min-height: 30px; padding: 0; border: 0;
+  display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center;
+  width: var(--control-h-compact); min-width: var(--control-h-compact); height: var(--control-h-compact); min-height: var(--control-h-compact); padding: 0; border: 0;
   border-radius: var(--control-radius);
   background: var(--board-blue);
   box-shadow: var(--elevation-xs);
@@ -397,6 +406,11 @@
 .peach-react button[data-filter-action]:hover { background: var(--board-blue-hover); color: #fff; }
 .peach-react button[data-filter-action] svg { width: 16px; height: 16px; }
 .peach-react button[data-filter-action][aria-busy="true"] { cursor: wait; }
+:is(.peach-react [data-index-head], .peach-react[data-index-head]) button:is([data-filter-action], [data-tag-mode]) {
+  width: var(--control-h); min-width: var(--control-h); height: var(--control-h); min-height: var(--control-h); padding: 0;
+  border-radius: var(--control-radius);
+}
+.peach-react button[data-tag-mode] svg { width: 16px; height: 16px; }
 
 /* 浮层上动作键（`components/filter-glass.tsx` 的 `GlassPill`）指上去的那一下：同一副料，
  * 细线让给整圈 rim，落影把它从浮层上托起来，跟首页筛选条上滑到指针下的那块一样。那一档
@@ -531,14 +545,20 @@
 /* 标签云那一枚：线和底都取自己的类型色，悬停把底提一档、线不动。选中换成浮层选中那一档面。
  * 类型色掺透明要按 sRGB 掺，与卡片上那枚同一副配色；工具类的透明度修饰按 oklab 掺，
  * 同一个百分比在两个色彩空间里不是同一块颜色。 */
-.peach-react [data-tag-chip] {
+.peach-react [data-tag-token] {
+  border-radius: var(--control-radius);
   border-color: color-mix(in srgb, var(--tag-color) 32%, transparent);
   background: color-mix(in srgb, var(--tag-color) 7%, transparent);
 }
-.peach-react [data-tag-chip]:hover {
+.peach-react [data-tag-token]:hover {
   background: color-mix(in srgb, var(--tag-color) 13%, transparent);
 }
-.peach-react [data-tag-chip][aria-pressed="true"],
+.peach-react [data-tag-token] :is([data-entity-action], [data-tag-chip]) { border-radius: calc(var(--control-radius) - 4px); }
+.peach-react [data-tag-token] [data-entity-action] {
+  width: 24px; height: 24px; border-color: transparent; background: transparent;
+}
+.peach-react [data-tag-token] [data-entity-action]:is(:hover, [data-hovered]) { background: var(--hover); }
+.peach-react [data-tag-token]:has([data-tag-chip][aria-pressed="true"]),
 .peach-react [data-alpha-tag][aria-pressed="true"] {
   background: var(--picked);
   color: var(--color-text-primary);
@@ -711,6 +731,13 @@
   outline: none;
 }
 
+/* BoardUI 下拉的选项面板定宽 266px，表单里通栏的触发框（查找资源的「优先寻找」）展开后只剩
+ * 半截。React Aria 给每个下拉面板写了 `--trigger-width`：面板至少与触发框同宽，比 266px 窄的
+ * 触发框（工具栏、设置行里的短下拉）仍按 266px 展开，长选项不会被挤断。 */
+.peach-react [data-trigger='Select'] {
+  min-width: var(--trigger-width);
+}
+
 /* 构建器会把 SVG 的 unitless stroke-dashoffset 改写成 px，破坏 pathLength=1 的归一化，
  * 勾会在浏览器重算路径长度时来回跳。改成只动 opacity/transform 的单次出现动画。 */
 @keyframes checkbox-mark-enter {
@@ -750,6 +777,31 @@
   border-bottom: 1px solid var(--color-separator-border);
   transition: padding 200ms ease, font-size 200ms ease;
 }
+/* 工具栏按操作组换行；组内仍可适应比自身固有宽度更窄的容器。 */
+[data-responsive-toolbar] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+[data-toolbar-heading] {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-direction: column;
+  margin-inline-end: auto;
+}
+[data-toolbar-actions] {
+  display: flex;
+  width: max-content;
+  max-width: 100%;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+[data-pagination-layout] { grid-template-columns: auto minmax(0, 1fr) auto; }
+
 .bui-table td {
   @apply px-3 py-2.5 align-middle text-body-medium text-text-primary outline-none;
   transition: padding 200ms ease, font-size 200ms ease;

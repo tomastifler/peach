@@ -14,7 +14,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from smoke_desktop import assert_requires_login, complete_first_run, smoke_environment, wait_health
+from smoke_desktop import assert_amane_runtime, assert_requires_login, complete_first_run, smoke_environment, wait_health
 
 
 def main() -> int:
@@ -57,6 +57,7 @@ def main() -> int:
                     headers={"Origin": base})
                 with opener.open(request, timeout=10) as response:
                     assert response.status == 200
+                assert_amane_runtime(opener, base, executable.parent.parent / 'Frameworks/tools/amane-runtime')
                 for path in ("/", "/dist/peach-app.js", "/dist/peach-app.css", "/api/items",
                              "/healthz?ready=1"):
                     with opener.open(base + path, timeout=30) as response:
@@ -75,7 +76,7 @@ def main() -> int:
                 assert (data / "config.previous.toml").is_file()
                 print(json.dumps({"ok": True, "version": health.get("version"),
                     "checks": ["relocated-app", "no-development-tools", "first-run", "migrations",
-                               "standalone-ledger", "login", "frontend", "configuration-write"]}))
+                               "standalone-ledger", "login", "frontend", "bundled-amane-runtime", "configuration-write"]}))
             except BaseException as error:
                 if isinstance(error, urllib.error.HTTPError):
                     print(error.read().decode("utf-8", "replace"))

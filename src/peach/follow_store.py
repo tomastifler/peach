@@ -641,16 +641,19 @@ class FollowStore:
         key = hashlib.sha256(f"{fetch.provider}\n{fetch.ref}".encode()).hexdigest()[:20]
         directory = self.sources_root / fetch.provider / key
         stamp = reference.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
-        path = directory / f"{stamp}-{digest[:12]}.raw"
+        sidecar = (json.dumps({
+            "provider": fetch.provider, "ref": fetch.ref,
+            # 脱敏后的请求 URL：凭据永不进证据目录。
+            "request_url": fetch.request_url, "sha256": digest,
+            "checked_at": _now_text(reference), "candidates": len(fetch.candidates),
+        }, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+        # 快照身份包含正文摘要与说明；相同正文可来自不同游标或候选筛选。
+        snapshot_digest = hashlib.sha256(sidecar).hexdigest()
+        path = directory / f"{stamp}-{snapshot_digest}.raw"
         try:
             directory.mkdir(parents=True, exist_ok=True)
             write_immutable(path, fetch.raw_body)
-            write_immutable(path.with_suffix(".json"), (json.dumps({
-                "provider": fetch.provider, "ref": fetch.ref,
-                # 脱敏后的请求 URL：凭据永不进证据目录。
-                "request_url": fetch.request_url, "sha256": digest,
-                "checked_at": _now_text(reference), "candidates": len(fetch.candidates),
-            }, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+            write_immutable(path.with_suffix(".json"), sidecar)
         except OSError as error:
             return None, f"Evidence not obtained ({self.sources_root} is not writable: {error.strerror or error})"
         return str(path.relative_to(self.sources_root.parent)), None
@@ -926,6 +929,38 @@ class FollowStore:
         if source != "manual" and not inserted:
             return None
         return {"canonical": canonical_name, "alias": alias_name, "source": source}
+
+    def rename_author_group(self, canonical_key: str, name: str) -> dict:
+        """人工修改整组统一名称，旧名称和平台别名仍属于同一组。"""
+        name = str(name).strip()
+        next_key = normalized_author_name(name)
+        if not next_key:
+            raise ValueError("统一名称不能为空")
+        connection = self._connect()
+        current = connection.execute(
+            "SELECT canonical_name FROM follow_author_alias WHERE canonical_key=? LIMIT 1",
+            (canonical_key,),
+        ).fetchone()
+        if current is None:
+            raise ValueError("这个创作者别名组不存在，请刷新列表")
+        occupied = connection.execute(
+            "SELECT canonical_key FROM follow_author_alias WHERE alias_key=? OR canonical_key=?",
+            (next_key, next_key),
+        ).fetchall()
+        if any(str(row["canonical_key"]) != canonical_key for row in occupied):
+            raise ValueError("这个名称已属于另一位创作者，请先确认是否需要合并")
+        stamp = _now_text()
+        connection.execute(
+            "UPDATE follow_author_alias SET canonical_key=?,canonical_name=?,updated_at=? "
+            "WHERE canonical_key=?", (next_key, name, stamp, canonical_key),
+        )
+        connection.execute(
+            "INSERT INTO follow_author_alias(alias_key,alias_name,canonical_key,canonical_name,source,created_at,updated_at) "
+            "VALUES(?,?,?,?,?,?,?) ON CONFLICT(alias_key) DO UPDATE SET alias_name=excluded.alias_name,"
+            "canonical_key=excluded.canonical_key,canonical_name=excluded.canonical_name,source=excluded.source,updated_at=excluded.updated_at",
+            (next_key, name, next_key, name, "manual", stamp, stamp),
+        )
+        return {"previous": str(current["canonical_name"]), "canonical": name}
 
     def remove_author_alias(self, alias_name: str) -> None:
         """删掉一条别名。规范名本身不能当别名删掉，那会拆散整个组。"""

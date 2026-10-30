@@ -107,7 +107,8 @@
   flex: none; width: 30px; height: 30px; min-width: 0;
   margin: calc((var(--fs-lg) * 1.5 - 30px) / 2) 0;
 }
-.peach-react [data-follow-detail] :is([data-follow-origin], [data-follow-resources] a) svg { flex: none; width: 18px; height: 18px; }
+.peach-react [data-follow-detail] [data-follow-origin] svg { flex: none; width: 18px; height: 18px; }
+.peach-react [data-follow-detail] [data-follow-resources] a svg { flex: none; width: var(--icon-inline); height: var(--icon-inline); }
 .peach-react [data-follow-detail] [data-follow-detail-credit] {
   overflow-wrap: anywhere;
   color: var(--muted);
@@ -123,7 +124,6 @@
 }
 .peach-react [data-follow-detail] [data-follow-detail-summary] {
   margin: 0 0 16px;
-  line-height: 1.6;
   color: var(--ink-2);
   white-space: pre-line;
   overflow-wrap: anywhere;
@@ -204,29 +204,5 @@
 /* 写失败的那一句。侧栏是纵向 flex：按内容高，不把整栏剩余高度都算给它（标签会被推到栏底）。 */
 .peach-react [data-follow-detail] [data-follow-state] { flex: none; font-size: var(--fs-xs); color: var(--drop); }
 
-/* 标签沉到侧栏最后：来源站的标签动辄几十个，夹在正文和操作之间就得先滚过整片标签云才够得着
-   「已看／忽略」。盒子是全站标签那一副（`--tag-pad-*`、`--tag-radius`、1px 线），线与底按来源记下的
-   类型着色（`--tag-color`，色板在 `../styles.css` 的 `r34-*`）；长标签就地换行，不截断。 */
-.peach-react [data-follow-detail] [data-follow-detail-tags] { margin: 16px 0 0; }
-.peach-react [data-follow-detail] [data-follow-detail-tags] [data-follow-tag] {
-  max-width: none;
-  padding: var(--tag-pad-y) var(--tag-pad-x);
-  overflow: visible;
-  border: 1px solid color-mix(in srgb, var(--tag-color) 42%, transparent);
-  border-radius: var(--tag-radius);
-  background: color-mix(in srgb, var(--tag-color) 10%, transparent);
-  color: var(--ink-2);
-  font: inherit;
-  font-size: var(--fs-xs);
-  line-height: 1.45;
-  text-align: left;
-  text-overflow: clip;
-  white-space: normal;
-  cursor: pointer;
-}
-/* 悬停按标签自己那个类型色加深，不回到中性的 `--hover`。 */
-.peach-react [data-follow-detail] [data-follow-detail-tags] [data-follow-tag]:hover {
-  border-color: color-mix(in srgb, var(--tag-color) 68%, transparent);
-  background: color-mix(in srgb, var(--tag-color) 18%, transparent);
-  color: var(--ink);
-}
+/* 详情标签沿用本地标签行；在线侧栏在操作区之后留出间距。 */
+.peach-react [data-follow-detail-tags] { margin-top:16px; }

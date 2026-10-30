@@ -16,7 +16,7 @@ class AutomaticUpdateTests(unittest.TestCase):
         self.updates = AutomaticUpdates(self.root, available=True)
 
     def test_settings_roundtrip_disable_and_validate_installation(self):
-        self.assertEqual(self.updates.snapshot()["mode"], "off")
+        self.assertEqual(self.updates.snapshot()["mode"], "check")
         self.updates.save({"mode": "check", "interval_hours": 6})
         self.assertEqual(AutomaticUpdates(self.root, available=True).read()["mode"], "check")
         for body in ({"mode": [], "interval_hours": 24}, {"mode": "check", "interval_hours": True},

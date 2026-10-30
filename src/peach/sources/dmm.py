@@ -29,6 +29,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 from ..metadata import identifies_code
+from ..catalog_rules import normalise_code_key
 from .base import FailureReason, Page, Session, SiteConfig, SiteRecord, SiteSource, SourceFailure
 
 #: 不带 Cookie，主机间隔用默认的 2 秒。一次响应实测几 KB，1 MiB 是余量。
@@ -59,14 +60,23 @@ MISSING = "DMM has no such code"
 NOT_JSON = "DMM did not return work JSON"
 REFUSED = "DMM rejected this query"
 
-_CODE = re.compile(r"^(\d{3})?([A-Z]{2,8})-?(\d{1,5})$")
+_CODE = re.compile(r"^(\d{3})?([A-Z]{2,8})-?(\d{1,5})([A-Z]{0,2})$")
 _CID = re.compile(r"^(?:h_\d+|\d+)?([a-z]+)(\d+)([a-z]*)$")
 
 
+def code_from_cid(value: str) -> str:
+    """DMM 商品号的数字头属于发行目录，尾字母保留为作品身份。"""
+    matched = _CID.fullmatch(str(value or "").lower())
+    if not matched:
+        return ""
+    letters, digits, suffix = matched.groups()
+    return normalise_code_key(f"{letters}-{digits}{suffix}")
+
+
 def code_parts(code: str) -> tuple[str, str, str] | None:
-    """番号拆成（数字前缀，字母段，数字）：`SSIS-057` → `('', 'SSIS', '057')`，`300MIUM-1239` → `('300', 'MIUM', '1239')`。"""
+    """番号拆成（数字前缀，字母段，序号及尾字母），例如 `DANDY-851C` → `('', 'DANDY', '851C')`。"""
     matched = _CODE.match(str(code or "").strip().upper())
-    return (matched.group(1) or "", matched.group(2), matched.group(3)) if matched else None
+    return (matched.group(1) or "", matched.group(2), matched.group(3) + matched.group(4)) if matched else None
 
 
 def guessed_cid(code: str) -> str:
@@ -75,7 +85,8 @@ def guessed_cid(code: str) -> str:
     if not parts:
         return ""
     digits, letters, number = parts
-    return f"{digits}{letters.lower()}{int(number):05d}"
+    serial = re.fullmatch(r"(\d+)([A-Z]*)", number)
+    return f"{digits}{letters.lower()}{int(serial.group(1)):05d}{serial.group(2).lower()}"
 
 
 def matching_cids(code: str, cids) -> list[str]:
@@ -84,11 +95,14 @@ def matching_cids(code: str, cids) -> list[str]:
     if not parts:
         return []
     digits, letters, number = parts
+    serial = re.fullmatch(r"(\d+)([A-Z]*)", number)
     found = []
     for cid in cids:
         text = str(cid or "").lower()
         matched = _CID.match(text)
-        if not matched or matched.group(1) != letters.lower() or int(matched.group(2)) != int(number):
+        if not matched or matched.group(1) != letters.lower() or int(matched.group(2)) != int(serial.group(1)):
+            continue
+        if serial.group(2) and matched.group(3) != serial.group(2).lower():
             continue
         if digits and not text.startswith(digits):
             continue

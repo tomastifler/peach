@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+from urllib.request import Request
 
 if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -26,11 +27,46 @@ def run(args: list[str], root: Path, *, allowed: tuple[int, ...] = (0,)) -> str:
     return result.stdout.strip()
 
 
-def collect(root: Path, repo: str) -> dict:
+def public_github_api(endpoint: str):
+    """公开上游元数据使用匿名官方 API，不携带本机账号凭据。"""
+    request = Request(f"https://api.github.com/{endpoint}",
+                      headers={"Accept": "application/vnd.github+json", "User-Agent": references.USER_AGENT})
+    from peach.peach_proxy import read_url
+    return json.loads(read_url(request.full_url, headers=dict(request.header_items()), timeout=60))
+
+
+def public_dependabot(repo: str) -> list[dict]:
+    found = []
+    for page in range(1, 11):
+        batch = public_github_api(f"repos/{repo}/pulls?state=open&per_page=100&page={page}")
+        found.extend({"number": item["number"], "title": item["title"], "url": item["html_url"]}
+                     for item in batch if item.get("user", {}).get("login") == "dependabot[bot]")
+        if len(batch) < 100:
+            return found
+    raise ValueError("公开上游 PR 超过可核对上限，检查未完成")
+
+
+def local_reference_files(values: list[str]) -> dict[str, Path]:
+    """解析本次调用明确提供的参考正文，不改变登记表或快照。"""
+    files = {}
+    for value in values:
+        source, separator, filename = value.partition("=")
+        if not separator or not source or not filename or source in files:
+            raise ValueError("参考正文须为不重复的 SOURCE=FILE")
+        files[source] = Path(filename).resolve(strict=True)
+    return files
+
+
+def collect(root: Path, repo: str, *, public_github: bool = False,
+            reference_evidence: dict[str, Path] | None = None) -> dict:
     registry = references.load_registry(root / "docs/reference-sources.json")
     problems = references.validate_registry(root, registry)
     if problems:
         raise ValueError("；".join(problems))
+    evidence = reference_evidence or {}
+    sources = references.selected_sources(registry, None)
+    if unknown := evidence.keys() - {source["id"] for source in sources}:
+        raise ValueError("参考正文未对应本次检查来源：" + "、".join(sorted(unknown)))
     report = {"checked_at": dt.datetime.now(dt.timezone.utc).isoformat(),
               "commit": run(["git", "rev-parse", "HEAD"], root),
               "checks": [], "complete": True}
@@ -53,6 +89,8 @@ def collect(root: Path, repo: str) -> dict:
                         f"repos/{repo}/pulls?state=open&per_page=100"], (0,)),
     ):
         def inspect_dependency(args=args, allowed=allowed, label=label):
+            if label == "dependabot" and public_github:
+                return public_dependabot(repo)
             output = run(args, root, allowed=allowed)
             if label == "dependabot":
                 return [{"number": item["number"], "title": item["title"], "url": item["html_url"]}
@@ -82,18 +120,33 @@ def collect(root: Path, repo: str) -> dict:
         web = pin["repository"].removesuffix(".git")
         if web.startswith("https://github.com/"):
             upstream = web.removeprefix("https://github.com/")
-            check(pin["id"] + "-release", lambda upstream=upstream: json.loads(run(
-                ["gh", "api", f"repos/{upstream}/releases/latest"], root)))
-    for source in references.selected_sources(registry, None):
+            check(pin["id"] + "-release", lambda upstream=upstream:
+                  public_github_api(f"repos/{upstream}/releases/latest") if public_github else json.loads(run(
+                      ["gh", "api", f"repos/{upstream}/releases/latest"], root)))
+    for source in sources:
         def inspect(source=source):
-            result = references.inspect_source(root, source, revision_resolver=resolve)
+            supplied = evidence.get(source["id"])
+            if supplied is None:
+                result = references.inspect_source(root, source, revision_resolver=resolve)
+            else:
+                content = supplied.read_bytes()
+                if not content.strip():
+                    raise ValueError("用户提供的参考正文为空")
+                result = references.inspect_source(root, source, revision_resolver=resolve,
+                                                   fetcher=lambda _url: content)
+                result["provenance"] = {"channel": "用户手动提供", "url": source["url"],
+                                        "direct_fetch": "未取得", "sha256": references.sha256_bytes(content)}
             return {key: value for key, value in result.items() if key != "live"}
         check(source["id"], inspect)
     return report
 
 
-def review(root: Path, repo: str) -> dict:
-    report = collect(root, repo)
+def review(root: Path, repo: str, *, public_github: bool = False,
+           reference_evidence: dict[str, Path] | None = None) -> dict:
+    options = {"public_github": True} if public_github else {}
+    if reference_evidence:
+        options["reference_evidence"] = reference_evidence
+    report = collect(root, repo, **options)
     path = root / "build/release-review.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -106,9 +159,16 @@ def review(root: Path, repo: str) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", default="peach-mitao/peach")
+    parser.add_argument("--public-github", action="store_true",
+                        help="通过匿名官方 API 读取 GitHub 元数据，不调用 GitHub CLI")
+    parser.add_argument("--reference-evidence", action="append", default=[], metavar="SOURCE=FILE",
+                        help="本次检查使用用户手动提供的正文，报告保留取证渠道")
     args = parser.parse_args()
     try:
-        print(json.dumps(review(ROOT, args.repo), ensure_ascii=False))
+        options = {"public_github": True} if args.public_github else {}
+        print(json.dumps(review(ROOT, args.repo,
+                                reference_evidence=local_reference_files(args.reference_evidence),
+                                **options), ensure_ascii=False))
         return 0
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
         print(str(exc), file=sys.stderr)

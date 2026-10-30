@@ -19,6 +19,68 @@ def load_checker():
 
 
 class ReleaseReviewTests(unittest.TestCase):
+    def test_supplied_body_keeps_provenance_and_does_not_hide_other_network_failures(self):
+        from scripts import release_review as review
+        inspect_source = review.references.inspect_source
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            snapshot = root / "snapshot.md"
+            snapshot.write_bytes(b"protocol notes")
+            body = root / "provided.js"
+            body.write_bytes(b"current public script")
+            source = {"id": "provided", "cadence": "monthly", "snapshot": "snapshot.md",
+                      "url": "https://example.invalid/current.js",
+                      "sha256": review.references.sha256_bytes(snapshot.read_bytes())}
+            registry = {"pins": [], "sources": [source, {**source, "id": "unavailable"}]}
+
+            def inspect(root, source, **kwargs):
+                if source["id"] == "unavailable":
+                    raise OSError("network unavailable")
+                return inspect_source(root, source, **kwargs)
+
+            def run(args, _root, **kwargs):
+                return "[]" if args[0] in {"npm", "gh"} else "head"
+
+            with mock.patch.object(review.references, "load_registry", return_value=registry), \
+                    mock.patch.object(review.references, "inspect_source", side_effect=inspect), \
+                    mock.patch.object(review, "run", side_effect=run):
+                report = review.collect(root, "owner/repo", reference_evidence={"provided": body})
+            results = {item["id"]: item for item in report["checks"]}
+            result = results["provided"]["result"]
+            self.assertEqual(results["provided"]["status"], "已取得")
+            self.assertEqual(result["live_sha256"], review.references.sha256_bytes(body.read_bytes()))
+            self.assertEqual(result["provenance"]["channel"], "用户手动提供")
+            self.assertEqual(result["provenance"]["direct_fetch"], "未取得")
+            self.assertTrue(result["changed"])
+            self.assertEqual(snapshot.read_bytes(), b"protocol notes")
+            self.assertEqual(results["unavailable"]["status"], "未取得")
+            self.assertFalse(report["complete"])
+            with mock.patch.object(review.references, "load_registry", return_value=registry), \
+                    self.assertRaisesRegex(ValueError, "未对应"):
+                review.collect(root, "owner/repo", reference_evidence={"unknown": body})
+
+    def test_supplied_body_arguments_reject_duplicates_and_missing_files(self):
+        from scripts import release_review as review
+        with tempfile.TemporaryDirectory() as temp:
+            body = Path(temp).resolve() / "provided.js"
+            body.write_bytes(b"public script")
+            self.assertEqual(review.local_reference_files([f"source={body}"]), {"source": body})
+            for values in (["source"], [f"source={body}", f"source={body}"]):
+                with self.assertRaises(ValueError):
+                    review.local_reference_files(values)
+            with self.assertRaises(OSError):
+                review.local_reference_files([f"source={body.parent / 'missing'}"])
+
+    def test_public_review_paginates_dependabot_without_account_credentials(self):
+        from scripts import release_review as review
+        item = {"number": 3, "title": "更新", "html_url": "url", "user": {"login": "dependabot[bot]"}}
+        with mock.patch.object(review, "public_github_api", side_effect=[[item] * 100, []]) as api:
+            self.assertEqual(len(review.public_dependabot("owner/repo")), 100)
+        self.assertEqual(api.call_count, 2)
+        with mock.patch.object(review, "public_github_api", side_effect=OSError("network unavailable")), \
+                self.assertRaises(OSError):
+            review.public_dependabot("owner/repo")
+
     def test_network_failure_keeps_later_checks_and_records_missing_evidence(self):
         from scripts import release_review as review
         registry = {"pins": [], "sources": [

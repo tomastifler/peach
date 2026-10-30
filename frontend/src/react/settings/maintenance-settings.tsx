@@ -1,4 +1,5 @@
-/* 「应用与维护」中的运行信息、安装教程与卸载。 */
+/* 「应用与维护」的后半段：存储空间、数据上传、运行信息、安装教程与卸载。少改的隐私开关和只读信息在后，
+ * 卸载是不可逆动作，留在整组最后。 */
 import { useState, type FormEvent } from 'react';
 import { confirmModal } from '@peach/legacy/ui';
 
@@ -13,7 +14,10 @@ import type {
 } from '../bundle';
 import { PathLine } from '../components/path-line';
 import { groupRoot } from './configuration-panel';
+import { LibrarySharingSettings } from './library-sharing-settings';
+import { RemoteReportingSettings } from './remote-reporting-settings';
 import { Disclosure, ErrorText, ExternalLink, Fact, FactList, Footer, Help, Rows, Section, Stack } from './section';
+import { StorageSettings } from './storage-settings';
 import { busyProps, useAction } from './use-action';
 
 const INTERVALS = [['6', 'Every 6 hours'], ['24', 'Daily'], ['168', 'Weekly']] as const;
@@ -23,6 +27,13 @@ export function MaintenanceSettings(
 ) {
   return (
     <div {...groupRoot(panel)}>
+      {data.storage ? <StorageSettings initial={data.storage} receipt={receipt} /> : null}
+      {data.remote_reporting || data.library_sharing ? <Section id="librarySharing" title="数据上传">
+        {data.remote_reporting ? <RemoteReportingSettings initial={data.remote_reporting} receipt={receipt} /> : null}
+        {data.library_sharing ? <div className="border-t border-separator-border">
+          <LibrarySharingSettings initial={data.library_sharing} receipt={receipt} />
+        </div> : null}
+      </Section> : null}
       <Facts facts={data.facts} />
       <TutorialSettings receipt={receipt} reopenTutorial={reopenTutorial} />
       {data.uninstall ? <UninstallSettings uninstall={data.uninstall} receipt={receipt} /> : null}
@@ -63,7 +74,7 @@ export function AutomaticUpdates({ initial, receipt }: { initial: AutomaticUpdat
       ? 'Confirm the restart and install here once the download finishes.'
       : undefined;
   return (
-    <Section title="Automatic updates" onSubmit={submit}>
+    <Section id="automaticUpdates" title="自动更新" onSubmit={submit}>
       <Rows>
         <SettingsRow label="Check for new versions automatically">
           <Switch aria-label="Check for new versions automatically" isSelected={mode !== 'off'} isDisabled={!initial.available}

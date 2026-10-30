@@ -22,7 +22,7 @@ SETTINGS = FRONTEND_SRC / "history" / "settings-route.ts"
 #: （`TREE_PATTERNS`）登记，同样不在此列。
 FROZEN_ROUTES = frozenset({
     "/", "/trash", "/playlists", "/assets/:id", "/posts/:id",
-    "/performers", "/creators", "/studios", "/agencies", "/tags", "/stats", "/taste",
+    "/performers", "/creators", "/studios", "/agencies", "/series", "/tags", "/stats", "/taste",
     "/review", "/data-cleanup", "/duplicates", "/resource-sync", "/quality-goals",
     "/sources", "/follow", "/subscriptions", "/tasks", "/immerse", "/wall",
     "/settings/diagnostics", "/jav", "/works/:code", "/settings", "/settings/appearance",

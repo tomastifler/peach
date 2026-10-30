@@ -3,9 +3,9 @@
  * 外框取 BoardUI 设置弹层的 `SettingsSectionLabel` + `SettingsCard`，开关行直接用 `SettingsRow`。
  * 注册表里没有折叠，它用 BoardUI token 组合，差异登记在 `boardui/ORIGIN.md`。
  * 提示与进度条另有页面共用的一份，在 `../components/`。 */
-import { useId, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import type { ComponentType, FormEvent, MouseEvent, ReactNode } from 'react';
-import { RiArrowRightSLine, RiExternalLinkLine } from '@remixicon/react';
+import { RiArrowRightLine, RiArrowRightSLine, RiExternalLinkLine } from '@remixicon/react';
 import { setCollapseOpen } from '@peach/legacy/ui';
 
 import { SettingsCard, SettingsSectionLabel } from '@/components/application/settings/settings-rows';
@@ -44,17 +44,24 @@ export function Section({ title, icon, id, aside, onSubmit, children }: SectionP
     : <section id={id} aria-label={title} className="flex w-full flex-col gap-2 wrap-anywhere">{body}</section>;
 }
 
-/** 一组 `SettingsRow`。行自己画下边线、最后一行不画，所以要有一层只装行的父元素。 */
+/** 设置行组：内部由行画线，相邻行组由共享样式补齐边界。 */
 export function Rows({ children }: { children: ReactNode }) {
-  return <div className="flex flex-col">{children}</div>;
+  return <div className="ui-settings-rows flex flex-col empty:hidden">{children}</div>;
 }
 
 /** 卡片只管左内边距和底色；不是 `SettingsRow` 的内容由这一层给行距和上下右内边距。
  *  排在 `Rows` 或 `FactList` 后面时 `divided`，和上面那组行之间补一道分隔线。 */
 export function Stack({ divided = false, children }: { divided?: boolean; children: ReactNode }) {
   return divided
-    ? <div className="flex flex-col gap-4 border-t border-separator-border py-4 pr-3">{children}</div>
-    : <div className="flex flex-col gap-4 py-4 pr-3">{children}</div>;
+    ? <div className="flex flex-col gap-4 border-t border-separator-border py-4 pr-3 empty:hidden">{children}</div>
+    : <div className="flex flex-col gap-4 py-4 pr-3 empty:hidden">{children}</div>;
+}
+
+/** 分区首次取数：画 `configuration-skeleton.ts` 里这个分区的那一份骨架，与整页骨架里这一块是同一段
+ *  结构，整页骨架交给 React 时位置不动。挂载时取一次，读回之前不随渲染重算。状态名只给辅助技术。 */
+export function SectionSkeleton({ label, html }: { label: string; html: () => string }) {
+  const [markup] = useState(html);
+  return <div className="contents" data-skeleton="" aria-busy="true" aria-label={label} dangerouslySetInnerHTML={{ __html: markup }} />;
 }
 
 /** 底栏：左边一句说这颗按钮此刻意味着什么，右边是按钮。
@@ -63,7 +70,7 @@ export function Stack({ divided = false, children }: { divided?: boolean; childr
  *  卡片的左内边距在卡自己身上，所以这一条要把它抵掉再自己补回来。 */
 export function Footer({ status, children }: { status?: ReactNode; children?: ReactNode }) {
   return (
-    <div className="-ml-3 flex flex-wrap items-center justify-end gap-3 rounded-b-2xl border-t border-separator-border bg-card-footer px-3 py-3">
+    <div className="-ml-3 flex flex-wrap items-center justify-end gap-3 rounded-b-2xl border-t border-separator-border bg-card-footer px-3 py-3 empty:hidden">
       {status ? <div className="mr-auto min-w-0 text-body-2-regular text-text-secondary">{status}</div> : null}
       {children}
     </div>
@@ -97,9 +104,18 @@ export function ExternalLink({ href, children, leadingIcon }: {
   );
 }
 
+/** 后台任务的进度在任务中心看：说明句后面跟这一颗，点了站内跳过去。 */
+export function TaskCenterLink() {
+  return (
+    <LinkButton href="/tasks" size="small" trailingIcon={RiArrowRightLine} className="self-start">
+      在任务中心查看进度
+    </LinkButton>
+  );
+}
+
 /** 只读的名目与读数，一行一对，行距与分隔线同 `SettingsRow`。 */
 export function FactList({ children }: { children: ReactNode }) {
-  return <dl className="flex flex-col">{children}</dl>;
+  return <dl className="ui-settings-facts flex flex-col empty:hidden">{children}</dl>;
 }
 
 /* 名目按内容宽，最多占一半，再长就在自己那一半里折行；读数靠右，折成多行时行内文字左对齐，
@@ -116,14 +132,19 @@ export function Fact({ term, children }: { term: ReactNode; children: ReactNode 
 /** 展开正文。原生 `details` 给键盘与无障碍语义；开合交给共用 Collapse 的 `setCollapseOpen`，
  *  它给正文外层挂上 `ui-kit/collapse.css` 的 `.ui-fcollapse` 让高度过渡。内边距放在里层，高度才能收到 0。 */
 export function Disclosure(
-  { summary, defaultOpen = false, children, trailing = false, onOpenChange, contentClassName }:
-  { summary: ReactNode; defaultOpen?: boolean; children: ReactNode; trailing?: boolean; onOpenChange?(open: boolean): void; contentClassName?: string },
+  { summary, defaultOpen = false, isOpen, children, trailing = false, onOpenChange, contentClassName }:
+  { summary: ReactNode; defaultOpen?: boolean; isOpen?: boolean; children: ReactNode; trailing?: boolean; onOpenChange?(open: boolean): void; contentClassName?: string },
 ) {
   const id = useId();
   const details = useRef<HTMLDetailsElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const primed = useRef(false);
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpen] = useState(isOpen ?? defaultOpen);
+  useLayoutEffect(() => {
+    if (isOpen === undefined || isOpen === open || !details.current || !body.current) return;
+    setCollapseOpen(details.current, body.current, isOpen);
+    setOpen(isOpen);
+  }, [isOpen, open]);
   const toggle = (event: MouseEvent) => {
     event.preventDefault();
     if (!details.current || !body.current) return;
@@ -135,7 +156,7 @@ export function Disclosure(
      过渡里它会被重新画成展开。这里只在第一次挂上时把初始状态落到 DOM 上。 */
   const attach = (node: HTMLDetailsElement | null) => {
     details.current = node;
-    if (node && defaultOpen && !primed.current) {
+    if (node && (isOpen ?? defaultOpen) && !primed.current) {
       primed.current = true;
       node.open = true;
     }
@@ -144,9 +165,9 @@ export function Disclosure(
     <details ref={attach}>
       <summary aria-expanded={open} aria-controls={id} onClick={toggle}
         className={`${trailing ? 'w-full' : 'w-fit'} flex cursor-pointer list-none items-center gap-1 rounded-sm text-body-2-medium text-text-secondary outline-none select-none hover:text-text-primary focus-visible:ring-2 focus-visible:ring-border-focus-ring`}>
-        {!trailing ? <RiArrowRightSLine aria-hidden className={open ? 'size-4 shrink-0 rotate-90 transition-transform' : 'size-4 shrink-0 transition-transform'} /> : null}
+        {!trailing ? <RiArrowRightSLine aria-hidden className={open ? 'size-(--icon-inline) shrink-0 rotate-90 transition-transform' : 'size-(--icon-inline) shrink-0 transition-transform'} /> : null}
         {summary}
-        {trailing ? <RiArrowRightSLine aria-hidden className={open ? 'ml-auto size-4 shrink-0 -rotate-90 transition-transform' : 'ml-auto size-4 shrink-0 rotate-90 transition-transform'} /> : null}
+        {trailing ? <RiArrowRightSLine aria-hidden className={open ? 'ml-auto size-(--icon-inline) shrink-0 -rotate-90 transition-transform' : 'ml-auto size-(--icon-inline) shrink-0 rotate-90 transition-transform'} /> : null}
       </summary>
       <div ref={body} id={id} inert={!open}>
         <div className={cx('flex flex-col gap-2 pt-3', contentClassName)}>{children}</div>
@@ -158,7 +179,7 @@ export function Disclosure(
 /** 遗留雪碧图（`web/index.html` 的 `#i-*` symbol）里的字形。媒体库图标的取值就是这些名字。 */
 export function SpriteIcon({ name }: { name: string }) {
   return (
-    <svg aria-hidden viewBox="0 0 24 24" fill="none" className="size-4 shrink-0 stroke-current stroke-2">
+      <svg aria-hidden data-source-mark={name} viewBox="0 0 24 24" fill="none" className="size-(--icon-inline) shrink-0 stroke-current stroke-2">
       <use href={`#i-${name}`} />
     </svg>
   );
@@ -167,6 +188,6 @@ export function SpriteIcon({ name }: { name: string }) {
 /** 来源标识：网盘站标是内嵌 PNG，其余是雪碧图字形（`src/ui-kit/media-source-icons.ts`）。 */
 export function SourceMark({ mark }: { mark: string }) {
   return mark.startsWith('data:image/png;base64,')
-    ? <img src={mark} alt="" width={16} height={16} className="size-4 shrink-0" />
+    ? <img src={mark} alt="" width={16} height={16} className="size-(--icon-inline) shrink-0" />
     : <SpriteIcon name={mark} />;
 }

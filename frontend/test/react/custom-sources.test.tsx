@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { notifyManager, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, expect, it, vi } from 'vitest';
+import * as legacyUi from '@peach/legacy/ui';
 import { queryClient } from '../../src/react/query';
 import { CustomSources } from '../../src/react/scraping/custom-sources';
 import { click, mount, pending, settle, type } from './render';
@@ -45,4 +46,16 @@ it('试查期间修改配置后不展示旧请求的结果', async () => {
   await settle();
   expect(host.querySelector('pre')).toBeNull();
   expect(host.textContent).not.toContain('旧请求标题');
+});
+
+it('删除自定义来源的确认弹层用危险样式', async () => {
+  const row = { id: 'custom-1234567890abcdef', name: '示例来源', endpoint: 'https://example.com/{code}',
+    fields: { code: 'id' }, content_types: ['censored'], enabled: true };
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ items: [row] }) })));
+  const modal = vi.spyOn(legacyUi, 'confirmModal').mockResolvedValue({ confirmed: false });
+  const host = await mount(<QueryClientProvider client={queryClient}><CustomSources receipt={vi.fn()} /></QueryClientProvider>);
+  await settle();
+  await click(Array.from(host.querySelectorAll('button')).find(button => button.textContent === '删除'));
+  expect(modal.mock.calls[0]?.[0]).toMatchObject({ title: '删除自定义来源', confirmLabel: '删除来源', danger: true });
+  modal.mockRestore();
 });

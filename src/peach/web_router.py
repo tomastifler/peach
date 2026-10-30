@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+from . import media_libraries, settings_file
 from .follow_discovery import MAX_SUGGESTIONS, MAX_TERM_LENGTH
 from .review_csv import candidate_root_version
 from .web_activity import (
@@ -21,8 +22,10 @@ from .web_activity import (
     w_watch_later,
 )
 from .web_batch import q_ads, q_duplicates, w_batch, w_empty_trash
+from .web_tags import q_tag_management, w_tag_management, w_tag_preview
 from .taste_history import history_source_count
 from .web_catalog import (
+    FACETS_TABLES,
     catalog_filter,
     q_editions,
     q_facets,
@@ -49,15 +52,17 @@ from .web_entity import (
 from .web_downloads import (q_downloads, w_download_cancel, w_download_postprocess,
                             w_download_submit)
 from .web_resource_search import q_resource_search
-from .web_jav_detail import q_jav_detail, q_jav_image, q_jav_resources, q_jav_reviews
+from .web_jav_detail import q_jav_detail, q_jav_resources, q_jav_reviews
 from .web_jav_discovery import q_jav_discoveries
 from .web_feeds import (
     q_feed_check,
     q_feed_discoveries,
     q_feed_lookup,
+    q_feed_schedule,
     q_feeds,
     w_feed_check,
     w_feed_discovery,
+    w_feed_schedule_run,
     w_feed_source,
 )
 from .web_follow import (
@@ -79,14 +84,16 @@ from .web_follow import (
     w_follow_resolve,
     w_follow_save,
     w_follow_schedule,
+    w_follow_schedule_run,
     w_follow_source,
     w_follow_status,
+    w_follow_tag,
 )
 from .web_links import w_links, w_links_check, w_links_prune
 from .web_library_processing import q_library_processing, q_library_processing_issues, w_library_processing
 from .web_media_repair import q_media_repair, w_media_repair
 from .web_organize import (
-    q_organize, w_organize_apply, w_organize_preview, w_organize_rollback,
+    q_organize, q_organize_example, w_organize_apply, w_organize_preview, w_organize_rollback,
 )
 from .web_orphan_records import q_orphan_records, w_orphan_attach
 from .web_playlists import q_playlist, q_playlists, w_playlist
@@ -110,8 +117,7 @@ from .web_stats import (
     q_quality_goals,
     q_search_history,
     q_stats,
-    q_taste,
-    taste_inputs,
+    taste_snapshot,
     w_search_history,
     w_taste_refresh,
     w_taste_source,
@@ -138,7 +144,8 @@ def _get_index(contract, args):
 
 
 def _get_stats(contract, _args):
-    return contract.cached("stats", lambda: q_stats(contract))
+    # 账本那一段在 `q_stats` 里按版本缓存，存储卷每次现量。
+    return q_stats(contract)
 
 
 def _get_tops(contract, args):
@@ -179,6 +186,11 @@ def _get_related(contract, args):
         f"related:{asset_id}:{limit}", lambda: q_related(contract, asset_id, limit))
 
 
+#: 按账本版本缓存的筛选项口径：状态页与取值有限的几组筛选。
+FACET_STATES = frozenset({"", "fresh", "played", "flagged", "later"})
+FACET_ENUM_FILTERS = frozenset({"loc", "len", "orient", "region", "exclude_vertical", "thumb", "library"})
+
+
 def _get_facets(contract, args):
     jav = args.get("jav") == "1"
     scope_kind = str(args.get("scope_kind", ""))
@@ -189,17 +201,25 @@ def _get_facets(contract, args):
     filters = {key: args[key] for key in (
         'loc', 'creator', 'performer', 'studio', 'series', 'agency', 'tag', 'tag_match',
         'len', 'dur_min', 'dur_max', 'orient', 'region', 'exclude_vertical', 'q', 'thumb',
-        'library', 'folder', 'folder_recursive',
+        'library', 'folder', 'folder_recursive', 'year',
     ) if args.get(key)}
+    if not filters.get("tag"):
+        filters.pop("tag_match", None)
     scope_key += repr(sorted(filters.items()))
-    return contract.cached(
-        f"facets{'-jav' if jav else ''}:{scope_key}",
-        lambda: q_facets(
-            contract,
-            jav=jav, scope_kind=scope_kind, scope_name=scope_name, asset_id=asset_id,
-            state=state, filters=filters or None,
-        ),
+    compute = lambda: q_facets(  # noqa: E731
+        contract,
+        jav=jav, scope_kind=scope_kind, scope_name=scope_name, asset_id=asset_id,
+        state=state, filters=filters or None,
     )
+    # 首页与侧栏几组枚举筛选（来源、时长、画幅、产地、媒体库）的组合有限，按账本版本缓存；
+    # 实体、详情、搜索词、标签与时长区间的键空间不封闭，照旧走 TTL 缓存。
+    if (not (scope_kind or scope_name or asset_id is not None) and state in FACET_STATES
+            and set(filters) <= FACET_ENUM_FILTERS):
+        library = (repr(media_libraries.predicate(settings_file.active(), filters['library']))
+                   if 'library' in filters else '')
+        return contract.cached_until_changed(
+            f"facets{'-jav' if jav else ''}:{scope_key}", compute, library, tables=FACETS_TABLES)
+    return contract.cached(f"facets{'-jav' if jav else ''}:{scope_key}", compute)
 
 
 def _get_suggest(contract, args):
@@ -242,10 +262,8 @@ def _get_search_history(contract, args):
 
 
 def _get_taste(contract, args):
-    window = str(args.get("window") or "all")
-    return contract.cached_until_changed(
-        f"taste:{window}", lambda: q_taste(contract, {"window": window}),
-        *taste_inputs(contract, window))
+    return taste_snapshot(contract, str(args.get("window") or "all"),
+                          retry=str(args.get("retry") or "") == "1")
 
 
 def _get_review(contract, args):
@@ -254,7 +272,9 @@ def _get_review(contract, args):
     payload = contract.cached_until_changed(
         "review", lambda: q_review(contract),
         candidate_root_version(contract.candidate_root),
-        path_version(contract.cover_root), path_version(contract.avatar_root))
+        path_version(contract.cover_root), path_version(contract.avatar_root),
+        tables=("asset", "asset_entity", "entity", "entity_alias", "entity_redirect",
+                "review_decision", "genre_decision"))
     # 数据管理页只要一个待复核条数。完整 payload 带着每条候选的全文，实测是
     # 兆级；卡片上的一个数字不值这趟传输，但计数本身仍来自同一份缓存快照，
     # 不另立一套口径。
@@ -316,7 +336,14 @@ def _post_empty_trash(contract, _body):
     return w_empty_trash(contract)
 
 
+def _post_face_models(contract, _body):
+    """活动中心「立即重试」：后台开一轮取人脸模型，进度与结果看 `/api/tasks`。"""
+    from . import face_models
+    return contract.face_models_job.start_result(face_models.download_all)
+
+
 GET_HANDLERS = {
+    "/api/tag-management": q_tag_management,
     "/api/media-processing": q_media_processing,
     "/api/folders": q_folders,
     "/api/tasks": q_tasks,
@@ -324,7 +351,6 @@ GET_HANDLERS = {
     "/api/resources/search": q_resource_search,
     "/api/jav/detail": q_jav_detail,
     "/api/jav/reviews": q_jav_reviews,
-    "/api/jav/image": q_jav_image,
     "/api/jav/resources": q_jav_resources,
     "/api/jav/discoveries": q_jav_discoveries,
     "/api/library-processing": q_library_processing,
@@ -340,6 +366,7 @@ GET_HANDLERS = {
     "/api/feeds/check": q_feed_check,
     "/api/feeds/discoveries": q_feed_discoveries,
     "/api/feeds/lookup": q_feed_lookup,
+    "/api/feeds/schedule": q_feed_schedule,
     "/api/follow": q_follow,
     "/api/follow/credentials": q_follow_credentials,
     "/api/follow/tags": q_follow_tags,
@@ -354,6 +381,7 @@ GET_HANDLERS = {
     "/api/media-repair": q_media_repair,
     "/api/orphan-records": q_orphan_records,
     "/api/organize": q_organize,
+    "/api/organize/example": q_organize_example,
     "/api/items": q_items,
     "/api/item": _get_item,
     "/api/parts": q_parts,
@@ -384,6 +412,8 @@ GET_HANDLERS = {
 }
 
 POST_HANDLERS = {
+    "/api/tag-management": w_tag_management,
+    "/api/tag-management/preview": w_tag_preview,
     "/api/media-processing": w_media_processing,
     "/api/folders/preview": w_folder_preview,
     "/api/folders/rule": w_folder_rule,
@@ -400,14 +430,17 @@ POST_HANDLERS = {
     "/api/feeds/check": w_feed_check,
     "/api/feeds/source": w_feed_source,
     "/api/feeds/discovery": w_feed_discovery,
+    "/api/feeds/schedule/run": w_feed_schedule_run,
     "/api/follow/check": w_follow_check,
     "/api/follow/schedule": w_follow_schedule,
+    "/api/follow/schedule/run": w_follow_schedule_run,
     "/api/follow/source": w_follow_source,
     "/api/follow/author-alias": w_follow_author_alias,
     "/api/follow/creator": w_follow_creator,
     "/api/follow/resolve": w_follow_resolve,
     "/api/follow/credential": w_follow_credential,
     "/api/follow/status": w_follow_status,
+    "/api/follow/tag": w_follow_tag,
     "/api/follow/media/hide": w_follow_media_hide,
     "/api/follow/image-dims": w_follow_image_dims,
     "/api/follow/save": w_follow_save,
@@ -444,6 +477,7 @@ POST_HANDLERS = {
     "/api/library-shortcuts": w_library_shortcuts,
     "/api/entity-name": w_entity_name,
     "/api/entity-alias": w_entity_alias,
+    "/api/face-models": _post_face_models,
 }
 
 
@@ -451,6 +485,7 @@ POST_HANDLERS = {
 #: 不该拦它们——「查找」只联网、「存凭据」只写本机 secrets 文件，都不碰账本。
 #: 追更的「查找」在只读端被拦成 409 是实测踩到的。
 READ_ONLY_POST_ROUTES = frozenset({
+    "/api/tag-management/preview",
     "/api/media-processing",
     "/api/folders/preview",
     "/api/custom-metadata",
@@ -462,6 +497,8 @@ READ_ONLY_POST_ROUTES = frozenset({
     "/api/media-repair",
     # 整理的预览只出一份计划 CSV，不动文件也不改账本；执行与回滚不在这里。
     "/api/organize/preview",
+    # 人脸模型存在本机 tools 目录，取一次不碰账本。
+    "/api/face-models",
 })
 # `/api/resource-sync/apply` 不在上面：它永久删除文件已不在盘上的账本行，走的是
 # `purge_assets`。检查那一步只读盘，候选留在进程内存里；它在任务中心的那一行

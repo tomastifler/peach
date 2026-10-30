@@ -43,6 +43,7 @@ RETRY_SECONDS = 3600
 SOURCE_ICON_URLS: dict[str, str] = {
     "fanbox": "https://www.fanbox.cc/favicon.ico",
     "patreon": "https://www.patreon.com/favicon.ico",
+    "iwara": "https://www.iwara.tv/logo.png",
     "subscribestar": "https://assets.subscribestar.com/assets/public/images/favicons/"
                      "favicon-32x32-b9aa1e7e5bab6cb1b28b5161e16f9d42.png",
     "kemono": "https://kemono.cr/assets/favicon-CPB6l7kH.ico",

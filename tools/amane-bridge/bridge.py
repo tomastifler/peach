@@ -5,7 +5,7 @@
 与网络层——`amane.crawlers.sites.<站>`、`amane.crawlers.http`、`amane.net.*`；不碰
 `amane.aggregate`（它把配置层与数据库层一起拖进来，聚合逻辑 Peach 自己在
 `metadata_policy` 里做），也不经 `observability.invoke_source`（失败原因会被它吞进
-Recorder，返回值只剩站点名）。这里自己 catch `SourceError`，把 `FailureReason` 那 17 档
+Recorder，返回值只剩站点名）。这里自己 catch `SourceError`，把 `FailureReason` 的分类
 原样写进 JSON，冷却与分档由 Peach 一侧决定。
 
 已知代价：`amane.crawlers` 的包 `__init__` 会连带 SQLAlchemy 等模块（实测导入约 0.6～1 秒），
@@ -61,12 +61,12 @@ LANGUAGES = ("jp", "zh_cn", "zh_tw", "en")
 
 EXIT_FOUND, EXIT_NOT_FOUND, EXIT_FAILED, EXIT_USAGE = 0, 2, 3, 4
 
-#: 上游 `FailureReason` 的全部取值，照抄 `amane/net/errors.py`。桥不解释它们，只保证写进
+#: 上游 `FailureReason` 的全部取值，来自 `amane/net/errors.py`。桥不解释它们，只保证写进
 #: JSON 的 `reason` 落在这张表里；上游加档时这里要跟着改，Peach 一侧的映射也是。
 FAILURE_REASONS = (
     "http_error", "api_error", "not_found", "rate_limited", "server_error", "timeout", "network",
     "cloudflare_challenge", "cloudflare_blocked", "ip_banned", "geo_restricted",
-    "age_verification", "empty_response", "no_usable_metadata", "parse_error",
+    "age_verification", "login_required", "empty_response", "no_usable_metadata", "parse_error",
     "crawler_unavailable", "unexpected",
 )
 
@@ -193,6 +193,9 @@ async def run(runtime: Runtime, number: str, sites: list[str], *, language: str 
         "language": language or "",
         "sites": dict(zip(sites, records)),
         "amane": {"version": runtime.version},
+        "transport": {"stdout_encoding": sys.stdout.encoding,
+                      "stderr_encoding": sys.stderr.encoding,
+                      "frozen": bool(getattr(sys, 'frozen', False))},
     }
 
 
@@ -207,8 +210,9 @@ def exit_code(report: dict) -> int:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
-    parser.add_argument("--number", required=True, help="规范化番号")
-    parser.add_argument("--sites", required=True, help="逗号分隔的站名，见 SITES")
+    parser.add_argument("--self-check", action="store_true", help="离线载入运行时与全部站点类")
+    parser.add_argument("--number", default="", help="规范化番号")
+    parser.add_argument("--sites", default="", help="逗号分隔的站名，见 SITES")
     parser.add_argument("--language", default="jp", choices=(*LANGUAGES, ""),
                         help="amane 的 Language；空串表示不指定")
     parser.add_argument("--proxy", default=None,
@@ -227,6 +231,18 @@ def main(argv: list[str] | None = None, runtime: Runtime | None = None,
         args = parse_args(argv)
     except SystemExit as exc:
         return EXIT_USAGE if exc.code else 0
+    if args.self_check:
+        try:
+            active = runtime or load_runtime()
+            for site in SITES:
+                active.crawler(site)
+            report = {"ok": True, "amane": {"version": active.version}, "sites": list(SITES)}
+            code = EXIT_FOUND
+        except Exception as error:
+            report = {"ok": False, "error": f"amane 加载失败：{type(error).__name__}: {error}"}
+            code = EXIT_FAILED
+        print(json.dumps(report, ensure_ascii=False), file=out, flush=True)
+        return code
     number = str(args.number or "").strip()
     sites = [part.strip() for part in str(args.sites).split(",") if part.strip()]
     unknown = [site for site in sites if site not in SITES]
@@ -250,4 +266,7 @@ def main(argv: list[str] | None = None, runtime: Runtime | None = None,
 
 
 if __name__ == "__main__":
+    # 冻结程序不读取 PYTHONIOENCODING；重定向后的默认编码可能仍是 Windows GBK。
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     sys.exit(main())

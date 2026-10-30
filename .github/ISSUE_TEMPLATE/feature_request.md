@@ -17,3 +17,4 @@ type: Feature
 ## 补充（可选）/ Additional context (optional)
 
 <!-- 现有替代方案、截图或参考链接。/ Current workarounds, screenshots, or reference links. -->
+<!-- 公开截图和录屏使用不含露骨画面的演示资料，并遮盖隐私信息。/ Use demo data without sexually explicit imagery in public screenshots and recordings, and redact private information. -->

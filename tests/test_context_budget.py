@@ -49,6 +49,9 @@ class ContextBudgetTests(unittest.TestCase):
         )
         for name, budget in self.checker.BYTE_BUDGET.items():
             self.assertLessEqual(budget, self.checker.MAX_EVER_BYTES[name], name)
+        self.assertLessEqual(
+            self.checker.SKILL_MAX_BYTES, self.checker.MAX_EVER_BYTES["SKILL.md"]
+        )
 
     def test_raising_a_budget_without_a_reason_is_reported(self):
         original = dict(self.checker.BUDGET_CHANGES)
@@ -166,6 +169,46 @@ class ContextBudgetTests(unittest.TestCase):
             )
             problems, _ = self.checker.check_skills(root)
         self.assertTrue(any("description" in problem for problem in problems), problems)
+
+    def test_skill_utf8_bytes_are_checked_within_the_line_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            skill_dir = root / ".claude" / "skills" / "sized"
+            skill_dir.mkdir(parents=True)
+            header = SKILL_TEMPLATE.format(
+                name="sized", description="描述", reviewed="2026-10-26"
+            )
+            limit = self.checker.SKILL_MAX_BYTES
+            row = "字" * 100 + "\n"
+            rows = (limit - len(header.encode("utf-8"))) // len(row.encode("utf-8"))
+            within = header + row * rows
+            path = skill_dir / "SKILL.md"
+            path.write_text(within, encoding="utf-8", newline="\n")
+            self.assertLess(len(within.splitlines()), self.checker.SKILL_MAX_LINES)
+            problems, _ = self.checker.check_skills(root)
+            self.assertEqual(problems, [])
+            path.write_text(within + row, encoding="utf-8", newline="\n")
+            problems, _ = self.checker.check_skills(root)
+            self.assertEqual(len(problems), 1, problems)
+            self.assertIn("字节", problems[0])
+            self.assertEqual(self.checker.check_line_lengths(root), [])
+
+    def test_skill_line_length_is_checked_independently_of_total_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            skill_dir = root / ".claude" / "skills" / "line"
+            skill_dir.mkdir(parents=True)
+            text = SKILL_TEMPLATE.format(
+                name="line", description="描述", reviewed="2026-10-26"
+            )
+            path = skill_dir / "SKILL.md"
+            path.write_text(text + "字" * self.checker.MAX_LINE_CHARS, encoding="utf-8")
+            self.assertEqual(self.checker.check_line_lengths(root), [])
+            path.write_text(text + "字" * (self.checker.MAX_LINE_CHARS + 1), encoding="utf-8")
+            self.assertLess(path.stat().st_size, self.checker.SKILL_MAX_BYTES)
+            problems = self.checker.check_line_lengths(root)
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn(".claude/skills/line/SKILL.md", problems[0])
 
     def test_index_and_files_must_match(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -10,8 +10,9 @@ import io
 import sqlite3
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import closing, redirect_stdout
 from pathlib import Path, PureWindowsPath
+from unittest import mock
 
 from peach import scan, subtitles
 from support.ledger import fresh_ledger
@@ -346,7 +347,8 @@ class SubtitleApiTests(unittest.TestCase):
                          ["ABP-758.chs.srt", "ABP-758.en.srt", "ABP-758.jp.srt"])
         self.assertEqual([track["index"] for track in tracks], [0, 1, 2])
         self.assertEqual(tracks[0]["label"], "简体中文")
-        self.assertEqual(tracks[0]["src"], "/api/assets/1/subtitles/0")
+        self.assertEqual(tracks[0]["src"],
+                         f"/api/assets/1/subtitles/0?track={subtitles.file_key('ABP-758.chs.srt')}")
         self.assertTrue(tracks[0]["playable"])
         self.assertEqual(tracks[1]["note"], "Not in the main video's directory")
         self.assertEqual(tracks[2]["note"], "Encoding not recognized")
@@ -359,6 +361,61 @@ class SubtitleApiTests(unittest.TestCase):
         self.assertTrue(response.headers["content-type"].startswith("text/vtt"))
         self.assertIn("00:00:01.000 --> 00:00:02.000", response.text)
         self.assertIn("简体台词", response.text)
+
+    def test_same_directory_files_are_discovered_without_registration(self):
+        sibling = self.media / "ABP-758.srt"
+        sibling.write_text("1\n00:00:00,000 --> 00:00:05,000\n同目录字幕\n", encoding="utf-8")
+        (self.media / "OTHER-123.mp4").write_bytes(b"0")
+        (self.media / "OTHER-123.srt").write_text("无关字幕", encoding="utf-8")
+        nested = self.media / "ABP-758.trickplay"
+        nested.mkdir()
+        (nested / "ABP-758.ass").write_text("不遍历子目录", encoding="utf-8")
+        with self._client() as client:
+            tracks = client.get("/api/assets/1/subtitles").json()["subtitles"]
+            self.assertEqual(len(tracks), 4)
+            found = next(row for row in tracks if row["name"] == sibling.name)
+            self.assertTrue(found["playable"])
+            self.assertTrue(found["id"].startswith("sidecar:local:"))
+            self.assertIn("同目录字幕", client.get(found["src"]).text)
+            self.assertEqual(sum(row["name"] == "ABP-758.chs.srt" for row in tracks), 1)
+        with closing(sqlite3.connect(self.db)) as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM asset_subtitle").fetchone()[0], 3)
+
+    def test_discovered_track_identity_survives_directory_changes(self):
+        (self.media / "ABP-758.srt").write_text("1\n00:00:00,000 --> 00:00:05,000\n原字幕\n", encoding="utf-8")
+        with self._client() as client:
+            tracks = client.get("/api/assets/1/subtitles").json()["subtitles"]
+            original = next(row for row in tracks if row["name"] == "ABP-758.srt")
+            (self.media / "ABP-758.fr.srt").write_text("1\n00:00:00,000 --> 00:00:05,000\n新字幕\n", encoding="utf-8")
+            self.assertIn("原字幕", client.get(original["src"]).text)
+            current = client.get("/api/assets/1/subtitles").json()["subtitles"]
+            self.assertEqual(next(row for row in current if row["name"] == "ABP-758.srt")["id"], original["id"])
+            (self.media / "ABP-758.srt").unlink()
+            self.assertEqual(client.get(original["src"]).status_code, 404)
+
+    def test_discovery_stays_inside_authorized_media_roots(self):
+        from peach.routes_media import _subtitle_rows
+        with self._client() as client:
+            state = client.app.state
+            state.media_engine.filesystem.allowed_roots = (self.outside,)
+            with mock.patch("peach.routes_media.subtitles.discover_sidecars") as discover:
+                _subtitle_rows(state, 1)
+            discover.assert_not_called()
+
+    def test_discovered_identity_is_stable_when_the_file_is_registered(self):
+        path = self.media / "ABP-758.srt"
+        path.write_text("1\n00:00:00,000 --> 00:00:05,000\n旁挂字幕\n", encoding="utf-8")
+        with self._client() as client:
+            first = next(row for row in client.get("/api/assets/1/subtitles").json()["subtitles"]
+                         if row["name"] == path.name)
+            with closing(sqlite3.connect(self.db)) as connection, connection:
+                subtitles.record(connection, "local", [subtitles.Sidecar(
+                    str(path), path.name, "srt", "", subtitles.EXACT, str(self.video))], "2026-10-23")
+            current = next(row for row in client.get("/api/assets/1/subtitles").json()["subtitles"]
+                           if row["name"] == path.name)
+            self.assertEqual(current["id"], first["id"])
+            self.assertTrue(current["legacy_id"].startswith("sidecar:"))
+            self.assertIn("旁挂字幕", client.get(first["src"]).text)
 
     def test_a_path_outside_the_video_directory_is_refused(self):
         with self._client() as client:

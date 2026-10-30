@@ -1,7 +1,7 @@
 """把数据库中的媒体路径转换为当前系统可以读取的文件路径。
 
-账本里的 `asset.path` 一律是 Windows 形态的绝对路径：`R:\\media\\...`（本地硬盘）、
-`A:\\...`（PikPak）、`B:\\...`（115）。这是不变量，不随平台改写。
+账本里的 `asset.path` 一律是 Windows 形态的绝对路径，前缀取自媒体目录配置。
+来源由配置声明，与具体盘符无关；读取时按本机挂载目录转换。
 
 `asset.location` 保存媒体来源的键，例如 local、115、pikpak（见 `media_sources.SOURCE_REGISTRY`）。
 `[media.locations]` 保存每个来源在数据库中的目录前缀；`[media.mounts]` 保存本机实际目录。
@@ -58,8 +58,11 @@ def location_mounts() -> dict[str, tuple[Path, ...]]:
     merged: dict[str, tuple[str, ...]] = dict(settings_file.active().mounts)
     for location, mount in _parse_override(os.environ.get(MOUNTS_ENV, "")):
         merged[location] = (mount,) if mount else ()
-    return {location: tuple(Path(mount) for mount in mounts)
-            for location, mounts in merged.items() if mounts}
+    declared = settings_file.active().locations
+    return {location: tuple(Path(mount) if mount else (
+                Path(declared[location][index]) if os.name == "nt" and index < len(declared.get(location, ()))
+                else UNMAPPED_ROOT / location / str(index))
+            for index, mount in enumerate(mounts)) for location, mounts in merged.items() if mounts}
 
 
 def location_roots() -> dict[str, tuple[str, ...]]:
@@ -110,6 +113,10 @@ def resolve_location(
 def root_status(root: Path) -> str:
     """以目录首条读取判断挂载状态；空目录可读也算在线。"""
     try:
+        from .smb_media import SmbResource
+        if isinstance(root, SmbResource):
+            root.scandir()
+            return 'ok'
         with os.scandir(root) as entries:
             next(iter(entries), None)
     except PermissionError:
@@ -136,6 +143,11 @@ def within_root(path: Path, root: Path) -> bool:
     字面比较先走一遍；不匹配时用 inode 比较兜底，因为账本里是 `R:\\Media`
     而授权根是 `/Volumes/Media/media`，exFAT/NTFS 大小写不敏感、pathlib 不是。
     """
+    from .smb_media import SmbResource
+    if isinstance(path, SmbResource) or isinstance(root, SmbResource):
+        if not isinstance(path, SmbResource) or not isinstance(root, SmbResource):
+            return False
+        return (path.root_id == root.root_id and path.relative[:len(root.relative)] == root.relative)
     if path == root or root in path.parents:
         return True
     depth = len(root.parts)
@@ -150,9 +162,16 @@ def within_root(path: Path, root: Path) -> bool:
 def system_volume() -> Path:
     """磁盘闸门看的那块盘。
 
-    CloudDrive 会把下载块缓存到系统盘：Windows 是 `C:`，macOS 是根卷。
+    Windows 读取系统目录所在卷，其他平台使用根卷。
     """
-    return Path("C:/") if os.name == "nt" else Path("/")
+    if os.name != "nt":
+        return Path("/")
+    import ctypes
+    buffer = ctypes.create_unicode_buffer(32768)
+    length = ctypes.windll.kernel32.GetWindowsDirectoryW(buffer, len(buffer))
+    if not 0 < length < len(buffer):
+        raise OSError("未取得 Windows 系统目录")
+    return Path(PureWindowsPath(buffer.value).anchor)
 
 
 def is_windows_path(raw: str | os.PathLike[str]) -> bool:
@@ -167,13 +186,18 @@ def is_unmapped(path: Path) -> bool:
 def translate_ledger_path(raw: str | os.PathLike[str]) -> Path:
     """把账本里的 Windows 路径翻译成本机路径；非 Windows 形态原样返回。"""
     text = os.fspath(raw)
-    if os.name == "nt" or not is_windows_path(text):
+    from .smb_media import resolve
+    if resolve(text) is not None:
+        return UNMAPPED_ROOT / 'smb'
+    if not is_windows_path(text):
         return Path(text)
     location, index, tail = resolve_root(text)
     if location is not None:
         mounts = location_mounts().get(location, ())
-        if index < len(mounts):
+        if index < len(mounts) and str(mounts[index]) not in ("", "."):
             return mounts[index].joinpath(*tail)
+    if os.name == "nt":
+        return Path(text)
     # 未配置的路径前缀或未挂载的来源转换到 UNMAPPED_ROOT，供读取端识别并拒绝访问。
     # 保留盘符和其余层级，方便日志中定位原路径。
     parts = PureWindowsPath(text).parts
@@ -182,5 +206,6 @@ def translate_ledger_path(raw: str | os.PathLike[str]) -> Path:
 
 def translate_roots(roots) -> tuple[Path, ...]:
     """翻译一组授权根，丢掉本机没有挂载的来源。"""
-    translated = [translate_ledger_path(root) for root in roots]
+    from .smb_media import resolve
+    translated = [resolve(root) or translate_ledger_path(root) for root in roots]
     return tuple(path for path in translated if not is_unmapped(path))

@@ -61,6 +61,9 @@ def finish(output: Path, lock: dict) -> dict:
         for name in ('build_untrunc_windows.sh', 'fetch_untrunc_sources.py',
                      'fetch_ffmpeg_sources.py', 'untrunc-sources.json'):
             package.write(SCRIPT_DIR / name, f'scripts/{name}')
+        for name in ('__init__.py', 'user_agent.py'):
+            package.write(SCRIPT_DIR.parent / 'src/peach' / name, f'src/peach/{name}')
+        package.write(SCRIPT_DIR.parent / 'LICENSE', 'licenses/Peach-LICENSE.txt')
         package.writestr('README.md', instructions)
         package.write(output / 'buildconf.txt', 'buildconf.txt')
         package.write(output / 'build-environment.txt', 'build-environment.txt')

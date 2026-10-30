@@ -1,4 +1,4 @@
-"""按提交影响生成 CI 矩阵；主线全量、Windows 系统回归与独立安装共同验收。"""
+"""按已验证基线与提交影响生成 CI 矩阵，未知范围与手动验证使用全量。"""
 from __future__ import annotations
 
 import argparse
@@ -12,6 +12,7 @@ if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
     __package__ = "scripts"
 ROOT = Path(__file__).resolve().parents[1]
+AUTO_SHARD_FILES = 150
 
 
 def browser_matrix(root: Path = ROOT, count: int = 6) -> dict:
@@ -72,14 +73,18 @@ def browser_input(path: str) -> bool:
 def plan(event: str, paths: list[str], contents: dict | None = None) -> dict:
     from . import test_runner as runner
     scopes, _ = runner.scopes_for_changes(paths, contents=contents)
-    wide = event in {"push", "workflow_dispatch"} or "full" in scopes
+    wide = event == "workflow_dispatch" or "full" in scopes
+    runtime_tools = wide or scopes != ("checks",)
+    selected_count = len({path for scope in scopes for path in runner.selected_files(scope)}) if not wide else 0
     rows = []
     for system in ("macos-latest", "windows-latest"):
         scope = "full" if wide else "auto"
         # 独立 runner 承担分片，避免共享文件、端口和全量证据锁。
-        shards = (4 if system == "windows-latest" else 2) if scope == "full" else 1
+        split = wide or (system == "windows-latest" and selected_count >= AUTO_SHARD_FILES)
+        shards = (4 if system == "windows-latest" else 2) if split else 1
         for index in range(shards):
             rows.append({"os": system, "python": "3.14", "scope": scope,
+                         "runtime_tools": runtime_tools,
                          "shard_index": index, "shard_count": shards})
     wheels = [{"os": "windows-latest", "python": "3.14"},
               {"os": "macos-latest", "python": "3.14"}]
@@ -102,6 +107,23 @@ def plan(event: str, paths: list[str], contents: dict | None = None) -> dict:
             "vendor": vendor, "wheel": wheel, "required_jobs": required}
 
 
+def github_verified_base(root: Path) -> str:
+    """最近成功的主线 Test 必须属于当前祖先，失败区间继续包含在差异内。"""
+    from .ci_scope import ancestor_of_head, verified_base
+    repo = os.environ['GITHUB_REPOSITORY']
+    payload = subprocess.check_output(
+        ['gh', 'api', f'repos/{repo}/actions/workflows/test.yml/runs?branch=master&event=push&status=success&per_page=20'],
+        text=True, encoding='utf-8')
+    runs = json.loads(payload)['workflow_runs']
+    rows = [{'sha': run['head_sha'], 'status': 'success'} for run in runs
+            if run.get('conclusion') == 'success' and run.get('event') == 'push' and run.get('head_branch') == 'master']
+    current = subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True, encoding='utf-8').strip()
+    base = verified_base(rows, current, ancestor_of_head(root))
+    if base is None:
+        raise ValueError('最近成功的主线 Test 中没有当前提交的祖先')
+    return base
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--event", choices=("push", "pull_request", "workflow_dispatch"))
@@ -117,17 +139,24 @@ def main() -> None:
         parser.error("生成计划需要 --event 与 --base")
     from . import test_runner as runner
     root = Path(__file__).resolve().parents[1]
+    base = args.base
     try:
-        paths = runner.changed_files(root, args.base)
-        result = plan(args.event, paths, runner.changed_contents(root, args.base, paths))
-    except subprocess.CalledProcessError:
+        if args.event == 'push':
+            base = github_verified_base(root)
+        paths = runner.changed_files(root, base)
+        result = plan(args.event, paths, runner.changed_contents(root, base, paths))
+    except (OSError, KeyError, ValueError, subprocess.CalledProcessError) as error:
         # 首次推送、浅克隆或已删除基线：扩大验证，不能把无 diff 当成无需测试。
+        print(f'已验证基线未取得，使用全量：{error}', file=sys.stderr)
         result = plan("workflow_dispatch", [])
+    result['base'] = base
     print(json.dumps(result, ensure_ascii=False, indent=2))
     if output := os.environ.get("GITHUB_OUTPUT"):
         with Path(output).open("a", encoding="utf-8") as stream:
             for key in result:
-                stream.write(f"{key}={json.dumps(result[key])}\n")
+                value = result[key]
+                encoded = value if isinstance(value, str) else json.dumps(value)
+                stream.write(f"{key}={encoded}\n")
 
 
 if __name__ == "__main__":

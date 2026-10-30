@@ -1,0 +1,413 @@
+workflow:
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/ && $CI_COMMIT_REF_PROTECTED == "true"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+      when: never
+    - if: '$CI_COMMIT_BRANCH'
+
+stages: [prepare, verify, package, validate, media, build, smoke, publish]
+
+default:
+  tags: [docker]
+
+variables:
+  GIT_DEPTH: "0"
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
+  UV_LINK_MODE: copy
+  UV_CACHE_DIR: "$CI_PROJECT_DIR/.uv-cache"
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"
+  npm_config_fetch_retries: "5"
+  npm_config_fetch_retry_mintimeout: "10000"
+  npm_config_fetch_retry_maxtimeout: "60000"
+  PEACH_DOWNLOAD_BACKEND: both
+  PEACH_R2_BUCKET: peach-releases
+  PEACH_R2_PUBLIC_BASE: https://downloads.peach.video
+
+# 回归口径（ADR-0119）：分支与合并请求验证改动域及平台敏感用例，必要时使用全量范围。
+# 版本提交的演练使用三平台全量范围；标签流水线复核同提交的演练结果后晋级产物并发布。
+# 正式验证使用有效证明续跑；缓存缺失或证明失效时执行必要测试。
+# 改动域随时可能退成全量，所以两种作业的时限都按全量定。
+.verify-linux:
+  stage: verify
+  image: node:24-bookworm
+  # 全量回归连同装依赖 13–20 分钟。
+  timeout: 45m
+  cache:
+    - when: always
+      key:
+        files: [uv.lock, frontend/package-lock.json]
+      paths: [.uv-cache/, .npm/]
+    - when: always
+      key: "test-evidence-v1-$CI_JOB_NAME-$CI_COMMIT_REF_SLUG-$CI_COMMIT_REF_PROTECTED"
+      paths: [build/agent-verification/*.json]
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends python3-pip chromium ffmpeg xvfb xauth
+    - python3 -m pip install --break-system-packages uv==0.13.3
+    - uv sync --locked --all-extras --python 3.14
+    - python3 -X utf8 scripts/npm_ci.py --ignore-scripts
+    - python3 -X utf8 scripts/npm_ci.py --prefix frontend
+    - export PEACH_E2E_CHROME=/usr/bin/chromium
+    - test -x "$PEACH_E2E_CHROME"
+    - ffmpeg -version
+  script:
+    - npm run check:vendor
+    - npm --prefix frontend run build
+    - test -z "$(git status --porcelain --untracked-files=all -- web/dist)"
+    - uv run --locked python scripts/npm_audit.py
+    - uv run --locked python scripts/npm_audit.py --prefix frontend
+    - xvfb-run -a bash scripts/ci_verify.sh linux "$PEACH_CI_COVERAGE"
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - build/agent-verification/browser/*.tap
+      - build/agent-verification/browser/serve.log
+      - build/agent-verification/browser/setup-serve.log
+      - build/test-history/
+
+# 三平台验收在版本提交上由演练规则改成全量；标签核对成功演练和不可变产物清单后发布。
+verify-linux:
+  extends: .verify-linux
+  needs: [{job: release-preflight, optional: true}]
+  rules:
+    - !reference [.release-rehearsal, rules]
+    - if: '$CI_COMMIT_BRANCH || $CI_PIPELINE_SOURCE == "merge_request_event"'
+  variables:
+    PEACH_CI_COVERAGE: changed
+
+.verify-windows:
+  stage: verify
+  tags: [peach-windows]
+  # 全量回归连同依赖安装约 20–25 分钟；runner 与本机开发会话共用 CPU，并发全量时会翻倍。
+  timeout: 1h 30m
+  cache:
+    when: always
+    key: "test-evidence-v1-$CI_JOB_NAME-$CI_COMMIT_REF_SLUG-$CI_COMMIT_REF_PROTECTED"
+    paths: [build/agent-verification/*.json]
+  script:
+    - '& ./scripts/ci_windows.ps1 verify -Coverage $env:PEACH_CI_COVERAGE'
+    - if ($LASTEXITCODE -ne 0) { throw 'Windows 回归未通过' }
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths: [build/test-history/]
+
+verify-windows:
+  extends: .verify-windows
+  needs: [{job: release-preflight, optional: true}]
+  rules:
+    - !reference [.release-rehearsal, rules]
+    - if: '$CI_COMMIT_BRANCH == "master"'
+  variables:
+    PEACH_CI_COVERAGE: changed
+
+.verify-macos:
+  stage: verify
+  tags: [peach-macos]
+  # 作业脚本约 3 分钟，新 runner 首次检出完整历史约 16 分钟；下载卡住时提前结束。
+  timeout: 45m
+  cache:
+    when: always
+    key: "test-evidence-v1-$CI_JOB_NAME-$CI_COMMIT_REF_SLUG-$CI_COMMIT_REF_PROTECTED"
+    paths: [build/agent-verification/*.json]
+  script:
+    - bash scripts/ci_macos.sh verify arm64 "$PEACH_CI_COVERAGE"
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths: [build/test-history/]
+
+verify-macos:
+  extends: .verify-macos
+  needs: [{job: release-preflight, optional: true}]
+  rules:
+    - !reference [.release-rehearsal, rules]
+    - if: '$CI_COMMIT_BRANCH == "master"'
+  variables:
+    PEACH_CI_COVERAGE: changed
+
+wheel-smoke:
+  stage: package
+  image: ghcr.io/astral-sh/uv:0.13.3-python3.14-trixie-slim
+  rules:
+    - if: '$CI_COMMIT_BRANCH || $CI_PIPELINE_SOURCE == "merge_request_event"'
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends git
+  script:
+    - uv lock --check
+    - uv build --wheel --out-dir build/wheelhouse
+    - uv venv .wheel-smoke --python 3.14
+    - uv pip install --python .wheel-smoke/bin/python build/wheelhouse/*.whl
+    - uv pip check --python .wheel-smoke/bin/python
+    - |
+      cd "$(mktemp -d)"
+      "$CI_PROJECT_DIR/.wheel-smoke/bin/python" "$CI_PROJECT_DIR/scripts/smoke_wheel.py"
+      cd "$CI_PROJECT_DIR"
+      sha256sum build/wheelhouse/*.whl > build/wheelhouse/SHA256SUMS.txt
+  artifacts:
+    expire_in: 14 days
+    paths: [build/wheelhouse/]
+
+# 发版分两步（ADR-0121）：版本提交 `chore(release): 版本 X` 推上 master 时演练整条发布链，三平台验收
+# 改跑全量，媒体、构建、冒烟与镜像都跑，只是不发布；`release_tag.py --ship` 等这条流水线转绿才打标签。
+# 标签流水线晋级演练中已验收的相同产物；任何必需验证失败都不发布（ADR-0127）。
+.release-rehearsal:
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_MESSAGE =~ /^chore\(release\): 版本 /'
+      variables:
+        PEACH_RELEASE_REHEARSAL: "1"
+        PEACH_CI_COVERAGE: full
+
+.release-publish:
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+$/ && $CI_COMMIT_REF_PROTECTED == "true"'
+
+.release-linux:
+  image: ghcr.io/astral-sh/uv:0.13.3-python3.14-trixie-slim
+  rules:
+    - !reference [.release-rehearsal, rules]
+  before_script:
+    - apt-get update
+    - apt-get install -y --no-install-recommends python3 ca-certificates git
+    - python3 -c 'import sys; assert sys.version_info[:2] == (3, 14), sys.version'
+    # 取工具、查发行与下载校验经 peach.peach_proxy 使用 httpx，按锁文件装运行依赖。
+    - uv sync --locked --python 3.14
+    - export PATH="$CI_PROJECT_DIR/.venv/bin:$PATH"
+    - python3 scripts/fetch_release_tools.py
+    - export PATH="$CI_PROJECT_DIR/build/release-tools:$PATH"
+    - export GLAB_ENABLE_CI_AUTOLOGIN=true
+
+release-preflight:
+  extends: .release-linux
+  stage: prepare
+  environment:
+    name: release
+    action: prepare
+  script:
+    - python3 scripts/release_candidate.py preflight
+
+validate-release:
+  extends: .release-linux
+  stage: validate
+  # 核对这个提交的主线流水线（含演练）已经成功：演练里正在跑的就是它自己，所以只在标签上跑。
+  rules: !reference [.release-publish, rules]
+  environment:
+    name: release
+    action: verify
+  script:
+    - python3 scripts/release_tag.py --gitlab-host "$CI_SERVER_HOST" --repo "$CI_PROJECT_PATH" --verify-sha "$CI_COMMIT_SHA"
+    - python3 -c 'import os; from pathlib import Path; from scripts.version_bump import read_version; assert os.environ["CI_COMMIT_TAG"] == "v" + read_version(Path.cwd())'
+    - python3 scripts/changelog.py --notes "${CI_COMMIT_TAG#v}" --to build/release-notes.md
+    - python3 scripts/release_candidate.py validate
+  artifacts:
+    expire_in: 14 days
+    paths: [build/ci-artifacts/release-candidate.json]
+
+windows-media:
+  extends: .release-linux
+  stage: media
+  needs: [release-preflight]
+  cache:
+    when: always
+    key:
+      prefix: windows-media-v2
+      files: [scripts/ffmpeg-sources.json, scripts/untrunc-sources.json]
+    paths: [build/media-cache/]
+  variables:
+    PEACH_SOURCE_CACHE_BASE: "${PEACH_R2_PUBLIC_BASE}/_sources"
+  environment:
+    name: release
+    action: prepare
+  script:
+    - python3 scripts/ci_r2_artifacts.py restore windows-media
+    - |
+      restored="$(python3 -c 'import json; print(int(json.load(open("build/ci-artifacts/windows-media-resume.json"))["restored"]))')"
+      if [ "$restored" = 0 ]; then
+        apt-get install -y build-essential gcc-mingw-w64-x86-64-posix g++-mingw-w64-x86-64-posix mingw-w64-x86-64-dev nasm pkg-config clang meson ninja-build cmake curl xz-utils
+        python3 scripts/media_build_cache.py windows
+      fi
+      uploaded="$(python3 -c 'import json; print(int(json.load(open("build/ci-artifacts/windows-media-resume.json"))["uploaded"]))')"
+      if [ "$uploaded" = 0 ]; then
+        python3 scripts/ci_r2_artifacts.py push windows-media
+      fi
+  artifacts:
+    expire_in: 14 days
+    paths:
+      - build/ci-artifacts/windows-media.json
+
+build-windows:
+  stage: build
+  tags: [peach-windows]
+  rules: !reference [.release-linux, rules]
+  needs: [windows-media, {job: verify-windows, artifacts: false, optional: true}]
+  environment:
+    name: release
+    action: prepare
+  before_script:
+    - python scripts/fetch_release_tools.py --rclone-only
+    - if ($LASTEXITCODE -ne 0) { throw 'R2 传输工具校验失败' }
+    - python scripts/ci_r2_artifacts.py restore windows-release
+    - if ($LASTEXITCODE -ne 0) { throw 'Windows 产物恢复检查失败' }
+    - if (-not (Get-Content build/ci-artifacts/windows-release-resume.json -Raw | ConvertFrom-Json).restored) { python scripts/ci_r2_artifacts.py pull windows-media }
+    - if ($LASTEXITCODE -ne 0) { throw '媒体构建产物校验失败' }
+  script:
+    # 本机 Windows runner 就是开发机：构建、冒烟与镜像作业和本机测试排同一把整机重负载锁
+    # （scripts/machine_lock.py）。runner 的系统 Python 没有 filelock，用 uv 起一个只带它的临时环境，
+    # 不碰作业里会被 uv sync 改写的 .venv。验证作业经测试入口，入口自己拿这把锁。
+    - if (-not (Get-Content build/ci-artifacts/windows-release-resume.json -Raw | ConvertFrom-Json).restored) { uv run --no-project --with filelock==4.2.4 --python 3.14 python -X utf8 scripts/machine_lock.py -- pwsh -NoProfile -File ./scripts/ci_windows.ps1 build }
+    - if ($LASTEXITCODE -ne 0) { throw 'Windows 构建失败' }
+    - if (-not (Get-Content build/ci-artifacts/windows-release-resume.json -Raw | ConvertFrom-Json).uploaded) { python scripts/ci_r2_artifacts.py push windows-release }
+    - if ($LASTEXITCODE -ne 0) { throw 'Windows 产物暂存失败' }
+  artifacts:
+    expire_in: 14 days
+    paths: [build/ci-artifacts/windows-release.json]
+
+build-macos:
+  stage: build
+  tags: [peach-macos]
+  # 两个架构分别核对工具缓存与对应源码；缓存缺失或构建输入变化时从源码编译。
+  timeout: 2h
+  rules: !reference [.release-linux, rules]
+  needs: [{job: validate-release, optional: true}, {job: verify-macos, artifacts: false, optional: true}]
+  environment:
+    name: release
+    action: prepare
+  cache:
+    when: always
+    key:
+      prefix: macos-media-v2
+      files: [scripts/ffmpeg-sources.json, scripts/untrunc-sources.json]
+    paths: [build/media-cache/]
+  before_script:
+    - python3 scripts/fetch_release_tools.py --rclone-only
+  script:
+    - python3 scripts/ci_r2_artifacts.py restore macos-release
+    - |
+      restored="$(python3 -c 'import json; print(int(json.load(open("build/ci-artifacts/macos-release-resume.json"))["restored"]))')"
+      if [ "$restored" = 0 ]; then
+        bash scripts/ci_macos.sh build arm64
+        bash scripts/ci_macos.sh build x86_64
+      fi
+      uploaded="$(python3 -c 'import json; print(int(json.load(open("build/ci-artifacts/macos-release-resume.json"))["uploaded"]))')"
+      if [ "$uploaded" = 0 ]; then
+        python3 scripts/ci_r2_artifacts.py push macos-release
+      fi
+  artifacts:
+    expire_in: 14 days
+    paths: [build/ci-artifacts/macos-release.json]
+
+smoke-windows:
+  stage: smoke
+  tags: [peach-windows]
+  rules: !reference [.release-linux, rules]
+  needs: [build-windows, candidate-capacity]
+  environment:
+    name: release
+    action: verify
+  before_script:
+    - python scripts/fetch_release_tools.py --rclone-only
+    - if ($LASTEXITCODE -ne 0) { throw 'R2 传输工具校验失败' }
+    - python scripts/ci_r2_artifacts.py pull windows-release
+    - if ($LASTEXITCODE -ne 0) { throw 'Windows 产物下载校验失败' }
+  script:
+    - uv run --no-project --with filelock==4.2.4 --python 3.14 python -X utf8 scripts/machine_lock.py -- pwsh -NoProfile -File ./release/ci_windows.ps1 smoke
+    - if ($LASTEXITCODE -ne 0) { throw 'Windows 独立制品验收失败' }
+
+# 镜像先构建、冒烟，留在这台 runner 上；推送放在 publish-release 成功之后（publish-docker），
+# 安装包、R2 与 Release 任何一步没发出去，Docker Hub 的版本号与 edge 都不动。
+docker-build:
+  stage: smoke
+  tags: [peach-windows]
+  rules: !reference [.release-linux, rules]
+  needs: [{job: validate-release, optional: true}, {job: verify-linux, artifacts: false, optional: true}]
+  environment:
+    name: release
+    action: prepare
+  before_script:
+    - python scripts/fetch_release_tools.py --rclone-only
+    - if ($LASTEXITCODE -ne 0) { throw 'R2 传输工具校验失败' }
+    - python scripts/ci_r2_artifacts.py restore docker-release
+    - if ($LASTEXITCODE -ne 0) { throw '镜像回执恢复检查失败' }
+  script:
+    - uv run --no-project --with filelock==4.2.4 --python 3.14 python -X utf8 scripts/machine_lock.py -- pwsh -NoProfile -File ./scripts/ci_windows.ps1 docker-build
+    - if ($LASTEXITCODE -ne 0) { throw 'Docker 镜像构建或验收失败' }
+    - if (-not (Get-Content build/ci-artifacts/docker-release-resume.json -Raw | ConvertFrom-Json).uploaded) { python scripts/ci_r2_artifacts.py push docker-release }
+    - if ($LASTEXITCODE -ne 0) { throw '镜像验收回执上传失败' }
+
+candidate-capacity:
+  extends: .release-linux
+  stage: smoke
+  needs: [build-windows, build-macos, docker-build]
+  environment:
+    name: release
+    action: verify
+  script:
+    - python3 scripts/release_candidate.py check-capacity
+
+publish-docker:
+  stage: publish
+  tags: [peach-windows]
+  rules: !reference [.release-publish, rules]
+  needs: [publish-release, validate-release]
+  resource_group: peach-docker-publication
+  environment:
+    name: release
+    action: prepare
+  script:
+    - pwsh -NoProfile -File ./scripts/ci_windows.ps1 docker-push
+    - if ($LASTEXITCODE -ne 0) { throw 'Docker 镜像发布失败' }
+
+# 候选登记是演练必需任务；保留暂存，直到桌面包和镜像都成功发布。
+seal-release:
+  extends: .release-linux
+  stage: publish
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master" && $CI_COMMIT_REF_PROTECTED == "true" && $CI_COMMIT_MESSAGE =~ /^chore\(release\): 版本 /'
+      variables:
+        PEACH_RELEASE_REHEARSAL: "1"
+  needs:
+    - {job: smoke-windows, artifacts: false}
+    - {job: build-macos, artifacts: false}
+    - {job: docker-build, artifacts: false}
+    - {job: verify-linux, artifacts: false}
+    - {job: verify-windows, artifacts: false}
+    - {job: verify-macos, artifacts: false}
+    - {job: wheel-smoke, artifacts: false}
+  environment:
+    name: release
+    action: prepare
+  script:
+    - python3 scripts/release_candidate.py seal
+
+publish-release:
+  extends: .release-linux
+  stage: publish
+  rules: !reference [.release-publish, rules]
+  needs: [validate-release]
+  resource_group: peach-release-publication
+  environment:
+    name: release
+    url: https://downloads.peach.video
+  variables:
+    PEACH_R2_BUCKET: peach-releases
+    PEACH_R2_PUBLIC_BASE: https://downloads.peach.video
+  script:
+    - python3 scripts/release_candidate.py pull
+    - cp dist/macos.noindex/arm64/*.dmg dist/macos.noindex/x86_64/*.dmg release/
+    - cp dist/macos.noindex/arm64/*-corresponding-source.zip dist/macos.noindex/x86_64/*-corresponding-source.zip release/
+    - python3 scripts/publish_gitlab_release.py
+
+publication-cleanup:
+  extends: .release-linux
+  rules: !reference [.release-publish, rules]
+  stage: publish
+  needs: [validate-release, publish-release, publish-docker]
+  environment:
+    name: release
+    action: prepare
+  script:
+    - python3 scripts/release_candidate.py cleanup

@@ -2,20 +2,24 @@ import type { ReactNode } from 'react';
 import { esc, firstGrapheme, icon, leadingGraphemes, registerEntityLink } from '@peach/legacy/core';
 import { entityFaceImg, logoUrl } from '@peach/card-art';
 import type { DetailEntityRef } from '../item-detail/item-detail';
+import { entityDisplayName, nameFallback } from '../../core/entity-names';
+import { useEntityNames } from '../use-entity-names';
 
 /** 详情署名共用实体头像、厂牌标识与首字回退。 */
 export function IdentityCell({ kind, person, onOpen, hidden, overflow, face }: {
   kind: string; person: DetailEntityRef; onOpen(kind: string, name: string): void;
   hidden?: boolean; overflow?: boolean; face?: ReactNode;
 }) {
+  useEntityNames();
+  const displayName = entityDisplayName(kind, person.name, person.id);
   const image = kind === 'performer' || kind === 'creator'
-    ? <span data-id-face="" dangerouslySetInnerHTML={{ __html: `<span>${esc(firstGrapheme(person.name))}</span>`
+    ? <span data-id-face="" dangerouslySetInnerHTML={{ __html: `<span>${esc(firstGrapheme(displayName))}</span>`
       + entityFaceImg({ kind, id: person.id, hasImage: person.has_image, version: person.image_version,
         focus: person.avatar_focus, rep: person.has_avatar ? person.rep : null, standIn: person.avatar_stand_in }) }} />
     : <span data-id-face=""><span>{kind === 'studio' ? leadingGraphemes(person.name, 2) : firstGrapheme(person.name)}</span>
-      {kind === 'studio' && person.has_logo ? <img src={logoUrl(person.name, 'icon', person.logo_version)} alt="" loading="lazy" data-drop="self" /> : null}</span>;
-  const content = <>{face ?? image}<span data-id-name="">{person.name}</span></>;
-  const attrs = { 'data-id-cell': kind, title: person.name, hidden, 'data-castoverflow': overflow ? '' : undefined };
+      {kind === 'studio' && person.has_logo ? <img src={logoUrl(person.name, 'icon', person.logo_version)} alt="" width={128} height={128} loading="lazy" decoding="async" data-drop="self" /> : null}</span>;
+  const content = <>{face ?? image}<span data-id-name="">{displayName}</span></>;
+  const attrs = { 'data-id-cell': kind, title: nameFallback(kind, person.name, person.id) || displayName, hidden, 'data-castoverflow': overflow ? '' : undefined };
   return person.id ? <button type="button" {...attrs} data-entity-kind={kind} data-entity-name={person.name}
     onClick={() => { registerEntityLink(kind, person.name, person.id); onOpen(kind, person.name) }}>{content}</button> : <span {...attrs}>{content}</span>;
 }

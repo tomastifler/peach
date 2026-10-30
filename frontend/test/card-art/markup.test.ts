@@ -1,5 +1,5 @@
 /* 卡片、头像与封面那几段 HTML：取哪张图、回落到哪张、取景数据贴在哪一环。 */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   avatarInner, cardArtwork, cardIdentity, coverImage, coverUrl, detailPosterUrl, entityAvatar, entityFaceImg,
@@ -20,7 +20,7 @@ const FOCUS = { axis: 'y', pct: 12, box: { cx: 0.44, cy: 0.22, faceW: 67, imgW: 
 describe('西方官方封面', () => {
   it('无番号作品在卡片、队列和详情使用资产封面键', () => {
     const item = { id: 12, has_cover: true, cover_key: 'ASSET-ID-12', cover_version: 'abc' };
-    const source = '/cover?code=ASSET-ID-12&thumb=1&v=abc';
+    const source = '/cover?code=ASSET-ID-12&thumb=2&v=abc';
     expect(parse(cardArtwork(item, 'big', false, 'cover').html)?.getAttribute('src')).toBe(source);
     expect(parse(queueThumbHtml(item, 'cover'))?.getAttribute('src')).toBe(source);
     expect(detailPosterUrl(item, 'cover')).toBe('/cover?code=ASSET-ID-12&v=abc');
@@ -35,7 +35,7 @@ it('创作者名片官方头像使用本机代理和归档回退，实体图优�
   expect(image.dataset.fallbacks).toBe(ref.source_avatar_fallbacks[0]);
   expect(image.dataset.drop).toBe('self');
   expect(parse(avatarInner('创作者', { ...ref, has_image: true }, null, 'creator'))?.getAttribute('src'))
-    .toBe('/entity-image?kind=creator&id=7');
+    .toBe('/entity-image?kind=creator&id=7&thumb=1');
 });
 
 describe('entityFaceImg：实体图优先，取不到退代表作头像', () => {
@@ -53,14 +53,16 @@ describe('entityFaceImg：实体图优先，取不到退代表作头像', () => 
 
   it('实体图在前，代表作头像排进兜底链；最后一环把图摘掉', () => {
     const img = parse(entityFaceImg({ kind: 'creator', id: 3, hasImage: true, rep: 41 }))!;
-    expect(img.getAttribute('src')).toBe('/entity-image?kind=creator&id=3');
+    expect(img.getAttribute('src')).toBe('/entity-image?kind=creator&id=3&thumb=1');
     expect(img.dataset.fallbacks).toBe('/avatar?id=41');
     expect(img.dataset.drop).toBe('self');
   });
 
-  it('一屏几十格的位置取派生件', () => {
-    expect(parse(entityFaceImg({ id: 3, hasImage: true, thumb: true }))!.getAttribute('src'))
+  it('默认取派生件；资料页大位传 false 取原件', () => {
+    expect(parse(entityFaceImg({ id: 3, hasImage: true }))!.getAttribute('src'))
       .toBe('/entity-image?kind=performer&id=3&thumb=1');
+    expect(parse(entityFaceImg({ id: 3, hasImage: true, thumb: false }))!.getAttribute('src'))
+      .toBe('/entity-image?kind=performer&id=3');
   });
 
   it('换过图的实体地址带上版本，没给版本的地址不变', () => {
@@ -69,7 +71,7 @@ describe('entityFaceImg：实体图优先，取不到退代表作头像', () => 
     // 代表作头像是另一张图，不跟实体图的版本走。
     expect(img.dataset.fallbacks).toBe('/avatar?id=41');
     expect(parse(entityFaceImg({ id: 3, hasImage: true, version: '' }))!.getAttribute('src'))
-      .toBe('/entity-image?kind=performer&id=3');
+      .toBe('/entity-image?kind=performer&id=3&thumb=1');
     // 没有实体图时版本也不出现在任何一环。
     expect(parse(entityFaceImg({ id: 3, hasImage: false, version: '7', rep: 41 }))!.getAttribute('src'))
       .toBe('/avatar?id=41');
@@ -87,7 +89,7 @@ describe('entityFaceImg：实体图优先，取不到退代表作头像', () => 
   it('厂牌走自己的标识，实体图和代表作排在它后面，都不取景', () => {
     const img = parse(entityFaceImg({ kind: 'studio', id: 3, hasImage: true, rep: 41, logo: 'S1 NO.1', logoVariant: 'icon', focus: FOCUS }))!;
     expect(img.getAttribute('src')).toBe('/logo?studio=S1%20NO.1&variant=icon');
-    expect(img.dataset.fallbacks).toBe('/entity-image?kind=studio&id=3|/avatar?id=41');
+    expect(img.dataset.fallbacks).toBe('/entity-image?kind=studio&id=3&thumb=1|/avatar?id=41');
     expect(img.hasAttribute('style')).toBe(false);
     expect(img.dataset.facebox).toBeUndefined();
     expect('dropStyle' in img.dataset).toBe(false);
@@ -149,7 +151,7 @@ describe('avatarInner：首字母垫底，再叠真实图', () => {
 
   it('kind 跟着身份走：创作者的图不写成 performer', () => {
     expect(parse(avatarInner('A', { id: 3, has_image: true }, null, 'creator'))!.getAttribute('src'))
-      .toBe('/entity-image?kind=creator&id=3');
+      .toBe('/entity-image?kind=creator&id=3&thumb=1');
   });
 
   it('卖家引用自带代表作头像，实体图优先，未取得的代表作不出图', () => {
@@ -158,14 +160,14 @@ describe('avatarInner：首字母垫底，再叠真实图', () => {
     expect(avatar.getAttribute('src')).toBe('/avatar?id=18');
     expect(avatar.getAttribute('title')).toBe('Frame from a representative work, not the person');
     const installed = parse(entityAvatar('卖家账号', { ...ref, has_image: true }, 'creator'))!;
-    expect(installed.getAttribute('src')).toBe('/entity-image?kind=creator&id=80');
+    expect(installed.getAttribute('src')).toBe('/entity-image?kind=creator&id=80&thumb=1');
     expect(installed.hasAttribute('title')).toBe(false);
     expect(parse(entityAvatar('卖家账号', { ...ref, has_avatar: false }, 'creator'))).toBeNull();
   });
 
   it('引用上的 image_version 跟着拼进实体图地址', () => {
     expect(parse(avatarInner('A', { id: 3, has_image: true, image_version: '1727800000' }, null))!.getAttribute('src'))
-      .toBe('/entity-image?kind=performer&id=3&v=1727800000');
+      .toBe('/entity-image?kind=performer&id=3&thumb=1&v=1727800000');
   });
 
   it('代表作画面替账号占位时注明不是本人；装了实体图的不注', () => {
@@ -230,12 +232,13 @@ describe('coverImage：官方封面', () => {
       code: 'SSIS-001', cover_frame: { cx: 0.81, cy: 0.9 },
       poster_box: { x0: 421, y0: 0, x1: 800, y1: 538, px: [800, 538] },
     }, 'big'))!;
-    expect(img.getAttribute('src')).toBe('/cover?code=SSIS-001&thumb=1');
+    expect(img.getAttribute('src')).toBe('/cover?code=SSIS-001&thumb=2');
     expect(img.className).toBe('poster cover front');
     expect(img.dataset.cx).toBe('0.81');
     expect(img.dataset.cy).toBe('0.6');
     expect(img.dataset.posterbox).toBe('421 800 538 0 800 538');
     expect(img.getAttribute('loading')).toBe('lazy');
+    expect(img.getAttribute('decoding')).toBe('async');
     expect(img.width).toBeGreaterThan(0);
     expect(img.height).toBeGreaterThan(0);
     expect(img.dataset.drop).toBe('self');
@@ -243,17 +246,32 @@ describe('coverImage：官方封面', () => {
 
   it('补过高清、重探过的封面地址带上版本，派生档摘掉 thumb 后版本还在', () => {
     expect(parse(coverImage({ code: 'SSIS-001', cover_version: '18f3a' }, 'big'))!.getAttribute('src'))
-      .toBe('/cover?code=SSIS-001&thumb=1&v=18f3a');
+      .toBe('/cover?code=SSIS-001&thumb=2&v=18f3a');
     expect(coverUrl({ code: 'SSIS-001', cover_version: '18f3a' })).toBe('/cover?code=SSIS-001&v=18f3a');
     expect(detailPosterUrl({ ...JAV, cover_version: '18f3a' }, 'cover')).toBe('/cover?code=SSIS-001&v=18f3a');
     expect(parse(javArtwork({ ...JAV, cover_version: '18f3a' }, 'big', false, 'thumbnail').html)!.dataset.javCover)
-      .toBe('/cover?code=SSIS-001&thumb=1&v=18f3a');
+      .toBe('/cover?code=SSIS-001&thumb=2&v=18f3a');
+  });
+
+  it('一倍屏的卡片起步取 800 那一档，更密的屏起步取 1600 那一档；换图属性跟着同一档', () => {
+    const shown = (dpr: number) => {
+      vi.stubGlobal('devicePixelRatio', dpr);
+      try {
+        return [parse(coverImage({ code: 'SSIS-001' }, 'big'))!.getAttribute('src'),
+          parse(javArtwork(JAV, 'big', false, 'cover').html)!.dataset.javCover];
+      } finally { vi.unstubAllGlobals(); }
+    };
+    expect(shown(1)).toEqual(['/cover?code=SSIS-001&thumb=2', '/cover?code=SSIS-001&thumb=2']);
+    expect(shown(1.5)).toEqual(['/cover?code=SSIS-001&thumb=2', '/cover?code=SSIS-001&thumb=2']);
+    expect(shown(2)).toEqual(['/cover?code=SSIS-001&thumb=1', '/cover?code=SSIS-001&thumb=1']);
+    expect(coverUrl({ code: 'SSIS-001' }, true)).toBe('/cover?code=SSIS-001&thumb=1');
+    expect(coverUrl({ code: 'SSIS-001' }, 2)).toBe('/cover?code=SSIS-001&thumb=2');
   });
 
   it('小图看整张；没检出人脸就不带锚点', () => {
     const img = parse(coverImage({ code: 'A B' }, 'small', true))!;
     expect(img.className).toBe('poster cover whole');
-    expect(img.getAttribute('src')).toBe('/cover?code=A%20B&thumb=1');
+    expect(img.getAttribute('src')).toBe('/cover?code=A%20B&thumb=2');
     expect(img.getAttribute('loading')).toBe('eager');
     expect(img.dataset.cx).toBeUndefined();
     expect(img.dataset.cy).toBe(undefined);
@@ -271,7 +289,7 @@ describe('javArtwork：番号作品两种来源都挂在元素上', () => {
     expect(art.kind).toBe('cover');
     const img = parse(art.html)!;
     expect(img.dataset.javImage).toBe('5');
-    expect(img.dataset.javCover).toBe('/cover?code=SSIS-001&thumb=1');
+    expect(img.dataset.javCover).toBe('/cover?code=SSIS-001&thumb=2');
     expect(img.dataset.javThumb).toBe('/poster?id=5&c=4');
     expect(img.dataset.javImageLayout).toBe('big');
     expect(img.classList.contains('cover')).toBe(true);
@@ -363,7 +381,7 @@ describe('卡片署名的身份推导', () => {
 
   it('创作者那一格取 creator_entity 的图', () => {
     const html = queueAvatarHtml({ creator: 'cc', creator_entity: { id: 8, has_image: true } });
-    expect(parse(html)!.getAttribute('src')).toBe('/entity-image?kind=creator&id=8');
+    expect(parse(html)!.getAttribute('src')).toBe('/entity-image?kind=creator&id=8&thumb=1');
   });
 
   it('详情队列从 entity_refs 取得共演头像、版本和取景', () => {
@@ -373,14 +391,14 @@ describe('卡片署名的身份推导', () => {
         { id: 9, has_image: false }],
     } });
     expect(host.querySelectorAll('.mav')).toHaveLength(2);
-    expect(host.querySelector('img')?.getAttribute('src')).toBe('/entity-image?kind=performer&id=7846&v=portrait-v2');
+    expect(host.querySelector('img')?.getAttribute('src')).toBe('/entity-image?kind=performer&id=7846&thumb=1&v=portrait-v2');
     expect(host.querySelector('img')?.style.objectPosition).toBe('50% 15%');
     expect(host.querySelectorAll('.mav')[1]?.querySelector('img')).toBeNull();
   });
 
   it('详情队列的创作者头像使用 creator 实体引用', () => {
     const html = queueAvatarHtml({ creator: '创作者', entity_refs: { creator: [{ id: 8, has_image: true }] } });
-    expect(parse(html)!.getAttribute('src')).toBe('/entity-image?kind=creator&id=8');
+    expect(parse(html)!.getAttribute('src')).toBe('/entity-image?kind=creator&id=8&thumb=1');
   });
 });
 

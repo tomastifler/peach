@@ -35,6 +35,8 @@ import {
 
 import { Providers } from '../providers';
 import { LibraryProcessingDock } from '../library-processing/library-processing-dock';
+import { NetworkBanner } from '../network-banner';
+import { ClientUpdateBanner } from '../client-updates';
 import { SettingsMatch } from './pages/settings';
 import {
   BROWSE_ROUTES, CATALOG_PATHS, CATALOG_ROUTES, ENTITY_ROUTES, IMMERSE_ROUTES, INDEX_ROUTES, MANAGED_ROUTES, REDIRECT_ROUTES,
@@ -226,6 +228,8 @@ export function RouterRoot({ children, actions = null, background, processing = 
           <ManagedSurface />
           <QueueRequests />
           {processing && actions ? <LibraryProcessingDock toast={actions.toast} /> : null}
+          {processing && actions ? <NetworkBanner /> : null}
+          {processing && actions ? <ClientUpdateBanner navigate={actions.navigate} /> : null}
           <RouteGroups>{children}</RouteGroups>
         </PeachRouter>
       </ShellActionsContext.Provider>

@@ -15,6 +15,7 @@ from uuid import uuid4
 from filelock import FileLock
 
 from .fsutil import atomic_write_text
+from .upgrade_rules import PUBLIC_SNAPSHOTS
 
 DAY = 86400
 MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024
@@ -82,7 +83,7 @@ class PublicSnapshots:
                 return None
             row = json.loads(path.read_text(encoding='utf-8'))
             saved = row.get('saved')
-            if (row.get('version') != 1 or row.get('key') != key
+            if (row.get('version') != PUBLIC_SNAPSHOTS or row.get('key') != key
                     or type(saved) not in (int, float) or not math.isfinite(saved)
                     or saved < 0 or saved > self.clock() or not isinstance(row.get('revision'), str)
                     or (row.get('released') is not None and not isinstance(row['released'], str))):
@@ -95,7 +96,7 @@ class PublicSnapshots:
         snapshot = Snapshot(value, self.clock(), released, uuid4().hex)
         path = self.path(key)
         if path is not None:
-            encoded = json.dumps({'version': 1, 'key': key, 'saved': snapshot.saved,
+            encoded = json.dumps({'version': PUBLIC_SNAPSHOTS, 'key': key, 'saved': snapshot.saved,
                                   'released': released, 'revision': snapshot.revision, 'value': value},
                                  ensure_ascii=False, allow_nan=False)
             if len(encoded.encode('utf-8')) > MAX_SNAPSHOT_BYTES:

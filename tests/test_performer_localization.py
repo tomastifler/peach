@@ -348,10 +348,10 @@ class KanjiTableAgainstOpenCCTests(unittest.TestCase):
         direct = OPENCC_T2S.convert(ch)
         return direct if direct != ch else OPENCC_T2S.convert(OPENCC_JP2T.convert(ch))
 
-    #: opencc 给不出可用简体、由本表自己定的三个字。前两个是简体里确实没有的字形，
+    #: opencc 给不出可用简体、由本表核对的字形。前两个是简体里确实没有的字形，
     #: opencc 原样留着（`嶋` → `嶋`、`姫` → `姫`），本库按大陆资料页的写法归到常用字；
-    #: `渋` 的旧字体是 `澁`，`t2s` 不动它，简体实际写 `涩`。
-    CURATED = {"嶋": "岛", "姫": "姬", "渋": "涩"}
+    #: `渋` 的旧字体是 `澁`，简体写 `涩`；`郷` 的旧字体为 `鄕`，简体写 `乡`。
+    CURATED = {"嶋": "岛", "姫": "姬", "渋": "涩", "郷": "乡"}
 
     def test_every_mapping_matches_opencc_or_is_a_declared_exception(self):
         disagree = {ch: (ours, self.reference(ch))

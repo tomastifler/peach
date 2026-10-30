@@ -61,7 +61,7 @@ function shellActions(): ShellActions {
     openItem: vi.fn(), openEntity: vi.fn(), openTag: vi.fn(), openTasteSignal: vi.fn(), navigate: vi.fn(),
     openManage: vi.fn(), managePath: vi.fn(() => ''), openFollow: vi.fn(), receipt: vi.fn(), toast: vi.fn(),
     failure: vi.fn(), revealSource: vi.fn(async () => ''), reopenTutorial: vi.fn(async () => {}),
-    requestConfigurationSection: vi.fn(), routeReview: vi.fn(),
+    routeReview: vi.fn(),
     routeFollowManage: vi.fn(), saveFollowPreference: vi.fn(), srcBadge: () => '', routeIndex: vi.fn(),
     savePeopleLayout: vi.fn(), exitSelectMode: vi.fn(), personAvatar: vi.fn(() => ({ html: '', face: '' })),
     authorAvatar: vi.fn(() => ''), showIndexTags: vi.fn(), openFollowAuthor: vi.fn(), openFollowTag: vi.fn(),
@@ -138,6 +138,15 @@ describe('浮条', () => {
     expect(root.querySelector('[data-selection-dock] [role="status"]')!.textContent).toBe('3 selected');
     expect(labels(root)).toEqual(['Reassess', 'Move to trash', 'Cancel']);
     expect(root.querySelector('[data-batch-scope]')!.getAttribute('data-context')).toBe('junk');
+  });
+
+  it('浮条在的时候 body 挂 data-batch-dock-open 给网格让位，选空就摘', async () => {
+    const { render } = await setup();
+    expect(document.body.hasAttribute('data-batch-dock-open')).toBe(false);
+    await render({ count: 2, context: 'catalog', junkDismissed: false });
+    expect(document.body.hasAttribute('data-batch-dock-open')).toBe(true);
+    await render({ count: 0, context: 'catalog', junkDismissed: false });
+    expect(document.body.hasAttribute('data-batch-dock-open')).toBe(false);
   });
 
   it('上千项的计数带千分位', async () => {

@@ -61,11 +61,14 @@ def plan(db_path: Path, directory: Path) -> tuple[list[Migration], list[Migratio
     all_migrations = discover(directory)
     # status 对既有数据库使用 SQLite 只读 URI，保证不会创建 journal/WAL 或触发隐式写入。
     connection = (sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro", uri=True)
-                  if db_path.exists() else sqlite3.connect(db_path))
+                  if db_path.exists() else sqlite3.connect(':memory:'))
     try:
         done = applied(connection)
     finally:
         connection.close()
+    unknown = set(done) - {migration.version for migration in all_migrations}
+    if unknown:
+        raise RuntimeError('数据库包含当前程序不支持的迁移，请使用匹配版本或升级前备份')
     for migration in all_migrations:
         if migration.version in done and done[migration.version] != migration.checksum:
             raise RuntimeError(f"checksum of applied migration {migration.version} has changed")

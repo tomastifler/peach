@@ -3,6 +3,7 @@ import { mkdir } from 'node:fs/promises';
 import { after, before, describe, it } from 'node:test';
 import type { Browser } from 'playwright-core';
 import { launch, layout, settle, VIEWPORTS, visit } from './harness.ts';
+import { verifyTablePreferences, verifyColumnContentWidth } from './table-preferences-fixture.ts';
 
 describe('孤儿记录数据表', () => {
   let browser: Browser;
@@ -30,6 +31,12 @@ describe('孤儿记录数据表', () => {
       const table = page.getByRole('grid', { name: 'Works whose files are gone', exact: true });
       await table.waitFor();
       await settle(page);
+      await verifyTablePreferences(page, table, '文件已消失的作品', 'item', { id: 'records', label: '个人记录' });
+      await verifyColumnContentWidth(table, 'item', 'span[title]');
+      const widths = await table.locator('th').evaluateAll(nodes => Object.fromEntries(nodes.map(node =>
+        [node.getAttribute('data-key'), node.getBoundingClientRect().width])));
+      assert.ok(widths.item! > widths.target! * 2, JSON.stringify(widths));
+      assert.ok(widths.target! <= 144, JSON.stringify(widths));
       const faces = await page.evaluate(() => {
         const read = (node: Element) => {
           const style = getComputedStyle(node);
@@ -44,13 +51,13 @@ describe('孤儿记录数据表', () => {
       const scroller = table.locator('..');
       assert.equal(await scroller.getAttribute('data-overlay-scrollbar'), 'true');
       if (viewport.mobile) {
-        const track = section.locator('[data-board-data-table] > .ov-x');
+        const track = section.locator('[data-board-data-table] .ov-x');
         await track.waitFor({ state: 'visible' });
         const before = await track.locator('.ovthumb').evaluate(node => getComputedStyle(node).transform);
         await scroller.evaluate(node => { node.scrollLeft = node.scrollWidth });
         await page.waitForFunction(previous => {
           const node = document.querySelector('#orphan-records [data-overlay-scrollbar]');
-          const thumb = document.querySelector('#orphan-records [data-board-data-table] > .ov-x .ovthumb');
+          const thumb = document.querySelector('#orphan-records [data-board-data-table] .ov-x .ovthumb');
           return !!node && !!thumb && node.scrollLeft > 0 && getComputedStyle(thumb).transform !== previous;
         }, before);
         const after = await track.locator('.ovthumb').evaluate(node => getComputedStyle(node).transform);
@@ -59,7 +66,7 @@ describe('孤儿记录数据表', () => {
       }
       assert.equal(await section.locator('[data-data-table-panel] #orphan-records-title').count(), 1);
       assert.equal(await table.locator('tbody tr').count(), 20);
-      assert.equal(await section.getByRole('button', { name: 'Delete selected permanently (0)', exact: true }).count(), 0);
+      assert.equal(await section.getByRole('button', { name: '删除所选记录（0）', exact: true }).count(), 0);
       const pagination = section.locator('[data-table-pagination]');
       assert.ok((await pagination.textContent())?.includes('1–20 / 23 works'));
       await pagination.getByRole('button', { name: /Rows per page/ }).waitFor();
@@ -72,14 +79,14 @@ describe('孤儿记录数据表', () => {
       await section.locator('[data-selection-dock]').waitFor();
       await section.getByRole('button', { name: 'Next', exact: true }).click();
       await table.locator('tbody tr').first().locator('label:has(input[type="checkbox"])').click();
-      await table.getByRole('columnheader', { name: 'Work', exact: true }).click();
+      await table.getByRole('columnheader', { name: /^作品/ }).click({ position: { x: 40, y: 18 } });
       assert.ok((await table.locator('tbody tr').first().textContent())?.includes('作品 1・'));
       await pagination.scrollIntoViewIfNeeded();
       await page.screenshot({ path: `../build/table-evidence/orphan-selected-${viewport.name}.png` });
-      await section.getByRole('button', { name: 'Delete selected permanently (2)', exact: true }).click();
-      await page.getByRole('dialog').getByRole('button', { name: 'Cancel', exact: true }).click();
+      await section.getByRole('button', { name: '删除所选记录（2）', exact: true }).click();
+      await page.getByRole('dialog').getByRole('button', { name: '取消', exact: true }).click();
       await table.locator('thead label:has(input[type="checkbox"])').click();
-      await section.getByRole('button', { name: 'Delete selected permanently (23)', exact: true }).click();
+      await section.getByRole('button', { name: '删除所选记录（23）', exact: true }).click();
       const dialog = page.getByRole('dialog');
       const list = dialog.getByRole('list', { name: 'Selected records', exact: true });
       await list.waitFor();
@@ -87,7 +94,7 @@ describe('孤儿记录数据表', () => {
       assert.equal(await list.getAttribute('data-overlay-scrollbar'), 'true');
       const overflow = await list.evaluate(node => node.scrollHeight > node.clientHeight);
       assert.equal(overflow, true, '长清单在弹层内滚动');
-      const edges = dialog.locator('.ui-ov-edges');
+      const edges = list.locator('..').locator(':scope > .ui-ov-edges');
       await page.waitForFunction(() => !!document.querySelector('dialog .ui-can-scroll-bottom'));
       assert.equal(await edges.locator('.ui-ov-edge-bottom').evaluate(node => getComputedStyle(node).visibility), 'visible');
       await list.evaluate(node => { node.scrollTop = node.scrollHeight / 2 });

@@ -274,6 +274,9 @@ def name_entries(cell: str) -> list[dict]:
 
     text = _text(cell)
     groups = list(_PAREN.finditer(text))
+    # 「別名」栏也放以 (注) 开头的更名、复出说明；整格是注释，原文仍留在资料快照中。
+    if groups and groups[0].start() == 0 and groups[0].group(1).strip() == "注":
+        return []
     reading_at = next((index for index in range(len(groups) - 1, -1, -1)
                        if "/" in groups[index].group(1)), -1)
     reading = romaji = reading_note = ""

@@ -7,12 +7,12 @@ import uuid
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from .catalog_rules import solo_performer_clause
-from .library_favorites import KEY, favorite_entry, favorite_entities
+from .library_favorites import KEY, favorite_entry, favorite_entries, favorite_entities
 from .profiles import DEFAULT_PROFILE_ID, read_settings
 from .web_catalog import VISIBLE_CATALOG_ASSET, entity_ref
 
 QUERY_KEYS = frozenset({"loc", "creator", "studio", "owner", "tag", "tag_match", "len",
-                        "dur_min", "dur_max", "orient", "region", "sort", "dir", "q", "jav", "thumb", "state",
+                        "dur_min", "dur_max", "orient", "region", "year", "sort", "dir", "q", "jav", "thumb", "state",
                         "browse", "folder", "folder_recursive"})
 PATHS = frozenset({"/", "/unseen", "/watch-later", "/flagged"})
 
@@ -20,7 +20,7 @@ PATHS = frozenset({"/", "/unseen", "/watch-later", "/flagged"})
 def _snapshot(c, settings):
     stored = settings.get(KEY)
     stored = stored if isinstance(stored, dict) else {}
-    favorites = favorite_entities(c, settings)
+    favorites = favorite_entries(c, settings)
     raw_filters = stored.get("filters", [])
     filters = []
     for item in (raw_filters if isinstance(raw_filters, list) else [])[:100]:
@@ -56,6 +56,7 @@ def q_library_shortcuts(contract, _args=None):
 
 def _attach_art(contract, connection, rows):
     """收藏复用实体图、厂牌标识与可取得的代表作头像。"""
+    rows = [row for row in rows if 'entity_id' in row]
     if not rows:
         return
     ids = [row["entity_id"] for row in rows]
@@ -98,7 +99,13 @@ def w_library_shortcuts(contract, body):
         if action == "favorite":
             item = favorite_entry(c, body)
             if item is None or not isinstance(body.get("on"), bool):
-                raise ValueError("The favorite does not exist or is in the wrong state")
+                raise ValueError("收藏对象不存在或状态不正确")
+            if item.get('scope') == 'online' and body['on']:
+                from .web_follow import online_tag_inventory
+                tag = next((row for row in online_tag_inventory(c) if row['id'] == item['tag_id']), None)
+                if tag is None:
+                    raise ValueError('在线标签不存在，请刷新后重试')
+                item['name'] = tag['k']
             data["favorites"] = [row for row in data["favorites"] if row["key"] != item["key"]]
             if body["on"]:
                 if len(data["favorites"]) >= 1000:

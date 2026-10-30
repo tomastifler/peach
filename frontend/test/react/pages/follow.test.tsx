@@ -45,7 +45,7 @@ const helpers: FollowFeedHelpers = {
   listSkeletonHtml: () => '<div data-test-skeleton>骨架</div>', jobProgress: () => {},
 };
 const feedActions: FollowFeedActions = {
-  route: () => {}, shuffle: () => {}, loaded: () => {}, openDetail: () => {}, openAuthor: () => {}, openManage: () => {}, toggleSelection: () => {},
+  route: () => {}, shuffle: () => {}, loaded: () => {}, openDetail: () => {}, openAuthor: () => {}, toggleSelection: () => {},
   setImagesOnly: () => {}, setPhotoLayout: () => {}, canFlip: () => false, toast: () => {}, failure: () => {}, checkReport: () => {},
 };
 
@@ -63,7 +63,7 @@ function shellActions(r: Loaded) {
     openItem: vi.fn(), openEntity: vi.fn(), openTag: vi.fn(), openTasteSignal: vi.fn(), navigate: vi.fn(),
     openManage: vi.fn(), managePath: vi.fn(() => ''), openFollow: vi.fn(), receipt: vi.fn(), toast: vi.fn(),
     failure: vi.fn(), revealSource: vi.fn(async () => ''), reopenTutorial: vi.fn(async () => {}),
-    requestConfigurationSection: vi.fn(), routeReview: vi.fn(),
+    routeReview: vi.fn(),
     routeFollowManage: vi.fn(), saveFollowPreference: vi.fn(), srcBadge: () => '', routeIndex: vi.fn(),
     savePeopleLayout: vi.fn(), exitSelectMode: vi.fn(), personAvatar: vi.fn(() => ({ html: '', face: '' })),
     authorAvatar: vi.fn(() => ''), showIndexTags: vi.fn(), openFollowAuthor: vi.fn(), openFollowTag: vi.fn(),

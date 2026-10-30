@@ -1,5 +1,6 @@
 """r18.dev 套进站点解析器契约：作品 JSON 的解析、combined 页的日文补全、payload 逐键钉住，以及失败分档。"""
 import json
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -205,6 +206,28 @@ class OriginalWordingTests(unittest.TestCase):
         self.assertEqual(fields["studio"]["value"], "Prestige")
         mixed = dict(self.ENGLISH, actresses=[{"japanese_name": "胡桃さくら"}, {"japanese_name": "Remu Suzumori"}])
         self.assertEqual([row["name"] for row in extract_peach_fields(mixed)["performers"]["value"]], ["胡桃さくら"])
+
+    def test_an_english_original_title_in_an_r18_snapshot_is_source_only(self):
+        fields = extract_peach_fields(dict(self.ENGLISH, original_title='English alternative'))
+        self.assertNotIn('original_title', fields)
+
+    def test_latin_title_candidates_require_same_work_original_language_evidence(self):
+        from pathlib import Path
+        from peach.metadata_auto_apply import _original_title_candidate, _evidence_candidates
+        candidate = {'source':'r18dev', 'value':'BEAUTY VENUS 5', 'display_value':'BEAUTY VENUS 5'}
+        self.assertFalse(_original_title_candidate('title', candidate, 'IPX-219'))
+        self.assertEqual(_evidence_candidates({'code':'IPX-219','candidates':[candidate]}, 'title'), [])
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'source.json'
+            candidate['raw_snapshot'] = str(path)
+            payload = {'id':'IPX-219', 'source_url':'https://r18.dev/detail', 'title':'BEAUTY VENUS 5'}
+            path.write_text(json.dumps(payload),encoding='utf-8')
+            self.assertFalse(_original_title_candidate('title', candidate, 'IPX-219'))
+            payload['translations'] = [{'language':'ja','title':'BEAUTY VENUS 5'}]
+            path.write_text(json.dumps(payload),encoding='utf-8')
+            self.assertTrue(_original_title_candidate('title', candidate, 'IPX-219'))
+            self.assertFalse(_original_title_candidate('title', candidate, 'IPX-218'))
+            self.assertTrue(_original_title_candidate('title', dict(candidate,source='makers'), 'IPX-219'))
 
     def test_a_top_level_value_written_in_japanese_script_stays(self):
         payload = dict(self.ENGLISH, series="いつでも使えるオナホ後輩",

@@ -38,6 +38,7 @@
 [data-settings-panel] [data-setting-group]>h3+[data-setting-row]{border-top:0}
 [data-settings-panel] [data-setting-row] b{display:block;font-size:var(--fs-md)}
 [data-settings-panel] [data-setting-row] small{display:block;color:var(--muted);margin-top:8px;line-height:1.45;overflow-wrap:anywhere}
+[data-settings-panel] [data-setting-row]:has(#performerNameLanguageSetting){align-items:start}
 [data-settings-panel] [data-setting-row] [class~=ui-gselect]{min-width:148px}
 [data-settings-panel] [data-setting-row][data-setting-related]{border-top:0}
 [data-settings-panel] [data-setting-group] [data-setting-row][data-setting-sort]{grid-template-columns:minmax(0,1fr);gap:12px;padding-block:14px 16px}
@@ -79,14 +80,8 @@
 /* 侧栏光晕的参数区。它跟着上面那一行开关走，关掉就整块收起来——一组调不出任何效果的
    拉条和色块留在原地，读的人只会以为是坏了。
 
-   右边那 16px 外边距加 10px 内边距是这一块唯一的定位修正，不是留白偏好。Board 那一层
-   给 `[data-setting-group]` 的内边距是 `0 0 0 12px`——只有左边；右边那一段由每个 `[data-setting-row]`
-   自己的 `margin-right:16px`（下面 Board 外观里的 `[data-settings-scroll] [data-setting-row]`）和
-   `padding-right:10px` 一起给。`[data-glow-setting]` 不是设置行，两样都拿不到，少这两个值就一路
-   顶到分组的右边缘：1440 宽下同组设置行的盒子右缘落在 1108、正文右缘 1098，这一块
-   落在 1124，正好压在分组那 16px 圆角的弧线上，读数、色块和「恢复默认」被切掉一角。
-   `[data-sidebar-setting]` 为同一件事写着同样的两个值，这里按同一个办法补齐，
-   不靠 `overflow:hidden` 把溢出盖住。
+   分组统一留左侧 12px；设置行、光晕参数区与侧栏排序区的边界延伸到卡片右沿。
+   每块内容的右内边距保留 10px，使读数、色块与动作避开圆角。
 
    版式照 feralui.dev/gradients 的工作台面板：分组标题是一行小号灰字，参数行是
    「84px 标签 + 自绘拉条 + 等宽读数」，颜色行点开在自己下方弹一张色板。
@@ -97,7 +92,7 @@
    `--glowrow-min` / `--glowrow-pad` 就是那两个值，本块每一行都读它。换成几层 gap 叠出来的
    间距的话，同一屏里「当前配色」到「强度」的落差和上面几行设置之间的落差对不上，
    读起来像是中间漏了一条线。 */
-[data-settings-panel] [data-glow-setting]{--glowrow-min:52px;--glowrow-pad:10px;display:grid;gap:0;margin-right:16px;padding:0 10px var(--glowrow-pad) 0;min-width:0}
+[data-settings-panel] [data-glow-setting]{--glowrow-min:52px;--glowrow-pad:10px;display:flex;flex-direction:column;gap:20px;min-width:0}
 [data-settings-panel] [data-glow-setting][hidden]{display:none}
 [data-settings-panel] [data-glow-current]{display:flex;align-items:center;gap:8px;margin:0;min-height:var(--glowrow-min);padding-block:var(--glowrow-pad);color:var(--muted);font-size:var(--fs-sm)}
 [data-settings-panel] [data-glow-current] b{color:var(--ink);font-weight:500}
@@ -106,44 +101,45 @@
    （`[data-glow-chip]` 的 28px），能放几枚放几枚，排满再换行；列宽不跟行宽走，球挨着排、不被拉开。
    左边不留那 4px：这一行的字从内容左缘起，球也从那里起。 */
 [data-settings-panel] [data-glow-setting] [data-glow-grid]{grid-template-columns:repeat(auto-fill,28px);padding:0}
-[data-settings-panel] [data-glow-group]{display:grid;gap:0;min-width:0}
+[data-settings-panel] [data-glow-group]{display:flex;flex-direction:column;gap:8px;min-width:0}
+[data-settings-panel] [data-glow-card]{padding-right:10px}
 /* 「玻璃原色」那一档下面这行字顶替被收走的几条拉条和三行颜色。和上面那行「当前配色」
    同一档字色与行高，读起来是同一列里的一句话，不是插进来的提示条。 */
 [data-settings-panel] [data-glow-native-note]{margin:0;padding-block:var(--glowrow-pad);color:var(--muted);font-size:var(--fs-sm);line-height:1.6}
 /* 上游那一行是大写加宽字距的英文小标题，中文不大写：中文没有大小写，`text-transform`
    在这里什么也不做，字距倒是会把两个字拉散。 */
-[data-settings-panel] [data-glow-group]>h4{display:flex;align-items:center;min-height:var(--glowrow-min);padding-block:var(--glowrow-pad);margin:0;color:var(--muted);font-size:var(--fs-xs);font-weight:600}
 [data-settings-panel] [data-glow-fields]{display:flex;flex-direction:column;gap:0;min-width:0}
 [data-settings-panel] [data-glow-field]{display:flex;align-items:center;gap:10px;min-height:var(--glowrow-min);padding-block:var(--glowrow-pad);min-width:0}
 /* 带显式 display 的元素盖得住浏览器默认的 `[hidden]{display:none}`：「玻璃原色」那一档
    要收走其余几条拉条和整组颜色行，少这一条的话它们照样摆在那里，拖也拖得动、什么也
    不影响。 */
 [data-settings-panel] [data-glow-field][hidden],[data-settings-panel] [data-glow-group][hidden]{display:none}
-[data-settings-panel] [data-glow-field-label]{flex:none;width:84px;color:var(--muted);font-size:var(--fs-xs);font-weight:600;white-space:nowrap}
+[data-settings-panel] [data-glow-field-label]{flex:none;width:84px;color:var(--muted);font-size:var(--fs-xs);font-weight:400;white-space:nowrap}
 [data-settings-panel] [data-glow-field] [class~=ui-dial]{flex:1;min-width:0}
-/* 颜色行：34px 圆点 + 名称与十六进制两行 + 行尾折角。相邻两行之间那条分隔线从圆点
-   右侧起算，左边那一段留给圆点本身——线一路铺到最左边的话，三枚圆点会被切成一列格子。 */
+/* 颜色行与设置行共用左侧内缩、右侧通栏的分隔线。 */
 [data-settings-panel] [data-glow-stops]{display:grid;min-width:0}
-[data-settings-panel] [data-glow-stop]{position:relative;min-width:0}
-[data-settings-panel] [data-glow-stop]+[data-glow-stop]::before{content:'';position:absolute;left:54px;right:6px;top:0;height:1px;background:linear-gradient(to right,var(--line-soft),transparent)}
-[data-settings-panel] [data-glow-stop-toggle]{display:flex;align-items:center;gap:10px;width:100%;min-width:0;min-height:var(--glowrow-min);padding:var(--glowrow-pad) 7px var(--glowrow-pad) 8px;border:0;border-radius:var(--floating-radius);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
-[data-settings-panel] [data-glow-stop-toggle]:hover{background:color-mix(in srgb,var(--ink) 3.2%,transparent)}
-[data-settings-panel] [data-glow-stop-toggle][aria-expanded="true"]{background:color-mix(in srgb,var(--ink) 4.6%,transparent)}
+[data-settings-panel] [data-glow-colour-card]{overflow:hidden}
+[data-settings-panel] [data-glow-stop]{position:relative;min-width:0;border-bottom:1px solid var(--line-soft)}
+[data-settings-panel] [data-glow-stop]:last-child{border-bottom:0}
+[data-settings-panel] [data-glow-stop-toggle]{display:flex;align-items:center;gap:10px;width:calc(100% + 12px);margin-left:-12px;min-width:0;min-height:var(--glowrow-min);padding:var(--glowrow-pad) 10px var(--glowrow-pad) 12px;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
+/* 行反馈向上下各覆盖 1px，使相邻分隔线融入反馈面；边框仍占位，切换状态不改变行高。 */
+[data-settings-panel] [data-glow-stop-toggle]:hover,[data-settings-panel] [data-glow-stop-toggle][aria-expanded="true"]{position:relative;z-index:1;background:var(--control-hover);box-shadow:0 -1px 0 var(--control-hover),0 1px 0 var(--control-hover)}
 [data-settings-panel] [data-glow-stop-toggle]:focus-visible{outline:2px solid var(--tungsten);outline-offset:-2px}
-[data-settings-panel] [data-glow-stop-toggle]>svg{width:14px;height:14px;flex:none;margin-left:auto;color:var(--muted);stroke:currentColor;fill:none}
+[data-settings-panel] [data-glow-stop-toggle]>svg{width:var(--icon-inline);height:var(--icon-inline);flex:none;margin-left:auto;color:var(--muted);stroke:currentColor;fill:none}
 [data-settings-panel] [data-glow-stop-dot]{width:34px;height:34px;flex:none;border-radius:50%;background:var(--glow-swatch,var(--line));box-shadow:inset 0 1px 1px var(--frost-light),inset 0 -1px 2px var(--overlay-5),0 0 0 1px var(--border-15)}
 [data-settings-panel] [data-glow-stop-text]{display:grid;min-width:0}
-[data-settings-panel] [data-glow-stop-text]>b{font-size:var(--fs-sm);font-weight:600}
+[data-settings-panel] [data-glow-stop-text]>b{font-size:var(--fs-sm);font-weight:400}
 [data-settings-panel] [data-glow-stop-text]>small{color:var(--muted)}
 /* 色板弹层贴着行开，宽度由 JS 写成行宽。盒子、阴影和开合动效都来自共用的 .popmenu。 */
-[data-settings-panel] [data-glow-stop-pop]{display:grid;gap:0;overflow:hidden}
-[data-settings-panel] [data-glow-pills]{display:flex;gap:6px;padding:8px;border-bottom:1px solid var(--line-soft);overflow-x:auto;overscroll-behavior:contain;scrollbar-width:none}
+[data-settings-panel] [data-glow-stop-pop]{display:flex;flex-direction:column;gap:0;overflow:hidden}
+[data-settings-panel] [data-glow-pills]{display:flex;flex:none;gap:6px;padding:8px;border-bottom:1px solid var(--line-soft);overflow-x:auto;overscroll-behavior:contain;scrollbar-width:none}
 [data-settings-panel] [data-glow-pills]::-webkit-scrollbar{display:none}
 [data-settings-panel] [data-glow-pill]{flex:none;padding:5px 13px;border:0;border-radius:var(--pill-radius);background:color-mix(in srgb,var(--ink) 6%,transparent);color:var(--ink-2);font-size:var(--fs-xs);font-weight:500;cursor:pointer}
 [data-settings-panel] [data-glow-pill][aria-pressed="true"]{background:var(--hover);color:var(--ink)}
 [data-settings-panel] [data-glow-pill]:not([aria-pressed="true"]):hover{color:var(--ink)}
 [data-settings-panel] [data-glow-pill]:focus-visible{outline:2px solid var(--tungsten);outline-offset:2px}
-[data-settings-panel] [data-glow-palette]{display:grid;grid-template-columns:repeat(auto-fill,minmax(34px,1fr));gap:8px 9px;max-height:218px;padding:10px;overflow-y:auto;overscroll-behavior:contain}
+[data-settings-panel] [data-glow-palette-frame]{position:relative;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+[data-settings-panel] [data-glow-palette]{display:grid;flex:1;min-height:0;grid-template-columns:repeat(auto-fill,minmax(34px,1fr));gap:8px 9px;max-height:218px;padding:10px;overflow-y:auto;overscroll-behavior:contain}
 [data-settings-panel] [data-glow-swatch]{width:34px;height:34px;padding:0;border:1px solid var(--border-15);border-radius:50%;background:var(--glow-swatch);box-shadow:inset 0 1px 1px var(--frost-light);cursor:pointer;transition:transform .12s ease}
 [data-settings-panel] [data-glow-swatch][hidden]{display:none}
 [data-settings-panel] [data-glow-swatch]:hover{transform:scale(1.055)}
@@ -153,7 +149,8 @@
 [data-settings-panel] [data-glow-palette] [data-glow-swatch][aria-checked="true"]{background:var(--glow-swatch);box-shadow:inset 0 1px 1px var(--frost-light),
   0 0 0 1.5px var(--ground),0 0 0 2.5px color-mix(in srgb,var(--ink) 30%,transparent)}
 [data-settings-panel] [data-glow-swatch]:focus-visible{outline:2px solid var(--tungsten);outline-offset:2px}
-[data-settings-panel] [data-glow-actions]{display:flex;justify-content:flex-end;padding-top:var(--glowrow-pad)}
+[data-settings-panel] [data-glow-actions]{display:flex;justify-content:flex-end;margin:0 -10px 0 -12px;padding:var(--glowrow-pad) 10px var(--glowrow-pad) 12px;border-top:1px solid var(--line-soft);border-bottom-left-radius:inherit;border-bottom-right-radius:inherit;background:var(--board-card-foot)}
+[data-settings-panel] [data-glow-actions] button[data-glow-reset]{font:var(--board-body)}
 /* 同一组里排在设置行后面的分区自带分隔线。这里只给线：盒子的边距归下面 Board 外观里那条
    `[data-settings-card] [data-settings-scroll] [data-sidebar-setting]`，它带 `!important`，在这里另写一份
    只会留下一组读着像在生效、其实一个像素也没动的值。 */
@@ -163,7 +160,7 @@
 [data-settings-panel] [data-sidebar-setting]>span small{margin-top:3px;color:var(--muted);line-height:1.45}
 [data-settings-panel] [data-sidebar-order]{display:grid;gap:6px}
 /* 这一列的行、下面那个下拉和「添加」按钮同高：它们是同一张清单的三段，差几像素就
-   看得出是两拨控件。34px 的图标钮加上下 1px 内边距和 1px 边框正好是 --control-h。 */
+   看得出是两拨控件。紧凑档的图标钮加上下 1px 内边距和 1px 边框正好是 --control-h。 */
 [data-settings-panel] [data-sidebar-row]{position:relative;display:flex;align-items:center;justify-content:space-between;min-height:var(--control-h);padding:1px 5px;border:1px solid var(--line-soft);border-radius:var(--surface-radius);background:var(--surface);cursor:grab}
 [data-settings-panel] [data-sidebar-row]:active{cursor:grabbing}
 [data-settings-panel] [data-sidebar-row][data-dragging]{opacity:.42}
@@ -172,12 +169,14 @@
 [data-settings-panel] [data-sidebar-row][data-drop="after"]::after{bottom:-5px}
 [data-settings-panel] [data-sidebar-row]>span{display:flex;align-items:center;gap:8px}
 [data-settings-panel] [data-sidebar-row] svg{width:18px;height:18px;stroke:currentColor;fill:none}
+/* 名目前那枚字形与名字同行，随字号缩放；拖柄和右端的上移、下移键仍按键的尺寸。 */
+[data-settings-panel] [data-sidebar-label]>svg{width:var(--icon-inline);height:var(--icon-inline)}
 [data-settings-panel] [data-sidebar-label]{min-width:0}
 [data-settings-panel] [data-sidebar-label]>b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 [data-settings-panel] [data-sidebar-grip]{display:grid;place-items:center;width:24px;color:var(--muted)}
 [data-settings-panel] [data-sidebar-grip] svg{width:20px;height:20px}
 [data-settings-panel] [data-sidebar-actions]{flex:none}
-[data-settings-panel] [data-sidebar-row] button,[data-settings-panel] [data-sidebar-add-menu] button{display:grid;place-items:center;min-width:34px;height:34px;border:0;border-radius:var(--control-radius);background:transparent;color:var(--muted);cursor:pointer}
+[data-settings-panel] [data-sidebar-row] button,[data-settings-panel] [data-sidebar-add-menu] button{display:grid;place-items:center;min-width:var(--control-h-compact);height:var(--control-h-compact);border:0;border-radius:var(--control-radius);background:transparent;color:var(--muted);cursor:pointer}
 [data-settings-panel] [data-sidebar-row] button:hover:not(:disabled),[data-settings-panel] [data-sidebar-add-menu] button:hover:not(:disabled){background:var(--hover);color:var(--ink)}
 [data-settings-panel] [data-sidebar-row] button:disabled,[data-settings-panel] [data-sidebar-add-menu] button:disabled{opacity:.25;cursor:not-allowed}
 [data-settings-panel] [data-sidebar-add-row]{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;margin-top:5px}
@@ -192,13 +191,9 @@
 [data-settings-panel] [data-sidebar-add-menu]{position:absolute;z-index:4;left:0;right:0;bottom:calc(100% + 6px);max-height:min(312px,48vh)}
 [data-settings-panel] [data-sidebar-add-row] [data-sidebar-add-menu] button{grid-template-columns:auto minmax(0,1fr);width:100%;height:var(--control-h);border:0;text-align:left}
 [data-settings-panel] [data-sidebar-add-menu] button[aria-selected="true"]{background:var(--hover);color:var(--ink)}
-[data-settings-panel] [data-sidebar-add-row] svg{width:17px;height:17px;stroke:currentColor;fill:none}
+[data-settings-panel] [data-sidebar-add-row] svg{width:var(--icon-inline);height:var(--icon-inline);stroke:currentColor;fill:none}
 @media (max-width:600px){[data-settings-panel] [data-settings-scroll]{padding:0 17px 17px}}
 @media (max-width:600px){[data-settings-panel] [data-settings-head]{padding:17px 17px 14px}}
-@media (max-width:600px){[data-settings-panel] [data-setting-row]{grid-template-columns:1fr;gap:9px}}
-/* 单列是给下拉留的：148px 的下拉配上标题和说明在窄屏挤不下。开关只有 36px，
-     跟标题同一行绰绰有余，跟着换行只是白占一行高度。 */
-@media (max-width:600px){[data-settings-panel] [data-setting-row]:has(input[type="checkbox"]){grid-template-columns:minmax(0,1fr) auto;gap:12px}}
 @media (max-width:600px){[data-settings-panel] [data-setting-row] [class~=ui-gselect]{width:100%;min-width:0}}
 @media (max-width:600px){[data-settings-panel] [data-setting-row] [class~=ui-pcheck]{justify-self:start}}
 [data-settings-panel] [data-sidebar-add-row] [data-sidebar-add-menu] button{justify-items:start}
@@ -208,12 +203,8 @@
 /* ── Board 外观 ──
  * 下面这一层照 BoardUI 的设置弹层改写上面的骨架：两栏卡片、左栏玻璃、分组灰卡与紧凑控件。
  * 同权重时后写的胜出，这个顺序是外观的一部分。 */
-/* 右边这 16px 和设置行一样，是给覆盖式滑块让出的道；不留的话这一块会比上面几行宽出
-   一截，它那条上边线直贴到卡片边上。
-   上下那两个数也和设置行同一份（`[data-settings-scroll] [data-setting-row]` 的 10px）：这一块是同一
-   列里的又一行，上面写 16 下面写 12 的话，它和前一行之间就比上面每两行之间宽出一截，
-   同一屏里读得出来。 */
-[data-settings-panel] [data-settings-card] [data-settings-scroll] [data-sidebar-setting]{padding:10px 12px 10px 0!important;margin:0 16px 0 0!important}
+/* 侧栏排序区和设置行共用边界、上下行距与右侧内容留白。 */
+[data-settings-panel] [data-settings-card] [data-settings-scroll] [data-sidebar-setting]{padding:10px 10px 10px 0!important;margin:0!important}
 [data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-sort-controls]>[hidden]{display:none}
 [data-settings-panel] [data-number-setting]{display:flex;align-items:center;gap:12px;flex-direction:row-reverse}
 [data-settings-panel] [data-number-fields][hidden]{display:none}
@@ -228,7 +219,7 @@
 [data-settings-panel] [data-settings-card][data-settings-card]>[data-settings-nav] [data-settings-nav-caption]:first-child{margin-top:0}
 :is([data-settings-panel] [data-settings-card][data-settings-card]>[data-settings-nav] button,.peach-react [data-shortcuts-footer] a){flex:0 0 auto;justify-content:flex-start;padding:8px;border:0;border-radius:10px;font-size:14px;min-height:36px;font-weight:500}
 :is([data-settings-panel] [data-settings-card][data-settings-card]>[data-settings-nav] button,.peach-react [data-shortcuts-footer] a){display:flex;align-items:center;gap:8px}
-[data-settings-panel] [data-settings-card][data-settings-card]>[data-settings-nav] button svg{width:20px;height:20px;fill:currentColor;stroke:none;flex:none}
+[data-settings-panel] [data-settings-card][data-settings-card]>[data-settings-nav] button svg{width:var(--icon-inline);height:var(--icon-inline);fill:currentColor;stroke:none;flex:none}
 /* 这一列自己不铺底，当前那一条的填充由 `[data-settings-glide]` 那块滑过去的玻璃提供——跟筛选条上
    四枚视图、左侧抽屉那一列是同一套做法。两边都铺的话，静止态就是一块不透明的
    `--picked` 压在玻璃上面，切换时只看得见它瞬间换位置，滑动的那块从头到尾被盖住。
@@ -244,7 +235,7 @@
 /* 顶边那道高光不要：它是给浮在页面上的玻璃打边用的，而这一栏嵌在卡片里、上边贴着卡片
    自己的圆角，那道白线横在「设置」上面，读起来像卡片被切成了上下两截。其余三面的内描边
    和落影照旧。 */
-[data-settings-panel] [data-settings-card][data-settings-card][data-settings-card]>[data-settings-nav]{box-shadow:inset 1px 0 0 var(--glass-low),inset -1px 0 0 var(--glass-low),inset 0 -1px 0 var(--glass-low),var(--glass-shadow)}
+[data-settings-panel] [data-settings-card][data-settings-card][data-settings-card]>[data-settings-nav]{clip-path:inset(0);box-shadow:inset 1px 0 0 var(--glass-low),inset -1px 0 0 var(--glass-low),inset 0 -1px 0 var(--glass-low),var(--glass-shadow)}
 /* 标题和下面那一组之间留 24px：这一栏没有分隔线也不吸顶，标题与内容之间只剩这一段
    留白在说「上面那行是这一页的名字」。12px 和组内两行之间的间距是同一个量级，读下来
    标题像是第一行设置。 */
@@ -257,6 +248,9 @@
    灰卡上，16px 圆角、左内边距 12px，行的分隔线在卡片左沿内 12px 收住——即 BoardUI
    `SettingsCard` 的尺寸。「这台电脑」那张摘要卡也坐在这张灰卡上。 */
 [data-settings-panel] [data-settings-card] [data-settings-scroll]>[data-setting-group]{background:var(--ground);border-radius:16px;padding:0 0 0 12px}
+[data-settings-panel] [data-settings-card] [data-settings-scroll]>[data-setting-group][data-setting-layout="cards"]{display:flex;flex-direction:column;gap:20px;background:transparent;border-radius:0;padding:0}
+[data-settings-panel] [data-setting-card]{min-width:0;background:var(--ground);border-radius:16px;padding-left:12px}
+[data-settings-panel] [data-setting-block]{display:flex;flex-direction:column;gap:8px;min-width:0}
 [data-settings-panel] [data-settings-card] [data-settings-scroll]>[data-setting-group]>h3{display:none}
 [data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-row]{min-height:52px;padding:10px 10px 10px 0;gap:16px;border-top:0;border-bottom:1px solid var(--line-soft)}
 [data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-row]:last-child{border-bottom:0}
@@ -307,8 +301,6 @@ html[data-theme-snapshot] [data-settings-panel] :is([data-settings-glide],[data-
 [data-settings-panel] [data-number-help]{font-size:11px!important}
 [data-settings-panel] [data-number-error]{color:#ef6868!important;font-size:12px!important}
 [data-settings-panel] [data-number-error]:empty{display:none}
-@media (max-width:600px){[data-settings-panel] [data-settings-scroll] [data-setting-row]{grid-template-columns:1fr;gap:12px}}
-@media (max-width:600px){[data-settings-panel] [data-settings-scroll] [data-setting-row]:has(input[type=checkbox]){grid-template-columns:minmax(0,1fr) auto}}
 @media (max-width:600px){[data-settings-panel] [data-number-control] input{width:110px}}
 [data-settings-panel] [data-settings-nav] button[aria-selected="true"] [class~=ui-board-tab-count]{background:color-mix(in srgb,var(--tungsten) 12%,transparent);color:var(--tungsten);opacity:1}
 @media (max-width:1000px){[data-settings-panel] [data-settings-card]{width:calc(100vw - 32px)}}
@@ -316,7 +308,6 @@ html[data-theme-snapshot] [data-settings-panel] :is([data-settings-glide],[data-
 @media (max-width:760px){[data-settings-panel] [data-settings-head]{padding:16px 20px}}
 @media (max-width:760px){[data-settings-panel] [data-settings-card]>[data-settings-nav]{flex-direction:row;border-right:0;border-bottom:1px solid var(--line);padding:8px 12px;background:var(--ground);overflow-x:auto}}
 @media (max-width:760px){[data-settings-panel] [data-settings-scroll]{min-height:0;padding:20px;overflow:auto}}
-@media (max-width:760px){[data-settings-panel] [data-settings-scroll] [data-setting-row]{gap:16px;flex-wrap:wrap}}
 @media (max-width:760px){[data-settings-panel] [data-settings-nav]{gap:0}}
 @media (max-width:760px){[data-settings-panel] [data-settings-nav] button{padding:10px 9px;font-size:13px}}
 /* 排序那一行和其余设置行同一条基线：标题在左、两枚下拉在右，只在窄屏换行。 */
@@ -347,17 +338,17 @@ html[data-theme-snapshot] [data-settings-panel] :is([data-settings-glide],[data-
 [data-settings-panel] [data-toggle]:checked::after{left:3px;transform:translateX(18px)}
 [data-settings-panel] [data-toggle]:checked::before{transform:translateX(18px);background:linear-gradient(var(--color-accent-700),var(--color-accent-500))}
 [data-settings-panel] [data-toggle]:disabled{opacity:.5}
-@media (max-width:760px){[data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-row][data-setting-sort]{grid-template-columns:1fr;gap:10px}}
-@media (max-width:760px){[data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-sort-controls]{width:100%}}
-@media (max-width:760px){[data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-sort-controls]>div{flex:1}}
-@media (max-width:760px){[data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-sort-controls] [class~=ui-gselect]{width:100%}}
 @media (prefers-reduced-motion:reduce){[data-settings-panel] [data-toggle],[data-settings-panel] [data-toggle]::after,[data-settings-panel] [data-toggle]::before{transition:none}}
 @media (max-width:760px){[data-settings-panel][data-settings-panel]{padding:12px;grid-template-columns:minmax(0,1fr)}}
 @media (max-width:760px){[data-settings-panel] [data-settings-card][data-settings-card]{width:calc(100vw - 24px);max-width:calc(100vw - 24px);min-width:0}}
-@media (max-width:760px){[data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-row]:has([data-number-setting]){grid-template-columns:minmax(0,1fr) auto;gap:12px}}
-/* 再窄的手机上开关加数字框要占去一半宽，名目会挤成一字一行：控件换到名目下面、靠右。 */
-@media (max-width:420px){[data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-row]:has([data-number-setting]){grid-template-columns:minmax(0,1fr);gap:8px}}
-@media (max-width:420px){[data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-row]:has([data-number-setting])>:last-child{justify-self:end}}
+/* 设置行按标题与控件的实际宽度换行，控件始终靠右。 */
+@media (max-width:760px){
+  [data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-row]{display:flex;flex-wrap:wrap;gap:8px 12px}
+  [data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-row]>:first-child{flex:1 1 max-content;min-width:0}
+  [data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-row]:has(>span>small)>:first-child{flex-basis:0}
+  [data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-row]>:last-child{flex:0 0 auto;margin-left:auto;max-width:100%}
+  [data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-sort-controls] [class~=ui-gselect]{max-width:100%}
+}
 @media (max-width:760px){[data-settings-panel] [data-settings-card]>[data-settings-nav]{min-width:0;max-width:100%}}
 /* 纯图标按钮不继承浏览器按钮的水平内边距。 */
 [data-settings-panel] :is([data-settings-head] button,[data-sidebar-row] button){padding:0;display:inline-grid;place-items:center;line-height:1;flex-shrink:0}
@@ -388,7 +379,7 @@ html[class~=board-high-contrast] [data-settings-panel] [data-settings-card][data
    几十像素的模糊，往上会糊在标题自己头上、往左会糊到左栏那一列上，要的只是往下那一半。
    它也只在内容压上来时才点亮——这一栏滚到头时标题和第一行之间留着 `--settings-gap`，
    影子出现在那时候就是凭空多了一条线。 */
-[data-settings-panel] [data-settings-card] [data-settings-head]{position:relative;z-index:2;clip-path:inset(0 0 -96px 0);transition:box-shadow .2s ease-out}
+[data-settings-panel] [data-settings-card] [data-settings-head]{position:relative;z-index:2;box-shadow:none;clip-path:inset(0 0 -96px 0);transition:box-shadow .2s ease-out}
 [data-settings-panel] [data-settings-card][data-scrolled] [data-settings-head]{box-shadow:var(--glass-shadow)}
 [data-settings-panel] [data-settings-card] [data-settings-head] h2{line-height:26px}
 @media (max-width:760px){[data-settings-panel] [data-settings-card] [data-number-control] input{font-size:16px}}
@@ -396,13 +387,13 @@ html[class~=board-high-contrast] [data-settings-panel] [data-settings-card][data
 @media (max-width:760px){[data-settings-panel] [data-settings-card] [data-number-control] input{height:38px}}
 @media (max-width:760px){[data-settings-panel] [data-settings-card] [data-settings-scroll] [class~=ui-gselect],[data-settings-panel] [data-settings-card] [data-settings-scroll] [class~=gselectfield]{height:40px;font-size:14px}}
 @media (max-width:760px){[data-settings-panel] [data-settings-card] [data-settings-scroll] [data-number-control]>span{font-size:14px}}
-@media (prefers-reduced-motion:reduce){[data-settings-panel] [data-settings-card] [data-settings-head]::after{transition:none}}
+@media (prefers-reduced-motion:reduce){[data-settings-panel] [data-settings-card] [data-settings-head]{transition:none}}
 [data-settings-panel] [data-sidebar-add-menu][data-sidebar-add-menu]{transform-origin:bottom left}
 [data-settings-panel] [data-settings-card] [data-settings-head] h2{font:var(--board-heading);letter-spacing:0}
 [data-settings-panel] [data-setting-row] b{font:var(--board-body)}
 [data-settings-panel] [data-setting-row] small{font:var(--board-compact)}
 @media (max-width:760px){[data-settings-panel] [data-settings-card][data-settings-card] [data-settings-scroll]{padding-top:16px}}
-[data-settings-panel] [data-settings-scroll] [data-setting-row]{margin-right:16px}
+[data-settings-panel] [data-settings-scroll] [data-setting-row]{margin-right:0}
 [data-settings-panel] [data-settings-scroll] [data-setting-group]{border-bottom:0}
 
 /* ── 分区切换与开合 ──
@@ -414,6 +405,7 @@ html[class~=board-high-contrast] [data-settings-panel] [data-settings-card][data
 [data-settings-panel] [data-settings-card][data-settings-card]>[data-settings-nav] button svg:has(>use[href^="#i-"]){fill:none;stroke:currentColor;stroke-width:2}
 [data-settings-panel] [data-settings-service] button:disabled{color:var(--muted);cursor:not-allowed}
 [data-settings-panel] [data-settings-subheading]{margin:0;padding:16px 0 6px;color:var(--muted);font:var(--board-compact)}
+[data-settings-panel] [data-setting-layout="cards"] [data-settings-subheading]{padding:0 12px}
 [data-settings-panel] [data-settings-scroll] [data-settings-subheading]+[data-setting-row]{border-top:0}
 @media(max-width:760px){[data-settings-panel] [data-settings-service]{margin-top:0;padding:0 0 0 12px;border-top:0;border-left:1px solid var(--line-soft);flex-shrink:0}}
 @keyframes settings-backdrop-in{from{opacity:0}to{opacity:1}}

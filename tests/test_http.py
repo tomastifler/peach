@@ -1,12 +1,120 @@
 import unittest
 import ast
+import tempfile
+import threading
+import os
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
 
 import httpx
 
 from peach.http import (CurlCffiTransport, HttpRequest, HttpResponse, HttpxTransport,
                         body_text, response_text)
 from peach.user_agent import USER_AGENT
+from peach import peach_proxy
+
+
+class PeachProxyTests(unittest.TestCase):
+    def test_proxy_conflict_is_reported_on_outbound_request_and_leaves_local_startup_available(self):
+        with patch.object(peach_proxy, 'client_options', side_effect=ValueError('请选择 Peach 代理')):
+            for transport in (HttpxTransport(), CurlCffiTransport(impersonate='chrome')):
+                try:
+                    with self.assertRaisesRegex(ValueError, '请选择 Peach 代理'):
+                        transport(HttpRequest('GET', 'https://example.invalid', {}), 2, 100)
+                finally:
+                    transport.close()
+
+    def test_http_and_browser_transports_reach_the_configured_proxy(self):
+        seen = []
+        class Proxy(BaseHTTPRequestHandler):
+            def do_GET(self):
+                seen.append(self.path)
+                self.send_response(200)
+                self.send_header("Content-Length", "5")
+                self.end_headers()
+                self.wfile.write(b"proxy")
+            def log_message(self, *_args):
+                pass
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Proxy)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with tempfile.TemporaryDirectory() as folder:
+                root = Path(folder).resolve()
+                peach_proxy.save(root, {"mode": "proxy", "proxy": f"http://127.0.0.1:{server.server_port}"})
+                with patch.object(peach_proxy, "secrets_root", return_value=root), patch.dict(os.environ, {"NO_PROXY": "*", "no_proxy": "*"}):
+                    for transport in (HttpxTransport(), CurlCffiTransport(impersonate="chrome")):
+                        try:
+                            self.assertEqual(transport(HttpRequest("GET", "http://peach-proxy.invalid/check", {}), 3, 20).body, b"proxy")
+                        finally:
+                            transport.close()
+                peach_proxy.save(root, {"mode": "direct"})
+                with patch.object(peach_proxy, "secrets_root", return_value=root), patch.dict(os.environ, {
+                        "HTTP_PROXY": "http://127.0.0.1:1", "http_proxy": "http://127.0.0.1:1", "NO_PROXY": "", "no_proxy": ""}):
+                    for transport in (HttpxTransport(), CurlCffiTransport(impersonate="chrome")):
+                        try:
+                            self.assertEqual(transport(HttpRequest("GET", f"http://127.0.0.1:{server.server_port}/direct", {}), 3, 20).body, b"proxy")
+                        finally:
+                            transport.close()
+                self.assertEqual(seen, ["http://peach-proxy.invalid/check"] * 2 + ["/direct"] * 2)
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=3)
+
+    def test_environment_mode_inherits_process_proxy(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            peach_proxy.save(root, {"mode": "environment"})
+            self.assertEqual(peach_proxy.client_options(root), {"trust_env": True})
+
+    def test_read_url_preserves_script_network_failure_handling_and_exception_chain(self):
+        failure = httpx.ConnectError('private proxy address')
+        with patch.object(peach_proxy, 'http_client', side_effect=failure):
+            with self.assertRaises(OSError) as caught:
+                peach_proxy.read_url('https://example.invalid')
+        self.assertIs(caught.exception.__cause__, failure)
+        self.assertIn('ConnectError', str(caught.exception))
+        self.assertNotIn('private proxy address', str(caught.exception))
+
+    def test_default_transport_uses_saved_proxy_without_environment_fallback(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            peach_proxy.save(root, {"mode": "proxy", "proxy": "socks5h://127.0.0.1:17890"})
+            with patch.object(peach_proxy, "secrets_root", return_value=root), patch("peach.http.httpx.Client") as factory:
+                transport = HttpxTransport()
+                _ = transport.client
+                self.assertEqual(factory.call_args.kwargs["proxy"], "socks5h://127.0.0.1:17890")
+                self.assertFalse(factory.call_args.kwargs["trust_env"])
+                transport.close()
+
+    def test_direct_client_ignores_environment_proxy(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            peach_proxy.save(root, {"mode": "direct"})
+            with patch("httpx.Client") as factory:
+                peach_proxy.http_client(root=root, timeout=8)
+            self.assertEqual(factory.call_args.kwargs, {"trust_env": False, "timeout": 8})
+
+    def test_injected_transport_is_used_without_a_proxy_mount(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            peach_proxy.save(root, {"mode": "proxy", "proxy": "http://127.0.0.1:1"})
+            with peach_proxy.http_client(root=root, transport=httpx.MockTransport(
+                    lambda request: httpx.Response(200, content=b"injected"))) as client:
+                self.assertEqual(client.get("https://example.invalid").content, b"injected")
+
+    def test_browser_fingerprint_transport_uses_saved_proxy(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            peach_proxy.save(root, {"mode": "proxy", "proxy": "http://127.0.0.1:17890"})
+            with patch.object(peach_proxy, "secrets_root", return_value=root), patch("peach.http.curl_requests.Session") as factory:
+                transport = CurlCffiTransport(impersonate="chrome")
+                _ = transport.session
+                self.assertEqual(factory.call_args.kwargs["proxy"], "http://127.0.0.1:17890")
+                self.assertFalse(factory.call_args.kwargs["trust_env"])
+                transport.close()
 
 
 class UserAgentTests(unittest.TestCase):

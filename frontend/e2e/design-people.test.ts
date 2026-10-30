@@ -94,7 +94,6 @@ describe('设计决定：人物与厂牌资料页', () => {
         // 人名那一行点开的是资料页，不是按名字再搜一遍。
         await page.keyboard.press('ArrowDown');
         await page.keyboard.press('Enter');
-        await page.waitForURL(/\/performers\//, { timeout: 5_000 });
         await page.waitForURL('**/performers/90301');
         assert.deepEqual(opened.problems, []);
       } finally {
@@ -528,13 +527,15 @@ describe('设计决定：人物与厂牌资料页', () => {
           const count = classification.nextElementSibling!;
           const label = classification.getBoundingClientRect(), video = count.getBoundingClientRect();
           const glyph = classification.querySelector('svg')!.getBoundingClientRect();
+          // 行内字形取 `--icon-inline`，是所在文字字号的 1.2 倍。
+          const inline = parseFloat(getComputedStyle(classification.querySelector('svg')!).fontSize) * 1.2;
           return { first: element.firstElementChild === classification, top: [label.top, video.top],
-            edges: [label.right, video.left], glyph: [glyph.width, glyph.height] };
+            edges: [label.right, video.left], glyph: [glyph.width, glyph.height].map(side => Math.abs(side - inline) < 0.5) };
         });
         assert.equal(geometry.first, true);
         assert.ok(Math.abs(geometry.top[0]! - geometry.top[1]!) < 1, '分类与视频数量另起了行');
         assert.ok(geometry.edges[0]! <= geometry.edges[1]!, '分类没有排在视频数量左侧');
-        assert.deepEqual(geometry.glyph, [16, 16]);
+        assert.deepEqual(geometry.glyph, [true, true]);
         const measured = await layout(opened.page);
         assert.ok(measured.scrollWidth <= measured.viewportWidth + 1);
         assert.deepEqual(measured.offenders, []);
@@ -578,9 +579,7 @@ describe('设计决定：人物与厂牌资料页', () => {
 
   it('看片那一行：两枚标识隔 32px、按 22px 字高对齐；MISSAV 按它站上的排字，AV 用它的粉；第二枚带序号', { timeout: 60_000 }, async () => {
     const name = '七沢みあ';
-    const opened = await visit(browser, '/', DESKTOP);
-    try {
-      const page = opened.page;
+    const opened = await visit(browser, `/performers/${encodeURIComponent(name)}`, DESKTOP, async page => {
       await page.route(/\/api\/entity\?/, (route) => route.fulfill({ json: {
         id: 90_001, kind: 'performer', canonical_name: name, aliases: [], display_aliases: [],
         user_aliases: [], asset_count: 0, tags: [], related_performers: [], links: [], metadata: {},
@@ -590,7 +589,9 @@ describe('设计决定：人物与厂牌资料页', () => {
           { site: 'missav', label: 'MISSAV', ordinal: '2', slot: 'mark', mark: '', url: 'https://missav.ws/actresses/x' },
         ],
       } }));
-      await page.goto(new URL(`/performers/${encodeURIComponent(name)}`, page.url()).href, { waitUntil: 'load' });
+    });
+    try {
+      const page = opened.page;
       await page.locator('[data-missav-mark]').waitFor({ timeout: 15_000 });
       const marks = await page.locator('[data-entry-marks]').evaluate((row) => {
         const wordmark = row.querySelector('[data-missav-mark]')!;
@@ -819,6 +820,30 @@ describe('设计决定：人物与厂牌资料页', () => {
     }
   });
 
+  it('相邻两张稍后看卡的底色之间隔着整段列距', { timeout: 60_000 }, async () => {
+    const opened = await openCatalogFixture(browser, (payload) => {
+      if (payload.items.length < 2) throw new Error('演示目录不足两张卡');
+      for (const item of payload.items.slice(0, 2)) item.watch_later = true;
+    });
+    try {
+      await opened.page.mouse.move(0, 0);
+      const geometry = await opened.page.evaluate(() => {
+        const [first, second] = [...document.querySelectorAll<HTMLElement>('#grid [data-media-grid] > [data-media-card][data-watch-later]')];
+        const spread = (element: HTMLElement) => Number(/0px 0px 0px (\d+(?:\.\d+)?)px/.exec(getComputedStyle(element).boxShadow)?.[1] ?? 0);
+        return {
+          sameRow: Math.abs(first!.getBoundingClientRect().top - second!.getBoundingClientRect().top) < 1,
+          clearance: second!.getBoundingClientRect().left - spread(second!) - (first!.getBoundingClientRect().right + spread(first!)),
+          columnGap: parseFloat(getComputedStyle(first!.parentElement!).columnGap),
+        };
+      });
+      assert.ok(geometry.sameRow, '前两张稍后看卡不在同一排');
+      assert.equal(geometry.clearance, geometry.columnGap, `两张稍后看卡的底色之间只剩 ${geometry.clearance}px`);
+      assert.deepEqual(opened.problems, []);
+    } finally {
+      await opened.close();
+    }
+  });
+
   it('跳过渲染的元信息区不裁掉贴着边的头像悬停描边和焦点环', { timeout: 60_000 }, async () => {
     /* 演示库的作品都未归属，头像是不可聚焦的 `<span>`；首张卡归给一位女优，头像才是按钮。 */
     const opened = await openCatalogFixture(browser, (payload) => {
@@ -998,9 +1023,9 @@ describe('设计决定：人物与厂牌资料页', () => {
           })),
         } }));
         await page.reload({ waitUntil: 'load' });
-        await page.getByRole('tab', { name: 'JAV feeds', exact: true }).click();
-        const card = page.getByRole('region', { name: 'JAV subscription list', exact: true });
-        await card.getByText('1–20 / 25 feeds', { exact: true }).waitFor();
+        await page.getByRole('tab', { name: '关注列表', exact: true }).waitFor();
+        const card = page.getByRole('region', { name: 'JAV 订阅列表', exact: true });
+        await card.getByText('1–20 / 25 个订阅源', { exact: true }).waitFor();
         assert.equal(await card.locator('[role="row"][data-key]').count(), 20);
         await card.getByRole('button', { name: 'Next', exact: true }).click();
         await card.getByText('21–25 / 25 feeds', { exact: true }).waitFor();
@@ -1038,9 +1063,16 @@ describe('设计决定：人物与厂牌资料页', () => {
             document.documentElement.dataset.theme = value;
             document.documentElement.classList.toggle('dark', value === 'dark');
           }, theme);
-          await tabs.getByRole('tab', { name: 'JAV feeds', exact: true }).click();
+          await tabs.getByRole('tab', { name: '添加关注', exact: true }).click();
+          await page.waitForFunction(() => {
+            const host = document.querySelector('[role="tablist"][aria-label="关注管理区域"]')!;
+            const selected = host.querySelector('[aria-selected=true]')!.getBoundingClientRect();
+            const surface = host.querySelector('[data-pill-thumb]')?.getBoundingClientRect();
+            return surface && Math.abs(selected.left - surface.left) <= 1
+              && Math.abs(selected.width - surface.width) <= 1;
+          });
           const face = await tabs.evaluate((element) => {
-            const selected = element.querySelector('[aria-selected=true]')!;
+            const selected = element.querySelector('[data-pill-thumb]')!;
             return { track: getComputedStyle(element).backgroundColor,
               selected: getComputedStyle(selected).backgroundColor,
               shadow: getComputedStyle(selected).boxShadow };
@@ -1048,7 +1080,7 @@ describe('设计决定：人物与厂牌资料页', () => {
           assert.equal(face.track, 'rgba(0, 0, 0, 0)', 'Pills 容器应透明');
           assert.notEqual(face.selected, face.track, '当前分类应有独立底色');
           assert.equal(face.shadow, 'none', 'Pills 不使用浮起滑块');
-          await tabs.getByRole('tab', { name: 'JAV feeds', exact: true }).focus();
+          await tabs.getByRole('tab', { name: '添加关注', exact: true }).focus();
           await page.keyboard.press('Home');
           await page.keyboard.press('Enter');
           assert.equal(await tabs.getByRole('tab', { name: 'Follow list', exact: true }).getAttribute('aria-selected'), 'true');
@@ -1062,9 +1094,9 @@ describe('设计决定：人物与厂牌资料页', () => {
             }] }],
           }),
         }));
-        await tabs.getByRole('tab', { name: 'Add follow', exact: true }).click();
-        await page.getByRole('textbox', { name: 'Source link, name or id' }).fill('主题测试来源');
-        await page.getByRole('button', { name: 'Find', exact: true }).click();
+        await tabs.getByRole('tab', { name: '添加关注', exact: true }).click();
+        await page.getByRole('textbox', { name: '来源链接、名字或 id' }).fill('主题测试来源');
+        await page.getByRole('region', { name: '添加创作者关注', exact: true }).getByRole('button', { name: '查找', exact: true }).click();
         const result = page.getByText('主题测试来源', { exact: true }).locator('..');
         await result.waitFor();
         for (const theme of ['light', 'dark']) {
@@ -1087,9 +1119,9 @@ describe('设计决定：人物与厂牌资料页', () => {
       const opened = await openFollowManage(browser, viewport);
       try {
         const page = opened.page;
-        await page.getByRole('button', { name: /^Source and subscription settings/ }).click();
-        await page.getByRole('tab', { name: 'Sources & subscriptions', exact: true, selected: true }).waitFor();
-        await page.getByRole('region', { name: 'Credentials configurable', exact: true }).waitFor();
+        await page.getByRole('link', { name: /^来源与订阅设置/ }).click();
+        await page.getByRole('tab', { name: '来源与订阅', exact: true, selected: true }).waitFor();
+        await page.getByRole('region', { name: '可配置凭据', exact: true }).waitFor();
         await settle(page);
         for (const theme of ['light', 'dark']) {
           await page.evaluate(value => {
