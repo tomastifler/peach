@@ -41,9 +41,9 @@ export interface StageApi {
   isOpen(): boolean;
   /** 浮窗此刻开着、能原地换条的那一种详情；没开、在退场或已要求关闭时为空。壳据此决定换条前拆不拆舞台。 */
   showing(): StageRequest['kind'] | null;
-  /** 显式关闭详情：交给当前详情自己的 `close`，退场期间再要一次不重复。 */
+  /** Explicitly close the details: handed to the current details' own `close`, and asking again during the exit does not repeat it. */
   requestClose(): void;
-  /** Escape 先关闭最上层弹层；没有弹层时才关闭详情。 */
+  /** Escape closes the topmost overlay first; details are closed only when there is no overlay. */
   requestEscape(): void;
   /** 该响应播放快捷键的 video：舞台开着取舞台里的，否则取小窗里的。 */
   activeVideo(): HTMLVideoElement | null;

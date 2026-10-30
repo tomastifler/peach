@@ -31,8 +31,8 @@ _ATTEMPTS_LOCK = threading.Lock()
 def _attempt_key(request: Request) -> str:
     """限速按真实来源分桶。
 
-    隧道运行且连接来自回环或服务自己的地址时才读取边缘客户端地址。源码隧道连接本机
-    HTTPS 地址；其他局域网客户端按连接源计数。转发地址必须有效并归一化。
+    The edge client address is read only when the tunnel is running and the connection comes from loopback or the service's own address. A source tunnel connects to the local
+    HTTPS address; other LAN clients are counted by connection source. The forwarded address must be valid and normalized.
     """
     peer = request.client.host if request.client else "unknown"
     server = request.scope.get('server')
@@ -117,7 +117,7 @@ def _origin_key(value: str) -> tuple[str, str, int | None] | None:
     except ValueError:
         return None
     scheme = parsed.scheme.lower()
-    # 浏览器通常省略默认端口，代理或客户端可能显式保留；二者是同一个 origin。
+    # Browsers usually omit the default port while proxies or clients may keep it explicitly; the two are the same origin.
     if port == {"http": 80, "https": 443}[scheme]:
         port = None
     return scheme, parsed.hostname.rstrip(".").lower(), port

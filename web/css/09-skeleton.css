@@ -7,7 +7,7 @@
 /* 标签页骨架里的视图切换靠在读数行右缘，同页面落地后那一枚的位置。 */
 .index .board-filter-frame .count>.iconswitch{margin:0 0 0 auto}
 .skeleton{display:block;height:18px;border-radius:var(--control-radius);background:var(--hover)}
-/* 占位沿用内容的滚动布局，但不显示原生滚动条或此前内容留下的覆盖轨道。 */
+/* The placeholder keeps the content's scroll layout but shows neither the native scrollbar nor an overlay track left by earlier content. */
 :is([data-skeleton],[data-skeleton-tier]),:is([data-skeleton],[data-skeleton-tier]) *{scrollbar-width:none}
 :is([data-skeleton],[data-skeleton-tier])::-webkit-scrollbar,:is([data-skeleton],[data-skeleton-tier]) *::-webkit-scrollbar{display:none}
 :is([data-skeleton],[data-skeleton-tier]) .ovtrack{display:none}
@@ -116,8 +116,8 @@
 .imgwait::after{opacity:1;filter:none;visibility:visible;transition-delay:180ms;
   animation:skeleton-sweep 1.5s ease-in-out infinite reverse}
 @starting-style{.imgwait::after{opacity:0;filter:blur(2px)}}
-/* 微光只在看得见时扫（`frontend/src/ui-kit/sweep-gate.ts` 标 `data-sweep`）：框在视口外是
-   `idle`，动画停在原处；露面后等了十秒图还没来是 `stalled`，换成不动的占位面。 */
+/* The shimmer sweeps only while visible (`frontend/src/ui-kit/sweep-gate.ts` marks `data-sweep`): a frame outside the viewport is 
+   `idle` and its animation stays where it is; if the image still has not arrived ten seconds after it becomes visible it is `stalled` and is swapped for a static placeholder surface. */
 .imgwait[data-sweep="idle"]::after{animation-play-state:paused}
 .imgwait[data-sweep="stalled"]::after{animation:none;
   background:linear-gradient(var(--hover),var(--hover)),var(--ground)}

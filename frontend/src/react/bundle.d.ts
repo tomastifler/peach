@@ -60,7 +60,7 @@ export interface UninstallState {
   available: boolean; full_available: boolean; message: string; data_root: string; directories: string[];
 }
 
-/** 数据目录里的一类数据。`reclaimable` 是清理这一类能腾出的字节。 */
+/** One category of data in the data folder. `reclaimable` is the number of bytes that clearing this category can free. */
 export interface StorageCategory {
   key: string; label: string; description: string; note: string; cleanable: boolean;
   bytes: number; files: number; reclaimable: number;
@@ -126,7 +126,7 @@ export interface AutomaticUpdateState {
   mode: string; interval_hours: number; available: boolean; download_available: boolean; error?: string;
 }
 
-/** 媒体库中可用的直连渠道与 CloudDrive2 路径渠道。 */
+/** The direct-link channels and CloudDrive2 path channels available in the library. */
 export type DownloadProviderKey = '115' | 'pikpak' | `clouddrive:${string}:${string}`;
 
 export interface DownloadConfig {
@@ -258,7 +258,7 @@ export interface MediaSource {
   transport?: 'filesystem' | 'smb'; smb_username?: string; smb_password_saved?: boolean; smb_encrypt?: boolean;
   root_id?: string; library_id?: string;
   location: string; root: string; path: string; online?: boolean; library?: string; library_icon?: string; cost?: 'free' | 'metered';
-  /** 媒体库来源色（强调色键名，空串不上色）与处理方式；`library_stages` 是自定义时所选步骤，逗号分隔。 */
+  /** The library source color (accent key name; an empty string means no tint) and handling mode; `library_stages` is the steps chosen when customized, comma-separated. */
   library_color?: string; library_policy?: 'auto' | 'local' | 'custom'; library_stages?: string;
 }
 

@@ -86,9 +86,9 @@ export function FolderRuleDialog({ folder, rule, revision, close }: {
           {preview.sample.length ? <ul className="flex flex-col gap-1 text-body-2-regular text-text-secondary">
             {preview.sample.map(item => <li className="wrap-anywhere" key={item.id}>{item.name}</li>)}
           </ul> : null}
-          {preview.conflicts.length ? <Note tone="warning" extra={<Disclosure summary="查看归属冲突">
-            <ul className="mt-2 flex flex-col gap-2">{preview.conflicts.slice(0, 30).map(item => <li className="wrap-anywhere" key={item.id}>{item.name}：{item.reason}</li>)}</ul>
-          </Disclosure>}>已有归属或逐件确认的内容保留，目录规则只应用到其余内容。</Note> : null}
+          {preview.conflicts.length ? <Note tone="warning" extra={<Disclosure summary="View ownership conflicts">
+            <ul className="mt-2 flex flex-col gap-2">{preview.conflicts.slice(0, 30).map(item => <li className="wrap-anywhere" key={item.id}>{item.name}: {item.reason}</li>)}</ul>
+          </Disclosure>}>Content that already has an ownership or was confirmed one by one is kept; the folder rule only applies to the rest.</Note> : null}
         </section> : null}
         {action.error ? <Note tone="error">{action.error}</Note> : null}
       </div>

@@ -15,12 +15,12 @@ export const feedState = { FEED_SKELETON_CARDS: undefined, feedNewSkeletonHtml: 
 export function feedNewCoverHtml(item){
   if(item.has_cover)return coverImage(item,'big');
   if(!item.cover_url||!item.code)return item.cover_fetching
-    ?`<span class="nopic" data-feed-cover-state="fetching">${loadingDotsHtml('抓取中')}</span>`
-    :'<span class="nopic" data-feed-cover-state="missing">无封面</span>';
-  // 官方图经 Peach 代理取，断网或上游失败时换成「封面未取得」占位。
+    ?`<span class="nopic" data-feed-cover-state="fetching">${loadingDotsHtml('Fetching')}</span>`
+    :'<span class="nopic" data-feed-cover-state="missing">No cover</span>';
+  // Official images are fetched through the Peach proxy; when offline or the upstream fails they are swapped for a "Cover unavailable" placeholder.
   return coverImage(item,'big').replace(/ src="[^"]*"/,
     ` src="${esc(remoteCoverUrl(item))}" data-panel-prior="1"`)
-    .replace('data-drop="self"', 'data-drop="initial" data-initial="封面未取得" data-drop-class="nopic"');
+    .replace('data-drop="self"', 'data-drop="initial" data-initial="Cover unavailable" data-drop-class="nopic"');
 }
 
 export function feedNewCardHtml(item){
@@ -71,12 +71,12 @@ export async function loadEntityShapes(){
   return feedState.entityShapes;
 }
 
-/* 首页有没有「未入库的新作」记在本机：首屏骨架就按上次的结论铺这一行，不等形状接口回来再插进来，
-   把下面的目录往下推一跳。接口或那一行画完后改记新的结论。 */
+/* Whether the home page has any "new works not in the library" is remembered on this machine: the first-paint skeleton lays out that row from the last conclusion, without waiting for the shape API to return and then inserting it,
+   which would push the catalog below down one jump. After the API or that row finishes drawing, the new conclusion is remembered. */
 const HOME_FEED_KEY='peach.home-feed.v1';
 export function rememberHomeFeed(has){
   catalogState.homeHasFeed=has;
-  try{localStorage.setItem(HOME_FEED_KEY,has?'1':'0')}catch{/* 下次照旧等接口。 */}
+  try{localStorage.setItem(HOME_FEED_KEY,has?'1':'0')}catch{/* Next time, wait for the API as usual. */}
 }
 export function recalledHomeFeed(){
   try{const value=localStorage.getItem(HOME_FEED_KEY);return value==='1'?true:value==='0'?false:null}catch{return null}
@@ -140,9 +140,9 @@ export function syncFeedAutoScroll(){
     preferencesState.appSettings.feedAutoScroll?wireAutoScroll(row):stopAutoScroll(row));
 }
 
-/* 开关挪到下一帧写：它一翻，资料卡换栏、页面变高，而整页那条覆盖滚动条正观察着 `<body>`。在尺寸观察
-   回调里当场写，`<body>` 这一层浅的变化本轮送不出去，浏览器就报一次 ResizeObserver 循环错误，
-   每开一次资料页都进错误上报。 */
+/* Write the toggle on the next frame: once it flips, the profile card switches columns and the page gets taller, while the full-page overlay scrollbar is observing `<body>`. Writing it on the spot inside the size-observer
+   callback means this round cannot deliver the shallow change on the `<body>` level, so the browser reports a ResizeObserver loop error once,
+   and every opening of a profile page goes into error reporting. */
 let heroWideFrame=0;
 export function syncHeroWide([entry]){
   const wide=entry.contentRect.width>=feedState.HERO_WIDE_PX;

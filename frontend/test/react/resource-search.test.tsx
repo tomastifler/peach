@@ -106,14 +106,14 @@ it('设置保存后清空 API key，移除需再保存才生效', async () => {
   }));
   const host = await mount(<QueryClientProvider client={queryClient}><IndexerSettings receipt={vi.fn()} /></QueryClientProvider>);
   // 等待期间骨架也带同一个分区标题，等的是表单本身。
-  await vi.waitFor(async () => { await settle(); expect(host.querySelector('form[aria-label="资源搜索"]')).not.toBeNull() });
-  expect(host.textContent).toContain('清除已保存的 API key');
-  await type(named(host, '索引器 1 API key'), 'private-test-key');
-  await submit(section(host, '资源搜索'));
+  await vi.waitFor(async () => { await settle(); expect(host.querySelector('form[aria-label="Resource search"]')).not.toBeNull() });
+  expect(host.textContent).toContain('Clear saved API key');
+  await type(named(host, 'Indexer 1 API key'), 'private-test-key');
+  await submit(section(host, 'Resource search'));
   await settle();
   expect(posts).toHaveLength(1);
-  expect(named(host, '索引器 1 API key')?.value).toBe('');
-  await click(host.querySelector('button[aria-label="移除索引器 1"]'));
+  expect(named(host, 'Indexer 1 API key')?.value).toBe('');
+  await click(host.querySelector('button[aria-label="Remove indexer 1"]'));
   expect(posts).toHaveLength(1);
   await submit(section(host, 'Resource search'));
   expect(posts[1]).toEqual({ indexers: [] });

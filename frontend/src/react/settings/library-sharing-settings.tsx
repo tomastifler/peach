@@ -47,14 +47,14 @@ export function LibrarySharingSettings({ initial, receipt }: {
         onChange={(enabled) => enabled ? setReviewing(true) : save(false)}
         {...busyProps(action.busy === 'save')} />
     </SettingsRow></Rows>
-    {!value.available ? <Stack divided><span className="self-start"><StatusLabel>上传服务未配置</StatusLabel></span></Stack> : null}
+    {!value.available ? <Stack divided><span className="self-start"><StatusLabel>Upload service not configured</StatusLabel></span></Stack> : null}
     {value.enabled && value.last_attempt?.status === 'failed'
-      ? <Stack divided><span className="self-start"><StatusLabel tone={value.last_attempt.attempted ? 'error' : 'warning'}>{value.last_attempt.attempted ? '上传失败' : '待重新准备'}</StatusLabel></span><ErrorText>{value.last_attempt.attempted
-        ? '馆藏与口味上传失败，本周不再发送。' : '馆藏与口味上传未完成，将自动重新准备。'}</ErrorText></Stack> : null}
+      ? <Stack divided><span className="self-start"><StatusLabel tone={value.last_attempt.attempted ? 'error' : 'warning'}>{value.last_attempt.attempted ? 'Upload failed' : 'Awaiting re-preparation'}</StatusLabel></span><ErrorText>{value.last_attempt.attempted
+        ? 'Library and taste upload failed; nothing more will be sent this week.' : 'Library and taste upload did not finish; it will be prepared again automatically.'}</ErrorText></Stack> : null}
     {value.enabled && value.last_attempt?.status === 'waiting-data'
-      ? <Stack divided><span className="self-start"><StatusLabel>等待数据</StatusLabel></span><Help>等待可分析的馆藏或偏好数据。</Help></Stack> : null}
+      ? <Stack divided><span className="self-start"><StatusLabel>Waiting for data</StatusLabel></span><Help>Waiting for library or preference data that can be analyzed.</Help></Stack> : null}
     {value.enabled && value.last_attempt?.status === 'unknown'
-      ? <Stack divided><span className="self-start"><StatusLabel tone="warning">结果未取得</StatusLabel></span><Help>未取得上传结果，本周不再发送。</Help></Stack> : null}
+      ? <Stack divided><span className="self-start"><StatusLabel tone="warning">Result unavailable</StatusLabel></span><Help>Upload result unavailable; nothing more will be sent this week.</Help></Stack> : null}
     {preview ? <Stack divided>
       <Help>This preview contains {preview.data.library.length} coded titles and a summary of {preview.data.coverage.uncoded_items} uncoded library items, about {(preview.bytes / 1024).toFixed(1)} KiB. It does not include personal data such as accounts, devices, file paths or browser history.</Help>
       <Disclosure summary="Upload data preview" defaultOpen>
@@ -68,13 +68,13 @@ export function LibrarySharingSettings({ initial, receipt }: {
     <Footer>
       {reviewing && !value.enabled ? <Button variant="secondary" onClick={() => {
         setReviewing(false); setPreview(null); setAccepted(false);
-      }}>取消</Button> : null}
+      }}>Cancel</Button> : null}
       <Button variant="secondary" onClick={() => { setReviewing(true); void action.run('preview',
         (signal) => apiGet<Preview>('/api/configuration/library-sharing/preview', signal),
         (data) => { setPreview(data); setAccepted(false) }) }}
-        {...busyProps(action.busy === 'preview')}>预览上传内容</Button>
+        {...busyProps(action.busy === 'preview')}>Preview upload contents</Button>
       {!value.enabled && preview ? <Button variant="primary" disabled={!accepted} onClick={() => save(true)}
-        {...busyProps(action.busy === 'save')}>同意并开启上传</Button> : null}
+        {...busyProps(action.busy === 'save')}>Agree and turn on upload</Button> : null}
     </Footer>
   </>;
 }

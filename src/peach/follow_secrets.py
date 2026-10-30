@@ -187,17 +187,17 @@ CREDENTIAL_GUIDE: dict[str, dict] = {
         "fields": ["cookie"],
         # FANBOX Cookie 绑定浏览器会话与风控环境，不跨机同步。
         "syncable": [],
-        "why": "The public list needs no sign-in; when post details are blocked by the FANBOX verification page, a browser session can fetch the body, multiple images and external resource links.",
+        "why": "The public list does not need a login; when FANBOX's verification page blocks a post's details, a browser session can fetch the body, multiple images and external resource links.",
         "where": "https://www.fanbox.cc/",
-        "howto": "After signing in to FANBOX, copy the whole Cookie request header from a successful api.fanbox.cc/post.info request.",
+        "howto": "After logging in to FANBOX, copy the full Cookie request header from a successful api.fanbox.cc/post.info request.",
     },
     "gofile": {
         "requirement": "optional",
         "fields": ["api_token"],
         "syncable": [],
-        "why": "Used to expand Gofile file pages and get their image and video lists; Gofile currently requires Premium to read the contents API, and without it the file page link is still kept.",
+        "why": "Used to expand a Gofile file page and get its image and video list; Gofile currently requires Premium to read the contents API, and without it the file page link is still kept.",
         "where": "https://gofile.io/myprofile",
-        "howto": "After signing in to a Premium Gofile account, copy the API token from the profile page.",
+        "howto": "After logging in to a Premium Gofile account, copy the API token from the profile page.",
     },
     "kemono": {"requirement": "none"},
     "coomer": {"requirement": "none"},
@@ -207,37 +207,37 @@ CREDENTIAL_GUIDE: dict[str, dict] = {
         "requirement": "optional",
         "fields": ["access_token"],
         "syncable": [],
-        "why": "公开作者视频无需登录；有访问限制的视频需要账号访问权及有效登录凭据。",
+        "why": "Public creator videos need no login; videos with access restrictions need account access and valid login credentials.",
         "where": "https://www.iwara.tv/",
-        "howto": "登录 Iwara 后，从成功的 apiq.iwara.tv/video 请求复制 Authorization 中 Bearer 后的值，填写 access_token。令牌过期后需重新复制。",
+        "howto": "After logging in to Iwara, copy the value after Bearer in the Authorization header of a successful apiq.iwara.tv/video request and enter it as access_token. Copy it again after the token expires.",
     },
     "rule34xxx": {
         "requirement": "required",
         "fields": ["user_id", "api_key"],
         # 账号级、与机器无关，用户明确要求跨机同步。
         "syncable": ["user_id", "api_key"],
-        "why": "The website sits behind a Cloudflare captcha; Peach does not bypass captchas, so only the official API can be used.",
+        "why": "The website sits behind a Cloudflare CAPTCHA; Peach does not bypass CAPTCHAs, so only the official API can be used.",
         "where": "https://rule34.xxx/index.php?page=account&s=options",
-        "howto": "After signing in, generate an API key on the account settings page and write user_id and api_key into the credentials file.",
+        "howto": "After logging in, generate an API key on the account settings page and write user_id and api_key into the credentials file.",
     },
     "f95zone": {
         "requirement": "optional",
         "fields": ["cookie"],
         # cookie 绑会话与客户端 IP，同步到另一台大概率直接失效——不同步。
         "syncable": [],
-        "why": "Discovering updates needs no sign-in; only fetching attachments and masked download links requires a session.",
+        "why": "Finding updates does not need a login; only fetching attachments and masked download links needs a session.",
         "where": "https://f95zone.to/",
-        "howto": "After signing in, copy the whole Cookie request header from the browser and write it into the cookie field of the credentials file.",
+        "howto": "After logging in, copy the full Cookie request header from your browser and write it into the cookie field of the credentials file.",
     },
     "simpcity": {
         "requirement": "required",
         "fields": ["cookie"],
         # 登录会话绑浏览器与 DDoS-Guard 的放行记录，同步到另一台大概率直接失效——不同步。
         "syncable": [],
-        "why": "The site does not let guests read posts, so update checks need a signed-in session; the DDoS-Guard in front cannot identify "
-               "a challenge for a standard desktop browser, and Peach solves no challenges, so an expired cookie is reported as is.",
+        "why": "The site does not let guests read posts, so checking for updates requires a login session; the DDoS-Guard in front issues no "
+               "challenge to a standard desktop browser identity, Peach does not solve any challenge either, and an expired cookie is reported as-is.",
         "where": "https://simpcity.cr/",
-        "howto": "After signing in, copy the whole Cookie request header from the browser and write it into the cookie field of the credentials file.",
+        "howto": "After logging in, copy the full Cookie request header from your browser and write it into the cookie field of the credentials file.",
     },
 }
 

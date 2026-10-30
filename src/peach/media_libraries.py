@@ -1,4 +1,4 @@
-"""媒体库按持久身份分组，来源与挂载归存储根目录。"""
+"""Media libraries are grouped by persistent identity; sources and mounts belong to the storage root."""
 from . import media_identity
 
 LIBRARY_ICONS = frozenset({"hard-drive", "database", "heart", "star", "tags", "115", "pikpak",

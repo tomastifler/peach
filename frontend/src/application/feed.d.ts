@@ -1,2 +1,2 @@
-/** 首页新作卡的封面片段：本地封面、经 `/cover-image` 取的官方封面，或「抓取中」「无封面」占位。 */
+/** The cover fragment of the home page's new-work card: a local cover, an official cover fetched through `/cover-image`, or a "Fetching" / "No cover" placeholder. */
 export declare function feedNewCoverHtml(item: Record<string, unknown>): string;

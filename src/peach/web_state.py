@@ -67,12 +67,12 @@ FAVICON = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect wi
 
 CACHE_TTL = 90
 
-#: 目录时间距今不足这么久算「还在写」，那时扫出的目录索引只缓存 `SETTLE_TTL` 秒。
-#: 见 `WebContract._directory_index`。
+#: A directory time less than this long ago counts as "still being written", and a directory index scanned then is cached for only `SETTLE_TTL` seconds.
+#: See `WebContract._directory_index`.
 SETTLE_SECONDS = 2
 SETTLE_TTL = 1.0
 
-#: `cached()` 的聚合缓存最多留这么多个键，最久没用的先淘汰。
+#: `cached()` 's aggregate cache keeps at most this many keys, evicting the least recently used first.
 CACHE_KEYS = 192
 
 
@@ -183,7 +183,7 @@ class WebContract:
         #: 任务中心。每个后台任务的开始、进度与结束都写这一张表，`/tasks` 只读它。
         #: 只读端由 `api` 关掉写入：那边的账本是复制来的，写一行就是一处合不回去的分叉。
         self.task_runs = TaskRunStore(self.database)
-        #: 整理设置由组合根注入；垃圾检查由扫描和后处理共用领域规则。
+        #: Organize settings are injected by the composition root; the junk check shares domain rules between scanning and post-processing.
         self.download_organize_templates = lambda: {}
         #: 后继调度（ADR-0040）。导入 `avatar_followup` 就是它的登记动作：调度器本身
         #: 不认识任何一种后继，登记表在 `followups.REGISTRY` 里。
@@ -256,9 +256,9 @@ class WebContract:
         `w_review_decision` 调 `cache_bust`；旧实现照样把批准前的快照写回去，
         于是用户批准完刷新，看到的还是批准前的列表，而且持续整整一个 TTL。
 
-        用代次挡住：写回前确认这期间没有失效过，否则丢弃这次结果。按版本核验的键
-        （`revision_cache_keys`）不挡：版本在计算前读好，期间有写入，下一次读到新版本
-        照样重算；挡掉它们只会让长任务频繁提交时上秒的计算永远存不进去，每个读者各算一遍。
+        Guarded by a generation counter: before writing back, confirm there was no invalidation in between, otherwise discard this result. Keys verified by version
+        (`revision_cache_keys`) are not guarded: the version is read before computing, and if a write happens in between, the next read sees the new version
+        and recomputes as usual; guarding them would only keep a long task from ever storing last second's computation when it commits frequently, with every reader computing its own.
         """
         now = time.monotonic()
         with self.cache_lock:
@@ -276,9 +276,9 @@ class WebContract:
                 self.cache.move_to_end(key)
                 while len(self.cache) > CACHE_KEYS:
                     evicted, _ = self.cache.popitem(last=False)
-                    # 键空间不封闭的聚合（按作者、按筛选口径）的锁和登记跟着结果一起走，
-                    # 否则这两份只增不减。正被别的线程拿着的锁摘掉也无妨，持有者手里还有它；
-                    # 同键再来时 `cached_until_changed` 会重新登记。
+                    # Locks and registrations of aggregates with an open key space (per author, per filter criteria) go away together with the results,
+                    # otherwise these two would only grow. Removing a lock currently held by another thread is harmless, since the holder still has it;
+                    # When the same key comes again `cached_until_changed` registers it anew.
                     self.revision_cache_keys.discard(evicted)
                     self.aggregate_locks.pop(evicted, None)
         return value
@@ -413,25 +413,25 @@ class WebContract:
         `.poster.json` 说正封那一块在哪。版本见 `cover_version`。
 
         卡片列表逐行问「有封面吗」「取景是多少」，一页 60 行就是 120+ 次 stat 加
-        读文件；封面目录一次 scandir 就覆盖全部番号。`/cover` 端点仍走 `cover_path()`
-        直读，取图不受索引影响。
+        reads files; one scandir of the cover directory covers all codes. The `/cover` endpoint still goes through `cover_path()`
+        directly, so fetching images is unaffected by the index.
 
-        索引只认封面目录的修改时间，不随账本提交失效，也不按时间过期：重建要读两千多份
-        边车，约一秒。封面与边车的写入方（`cover_artwork.install_cover`、
-        `jav_poster_crop.write_sidecar`）都先写临时文件再换名，新增、替换、删除都会改
-        目录时间。目录不存在时退回 `CACHE_TTL`。刚写过的目录见 `_directory_index`。
+        The index goes only by the cover directory's modification time, and is neither invalidated by ledger commits nor expired by time: rebuilding reads over two thousand
+        sidecars, about one second. The writers of covers and sidecars (`cover_artwork.install_cover`,
+        `jav_poster_crop.write_sidecar`) both write a temp file first and then rename, so adding, replacing and deleting all change
+        the directory time. When the directory does not exist it falls back to `CACHE_TTL`. For a directory just written, see `_directory_index`.
         """
         return self._directory_index("cover-index", self.cover_root, self._scan_cover_root,
                                      ttl=math.inf)
 
     def _directory_index(self, key: str, root: Path, scan, *, ttl: float):
-        """按目录修改时间缓存的一次目录扫描；目录不存在时退回 `CACHE_TTL`。
+        """A directory scan cached by directory modification time; when the directory does not exist it falls back to `CACHE_TTL`.
 
-        目录时间取自文件系统的时钟刻度（NTFS 约 15 ms），装图的一连串换名可能落在同一
-        刻度里：读者在两次换名之间扫到的半成品，和换完之后的目录时间相同。所以照 Git 判
-        「新近修改」的做法，目录时间距今不足 `SETTLE_SECONDS` 时扫出的结果只按
-        `SETTLE_TTL` 缓存，版本里另记一档，目录静下来之后重扫一次才按 `ttl` 缓存。
-        `ttl` 为无穷时这一份不随提交通知清掉。
+        The directory time comes from the filesystem's clock tick (NTFS about 15 ms), a series of renames while installing images may fall within the same
+        tick: a half-finished state scanned by a reader between two renames has the same directory time as after the renames finish. So, following Git's way of judging
+        "recently modified" practice: a result scanned when the directory time is less than `SETTLE_SECONDS` ago is cached only by
+        `SETTLE_TTL`, with a separate tier recorded in the version, and only after the directory settles and is rescanned once is it cached by `ttl`.
+        `ttl` being infinite means this copy is not cleared by commit notifications.
         """
         version = path_version(root)
         if version is None:
@@ -523,8 +523,8 @@ class WebContract:
         敏感、同样把 `.icon` / `.logo` 变体算作这个厂牌有图。松一格就是页面说有图却
         取回 404（碎图），紧一格就是明明装了却永远只显示首字母。
 
-        键里和 `cover_index()` 一样带目录的修改时间，刚装上的标识立刻进索引；刚写过的
-        目录见 `_directory_index`。
+        The key carries the directory's modification time, just like `cover_index()` so a newly installed logo enters the index right away; for a just-written
+        directory, see `_directory_index`.
         """
         return self._directory_index("logo-index", self.logo_root, self._scan_logo_root,
                                      ttl=CACHE_TTL)
@@ -584,7 +584,7 @@ class WebContract:
         所以一次 `os.scandir` 一起收；分成两个缓存键就是同一个目录连扫两遍。
 
         键里和 `cover_index()` 一样带目录的修改时间，刚装上的实体图立刻进索引，
-        口味与复核按头像目录版本重算时拿到的也是这一份；刚写过的目录见 `_directory_index`。
+        Taste and review recomputations keyed by the avatar directory version also get this same copy; for a directory just written, see `_directory_index`.
         """
         return self._directory_index("avatar-root-index", self.avatar_root, self._scan_avatar_root,
                                      ttl=CACHE_TTL)

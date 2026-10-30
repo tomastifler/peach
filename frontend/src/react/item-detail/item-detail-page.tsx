@@ -178,7 +178,7 @@ function MediaFrame({ item, gate, helpers, actions, autoplay, onEnded }: {
       <div data-player-toolbar="">
         <span data-player-stats-slot="" />
         {hasPictures ? <button type="button" data-jav-preview-toggle="" aria-pressed={image !== -2}
-          onClick={() => selectImage(image === -2 ? media[0]!.index : -2)}><Glyph name={image === -2 ? 'image' : 'play'} />{image === -2 ? '查看图片' : '播放正片'}</button>
+          onClick={() => selectImage(image === -2 ? media[0]!.index : -2)}><Glyph name={image === -2 ? 'image' : 'play'} />{image === -2 ? 'View image' : 'Play feature'}</button>
           : null}
         <span data-player-net-slot="" />
       </div>
@@ -189,15 +189,15 @@ function MediaFrame({ item, gate, helpers, actions, autoplay, onEnded }: {
             source={samples.find(sample => sample.index === (entry.index === -2 ? media[0]!.index : entry.index))?.source} thumbnail />} />
       </> : null}
       {image !== -2 && item.is_jav && item.code && !item.sample_images?.length && (source.isPending || source.error || source.data?.state === 'partial') ?
-        <div data-item-samples-state="">{source.isPending ? <span data-skeleton="samples" role="status" aria-label="正在读取样图" className="relative block h-12 w-20 skeleton-sheen" />
+        <div data-item-samples-state="">{source.isPending ? <span data-skeleton="samples" role="status" aria-label="Loading sample images" className="relative block h-12 w-20 skeleton-sheen" />
           : <Button variant="secondary" {...busyProps(source.isFetching)} title={source.data?.message || requestErrorMessage(source.error)}
-            aria-label="立即重试样图" onClick={() => { refreshSamples.current = true; void source.refetch() }}>立即重试</Button>}</div> : null}
+            aria-label="Retry sample images" onClick={() => { refreshSamples.current = true; void source.refetch() }}>Retry</Button>}</div> : null}
       {gate === 'offline' ? <OfflineGate item={item} badge={badge} helpers={helpers} actions={actions} />
         : gate === 'disc' ? (
           <div role="status" data-item-gate="disc">
-            <b>ISO 原盘</b>
-            <span>请使用支持原盘的外部播放器打开。</span>
-            <ExternalPlayback key={item.id} id={item.id} onOpened={() => actions.toast('已请求打开本地播放器')} />
+            <b>ISO disc image</b>
+            <span>Open it with an external player that supports disc images.</span>
+            <ExternalPlayback key={item.id} id={item.id} onOpened={() => actions.toast('Requested to open the local player')} />
           </div>
         ) : gate === 'online' ? (
           <div id="onlineGate" role="status" data-item-gate="online">
@@ -231,7 +231,7 @@ function OfflineGate({ item, badge, helpers, actions }: {
   return (
     <div id="offlineGate" role="status" data-item-gate="offline">
       <Html html={badge} />
-      <b>媒体目录无法访问</b>
+      <b>Media folder unreachable</b>
       <span>{helpers.offlineReason(String(item.root_id || item.location || ''))}</span>
       <button className="chip" id="offlineRetry" type="button" disabled={checking} onClick={() => void retry()}>
         {still ? 'Still unreadable · Refresh' : 'Refresh status'}
@@ -397,7 +397,7 @@ function Side({ item, queue, write, helpers, actions }: {
           ) : null}
         </div>
         {(item.medium || 'video') === 'video' && !online && !String(item.name || '').toLowerCase().endsWith('.iso')
-          ? <ExternalPlayback key={item.id} id={item.id} onOpened={() => actions.toast('已请求打开本地播放器')} /> : null}
+          ? <ExternalPlayback key={item.id} id={item.id} onOpened={() => actions.toast('Requested to open the local player')} /> : null}
         <Identity item={item} helpers={helpers} actions={actions} />
         <Tags item={item} write={write} helpers={helpers} actions={actions} />
         <LibraryCompletionPrompt assetIds={missingPreviewIds([item], helpers.javImage())}
@@ -451,7 +451,7 @@ function DetailTitle({ item, queue, helpers, actions, onStatus }: {
           dangerouslySetInnerHTML={{ __html: html }} />
         <span data-title-tools="">
           <button type="button" data-title-fold="" hidden={!foldable} aria-expanded={expanded}
-            aria-label={expanded ? '收起标题' : '展开标题'} title={expanded ? '收起标题' : '展开完整标题'} onClick={toggle}>
+            aria-label={expanded ? 'Collapse title' : 'Expand title'} title={expanded ? 'Collapse title' : 'Expand full title'} onClick={toggle}>
             <CollapseChevron />
           </button>
           {/* 取景框存的是坐标不是图片：存完重取这一条，封面地址没变，变的是接口给的 `poster_box`。
@@ -508,7 +508,7 @@ function SourceTools({ id, actions, onStatus }: { id: number; actions: ItemDetai
 function Rating({ item, write }: { item: DetailItem; write: DetailWrite }) {
   const on = ratingStars(item.rating);
   return (
-    <div id="detailRating" role="group" data-item-rating="" aria-label="评分" data-value={clampRating(item.rating)}>
+    <div id="detailRating" role="group" data-item-rating="" aria-label="Rating" data-value={clampRating(item.rating)}>
       <RatingStars value={on} onRate={star => write.rate(star)}
         busyStar={[1, 2, 3, 4, 5].find(star => write.busy.has(`rate:${star}`))}
         busyAttrs={star => write.busyAttrs(`rate:${star}`)} />
@@ -608,7 +608,7 @@ function Preference({ item, open, write }: { item: DetailItem; open: boolean; wr
         <span id="preferenceState" aria-live="polite">{write.preferenceState}</span>
         <button type="button" className="geist-button primary" id="savePreference" data-save-preference="" title="Submit reason" aria-label="Submit reason"
           {...write.busyAttrs('preference')} onClick={() => write.preference({ reason })}
-          dangerouslySetInnerHTML={{ __html: saving ? `${spinnerHtml('正在提交喜爱理由')}<span>提交中</span>` : '<span>提交</span>' }} />
+          dangerouslySetInnerHTML={{ __html: saving ? `${spinnerHtml('Submitting favorite reason')}<span>Submitting</span>` : '<span>Submit</span>' }} />
       </div>
     </div>
   );

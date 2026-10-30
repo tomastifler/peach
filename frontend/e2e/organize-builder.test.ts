@@ -13,7 +13,7 @@ describe('整理规则构建', () => {
         status: 'idle', locations: [{ location: 'local', roots: [] }], last_batch: '',
         templates: { local: { file: '{code}', dir: '' } },
         presets: [{ label: '按厂牌建文件夹', file: '{code}[ {title}]', dir: '{studio}', example: '厂牌/ABC-123 标题.mp4' }],
-        placeholders: Object.entries({ code: '番号', title: '标题', studio: '厂牌', series: '系列', year: '发行年', actors: '出演者', cd: '分片号', mosaic: '有码无码', definition: '画质' })
+        placeholders: Object.entries({ code: 'Product code', title: '标题', studio: 'Studios', series: 'Series', year: '发行年', actors: '出演者', cd: '分片号', mosaic: '有码无码', definition: '画质' })
           .map(([key, label]) => ({ key, label })),
       } }));
       await page.route('**/api/links', route => route.fulfill({ json: {
@@ -29,7 +29,7 @@ describe('整理规则构建', () => {
       const dir = organize.getByRole('textbox', { name: '目录模板', exact: true });
       await file.waitFor();
       await settle(page);
-      assert.equal(await organize.getByRole('group', { name: '插入参数', exact: true }).getByRole('button').count(), 9);
+      assert.equal(await organize.getByRole('group', { name: 'Insert placeholder', exact: true }).getByRole('button').count(), 9);
       await file.fill('前缀-后缀');
       await file.evaluate((input: HTMLInputElement) => { input.focus(); input.setSelectionRange(3, 3) });
       await organize.getByRole('button', { name: '番号 {code}', exact: true }).click();
@@ -53,7 +53,7 @@ describe('整理规则构建', () => {
           const style = getComputedStyle(button);
           return [style.backgroundColor, style.borderTopWidth, style.boxShadow];
         };
-        return { preset: face('套用模板'), parameter: face('插入参数'), overflow: document.documentElement.scrollWidth > innerWidth };
+        return { preset: face('Apply template'), parameter: face('Insert placeholder'), overflow: document.documentElement.scrollWidth > innerWidth };
       });
       assert.notDeepEqual(faces.preset, faces.parameter, '模板与参数使用不同按钮样式');
       assert.equal(faces.overflow, false);

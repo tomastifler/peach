@@ -74,7 +74,7 @@ export function indexSkeletonHtml({kind,layout='big',mode='alphabet'}:{kind?:str
   const company=kind==='studios'||kind==='agencies'||kind==='series';
   const cell='<span class="icell"><span class="ring skeleton"></span><span class="nm skeleton">&nbsp;</span><span class="n skeleton">&nbsp;</span></span>';
   const body=`<div class="igrid" data-cells="${company?'company':'people'}" data-layout="${esc(layout)}">${cell.repeat(12)}</div>`;
-  const label='正在读取索引';
+  const label='Loading index';
   return `<div class="skeletonpanel index-skeleton" data-skeleton="index/${esc(kind)}/${esc(layout)}/${esc(mode)}" data-fill=""
     role="status" aria-label="${label}"><span class="sr-only">${label}</span><section aria-hidden="true">${body}</section></div>`;
 }

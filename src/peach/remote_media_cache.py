@@ -23,7 +23,7 @@ MEDIA_SECURITY_HEADERS = {
 
 
 def passive_media_type(value: str) -> bool:
-    """代理只返回被动媒体；活动文档和未知类型不能在应用域打开。"""
+    """The proxy returns only passive media; active documents and unknown types cannot be opened in the app origin."""
     kind = value.split(';',1)[0].strip().lower()
     return (not kind.endswith(('/svg+xml','+xml','/xml'))
             and (kind.startswith(('image/','video/','audio/'))
@@ -104,7 +104,7 @@ class RemoteMediaCache:
             upstream = fetch()
             if not passive_media_type(upstream.headers.get('content-type','')):
                 close()
-                return Response('媒体响应类型不受支持',status_code=502,media_type='text/plain',
+                return Response('Unsupported media response type',status_code=502,media_type='text/plain',
                                 headers={'cache-control':'no-store',**MEDIA_SECURITY_HEADERS})
             forwarded = {name: upstream.headers[name] for name in MEDIA_HEADERS if name in upstream.headers}
             forwarded.update({'cache-control':'private, no-cache', **(headers or {}), **MEDIA_SECURITY_HEADERS})

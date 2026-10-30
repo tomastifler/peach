@@ -122,7 +122,7 @@ export function wireSourceTools(root,done){
 export async function entityAliasForm(mine,write){
   const form=formModal({
     title:'添加别名',
-    description:'图库按名字查找图片，添加别名可能找到更多备选图片；也可以将别名设为统一显示的名称。',
+    description:'The image library looks up pictures by name; adding aliases may find more candidate images, and an alias can also be set as the unified display name.',
     body:`<label class="modalfield"><span>别名</span>
         <input class="geist-input" name="alias" maxlength="80" autocomplete="off"
           placeholder="另一种写法，或另一个艺名"></label>`
@@ -153,11 +153,11 @@ export async function entityAliasForm(mine,write){
 
 export function showEntityLoading(kind,name){
   const jav=['performer','studio'].includes(kind)&&feedState.hasEntityPart(kind,name,'jav');
-  const head=`<div data-filter-row="bottom" class="flex min-w-0 items-center gap-3 px-3 py-2 min-h-12"><h3 data-entity-readout><span data-skeleton="count" class="relative inline-block h-3.5 w-24 rounded-md align-middle skeleton-sheen"></span></h3>${islandShortcutsEntry()}${kind==='agency'?'':filterControlsSkeletonHtml(sortKeys(state.sort,state.dir,jav),jav?{name:'jav-layout',label:'JAV 卡片版式',value:javLayout(),options:JAV_LAYOUTS}:null)}</div>`;
-  const top=kind==='agency'?'':`<div data-entity-media><button type="button" data-media-view="videos" aria-label="视频" aria-pressed="true" ${FILTER_WAITING}>${icon('play')}</button><button type="button" data-media-view="photos" data-media-icon="image" aria-label="照片" ${FILTER_WAITING}>${icon('pics')}</button></div><span data-entity-sep></span><div data-entity-scroll><div data-entity-states>${catalogState.catalogViews().map(view=>`<button type="button" data-entity-state="${esc(view.k)}" aria-pressed="${state.state===view.k}" ${FILTER_WAITING}>${esc(view.label)}</button>`).join('')}<span data-entity-sep></span></div>`;
+  const head=`<div data-filter-row="bottom" class="flex min-w-0 items-center gap-3 px-3 py-2 min-h-12"><h3 data-entity-readout><span data-skeleton="count" class="relative inline-block h-3.5 w-24 rounded-md align-middle skeleton-sheen"></span></h3>${islandShortcutsEntry()}${kind==='agency'?'':filterControlsSkeletonHtml(sortKeys(state.sort,state.dir,jav),jav?{name:'jav-layout',label:'JAV card layout',value:javLayout(),options:JAV_LAYOUTS}:null)}</div>`;
+  const top=kind==='agency'?'':`<div data-entity-media><button type="button" data-media-view="videos" aria-label="Videos" aria-pressed="true" ${FILTER_WAITING}>${icon('play')}</button><button type="button" data-media-view="photos" data-media-icon="image" aria-label="Photos" ${FILTER_WAITING}>${icon('pics')}</button></div><span data-entity-sep></span><div data-entity-scroll><div data-entity-states>${catalogState.catalogViews().map(view=>`<button type="button" data-entity-state="${esc(view.k)}" aria-pressed="${state.state===view.k}" ${FILTER_WAITING}>${esc(view.label)}</button>`).join('')}<span data-entity-sep></span></div>`;
   const body=kind==='agency'
     ?indexSkeletonHtml({kind:'performers',layout:indexState.peopleIndexLayout()})
-    :catalogContentSkeletonHtml('正在读取作品',cardRatio(gridLayout({active:jav,home:false,portrait:false})));
+    :catalogContentSkeletonHtml('Loading works',cardRatio(gridLayout({active:jav,home:false,portrait:false})));
   const placeholder=entitySkeletonHtml(kind,head,body,top);
   if($('#index').firstElementChild?.dataset.skeleton!==`entity/${kind}`){
     $('#index').innerHTML=placeholder;
@@ -226,11 +226,11 @@ entityState.entityPageHelpers = {
 entityState.entityFollowActions = {...followState.followFeedActions,
   route:()=>{},shuffle:()=>{},loaded:()=>{},toggleSelection:()=>{}};
 entityState.SOURCE_HINTS = {
-  'source offline':'媒体库无法访问，暂时无法核对文件；恢复连接后重试',
-  'source not mapped':'本机没有映射这个来源的盘符',
-  'file missing':'找不到源文件；点击右侧的扫描按钮，重新检查目录并更新数据库记录',
-  'unsupported platform':'当前服务端系统不支持直接定位文件',
-  'reveal failed':'打开文件管理器失败，请重试',
+  'source offline':'The library is unreachable, so files cannot be verified for now; retry after the connection is restored',
+  'source not mapped':'This machine has no drive letter mapped for this source',
+  'file missing':'Source file not found; click the scan button on the right to recheck the folder and update the database record',
+  'unsupported platform':'The current server system does not support locating files directly',
+  'reveal failed':'Failed to open the file manager; try again',
 };
 entityState.sourceHint = message=>entityState.SOURCE_HINTS[message]||message;
 entityState.syncedText = r=>[r.trashed?`${r.trashed} moved to trash`:'',

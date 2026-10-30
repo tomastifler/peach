@@ -292,7 +292,7 @@ class StrmPlaybackTests(unittest.TestCase):
         self.assertEqual(json.loads((self.root / 'state' / 'timeline-thumbnails.json').read_text())['mode'], 'off')
 
     def test_machine_media_settings_only_answer_the_machine_running_peach(self):
-        refused = '请在运行 Peach 的电脑上打开配置'
+        refused = 'Open settings on the computer running Peach'
         for path in ('/api/media-processing', '/api/thumbnail-jobs'):
             with self.subTest(path=path), addressed_client(self.app, '192.0.2.50') as client:
                 for response in (client.get(path), client.post(path, json={'playback_acceleration': 'software', 'mode': 'off'})):
@@ -310,7 +310,7 @@ class StrmPlaybackTests(unittest.TestCase):
             # 开放访问下这台远程设备已经算登录了：同一个客户端读别的接口照常 200。
             self.assertEqual(client.get('/api/settings').status_code, 200)
             response = client.post('/api/media-processing', json={'playback_acceleration': 'software'})
-            self.assertEqual((response.status_code, response.json()['error']), (403, '请在运行 Peach 的电脑上打开配置'))
+            self.assertEqual((response.status_code, response.json()['error']), (403, 'Open settings on the computer running Peach'))
         self.assertEqual(policy.acceleration(self.root / 'state'), 'auto')
 
     def test_media_acceleration_is_a_live_device_preference_and_preserves_preview_policy(self):

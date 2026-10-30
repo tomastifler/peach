@@ -4,7 +4,7 @@ const controls = new Map<HTMLElement, OverlayScrollbar>();
 
 export function detachOverlayScrollbar(container:HTMLElement):void{controls.get(container)?.destroy()}
 
-/** 移出文档的滚动区释放监听、尺寸观察器及轨道。 */
+/** Scroll areas removed from the document release their listeners, size observers and tracks. */
 export function pruneOverlayScrollbars(): void {
   for (const [container, control] of controls) {
     if (!container.isConnected) control.destroy();
@@ -16,7 +16,7 @@ export function releaseOverlayScrollbars(root:HTMLElement):void{
   for(const [container,control] of controls)if(container===root||root.contains(container))control.destroy();
 }
 
-/** 布局模式改变时，display:contents 子树可能改变内容长度而不触发容器尺寸观察。 */
+/** When the layout mode changes, a display:contents subtree may change the content length without triggering container size observation. */
 export function refreshOverlayScrollbars(root:HTMLElement):void{
   for(const [container,control] of controls)if(container===root||root.contains(container))control();
 }
@@ -28,8 +28,8 @@ export function refreshOverlayScrollbars(root:HTMLElement):void{
  * 但没有滑块，读不出这一列有多长、自己停在哪儿，而且要求内容套进它自己的包装层。
  * 这里只往既有滚动容器的父元素上挂轨道，不动内容结构，两者可以叠加使用。
  *
- * 普通内容区的轨道与容器同级。浮层的轨道留在浮层内部，并补偿内容的滚动位移，
- * 保持在同一层级及可视边缘。宿主因此得是定位祖先，
+ * The track of a normal content area is a sibling of the container. An overlay's track stays inside the overlay and compensates for the content's scroll offset,
+ * staying on the same level and visible edge. The host must therefore be a positioned ancestor,
  * 而且不一定和容器一样大（设置面板的卡片还含着标题栏），所以轨道的位置每次都按
  * 两个 rect 量出来，不假设它们同框。两条轴各一条轨道，谁溢出谁显示——同一个容器
  * 可能在不同版式下换轴（队列列表 `[data-mix-list]` 在带队列的详情格里就是横滚）。
@@ -95,12 +95,12 @@ export function attachOverlayScrollbar(
     return {left:rect.left-hostRect.left-host.clientLeft,
       top:rect.top-hostRect.top-host.clientTop};
   };
-  /* 一次重算分两段：先把要用的几何全部量完，再统一写轨道、滑块和边缘提示。边量边写的话，
-     每写一次样式，下一次读布局就把整份文档当场重排一遍；详情页一开就有好几条滚动区同时
-     挂上，实测这一段占掉进出详情时强制重算的大半。 */
+  /* A recalculation has two phases: first measure all the geometry needed, then write the track, thumb and edge hints together. If measuring and writing were interleaved,
+     each style write would make the next layout read reflow the whole document on the spot; when a details page opens, several scroll areas attach at once,
+     and measurement showed this accounts for most of the forced recalculation when entering and leaving details. */
   interface Geometry { left:number; top:number; hostWidth:number; hostHeight:number;
     width:number; height:number; contentWidth:number; contentHeight:number; scrollTop:number; scrollLeft:number }
-  // 轨道按宿主的内边距框定位，static 的宿主会把它甩到更外层某个祖先上去。第一次量的时候补上。
+  // The track is positioned against the host's padding box, and a static host would throw it onto some outer ancestor. Fixed up on the first measurement.
   let positioned=root;
   let destroyed=false;
   const measure=():Geometry=>{
@@ -182,8 +182,8 @@ export function attachOverlayScrollbar(
       if(range<=1){track.hidden=true;return}
       track.hidden=false;
       place(lane,g);
-      /* 局部轨道的长度就是上面写进去的那个数，不必回读；整页那一条由样式表钉在视口上，
-         先显再量：藏起来的轨道长度是 0，拿它当「量不到」会把自己永久锁在隐藏态。 */
+      /* A local track's length is the number written above and need not be read back; the whole-page one is pinned to the viewport by the stylesheet,
+         so show first and then measure: a hidden track has length 0, and treating that as "unmeasurable" would lock itself in the hidden state permanently. */
       const trackSize=root?(vertical?track.clientHeight:track.clientWidth):Math.max(0,size-16);
       if(!trackSize)return;
       // 短到抓不住的滑块等于没有滑块：内容特别长时给它一个下限，代价是滑块位置与
@@ -194,9 +194,9 @@ export function attachOverlayScrollbar(
     });
     paintPosition(g.scrollTop,g.scrollLeft);
   };
-  /* 尺寸观察器的回调落在本帧布局之后，量的时候不必提前重排；内容增删、图片到手
-     这些零散的触发合到下一帧算一次。挂上时不当场量：第一次回调就在同一帧
-     绘制之前，轨道在那之前藏着。 */
+  /* The size observer's callback lands after this frame's layout, so measuring does not force an early reflow; content added or removed, images arriving
+     and similar scattered triggers are merged and computed once in the next frame. It does not measure on the spot when attached: the first callback comes in the same frame
+     before painting, and the track is hidden until then. */
   let pendingSync:number|null=null;
   const scheduleSync=()=>{if(pendingSync===null)pendingSync=requestAnimationFrame(()=>{pendingSync=null;sync()})};
   const scroller:EventTarget=root?document:container;
@@ -216,9 +216,9 @@ export function attachOverlayScrollbar(
       observed.forEach(child=>{if(!children.has(child)){resize.unobserve(child);observed.delete(child)}});
       children.forEach(child=>{if(!observed.has(child)){resize.observe(child);observed.add(child)}});
     };
-    /* 内容自身的高度变化也刷新几何，折叠过渡与字体重排无需等待滚动：直接子元素都在尺寸观察器
-       里，过渡逐帧改高度时它每帧都会回调。`transitionend` 不在这里听：侧栏开合时一列按钮的文字
-       过渡一结束就冒泡上来十几个，每个都要在下一帧重量一遍。 */
+    /* Changes in the content's own height also refresh the geometry, so collapse transitions and font reflow need not wait for scrolling: the direct children are all in the size observer,
+       which calls back every frame while a transition changes the height frame by frame. `transitionend` is not listened to here: when the sidebar opens or closes, the text of a column of buttons
+       finishes its transition and a dozen bubble up at once, each needing to be re-measured in the next frame. */
     contentChanged();
     contents=new MutationObserver(()=>{contentChanged();scheduleSync()});
     contents.observe(container,{childList:true});

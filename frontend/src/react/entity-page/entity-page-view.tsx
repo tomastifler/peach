@@ -214,14 +214,14 @@ function EntityLoaded(props: EntityPageProps & { entity: EntityPageData }) {
       const current = entity.canonical_name;
       if (chosen === current) return;
       void confirmModal({
-        title: '更改统一名称',
-        body: `「${chosen}」将成为这份档案显示的名称，「${current}」留作别名。作品上的署名、搜索和标签都会跟着改写。`,
-        confirmLabel: '更改统一名称',
+        title: 'Change unified name',
+        body: `"${chosen}" will become the name shown for this profile, and "${current}" will be kept as an alias. Bylines, search and tags on works will be rewritten accordingly.`,
+        confirmLabel: 'Change unified name',
         onConfirm: () => rename.mutateAsync({ from: current, to: chosen }),
       }).then(({ confirmed, result }) => {
         const done = result as { changed?: boolean; canonical_name?: string; previous_name?: string } | undefined;
         if (!confirmed || !done?.changed) return;
-        helpers.receipt(`已把统一名称更改为 ${done.canonical_name}`, { undo: async () => {
+        helpers.receipt(`Unified name changed to ${done.canonical_name}`, { undo: async () => {
           await rename.mutateAsync({ from: done.canonical_name || '', to: done.previous_name || '' });
           actions.openEntity(kind, done.previous_name || '');
         } });
@@ -268,7 +268,7 @@ function EntityLoaded(props: EntityPageProps & { entity: EntityPageData }) {
       try {
         await bindFollow.mutateAsync(key);
       } catch (error) {
-        helpers.failure('关联关注中的创作者', error);
+        helpers.failure('Link the followed creator', error);
         throw error;
       }
       helpers.receipt(`Linked followed author ${author} to ${entity.canonical_name}`);
@@ -422,15 +422,15 @@ function EntityLoaded(props: EntityPageProps & { entity: EntityPageData }) {
 /** 作品区一部也没有。筛完一部不剩时给一条回到全部视频的路：观看状态与交集条上的筛选一起撤掉。 */
 function WorksEmpty({ filtered, onShowAll, onOnline }: { filtered: boolean; onShowAll(): void; onOnline?: () => void }) {
   return filtered ? (
-    <EmptyState icon={spriteGlyph('search')} title="没有符合条件的视频"
-      actions={<Button size="small" onClick={onShowAll}>清除筛选</Button>}>
-      清除筛选后查看名下全部视频。
+    <EmptyState icon={spriteGlyph('search')} title="No matching videos"
+      actions={<Button size="small" onClick={onShowAll}>Clear filters</Button>}>
+      Clear the filters to see all videos under this name.
     </EmptyState>
   ) : (
-    <EmptyState icon={spriteGlyph('film')} title="还没有视频"
-      actions={onOnline ? <Button size="small" onClick={onOnline}>查看在线作品</Button>
-        : <ButtonLink size="small" href="/">浏览馆藏</ButtonLink>}>
-      署上这个名字的视频入库后会显示在这里。
+    <EmptyState icon={spriteGlyph('film')} title="No videos yet"
+      actions={onOnline ? <Button size="small" onClick={onOnline}>View online works</Button>
+        : <ButtonLink size="small" href="/">Browse library</ButtonLink>}>
+      Videos credited to this name will appear here once imported.
     </EmptyState>
   );
 }

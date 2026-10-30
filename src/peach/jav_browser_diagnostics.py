@@ -1,4 +1,4 @@
-"""专用令牌范围内的脚本错误取证，只写本机白名单字段。"""
+"""Script error evidence within the dedicated token's scope, writing only allowlisted fields locally."""
 from collections import deque
 from datetime import datetime
 import re
@@ -15,7 +15,7 @@ KINDS = {"timeout", "network", "abort", "http", "invalid_response", "client_exce
 def _validated_event(row, sites):
     from .jav_browser import code_key
     if not isinstance(row, dict):
-        raise HTTPException(400, "错误记录格式无效")
+        raise HTTPException(400, "Invalid error record format")
     if (not all(isinstance(row.get(key), str) for key in ("kind", "operation", "site"))
             or row.get("kind") not in KINDS or row.get("operation") not in {"GET", "POST", "IDENTIFY"}
             or row.get("site") not in sites
@@ -24,14 +24,14 @@ def _validated_event(row, sites):
             or not re.fullmatch(r"\d{1,3}\.\d{1,3}\.\d{1,3}", row["script_version"])
             or type(row.get("elapsed_ms")) is not int or not 0 <= row["elapsed_ms"] <= 3_600_000
             or type(row.get("status")) is not int or not 0 <= row["status"] <= 599):
-        raise HTTPException(400, "错误记录字段无效")
+        raise HTTPException(400, "Invalid error record field")
     try:
         code = code_key(row["code"]) if row.get("code") else ""
         at = datetime.fromisoformat(str(row.get("at", "")))
         if at.tzinfo is None:
             raise ValueError()
     except (TypeError, ValueError):
-        raise HTTPException(400, "错误记录身份或时间无效") from None
+        raise HTTPException(400, "Invalid error record identity or time") from None
     return {**{key: row[key] for key in ("id", "kind", "operation", "site", "script_version",
                                         "elapsed_ms", "status")}, "code": code, "occurred_at": at.isoformat()}
 
@@ -45,7 +45,7 @@ class BrowserDiagnostics:
         from .jav_browser import source_sites
         events = data.get("events") if isinstance(data, dict) else None
         if not isinstance(events, list) or not 1 <= len(events) <= 10:
-            raise HTTPException(400, "错误记录格式无效")
+            raise HTTPException(400, "Invalid error record format")
         sites = {site["id"] for site in source_sites()}
         clean = [_validated_event(row, sites) for row in events]
         with self._lock:
@@ -55,9 +55,9 @@ class BrowserDiagnostics:
             known = {identity for _, identity in self._recent}
             fresh = {row["id"]: row for row in clean if row["id"] not in known}
             if len(self._recent) + len(fresh) > 20:
-                raise HTTPException(429, "错误记录过于频繁")
+                raise HTTPException(429, "Error records too frequent")
             for row in fresh.values():
                 if error_reporting.local_event("userscript", **row) is None:
-                    raise HTTPException(503, "错误日志无法写入")
+                    raise HTTPException(503, "Error log cannot be written")
                 self._recent.append((now, row["id"]))
         return {"recorded": len(fresh)}

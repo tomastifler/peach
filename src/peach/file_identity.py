@@ -1,4 +1,4 @@
-"""本机文件身份缓存：改名或同卷移动后保留影片 ID，不按文件名与大小合并。"""
+"""Local file identity cache: after a rename or same-volume move it keeps the movie ID, and does not merge by file name and size."""
 import json
 from pathlib import Path
 
@@ -39,11 +39,11 @@ class FileIdentityIndex:
         except FileNotFoundError:
             return {}
         if not isinstance(result, dict):
-            raise ValueError('本地文件身份缓存格式无效')
+            raise ValueError('Invalid local file identity cache format')
         return result
 
     def relocate(self, connection, location, path, native, stat, *, previous=None):
-        """只接回唯一、旧路径已消失的系统文件身份或本机移动事件。"""
+        """Reattach only a system file identity that is unique and whose old path has disappeared, or a local move event."""
         if connection.execute('SELECT 1 FROM asset WHERE location=? AND path=?', (location, path)).fetchone():
             return False
         identity = fingerprint(stat)

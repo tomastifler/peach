@@ -71,10 +71,10 @@ it('官方构建生成可复现 Debug ID，私有 map 可还原源码位置，�
     'sourcemaps', 'upload', '--validate', '--strict', '--wait', '--url-prefix', 'app:///', directory,
   ]);
   writeFileSync(resolve(shipped, 'peach-app.js'), 'mismatched bundle');
-  expect(() => prepareBrowserUpload(env, directory, shipped)).toThrow('分发产物不一致');
+  expect(() => prepareBrowserUpload(env, directory, shipped)).toThrow('does not match the distributed artifacts');
   writeFileSync(resolve(shipped, 'peach-app.js'), first);
   writeFileSync(mapPath, JSON.stringify({ ...map, debug_id: 'invalid' }));
-  expect(() => prepareBrowserUpload(env, directory, shipped)).toThrow('匹配的 source map');
+  expect(() => prepareBrowserUpload(env, directory, shipped)).toThrow('a matching source map');
   // 这条用例在测试里跑一整遍正式构建：拆出 chunk 后每个都要核对 Debug ID，Linux runner 上实测 45 秒。
 }, 120_000);
 

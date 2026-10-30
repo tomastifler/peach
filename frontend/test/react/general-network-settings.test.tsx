@@ -6,7 +6,7 @@ import { buttonNamed, choose, click, fetchMock, mount, sentBody, settle, submit,
 
 const startup = { available: true, enabled: false, silent: true, message: '', desktop: false, desktop_message: '' };
 
-it('开机自启：静默启动跟着开机自启解锁，保存发出三颗开关的实际值', async () => {
+it('Launch at startup：静默启动跟着开机自启解锁，保存发出三颗开关的实际值', async () => {
   const fetcher = fetchMock(200, {});
   vi.stubGlobal('fetch', fetcher);
   const receipt = vi.fn();
@@ -34,7 +34,7 @@ it('桌面快捷方式被别的安装占着时只锁那一颗，并说出原因'
   expect(host.textContent).toContain('桌面快捷方式属于另一份 Peach 安装');
 });
 
-it('Peach 代理：选自定义才出地址栏，保存后清空地址并记住已保存', async () => {
+it('Peach proxy：选自定义才出地址栏，保存后清空地址并记住已保存', async () => {
   const fetcher = fetchMock(200, { mode: 'proxy', proxy_saved: true, needs_selection: false });
   vi.stubGlobal('fetch', fetcher);
   const receipt = vi.fn();

@@ -76,7 +76,7 @@ function entityFetch({ deferred = false } = {}) {
       if (!deferred) return Promise.resolve(reply(body));
       return new Promise<Reply>((resolve, reject) => {
         pending.push(() => resolve(reply(body)));
-        init?.signal?.addEventListener('abort', () => { reject(new DOMException('已中止', 'AbortError')) });
+        init?.signal?.addEventListener('abort', () => { reject(new DOMException('Aborted', 'AbortError')) });
       });
     }
     if (url.pathname === '/api/items') {
@@ -127,8 +127,8 @@ function entityProps(name: string, hosts: EntityPageProps['hosts']): EntityPageP
   return {
     kind: 'performer', name, filters: {}, media: { media: 'videos', set: 0 }, jav: false, seed: '42',
     revision: 0, feedRevision: 0, photoSize: 'small', photoLayout: 'masonry', followImagesOnly: false,
-    javLayout: 'small', javLayouts: [['small', '小图', 'layout-grid']], photoLayouts: [['masonry', '瀑布流', 'columns-2']],
-    states: [{ k: '', label: '全部' }], peopleLayout: 'big', hosts,
+    javLayout: 'small', javLayouts: [['small', 'Small', 'layout-grid']], photoLayouts: [['masonry', '瀑布流', 'columns-2']],
+    states: [{ k: '', label: 'All' }], peopleLayout: 'big', hosts,
     layout: { active: false, size: 'small', portrait: false, javImage: 'cover' },
     selectMode: false, selected: new Set(), seekSeconds: 10, wireDrag: vi.fn(),
     skeletonHtml: () => '<div data-test-skeleton></div>', groupCollapse: true, canLoadMore: () => true,
@@ -155,7 +155,7 @@ function entityProps(name: string, hosts: EntityPageProps['hosts']): EntityPageP
       portraitImg: () => '', wireDrag: vi.fn(), wireScroller: vi.fn(), wireFeedRow: vi.fn(),
       feedRowHtml: () => '<div class="feednewrow"></div>', receipt: vi.fn(), failure: vi.fn(),
       aliasForm: vi.fn(async () => {}), sourceToolsHtml: () => '', wireSourceTools: vi.fn(), comboItems: () => [],
-      sortKeys: vi.fn(() => [{ key: 'new', label: '入库时间', pressed: true, dir: '' as const, ariaLabel: '' }]),
+      sortKeys: vi.fn(() => [{ key: 'new', label: 'Added', pressed: true, dir: '' as const, ariaLabel: '' }]),
     },
     actions: {
       route: vi.fn(), toggleTag: vi.fn(), clearFilter: vi.fn(), clearAll: vi.fn(), setSort: vi.fn(),

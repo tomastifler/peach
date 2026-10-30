@@ -183,7 +183,7 @@ describe('设计决定：控件、状态与首页顶部', () => {
 
   it('跑失败的那一轮整张卡框线换成 danger 色，结束原因还是正文色', { timeout: 60_000 }, async () => {
     const opened = await openActivity(browser, [
-      settledRun(1, 'failed', '扫描与采集'), settledRun(2, 'succeeded', '追更检查'),
+      settledRun(1, 'failed', 'Scan and collection'), settledRun(2, 'succeeded', '追更检查'),
     ]);
     try {
       const danger = await tokenColor(opened.page, '.peach-react', '--color-border-error-default');
@@ -203,7 +203,7 @@ describe('设计决定：控件、状态与首页顶部', () => {
 
   it('任务结果成功绿、失败红、中断黄，取消与排队中性', { timeout: 60_000 }, async () => {
     const opened = await openActivity(browser, [
-      settledRun(1, 'succeeded', '追更检查'), settledRun(2, 'failed', '扫描与采集'),
+      settledRun(1, 'succeeded', '追更检查'), settledRun(2, 'failed', 'Scan and collection'),
       settledRun(3, 'cancelled', '批量操作'), settledRun(4, 'pending', '命令行批处理'),
       settledRun(5, 'interrupted', '资料采集'),
     ]);
@@ -355,7 +355,7 @@ describe('设计决定：控件、状态与首页顶部', () => {
       assert.equal(await fill(1),
         await tokenColor(opened.page, '.peach-react', '--color-border-focus-ring'));
       // 忙态不改 `disabled`：控件仍可聚焦，重复触发由页面自己挡。
-      const scan = card.getByRole('button', { name: '同步新增文件', exact: true });
+      const scan = card.getByRole('button', { name: 'Sync new files', exact: true });
       assert.equal(await scan.getAttribute('aria-busy'), 'true');
       assert.equal(await scan.evaluate((element) => (element as HTMLButtonElement).disabled), false,
         '用原生 disabled 挡的话按钮连焦点都拿不到');

@@ -41,7 +41,7 @@ describe('持久提示控件',()=>{
     expect(gaugeHtml('完成率',value,100)).toContain('data-level="normal"');
   });
   it('失败提示包含一个次要样式的内部操作按钮',()=>{
-    const host=document.createElement('div');host.innerHTML=noteHtml('来源离线',{variant:'error',filled:true,actionLabel:'立即重试'});
+    const host=document.createElement('div');host.innerHTML=noteHtml('来源离线',{variant:'error',filled:true,actionLabel:'Retry now'});
     const buttons=host.querySelectorAll('[role=alert] button');
     expect(buttons).toHaveLength(1);
     expect(buttons[0]!.classList.contains('primary')).toBe(false);

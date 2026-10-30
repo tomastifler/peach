@@ -113,7 +113,7 @@ def _attended_browser(executable: str, profile: Path) -> _Browser:
     flags = proxy_flags(direct=not options.get('trust_env') and not options.get('proxy'),
                         proxy=options.get('proxy', ''))
     if flags is None:
-        raise BrowserUnavailable('浏览器登录不支持带凭据的代理地址，请选择系统代理或无需认证的本机代理')
+        raise BrowserUnavailable('Browser login does not support proxy addresses with credentials; please choose the system proxy or a local proxy without authentication')
     return _Browser(executable, profile, flags, attended=True)
 
 

@@ -12,7 +12,7 @@ describe('搜索图片推荐', () => {
       if (url.startsWith('/api/feeds/')) return { items: [{ id: 12, code: 'ABW-102', cover_url: '/release-cover' }] };
       if (url.startsWith('/api/follow/authors')) return { items: [{ k: '作者', key: source.author_key, entity_id: 20 }] };
       return { sources: [source], groups: [{
-        primary: { id: 12, source_id: 8, title: '关注作品', thumb_url: '/post-cover', media_kind: 'video', status: 'saved' },
+        primary: { id: 12, source_id: 8, title: 'Followed works', thumb_url: '/post-cover', media_kind: 'video', status: 'saved' },
         variants: [{ id: 13, source_id: 8, title: '图片作品', status: 'seen', media_kind: 'image',
           media_items: [{ index: 2, media_kind: 'image', thumb_url: '/photo-cover' }] }], duplicates: [],
       }] };
@@ -39,7 +39,7 @@ describe('搜索图片推荐', () => {
 
   it('一类读取失败不会丢失其他推荐，无实体的作者进入自己的关注筛选', async () => {
     const groups = await searchRecommendations(async url => {
-      if (url.startsWith('/api/jav/')) throw new Error('离线');
+      if (url.startsWith('/api/jav/')) throw new Error('Offline');
       if (url.startsWith('/api/follow/authors')) return { items: [{ k: '作者', key: 'name:作者' }] };
       return { items: [{ id: 11, name: '本地作品' }] };
     });

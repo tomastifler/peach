@@ -1,4 +1,4 @@
-"""读取视频旁已有的时间轴预览；索引统一为带时刻的图片裁切区域。"""
+"""Read timeline previews that already sit next to the video; indexes are unified into image crop regions with timestamps."""
 from __future__ import annotations
 
 import io
@@ -48,30 +48,30 @@ def _text(path: Path) -> str:
     with path.open('rb') as stream:
         data = stream.read(MAX_INDEX_BYTES + 1)
     if len(data) > MAX_INDEX_BYTES:
-        raise ValueError('预览索引过大')
+        raise ValueError('Preview index too large')
     return data.decode('utf-8-sig')
 
 
 def _local(base: Path, name: str, root: Path) -> Path:
-    """只接受同一视频目录内的本地引用，解析符号链接后仍须留在目录内。"""
+    """Accept only local references within the same video directory, which must still stay inside the directory after symlinks are resolved."""
     url = urlsplit(name)
     if url.scheme or url.netloc or url.query or '\\' in name:
-        raise ValueError('预览图片引用无效')
+        raise ValueError('Invalid preview image reference')
     relative = Path(unquote(url.path))
     if relative.is_absolute() or ':' in str(relative):
-        raise ValueError('预览图片引用无效')
+        raise ValueError('Invalid preview image reference')
     path = (base / relative).resolve()
     if not path.is_relative_to(root.resolve()):
-        raise ValueError('预览图片超出视频目录')
+        raise ValueError('Preview image is outside the video directory')
     return path
 
 
 def _size(path: Path) -> tuple[int, int]:
     if path.suffix.lower() not in IMAGE_SUFFIXES or path.stat().st_size > MAX_IMAGE_BYTES:
-        raise ValueError('预览图片格式或大小无效')
+        raise ValueError('Invalid preview image format or size')
     with Image.open(path) as image:
         if image.format not in ('JPEG', 'PNG', 'WEBP') or image.width * image.height > 40_000_000:
-            raise ValueError('预览图片像素过多')
+            raise ValueError('Preview image has too many pixels')
         return image.size
 
 
@@ -99,10 +99,10 @@ def _timeline(source: str, frames: list[Frame], *, estimated: bool = False) -> T
 
 def _seconds(value: str) -> float:
     if not re.fullmatch(r'(?:\d+:)?\d{2}:\d{2}\.\d{3}', value):
-        raise ValueError('预览时刻无效')
+        raise ValueError('Invalid preview time')
     parts = value.split(':')
     if float(parts[-1]) >= 60 or int(parts[-2]) >= 60:
-        raise ValueError('预览时刻无效')
+        raise ValueError('Invalid preview time')
     return sum(float(part) * 60 ** index for index, part in enumerate(reversed(parts)))
 
 
@@ -143,47 +143,47 @@ def _grid(frames: list[Frame], path: Path, start: float, end: float,
           interval: float, columns: int, rows: int, width: int, height: int) -> None:
     values = (start, end, interval, columns, rows, width, height)
     if not all(math.isfinite(value) for value in values) or interval <= 0 or end <= start:
-        raise ValueError('预览网格无效')
+        raise ValueError('Invalid preview grid')
     if min(columns, rows, width, height) <= 0 or columns * rows > MAX_FRAMES:
-        raise ValueError('预览网格无效')
+        raise ValueError('Invalid preview grid')
     for slot in range(min(columns * rows, math.ceil((end - start) / interval - 1e-9))):
         point = start + slot * interval
         frames.append(Frame(point, min(end, point + interval), path,
                             ((slot % columns) * width, (slot // columns) * height, width, height)))
         if len(frames) > MAX_FRAMES:
-            raise ValueError('预览帧数过多')
+            raise ValueError('Too many preview frames')
 
 
 def _dash_segments(template, ns: str, duration: float) -> list[tuple[int, int]]:
     scale = int(template.get('timescale', '1'))
     offset = int(template.get('presentationTimeOffset', '0'))
     if scale <= 0:
-        raise ValueError('DASH 时间尺度无效')
+        raise ValueError('DASH timescale invalid')
     timeline = template.find(ns + 'SegmentTimeline')
     if timeline is None:
         step = int(template.get('duration', '0'))
         if step <= 0:
-            raise ValueError('DASH 分段时长无效')
+            raise ValueError('DASH segment duration invalid')
         count = math.ceil((duration * scale + offset) / step)
         if not 0 < count <= MAX_FRAMES:
-            raise ValueError('DASH 预览帧数过多')
+            raise ValueError('DASH too many preview frames')
         return [(index * step, step) for index in range(count)]
     entries = list(timeline)
     segments, point = [], 0
     for number, entry in enumerate(entries):
         if entry.tag != ns + 'S':
-            raise ValueError('DASH 时间线无效')
+            raise ValueError('DASH timeline invalid')
         point = int(entry.get('t', str(point)))
         step = int(entry.get('d', '0'))
         repeat = int(entry.get('r', '0'))
         if point < 0 or step <= 0 or repeat < -1:
-            raise ValueError('DASH 时间线无效')
+            raise ValueError('DASH timeline invalid')
         if repeat == -1:
             next_point = (int(entries[number + 1].get('t')) if number + 1 < len(entries)
                           else duration * scale + offset)
             repeat = math.ceil((next_point - point) / step) - 1
         if repeat < 0 or len(segments) + repeat + 1 > MAX_FRAMES:
-            raise ValueError('DASH 预览帧数过多')
+            raise ValueError('DASH too many preview frames')
         for _ in range(repeat + 1):
             segments.append((point, step))
             point += step
@@ -238,13 +238,13 @@ def _dash_name(template: str, representation: str, number: int, time: int, bandw
         return str(value).zfill(int(match[2] or 0))
     name = re.sub(r'\$(RepresentationID|Number|Time|Bandwidth)(?:%0(\d{1,2})d)?\$', replace, template)
     if '$' in name:
-        raise ValueError('DASH 预览模板无效')
+        raise ValueError('DASH preview template invalid')
     return name
 
 
 def _dash_representation(representation, adaptation, parent: Path, root: Path,
                          start: float, duration: float, ns: str) -> list[Frame] | None:
-    """将一条图片轨的网格、分段时钟和文件模板展开成预览区域。"""
+    """Expand the grid, segment clock and file template of one image track into preview regions."""
     tile = next((node for node in [*representation, *adaptation]
                  if node.tag in (ns + 'EssentialProperty', ns + 'SupplementalProperty')
                  and node.get('schemeIdUri') == 'http://dashif.org/guidelines/thumbnail_tile'), None)
@@ -382,7 +382,7 @@ def read_jellyfin(directory: Path, duration: float) -> Timeline | None:
 
 
 def discover(video: Path, duration: float) -> Timeline | None:
-    """按准确文件主名配对，不通过番号或同目录唯一性猜测视频版本。"""
+    """Pair by exact file stem, without guessing the video version through the code or same-directory uniqueness."""
     root = video.parent.resolve()
     candidates = []
     for suffix, reader in (('.vtt', read_vtt), ('.m3u8', read_hls), ('.mpd', read_dash)):
@@ -423,7 +423,7 @@ def discover(video: Path, duration: float) -> Timeline | None:
 
 
 def frame_bytes(timeline: Timeline, number: int) -> bytes | None:
-    """只读取所需图片并裁切，不启动 FFmpeg 或访问视频内容。"""
+    """Read and crop only the images needed, without starting FFmpeg or accessing video content."""
     if not 0 <= number < len(timeline.frames):
         return None
     frame = timeline.frames[number]

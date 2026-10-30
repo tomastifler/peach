@@ -1,15 +1,15 @@
-"""CloudDrive2 云下载：通过官方 gRPC 接口提交并跟踪任务。
+"""CloudDrive2 cloud download: submit and track tasks through the official gRPC API.
 
 Peach 不另申请 115 应用，复用 CloudDrive2 已有的 115open 授权：一个应用最多授权两次，第三次
 会顶掉第一次。CloudDrive2 的 API 令牌由用户在设置页填一次，存本机 `CredentialStore`，
 只放进 gRPC 的 `authorization` 元数据，不进 URL、日志与 ledger。
 
-接口子集见 `downloads_clouddrive.proto`。流程参照 JavBoss
+ The API subset is in `downloads_clouddrive.proto`. The flow follows JavBoss
 `internal/clouddrive/client.go` 与 `internal/service/download.go`：提交前确认目标目录
 `canOfflineDownload` 并查配额，提交时让 CloudDrive2 10 秒后自己看一眼目录，之后按 infohash
 在目录的离线列表里对账；列表里找不到时看目录里有没有那个文件。
 
-115 每个任务扣一条离线配额（年费会员每月 1500 条、月费 200 条，月底清零）。提交前先查
+115 charges one offline quota per task (annual members get 1500 per month, monthly members 200, reset at month end). Check before submitting
 目录里是否已有同一 infohash 的离线任务，有就接管，不再扣。
 
 115 目标目录留空时，检查从推送发现的云端路径前缀里推一个（「检查」键、打开设置页与保存配置
@@ -80,7 +80,7 @@ _AUTH_CODES = {grpc.StatusCode.UNAUTHENTICATED, grpc.StatusCode.PERMISSION_DENIE
 
 
 def channel_target(address: str) -> tuple[str, bool]:
-    """校验服务地址并生成 gRPC 目标；非法地址使用下载领域错误。"""
+    """Validate the service address and build the gRPC target; an illegal address uses the download-domain error."""
     try:
         address = clean_address(address)
     except ValueError as error:
@@ -122,9 +122,9 @@ def discover(addresses: tuple[str, ...] = LOCAL_ADDRESSES) -> str:
             continue
         if normalized and answers(normalized):
             return normalized
-    tried = "、".join(addresses)
-    raise DownloadError("network", f"没有填 CloudDrive2 地址，本机 {tried} 都没有应答。"
-                                   "确认 CloudDrive2 已启动，或在地址栏填上它的实际地址")
+    tried = ", ".join(addresses)
+    raise DownloadError("network", f"No CloudDrive2 address was entered, and on this machine {tried} none responded."
+                                   "Confirm CloudDrive2 is running, or enter its actual address in the address field")
 
 
 def _translate(error: grpc.RpcError, action: str) -> DownloadError:
@@ -155,7 +155,7 @@ class Folder:
 
 
 class CloudDriveClient:
-    """带令牌调用官方 gRPC 接口。"""
+    """Call the official gRPC API with the token."""
 
     def __init__(self, address: str, token: str, *, timeout: float = CALL_TIMEOUT):
         if not token:
@@ -268,7 +268,7 @@ def offline_status(item: pb.OfflineFile | None) -> RemoteStatus:
 
 
 class CloudDriveProvider:
-    """按网盘能力查询任务列表或确认文件落地。每次调用新开通道，用完就关。"""
+    """Query the task list or confirm file landing by cloud drive capability. Each call opens a new channel and closes it after use."""
 
     key = "115"
 
@@ -285,7 +285,7 @@ class CloudDriveProvider:
         with self.client() as client:
             folder = client.folder(target)
             if not folder.can_offline:
-                raise DownloadError("config", f"{target} 所在的网盘不支持离线下载")
+                raise DownloadError("config", f"{target} is on a cloud drive that does not support offline download")
             existing = match_offline(client.offline_files(target), magnet.info_hash) if folder.can_manage else None
             if existing is not None:
                 status = offline_status(existing)
@@ -298,7 +298,7 @@ class CloudDriveProvider:
                     raise
                 quota = None  # 这一侧不支持查配额时照常提交，由提交接口自己拒。
             if quota is not None and quota.total > 0 and quota.left <= 0:
-                raise DownloadError("quota", f"云下载配额已用完（{quota.used}/{quota.total}）")
+                raise DownloadError("quota", f"Cloud download quota used up ({quota.used}/{quota.total})")
             client.add(magnet.uri, target)
         return RemoteStatus(RUNNING, name=magnet.name)
 
@@ -315,14 +315,14 @@ class CloudDriveProvider:
     @staticmethod
     def _landed(client: CloudDriveClient, task: DownloadTask) -> bool:
         names = [name for name in (task.remote_name, task.display_name) if name]
-        return any(client.find(f"{task.target.rstrip('/')}/{name}", "查目标目录里的文件")
+        return any(client.find(f"{task.target.rstrip('/')}/{name}", "look up files in the target directory")
                    is not None for name in names)
 
     def cancel(self, task: DownloadTask) -> None:
         with self.client() as client:
             folder = client.folder(task.target)
             if not folder.can_manage:
-                raise DownloadError("config", "这个网盘不支持从 Peach 取消云下载，请到网盘中处理")
+                raise DownloadError("config", "This cloud drive does not support cancelling cloud downloads from Peach; please handle it in the cloud drive")
             client.remove(folder, task.info_hash or "")
 
 

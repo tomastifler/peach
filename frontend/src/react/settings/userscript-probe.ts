@@ -4,7 +4,7 @@ import { randomId } from '../../core/random-id';
 
 export type UserscriptProbeStatus = 'checking' | 'missing' | { version: string; paired: boolean };
 
-/** 通过同源桥接页核对当前浏览器中的用户脚本与配对状态。 */
+/** Checks the userscript and pairing status in the current browser through the same-origin bridge page. */
 export function useUserscriptProbe() {
   const frame = useRef<HTMLIFrameElement>(null);
   const [attempt, setAttempt] = useState(0);
@@ -38,7 +38,7 @@ export function useUserscriptProbe() {
     };
     window.addEventListener('message', receive);
     const interval = setInterval(probe, 250);
-    // 桥接文档加载与脚本回报分别计时，加载过程也有终止期限。
+    // Bridge document loading and script reporting are timed separately, and loading also has a deadline.
     timeout = setTimeout(missing, 15000);
     bridge?.addEventListener('load', loaded);
     if (bridge?.contentDocument?.readyState === 'complete'

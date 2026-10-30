@@ -10,14 +10,14 @@ import { boundedPreference } from '../../number-setting';
 export interface NumberSpec { min: number; max: number; unit: string; optional?: boolean; fallback: number }
 
 export const NUMBER_SPECS = {
-  batchSizeSetting: { min: 1, max: 200, unit: '个', fallback: 60 },
-  hoverDelaySetting: { min: 1, max: 60, unit: '秒', optional: true, fallback: 5 },
-  seekSecondsSetting: { min: 1, max: 300, unit: '秒', fallback: 10 },
-  relatedLimitSetting: { min: 1, max: 60, unit: '个', optional: true, fallback: 20 },
-  /* 上限跟 `/api/feeds/discoveries` 一致，服务端多于 100 也只回 100 部。 */
-  feedLimitSetting: { min: 1, max: 100, unit: '部', fallback: 12 },
-  searchHistoryLimitSetting: { min: 1, max: 50, unit: '条', optional: true, fallback: 10 },
-  followScheduleSetting: { min: 15, max: 10080, unit: '分钟', optional: true, fallback: 60 },
+  batchSizeSetting: { min: 1, max: 200, unit: 'items', fallback: 60 },
+  hoverDelaySetting: { min: 1, max: 60, unit: 'seconds', optional: true, fallback: 5 },
+  seekSecondsSetting: { min: 1, max: 300, unit: 'seconds', fallback: 10 },
+  relatedLimitSetting: { min: 1, max: 60, unit: 'items', optional: true, fallback: 20 },
+  /* The upper limit matches `/api/feeds/discoveries`; even if the server has more than 100 it returns only 100. */
+  feedLimitSetting: { min: 1, max: 100, unit: 'items', fallback: 12 },
+  searchHistoryLimitSetting: { min: 1, max: 50, unit: 'entries', optional: true, fallback: 10 },
+  followScheduleSetting: { min: 15, max: 10080, unit: 'minutes', optional: true, fallback: 60 },
 } as const satisfies Record<string, NumberSpec>;
 
 export type NumberSettingId = keyof typeof NUMBER_SPECS;

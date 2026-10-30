@@ -231,12 +231,12 @@ export function mountPlayerQualityControl(
     view = 'main';
     const { active } = qualityRows(), speed = rememberRate.current();
     const panel = renderPanel(`<div class="vjs-peach-panel-menu"><button type="button" class="vjs-peach-menu-row" role="menuitemcheckbox" data-player-ambient aria-checked="${playerHost().settings().ambientMode}">
-      ${icon('player-ambient')}<span>氛围模式</span><i class="vjs-peach-switch" aria-hidden="true"></i></button>
-      <button type="button" class="vjs-peach-menu-row" role="menuitem" data-player-speed>${icon('player-speed')}<span>播放速度</span><b>${speed === 1 ? '正常' : `${speed}×`}</b>${icon('player-menu-next')}</button>
-      <button type="button" class="vjs-peach-menu-row" role="menuitem" data-player-subtitles><span class="vjs-peach-menu-cc" aria-hidden="true">${subtitleIcon()}</span><span>字幕</span><b>${esc(subtitleControls?.label() || '关闭')}</b>${icon('player-menu-next')}</button>
-      <button type="button" class="vjs-peach-menu-row" role="menuitem" data-player-rotation>${icon('rotate-cw', 'vjs-peach-menu-line-icon')}<span>画面旋转</span><b>${rotation.angle()}°</b>${icon('player-menu-next')}</button>
-      <button type="button" class="vjs-peach-menu-row" role="menuitem" data-player-quality-view>${icon('player-quality')}<span>清晰度</span><b>${esc(active.label)}</b>${icon('player-menu-next')}</button>
-      <div data-player-memory-error hidden><p class="vjs-peach-subtitle-status" role="status"></p><button type="button" class="vjs-peach-menu-row" data-player-memory-retry>重试保存播放记忆</button></div></div>`, direction);
+      ${icon('player-ambient')}<span>Ambient mode</span><i class="vjs-peach-switch" aria-hidden="true"></i></button>
+      <button type="button" class="vjs-peach-menu-row" role="menuitem" data-player-speed>${icon('player-speed')}<span>Playback speed</span><b>${speed === 1 ? 'Normal' : `${speed}×`}</b>${icon('player-menu-next')}</button>
+      <button type="button" class="vjs-peach-menu-row" role="menuitem" data-player-subtitles><span class="vjs-peach-menu-cc" aria-hidden="true">${subtitleIcon()}</span><span>Subtitles</span><b>${esc(subtitleControls?.label() || 'Off')}</b>${icon('player-menu-next')}</button>
+      <button type="button" class="vjs-peach-menu-row" role="menuitem" data-player-rotation>${icon('rotate-cw', 'vjs-peach-menu-line-icon')}<span>Rotate video</span><b>${rotation.angle()}°</b>${icon('player-menu-next')}</button>
+      <button type="button" class="vjs-peach-menu-row" role="menuitem" data-player-quality-view>${icon('player-quality')}<span>Quality</span><b>${esc(active.label)}</b>${icon('player-menu-next')}</button>
+      <div data-player-memory-error hidden><p class="vjs-peach-subtitle-status" role="status"></p><button type="button" class="vjs-peach-menu-row" data-player-memory-retry>Retry saving playback memory</button></div></div>`, direction);
     button(panel, '[data-player-ambient]').onclick = () => { applyAmbientMode(!playerHost().settings().ambientMode); showMain() };
     button(panel, '[data-player-speed]').onclick = () => showSpeed();
     button(panel, '[data-player-subtitles]').onclick = () => subtitleControls?.show();
@@ -253,8 +253,8 @@ export function mountPlayerQualityControl(
   };
   const showRotation = () => {
     view = 'rotation';
-    const panel = renderPanel(`<div class="vjs-peach-panel-header"><button type="button" class="vjs-peach-menu-back" data-player-menu-back aria-label="返回上一个菜单">${icon('player-menu-back')}</button><strong>画面旋转</strong></div><div class="vjs-peach-panel-menu">${[0, 90, 180, 270].map(angle =>
-      `<button type="button" class="vjs-peach-menu-option" role="menuitemradio" data-player-rotation-option="${angle}" aria-checked="${angle === rotation.angle()}"><span class="vjs-peach-option-check">${angle === rotation.angle() ? icon('player-option-check') : ''}</span><span class="vjs-peach-option-label">${angle}°${angle === 0 ? '（原始方向）' : ''}</span></button>`).join('')}</div>`, 1);
+    const panel = renderPanel(`<div class="vjs-peach-panel-header"><button type="button" class="vjs-peach-menu-back" data-player-menu-back aria-label="Back to previous menu">${icon('player-menu-back')}</button><strong>Rotate video</strong></div><div class="vjs-peach-panel-menu">${[0, 90, 180, 270].map(angle =>
+      `<button type="button" class="vjs-peach-menu-option" role="menuitemradio" data-player-rotation-option="${angle}" aria-checked="${angle === rotation.angle()}"><span class="vjs-peach-option-check">${angle === rotation.angle() ? icon('player-option-check') : ''}</span><span class="vjs-peach-option-label">${angle}°${angle === 0 ? '(original orientation)' : ''}</span></button>`).join('')}</div>`, 1);
     button(panel, '[data-player-menu-back]').onclick = () => showMain(-1);
     panel.querySelectorAll<HTMLElement>('[data-player-rotation-option]').forEach(option => {
       option.onclick = () => { rotation.set(Number(option.dataset.playerRotationOption)); showMain(-1) };
@@ -348,7 +348,7 @@ export function mountPlayerQualityControl(
     const angle = view === 'main' ? panel?.querySelector('[data-player-rotation] b') : null;
     const speed = view === 'main' ? panel?.querySelector('[data-player-speed] b') : null;
     if (angle) angle.textContent = `${rotation.angle()}°`;
-    if (speed) speed.textContent = rememberRate.current() === 1 ? '正常' : `${rememberRate.current()}×`;
+    if (speed) speed.textContent = rememberRate.current() === 1 ? 'Normal' : `${rememberRate.current()}×`;
   };
   toggle.onclick = (event) => { event.stopPropagation(); const open = !isOpen(); if (open) showMain(); setOpen(open) };
   const outside = (event: Event) => { if (!root.contains(event.target as Node)) close() };
@@ -505,7 +505,7 @@ function mountPlayerChromeLayout(player: VjsPlayer): void {
   playerControlTooltip(controlBar.querySelector('.vjs-subtitles-control>button'), 'Subtitles');
   explicitIcon(pip, 'player-pip');
   // i 键归迷你播放器（YouTube 的 aria-keyshortcuts="i"），画中画只留按钮。
-  const syncPipTooltip = playerControlTooltip(pip, '画中画');
+  const syncPipTooltip = playerControlTooltip(pip, 'Picture-in-picture');
   mountPlayerPipControl(player, pip, syncPipTooltip, text => playerHost().toast(text, { warn: true }));
   const fullscreen = controlBar.querySelector<HTMLElement>(':scope>.vjs-fullscreen-control');
   const fullscreenUse = explicitIcon(fullscreen, 'player-fullscreen-enter');

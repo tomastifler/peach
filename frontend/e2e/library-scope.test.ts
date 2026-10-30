@@ -22,7 +22,7 @@ describe('媒体库目录范围', () => {
       });
       const { page } = opened;
       try {
-        for (const [library, label] of [['first', '媒体库甲'], ['second', '媒体库乙'], ['', '全部媒体库']]) {
+        for (const [library, label] of [['first', '媒体库甲'], ['second', '媒体库乙'], ['', 'All libraries']]) {
           if (viewport.mobile && !await page.locator('#drawer').evaluate(node => node.classList.contains('open'))) {
             await page.locator('#filterBtn').click();
           }

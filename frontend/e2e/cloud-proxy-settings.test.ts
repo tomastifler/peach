@@ -10,7 +10,7 @@ describe('CloudDrive 代理设置', () => {
   for (const viewport of VIEWPORTS) {
     it(`${viewport.name}：读取、保存、聚焦同步和冲突处理`, async () => {
       let account = { id: 'one', name: '示例网盘', cloud: '115open', path: '/drive1', revision: '1', writable: true,
-        libraries: [{ name: '我的媒体库', root: 'A:\\Movies', location: '115' }],
+        libraries: [{ name: 'My library', root: 'A:\\Movies', location: '115' }],
         api: { mode: 'direct', host: '', port: 0, username: '', password_set: false },
         data: { mode: 'http', host: 'localhost', port: 7890, username: '', password_set: true } };
       const posts: Record<string, unknown>[] = [];
@@ -34,31 +34,31 @@ describe('CloudDrive 代理设置', () => {
       });
       const { page } = opened;
       try {
-        const section = page.getByRole('region', { name: 'CloudDrive 代理', exact: true });
+        const section = page.getByRole('region', { name: 'CloudDrive proxy', exact: true });
         const form = section.getByRole('form', { name: '我的媒体库 代理', exact: true });
         const dataSelect = () => form.locator('button[aria-haspopup="listbox"]').first();
         await form.getByRole('textbox', { name: '数据代理端口', exact: true }).fill('7891');
-        await form.getByRole('button', { name: '保存配置', exact: true }).click();
-        await page.waitForFunction(() => [...document.querySelectorAll('form[aria-label="我的媒体库 代理"] button')].some(button => button.textContent === '保存配置' && (button as HTMLButtonElement).disabled));
+        await form.getByRole('button', { name: 'Save settings', exact: true }).click();
+        await page.waitForFunction(() => [...document.querySelectorAll('form[aria-label="我的媒体库 代理"] button')].some(button => button.textContent === 'Save settings' && (button as HTMLButtonElement).disabled));
         assert.equal(posts.length, 1);
         assert.equal((posts[0].data as { port: number }).port, 7891);
         assert.equal('api' in posts[0], false);
         assert.equal('password' in (posts[0].data as object), false);
         account = { ...account, revision: '3', data: { ...account.data, mode: 'system' } };
         await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-        await page.waitForFunction(() => document.querySelector('[aria-label="数据代理"]')?.textContent?.includes('跟随系统'));
+        await page.waitForFunction(() => document.querySelector('[aria-label="Data proxy"]')?.textContent?.includes('Follow system'));
         await dataSelect().click();
-        await page.getByRole('option', { name: '直连', exact: true }).click();
+        await page.getByRole('option', { name: 'Direct', exact: true }).click();
         const before = reads;
         account = { ...account, revision: '4', data: { ...account.data, mode: 'socks5' } };
         await page.evaluate(() => window.dispatchEvent(new Event('focus')));
         await page.waitForTimeout(150);
         assert.equal(reads, before);
-        assert.ok((await dataSelect().innerText()).includes('直连'));
-        await form.getByRole('button', { name: '保存配置', exact: true }).click();
+        assert.ok((await dataSelect().innerText()).includes('Direct'));
+        await form.getByRole('button', { name: 'Save settings', exact: true }).click();
         await form.getByText('CloudDrive2 配置已变化，请重新读取后保存', { exact: true }).waitFor();
-        await section.getByRole('button', { name: '重新读取', exact: true }).click();
-        await page.waitForFunction(() => document.querySelector('[aria-label="数据代理"]')?.textContent?.includes('SOCKS5'));
+        await section.getByRole('button', { name: 'Reload', exact: true }).click();
+        await page.waitForFunction(() => document.querySelector('[aria-label="Data proxy"]')?.textContent?.includes('SOCKS5'));
         await settle(page);
         assert.deepEqual((await layout(page)).offenders, []);
         await section.screenshot({ path: `../build/cloud-proxy-${viewport.name}.png` });
@@ -77,11 +77,11 @@ describe('CloudDrive 代理设置', () => {
     });
     const { page } = opened;
     try {
-      const section = page.getByRole('region', { name: 'CloudDrive 代理', exact: true });
+      const section = page.getByRole('region', { name: 'CloudDrive proxy', exact: true });
       await section.getByText('填写 CloudDrive2 地址和 API 令牌后，在这里设置各网盘账号的代理。').waitFor();
-      assert.equal(await section.getByRole('link', { name: '下载设置', exact: true }).getAttribute('href'), '/settings/downloads');
-      assert.equal(await section.getByText('没有读取配置').count(), 0);
-      assert.equal(await section.getByText('还没有使用 CloudDrive 的媒体库。').count(), 0);
+      assert.equal(await section.getByRole('link', { name: 'Download settings', exact: true }).getAttribute('href'), '/settings/downloads');
+      assert.equal(await section.getByText('Could not load settings').count(), 0);
+      assert.equal(await section.getByText('No library uses CloudDrive yet.').count(), 0);
       assert.deepEqual(opened.problems, []);
     } finally { await opened.close() }
   });

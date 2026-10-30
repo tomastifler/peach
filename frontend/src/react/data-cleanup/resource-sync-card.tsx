@@ -51,11 +51,11 @@ function ScanResult({ scan, partial = false }: { scan: ResourceScanState; partia
           <article key={source.location} className={plainStatClass()}>
             <PlainStat label={SOURCE_LABELS[source.location] || 'Media source'}
               mark={<SourceMark mark={MEDIA_SOURCE_ICONS[source.location] ?? 'database'} />}
-              aside={<ConnectionStatus online={source.online}>{source.online ? '可访问' : '离线'}</ConnectionStatus>}
-              figure={source.online ? `${count(source.missing)} 项` : '—'}
-              meta={source.online ? sourceMeta(source) : `${sourceMeta(source)} · 本次已跳过`} wrapMeta />
+              aside={<ConnectionStatus online={source.online}>{source.online ? 'Reachable' : 'Offline'}</ConnectionStatus>}
+              figure={source.online ? `${count(source.missing)} items` : '—'}
+              meta={source.online ? sourceMeta(source) : `${sourceMeta(source)} · skipped this time`} wrapMeta />
             {source.online && source.unreadable > 0
-              ? <span className="self-start"><StatusLabel tone="warning">{count(source.unreadable)} 个目录未读取</StatusLabel></span> : null}
+              ? <span className="self-start"><StatusLabel tone="warning">{count(source.unreadable)} folders not read</StatusLabel></span> : null}
           </article>
         ))}
       </div>
@@ -135,7 +135,7 @@ export function ResourceSyncCard(
   } else if (done) {
     result = receipt(done);
   } else if (apply.running) {
-    progress = <TaskProgress embedded label={apply.job?.message || '正在复核并清理失效条目'} />;
+    progress = <TaskProgress embedded label={apply.job?.message || 'Rechecking and cleaning up dead entries'} />;
   } else if (scan.start.isError) {
     result = <Note tone="error" title="Scan failed">{errorMessage(scan.start.error)}</Note>;
   } else if (scan.query.isError && state) {
@@ -161,13 +161,13 @@ export function ResourceSyncCard(
       <>
         <ScanResult scan={state} />
         {changes
-          ? <Note tone="neutral" title="清理内容" action={
+          ? <Note tone="neutral" title="Cleanup" action={
               <Button variant="danger" {...busyProps(cleaning)} onClick={() => runApply(state)}>
-                {cleaning ? '正在复核并清理…' : APPLY_LABEL}
+                {cleaning ? 'Rechecking and cleaning up…' : APPLY_LABEL}
               </Button>
             }>{applyPlanText(state)}</Note>
           : <p className="mr-auto text-body-regular text-notification-success-foreground">
-              已检查可访问的来源，没有待清理的记录、空文件夹或缓存。
+              Checked the reachable sources; there are no records, empty folders or caches to clean up.
             </p>}
       </>
     );

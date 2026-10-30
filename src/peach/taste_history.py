@@ -742,8 +742,8 @@ class _HistoryRows:
     taste: tuple[_TasteVisit, ...]
     identity_visits: tuple[tuple[str, str, str], ...] = ()
     bookmarks: tuple[tuple[str, str, str], ...] = ()
-    #: 读出这些行时历史库的版本（`store_version`）。按行派生的缓存拿它作键，
-    #: 不另读一次：另读的那次可能已经是下一次写入之后的版本。
+    #: The history store version at the time these rows were read (`store_version`). Caches derived per row use it as their key,
+    #: no separate re-read: a separate read may already be a version after the next write.
     version: tuple = ()
 
 
@@ -751,7 +751,7 @@ class _HistoryRows:
 #: 账本写入与它无关，不该连带重算。键里带 `-wal` 的版本：WAL 模式下写入先落在那里。
 _HISTORY_ROWS: dict[tuple, _HistoryRows] = {}
 _PREFERENCE_VISITS: dict[tuple, tuple[tuple[str, str, str], ...]] = {}
-#: 读的途中历史库被写过的那几次读，各领一个序号作版本，见 `_history_rows`。
+#: Reads during which the history store was written each take a sequence number as their version, see `_history_rows`.
 _UNSETTLED_READS = itertools.count()
 
 
@@ -878,10 +878,10 @@ def _read_history_rows(store_path: Path) -> _HistoryRows | None:
 
 
 def _history_rows(store_path: Path) -> _HistoryRows | None:
-    """历史库解析结果，`version` 是读之前取的版本。
+    """History store parse result, `version` is the version taken before reading.
 
-    读的途中历史库被写（口味刷新逐个来源提交）的话，读前读后两个版本对不上，这份结果
-    不进缓存，版本也换成只属于它自己的一个值，按版本取键的派生缓存不会拿别的行命中它。
+    If the history store is written during the read (taste refresh commits source by source), the versions before and after the read do not match, and this result
+    does not enter the cache, and its version is also swapped for a value belonging only to it, so a derived cache keyed by version never hits it with other rows.
     """
     version = store_version(store_path)
     cached = _HISTORY_ROWS.get(version)
@@ -1289,9 +1289,9 @@ def _taste_analysis(
     }
 
 
-#: 每条浏览信号（身份访问在前、书签在后，与 `_HistoryRows` 同序）对应的出演者、创作者与
-#: 域名，键是历史库版本加身份输入。只留最新一版。账本的其它写入（播放、关注检查、
-#: 状态）不改身份输入，这份结果照样命中，重算只剩按行累加。
+#: Per browsing signal (identity visits first, bookmarks after, in the same order as `_HistoryRows`), the performers, creators and
+#: domains, keyed by the history store version plus identity inputs. Only the latest version is kept. Other ledger writes (playback, follow checks,
+#: status) do not change the identity inputs, so this result still hits, and recomputation is reduced to per-row accumulation.
 _LINKED_SIGNALS: dict[tuple, tuple[tuple, ...]] = {}
 _NO_SIGNAL = ((), (), "", False)
 
@@ -1325,16 +1325,16 @@ def _linked_history_evidence(history_store, ledger_connection, since, history):
 
 
 def _linked_signals(history_store, cached, ledger_connection):
-    """每条浏览信号一份 `_linked_signal`。同一网址与标题（历史里约四成是重复访问）只判一次。"""
+    """One per browsing signal: `_linked_signal`. The same URL and title (about 40% of history is repeat visits) is judged only once."""
     from .entities import male_performer_ids
     from .taste_evidence import IdentityIndex, browser_entities
     excluded = male_performer_ids(ledger_connection)
     accounts, _ = identity_context(ledger_connection)
     index = IdentityIndex(ledger_connection)
-    # 判据读到的账本只有这几样：实体的种类与规范名、别名、身份链接与关注来源推出的账号、
-    # 排除的男优。取值本身进键，不用账本版本号——关注检查每小时都写账本，身份却很少变。
-    # 历史库那一半用这些行读出时的版本：此刻再读一次可能已是新版本，旧行算出的信号存到
-    # 新版本下，之后新行命中它就会按位置错配。
+    # The only things the criterion reads from the ledger are these: entity kinds and canonical names, aliases, identity links and accounts derived from follow sources,
+    # excluded male performers. The values themselves go into the key, not the ledger version number - follow checks write to the ledger every hour while identities rarely change.
+    # The history-store half uses the version at the time these rows were read: reading again now may already give a new version, and signals computed from old rows would be stored under
+    # the new version, so later new rows hitting it would be misaligned by position.
     key = (cached.version,
            tuple(sorted((eid, row["kind"], row["canonical_name"]) for eid, row in index.entities.items())),
            tuple(sorted((kind, label, tuple(sorted(ids))) for (kind, label), ids in index.aliases.items())),
@@ -1359,7 +1359,7 @@ def _linked_signals(history_store, cached, ledger_connection):
 
 
 def _linked_signal(url, title, entities, excluded):
-    """一对网址与标题贡献的出演者、创作者、域名，以及这次访问算不算进域名榜。"""
+    """The performers, creators and domains contributed by a URL and title pair, and whether this visit counts toward the domain ranking."""
     matches = set(entities)
     raw_creators = _url_candidates(url, title)[2]
     domain = (parse_url(url).hostname or "").removeprefix("www.")

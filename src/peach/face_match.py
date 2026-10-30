@@ -8,9 +8,9 @@ opencv_zoo，走同一个 `cv2` 包：`cv2.FaceRecognizerSF` 先按 YuNet 给的
 用它的地方只有一处：补头像后继在图库同名多张时，拿每张候选上的脸和她单人作品封面上
 截到的脸比，挑出是她本人的那几张（ADR-0056）。
 
-模型不进 Git：37 MB 的 ONNX，与 YuNet 一样随安装包分发，随包那份不在或对不上时退回
-`peach-data/tools/`，再退回按固定地址联网取一次，都校验 sha256（`face_detect.bundled_model`、
-`face_detect.fetch_model`）。取不到时 `FaceMatcher` 记下原因、
+ The model does not go into Git: 37 MB ONNX, shipped with the installer like YuNet; when the bundled copy is missing or mismatched it falls back to
+`peach-data/tools/`, then falls back to fetching once online from a fixed address, and verifies both with sha256 (`face_detect.bundled_model`,
+`face_detect.fetch_model`). When it cannot be fetched, `FaceMatcher` records the reason,
 一张都不比，调用方退回不看脸的旧判据——一次下载失败不能变成「装了一张别人的脸」。
 """
 from __future__ import annotations
@@ -21,7 +21,7 @@ from . import face_detect
 from .config import TOOLS_DIR
 from .face_detect import FaceDetector, main_face
 
-#: opencv_zoo 的 SFace 定版模型，与 YuNet 同一个定版提交。LFS 指针里的 oid 就是下面这个哈希。
+#: opencv_zoo 's pinned SFace model, at the same pinned commit as YuNet. LFS pointer's oid is the hash below.
 MODEL_URL = face_detect.ZOO_MEDIA + "face_recognition_sface/face_recognition_sface_2021dec.onnx"
 MODEL_SHA256 = "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"
 MODEL_PATH = TOOLS_DIR / "sface" / "face_recognition_sface_2021dec.onnx"
@@ -70,8 +70,8 @@ class FaceEmbedder:
         create = getattr(getattr(cv2, "FaceRecognizerSF", None), "create", None)
         if create is None:                       # pragma: no cover - 依赖版本兜底
             raise face_detect.FaceModelUnavailable(
-                "当前 OpenCV 没有 FaceRecognizerSF；需要 4.5.4 以上")
-        # 模型路径交给 Python 读取，OpenCV 只接收校验后的 ONNX 字节。
+                "The current OpenCV does not have FaceRecognizerSF; requires 4.5.4 or later")
+        # The model path is handed to Python to read, OpenCV only receives the verified ONNX bytes.
         model_bytes = numpy.frombuffer(self.model_path.read_bytes(), dtype=numpy.uint8)
         self._recognizer = create("ONNX", model_bytes, numpy.empty(0, dtype=numpy.uint8))
         self._detector = detector or FaceDetector(allow_download=allow_download)

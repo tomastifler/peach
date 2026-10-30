@@ -58,7 +58,7 @@ class ReleaseDownloadFailoverTests(unittest.TestCase):
             return httpx.Client(transport=httpx.MockTransport(respond))
 
         with tempfile.TemporaryDirectory() as folder, patch('peach.peach_proxy.http_client', side_effect=client):
-            with self.assertRaisesRegex(ValueError, '校验失败'):
+            with self.assertRaisesRegex(ValueError, 'verification failed'):
                 update.download('https://github.com/peach-mitao/peach/releases/download/v1.0.0/Peach-1.0.0-windows-x64.zip',
                                 Path(folder).resolve() / 'package.zip', 3, hashlib.sha256(b'yes').hexdigest(), lambda _count: None)
         self.assertEqual(len(calls), 2)
@@ -152,7 +152,7 @@ class StandaloneUpdateTests(unittest.TestCase):
                 update.distribution, 'standalone', return_value=True), patch.object(update.sys, 'platform', 'win32'), \
                 patch.object(update.update_tasks, 'reserve') as reserve, patch.object(update, 'preserve_local_state') as preserve, \
                 patch.object(update, 'restore_database') as restore, patch('peach.windows_restart.start_tray') as start:
-            with self.assertRaisesRegex(ValueError, '写入端迁移并同步'):
+            with self.assertRaisesRegex(ValueError, 'migrate on the writer first and then sync'):
                 update.request_restart()
             self.assertEqual(update.apply(update.state_path(), 999), 1)
         for operation in (reserve, preserve, restore, start):
@@ -452,7 +452,7 @@ class StandaloneUpdateTests(unittest.TestCase):
         result, requests, manifest, stage, error = self.prepare_online_lite('both-corrupt')
         self.assertEqual(result, 1)
         self.assertEqual(len(requests), 2)
-        self.assertIn('校验失败', error.read_text(encoding='utf-8'))
+        self.assertIn('verification failed', error.read_text(encoding='utf-8'))
         self.assertFalse(update_packages.matches(stage, manifest['tools']['ffmpeg']['files']))
 
     def test_lite_installer_rejects_a_corrupt_archive_and_can_retry_without_touching_the_install(self):
@@ -503,7 +503,7 @@ class StandaloneUpdateTests(unittest.TestCase):
                     update_packages.read_manifest(source, "1.0.0")
         del manifest["tools"]["untrunc"]["files"]["tools/untrunc/untrunc.exe"]
         (source / update_packages.MANIFEST).write_text(json.dumps(manifest), encoding="utf-8")
-        with self.assertRaisesRegex(ValueError, "缺少必需文件"):
+        with self.assertRaisesRegex(ValueError, "missing required files"):
             update_packages.read_manifest(source, "1.0.0")
 
     def test_a_tool_this_version_does_not_know_is_left_out_not_refused(self):

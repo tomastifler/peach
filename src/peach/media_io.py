@@ -1,4 +1,4 @@
-"""在可终止的只读子进程中访问媒体挂载；账本与任务状态由调用方保存。"""
+"""Access media mounts in a terminable read-only subprocess; the ledger and task state are saved by the caller."""
 from __future__ import annotations
 
 import argparse
@@ -23,7 +23,7 @@ def _request(operation, path, *, value='', timeout=None):
         if timeout is not None:
             from dataclasses import replace
             if timeout <= 0:
-                raise TimeoutError(errno.ETIMEDOUT, '媒体读取已超过期限')
+                raise TimeoutError(errno.ETIMEDOUT, 'Media read exceeded its deadline')
             remote = replace(remote, connection=replace(remote.connection, timeout=min(remote.connection.timeout, timeout)))
         return _read(operation, remote, value)
     command = ([sys.executable, 'media-read'] if getattr(sys, 'frozen', False)
@@ -34,9 +34,9 @@ def _request(operation, path, *, value='', timeout=None):
             timeout=TIMEOUT_SECONDS if timeout is None else timeout,
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
     except subprocess.TimeoutExpired as error:
-        raise TimeoutError(errno.ETIMEDOUT, '读取媒体目录或配套文件超时，已跳过，可重试', str(path)) from error
+        raise TimeoutError(errno.ETIMEDOUT, 'Reading the media directory or companion file timed out; skipped, can retry', str(path)) from error
     if result.returncode:
-        raise OSError(errno.EIO, '媒体读取进程未完成', str(path))
+        raise OSError(errno.EIO, 'Media read process did not finish', str(path))
     response = json.loads(result.stdout)
     if 'error' in response:
         error = response['error']
@@ -47,7 +47,7 @@ def _request(operation, path, *, value='', timeout=None):
 
 
 class DirectoryEntry:
-    """目录快照中的条目，属性访问不再触碰媒体盘。"""
+    """An entry in a directory snapshot; attribute access no longer touches the media disk."""
 
     def __init__(self, value):
         self.__dict__.update(value)
@@ -130,7 +130,7 @@ def _read(operation, path, value):
                     item.update(directory=entry.is_dir(), symlink=entry.is_symlink())
                     if not item['directory']:
                         info = entry.stat()
-                        # Windows 的目录快照没有文件 ID；仅本地身份请求在子进程内补读。
+                        # Windows directory snapshots have no file ID; only local identity requests are filled in by reading inside the subprocess.
                         if value == 'identity' and not info.st_ino:
                             info = os.stat(entry.path)
                         item['attributes'] = _attributes(info)
@@ -157,7 +157,7 @@ def _read(operation, path, value):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description='限时读取媒体目录与配套文件')
+    parser = argparse.ArgumentParser(description='Read the media directory and companion files with a time limit')
     parser.add_argument('operation', choices=OPERATIONS)
     parser.add_argument('path', type=Path)
     parser.add_argument('value', nargs='?', default='')

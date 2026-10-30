@@ -366,7 +366,7 @@ describe('片单与起播', () => {
     await act(async () => { opening = api.open(null) });
     await until(() => !!q('[data-immerse-loader]') && !q('[data-immerse-loader]')!.hidden);
     expect(root().hasAttribute('data-idle')).toBe(true);
-    expect(q('[data-immerse-loader]')!.textContent).toContain('加载中');
+    expect(q('[data-immerse-loader]')!.textContent).toContain('Loading');
     expect(q('[data-immerse-loader]')!.textContent, '转圈已经在动，字不带省略号').not.toContain('…');
     expect(document.body.hasAttribute('data-immerse-open')).toBe(true);
     await hold.release();
@@ -720,7 +720,7 @@ describe('常驻组件', () => {
     expect(root().hidden, '同步段里外框已经显出来').toBe(false);
     expect(root().hasAttribute('data-idle')).toBe(true);
     expect(q('[data-immerse-loader]')!.hidden).toBe(false);
-    expect(q('[data-immerse-loader]')!.textContent).toContain('加载内容');
+    expect(q('[data-immerse-loader]')!.textContent).toContain('Loading content');
     expect(document.body.hasAttribute('data-immerse-open')).toBe(true);
     await opening;
     expect(root().hasAttribute('data-idle'), '返回时已经画完，不等下一次渲染').toBe(false);

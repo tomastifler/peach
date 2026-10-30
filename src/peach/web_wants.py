@@ -128,7 +128,7 @@ def scrape(contract, job_id: str | None = None) -> dict:
                 incomplete.discard(want_id)
             if job_id and not contract.want_job.checkpoint(job_id, completed_wants=sorted(completed),
                     incomplete_wants=sorted(incomplete), checked=len(done), fetched=fetched, covers=covers):
-                raise InterruptedError('想要资料任务已停止')
+                raise InterruptedError('The want-list metadata task was stopped')
     contract.cache_bust()
     return {"ok": True, "total": len(done), "fetched": fetched, "covers": covers,
             "incomplete": len(incomplete)}

@@ -187,11 +187,11 @@ it('地址栏填了才允许取图，取回来的那一份进框选，交的是�
     ref: 'url:https://example.com/a.jpg', source: 'url', label: 'example.com', bases: ['url:https://example.com/a.jpg'],
   });
   await openPicker();
-  expect(buttonNamed('用这个地址')?.disabled).toBe(true);
-  expect(buttonNamed('用这个地址')?.className).not.toContain('bg-button-primary');
-  await type(document.querySelector<HTMLInputElement>('input[aria-label="图片地址"]'), '  https://example.com/a.jpg  ');
-  expect(buttonNamed('用这个地址')?.disabled).toBe(false);
-  await click(buttonNamed('用这个地址'));
+  expect(buttonNamed('Use this address')?.disabled).toBe(true);
+  expect(buttonNamed('Use this address')?.className).not.toContain('bg-button-primary');
+  await type(document.querySelector<HTMLInputElement>('input[aria-label="Image URL"]'), '  https://example.com/a.jpg  ');
+  expect(buttonNamed('Use this address')?.disabled).toBe(false);
+  await click(buttonNamed('Use this address'));
   await settle();
   expect(body(calls, 1)).toEqual({ kind: 'performer', id: 7792, url: 'https://example.com/a.jpg' });
   // 预览走服务端缓存里那一份，不把手填的地址直接塞进 <img>。
@@ -250,7 +250,7 @@ it('取景就失败时原因留在候选那一屏', async () => {
   )));
   await openPicker();
   await type(document.querySelector<HTMLInputElement>('input[aria-label="Image URL"]'), 'https://192.0.2.1/a.jpg');
-  await click(buttonNamed('Use this URL'));
+  await click(buttonNamed('Use this address'));
   await settle();
   expect(dialog()?.querySelector('[role="alert"]')?.textContent).toContain('只接受指向公网的 https 地址');
   expect(dialog()?.textContent).toContain('Change avatar');
@@ -290,9 +290,9 @@ it('索引准备完成后在当前弹层自动显示图库候选', async () => {
       : listing([choice()], { index_refreshing: false }),
   })));
   await openPicker();
-  expect(dialog()?.textContent).toContain('正在更新图库索引');
+  expect(dialog()?.textContent).toContain('Updating the image library index');
   await vi.waitFor(() => expect(cells()).toHaveLength(1), { timeout: 2500 });
-  expect(dialog()?.textContent).not.toContain('正在更新图库索引');
+  expect(dialog()?.textContent).not.toContain('Updating the image library index');
   const finished = calls;
   await new Promise((resolve) => setTimeout(resolve, 1100));
   expect(calls).toBe(finished);
@@ -307,7 +307,7 @@ it('索引刷新请求失败时停止轮询并允许手动重试', async () => {
     }) };
   }));
   await openPicker();
-  await vi.waitFor(() => expect(buttonNamed('立即重试')).not.toBeNull(), { timeout: 2500 });
+  await vi.waitFor(() => expect(buttonNamed('Retry now')).not.toBeNull(), { timeout: 2500 });
   await new Promise((resolve) => setTimeout(resolve, 1100));
   expect(calls).toBe(2);
 });
@@ -321,8 +321,8 @@ it('过期索引在重新打开弹层时读取当前候选', async () => {
       : listing([choice()], { index_refreshing: false }),
   })));
   const { host } = await openPicker();
-  expect(dialog()?.textContent).toContain('图库索引未取得');
-  await click(dialog()?.querySelector('button[aria-label="关闭"]'));
+  expect(dialog()?.textContent).toContain('Image library index unavailable');
+  await click(dialog()?.querySelector('button[aria-label="Close"]'));
   await settle();
   await click(host.querySelector('button'));
   await settle();
@@ -366,7 +366,7 @@ it('候选没取到时原因旁边有「重试」，点了再取一遍', async (
   expect(dialog()?.querySelector('[role="alert"]')?.textContent).toContain('候选读不出来');
   expect(document.querySelector('[role="listbox"]')).toBeNull();
   fail = false;
-  await click(buttonNamed('立即重试'));
+  await click(buttonNamed('Retry now'));
   await settle();
   expect(fetched).toHaveBeenCalledTimes(2);
   expect(cells()).toHaveLength(1);
@@ -383,7 +383,7 @@ it('提交失败的原因旁边不给「重试」：重来的是那颗提交键�
   await click(cells()[0]);
   await settle();
   expect(dialog()?.querySelector('[role="alert"]')).not.toBeNull();
-  expect(buttonNamed('立即重试')).toBeNull();
+  expect(buttonNamed('Retry now')).toBeNull();
 });
 
 it('保存失败返回候选并重新选图时只显示当前操作的错误', async () => {
@@ -398,16 +398,16 @@ it('保存失败返回候选并重新选图时只显示当前操作的错误', a
   await click(cells()[0]);
   await settle();
   await reportSize(300, 400);
-  await click(buttonNamed('用这一块'));
+  await click(buttonNamed('Use this area'));
   await settle();
   expect(dialog()?.textContent).toContain('图片数据不完整或无法解码');
-  await click(buttonNamed('返回备选图片'));
+  await click(buttonNamed('Back to alternative images'));
   await settle();
   expect(dialog()?.textContent).not.toContain('图片数据不完整或无法解码');
   await click(cells()[0]);
   await settle();
   expect(dialog()?.querySelector('[role="alert"]')).toBeNull();
-  expect(buttonNamed('用这一块')).not.toBeNull();
+  expect(buttonNamed('Use this area')).not.toBeNull();
 });
 
 it('合演作品的格子标出人数，框选时提醒先找到她自己的脸', async () => {

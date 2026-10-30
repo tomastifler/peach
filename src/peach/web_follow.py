@@ -1405,7 +1405,7 @@ def _follow_tag_index(store, items, tag_policy=None, *, evidence=False) -> list[
 
 
 def online_tag_inventory(connection):
-    """在线管理与收藏共用的完整标签词表，包含隐藏项与发布组证据。"""
+    """Complete tag vocabulary shared by online management and favorites, including hidden items and release-group evidence."""
     from .library_favorites import online_tag_ids
     store = FollowStore(lambda: connection)
     enabled = {row['id'] for row in store.sources() if row['enabled']}
@@ -1473,7 +1473,7 @@ def q_follow_tags(contract, args) -> dict:
 
 
 def _visible_online_tag_rows(store, items, policy):
-    """浏览词表只返回有可见内容的标签，管理词表保留全部保存的选择。"""
+    """The browsing vocabulary returns only tags with visible content, and the management vocabulary keeps all saved choices."""
     return [row for row in _follow_tag_index(store, items, policy)
             if not row['hidden'] and not row['blocked'] and row['n']]
 
@@ -1742,14 +1742,14 @@ def q_follow_suggest(contract, q: str, limit: int = MAX_SUGGESTIONS,
     ]}
 
 
-#: 关注条目、分组与筛选项读到的账本表：条目与来源、作者别名、来源绑定的实体名，以及
-#: 在线标签归类所在的 profile 设置。播放心跳只写 `follow_playback`，不在其中：看片时
-#: 每十秒一次的上报不让这几份整库结果重算。
+#: Ledger tables read by follow entries, groups and filter options: entries and sources, creator aliases, entity names bound to sources, and
+#: the profile setting where online tag classification lives. Playback heartbeats write only `follow_playback`, and are not among them: while watching
+#: the report every ten seconds does not make these whole-library results recompute.
 FOLLOW_GROUP_TABLES = ("follow_item", "follow_source", "follow_author_alias", "entity", "profile")
 
 
 class _FollowInputs(NamedTuple):
-    """关注页几份缓存共用的输入，以及读它们之前取的 `FOLLOW_GROUP_TABLES` 版本号。"""
+    """Inputs shared by the follow page's caches, and the one taken before reading them: `FOLLOW_GROUP_TABLES` version number."""
 
     store: FollowStore
     sources: list
@@ -1760,11 +1760,11 @@ class _FollowInputs(NamedTuple):
 
 
 def _follow_inputs(contract, connection) -> _FollowInputs:
-    """来源、作者别名与标签归类先于缓存从库里取出，再被闭包带进各份缓存的计算。
+    """Sources, creator aliases and tag classification are fetched from the library before the cache, then carried by closures into each cache's computation.
 
-    缓存自己的版本号在计算前才读，比这几样输入晚。两次读之间有写入的话，旧输入算出的
-    结果会记在新版本下一直命中。所以版本号在读输入之前先取一次，作为这几份缓存的额外
-    输入：期间有写入，两个版本号对不上，下一次请求照样重算。
+    A cache's own version number is read only just before computing, later than these inputs. If a write happens between the two reads, results computed from the old inputs
+    would be recorded under the new version and keep hitting. So the version number is taken once before the inputs are read, as an extra
+    input of these caches: if a write happens in between, the two version numbers do not match, and the next request recomputes as usual.
     """
     revision = contract.ledger_revision(FOLLOW_GROUP_TABLES)
     store = _store(contract, connection)
@@ -1775,7 +1775,7 @@ def _follow_inputs(contract, connection) -> _FollowInputs:
 
 
 def _enabled_items(contract, inputs, source_id) -> tuple:
-    """启用来源下的全部条目（可限定一个来源），关注页与封面候选共用这一份缓存。"""
+    """All entries under enabled sources (optionally limited to one source); the follow page and cover candidates share this cache."""
     enabled = {int(row["id"]) for row in inputs.sources if row["enabled"]}
     return contract.cached_until_changed(
         f"follow-items:{source_id}",
@@ -1785,7 +1785,7 @@ def _enabled_items(contract, inputs, source_id) -> tuple:
 
 
 def _unblocked_items(store, items, policy, by_author=None) -> tuple:
-    """任一版本命中屏蔽标签时，整组内容从浏览列表中隐藏。"""
+    """When any version hits a blocked tag, the whole group is hidden from the browse list."""
     if not any(group.get('blocked') for group in policy.groups.values()):
         return items
     blocked_ids = {member.id for group in store.group(items, by_author)
@@ -1796,7 +1796,7 @@ def _unblocked_items(store, items, policy, by_author=None) -> tuple:
 
 
 def _browsable_items(contract, inputs, source_id, by_author):
-    """在完整作品组的屏蔽结果中选择来源，供列表、数量和筛选项共用。"""
+    """Select a source within the blocked result of the full work group, shared by the list, counts and filter options."""
     def build():
         visible = _unblocked_items(inputs.store, _enabled_items(contract, inputs, None), inputs.tag_policy, by_author)
         return tuple(item for item in visible if source_id is None or item.source_id == source_id)
@@ -1805,10 +1805,10 @@ def _browsable_items(contract, inputs, source_id, by_author):
 
 
 def _item_groups(contract, inputs, everything, by_author, source_id) -> dict:
-    """条目 id → 它所在的整组。直达详情查这一份，整库只分一次组，按账本版本缓存。
+    """Entry id → the whole group it belongs to. Direct detail lookups use this one, the whole library is grouped only once, and it is cached by ledger version.
 
-    组是读时拼的（剥作者名、相似标题），只按库里同键去捞会漏掉别的站上那几份，详情
-    就比列表里的卡片少，所以还是整库分组。
+    Groups are assembled at read time (stripping creator names, similar titles); fetching only by the same key in the library would miss those from other sites, and the detail
+    would then have fewer than the cards in the list, so the whole library is still grouped.
     """
     def build():
         return {member.id: group for group in inputs.store.group(everything, by_author)
@@ -1818,27 +1818,27 @@ def _item_groups(contract, inputs, everything, by_author, source_id) -> dict:
 
 
 def _item_page(group, payload, sources, author_aliases) -> dict:
-    """直达详情（`fetchFollowItem`）只读这一组和署名要的来源、别名；筛选项、计数与
-    「猜你喜欢」都不算，也不随响应下发。条目不存在时组为空。"""
+    """Direct detail (`fetchFollowItem`) reads only this group and the sources and aliases the byline needs; filter options, counts and
+    "Recommended for you" are neither computed nor sent down with the response. When the entry does not exist the group is empty."""
     return {"ok": True, "sources": sources, "author_aliases": author_aliases,
             "groups": [payload(group)] if group is not None else [], "has_more": False}
 
 
 def _ranked_cache_key(args, source_id, statuses, sort, direction) -> str | None:
-    """无筛选、非随机排序的列表按这把键缓存排好的整批组；带筛选的子集与随机排序现算。"""
+    """Lists with no filter and non-random sorting cache the whole pre-sorted batch of groups under this key; filtered subsets and random sorting are computed fresh."""
     if sort == "rand" or any(args.get(key) for key in FOLLOW_FILTER_ARGS):
         return None
     return f"follow-ranked:{source_id}:{','.join(statuses)}:{sort}:{direction}"
 
 
 def _page_facets(contract, inputs, everything, by_source, args, scope, offset) -> dict:
-    """筛选项按全库算，只随首页下发：页面把几页并成一份时缺的键沿用首页那份
-    （`mergedPage`），每翻一页再带一遍就是几十 KB 的重复。"""
+    """Filter options are computed over the whole library and sent down only with the first page: when the page merges several pages into one, missing keys reuse the first page's
+    (`mergedPage`), sending them again on every page turn would be tens of KB of repetition."""
     if offset:
         return {}
     source_id, summary = scope
-    # 题材圆标的有无与取景读题材图目录。图与 `.face.json` 落在 `works/` 子目录
-    # （`follow_assets.cache_path`），子目录里新增文件不改上一级的修改时间，所以进键的是它。
+    # Whether a genre badge exists and its framing are read from the genre image directory. The images and `.face.json` land in the `works/` subdirectory
+    # (`follow_assets.cache_path`), adding files in a subdirectory does not change the parent's modification time, so it is that which goes into the key.
     icon_root = work_icon_root(contract)
     facets = {} if summary else contract.cached_until_changed(
         f"follow-facets:{source_id}",
@@ -1850,10 +1850,10 @@ def _page_facets(contract, inputs, everything, by_source, args, scope, offset) -
 
 
 def _page_groups(contract, inputs, everything, counted, by_author, *, statuses, order, window, summary, cache_key):
-    """这一次要回的作品组，以及后面还有没有。管理页的摘要请求不分组。
+    """The work groups to return this time, and whether there are more after. A management-page summary request does no grouping.
 
-    `cache_key` 不为空时整批排好的组按账本版本缓存，翻页、回到列表都不再重新分组；
-    带作者、来源、标签等筛选或随机排序的请求传空，现算。
+    `cache_key` when not empty, the whole pre-sorted batch of groups is cached by ledger version, and paging or returning to the list no longer regroups;
+    Requests with author, source, tag or other filters or random sorting pass empty and are computed fresh.
     """
     if summary:
         return (), False
@@ -1878,7 +1878,7 @@ def _duration_arg(raw) -> float:
     return value if value > 0 else 0.0
 
 
-#: `_follow_matcher` 读的筛选参数。带了任一个，列表就是全库的一个子集。
+#: `_follow_matcher` The filter parameters read. With any one of them, the list is a subset of the whole library.
 FOLLOW_FILTER_ARGS = ("author", "provider", "tag", "work", "dur_min", "dur_max")
 
 
@@ -2062,13 +2062,13 @@ def _write_item_ids(body) -> list[int]:
 
 
 def w_follow_tag(contract, body) -> dict:
-    """在线条目的用户标签写入本机设置，返回当前条目投影。"""
+    """Write the user tags of an online entry into local settings and return the current entry projection."""
     from .online_tag_management import write_item_tag
     with contract.write_transaction() as connection:
         item = _store(contract, connection).item(int(body['id']))
         enabled = {row['id'] for row in _store(contract, connection).sources() if row['enabled']}
         if item is None or item.source_id not in enabled or _excluded_item(item):
-            raise ValueError('关注内容不存在')
+            raise ValueError('Followed content does not exist')
         write_item_tag(connection, item, body)
     contract.cache_bust()
     page = q_follow(contract, {'item': item.id})
@@ -2076,7 +2076,7 @@ def w_follow_tag(contract, body) -> dict:
         for projected in (group['primary'], *group['variants'], *group['duplicates']):
             if projected['id'] == item.id:
                 return {'ok': True, 'item': projected, 'group': group}
-    raise ValueError('关注内容已不可用')
+    raise ValueError('Followed content is no longer available')
 
 
 def w_follow_status(contract, body) -> dict:
@@ -2442,7 +2442,7 @@ def w_follow_schedule(contract, body) -> dict:
 
 
 def w_follow_schedule_run(contract, _body) -> dict:
-    """让自动检查立刻跑一轮，结果照常记进调度状态。"""
+    """Make the automatic check run one round immediately, with the result recorded into the schedule state as usual."""
     scheduler = contract.follow_scheduler
     if scheduler is None:
         raise ValueError("automatic follow updates are unavailable")
@@ -2636,7 +2636,7 @@ def w_follow_creator(contract, body) -> dict:
 
 
 def w_follow_author_alias(contract, body) -> dict:
-    """维护人工确认的跨站创作者别名和统一名称。"""
+    """Maintain manually confirmed cross-site creator aliases and unified names."""
     action = str(body.get("action") or "add")
     if action == "rename":
         contract.cache_bust()
@@ -2648,9 +2648,9 @@ def w_follow_author_alias(contract, body) -> dict:
             linked = {int(row["entity_id"]) for row in store.sources()
                       if row["entity_id"] and name_key(row, mapping) == f"name:{key}"}
             if len(linked) > 1:
-                raise ValueError("这组别名关联了多份创作者档案，请先确认档案归属")
+                raise ValueError("This alias group is linked to several creator profiles; please confirm profile ownership first")
             if not chosen:
-                raise ValueError("请填写有效的创作者名称")
+                raise ValueError("Please enter a valid creator name")
             result = store.rename_author_group(key, chosen)
             for entity_id in linked:
                 connection.execute(

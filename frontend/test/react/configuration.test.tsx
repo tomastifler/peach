@@ -101,7 +101,7 @@ it.each([false, true])('来源凭据依据数据库只读状态 %s 控制写入'
   }] });
   await settle();
   expect(host.querySelector<HTMLInputElement>('input[type="password"]')?.disabled).toBe(readOnly);
-  expect(buttonNamed('Save configuration', host.querySelector('[aria-label="Credentials configurable"]')!)?.disabled).toBe(readOnly);
+  expect(buttonNamed('Save settings', host.querySelector('[aria-label="Credentials configurable"]')!)?.disabled).toBe(readOnly);
 });
 it('未知分区回到媒体库，未提供下载渠道时省略对应分类', async () => {
   const host = await open(data({ editable: false }), '不存在');
@@ -147,21 +147,21 @@ it('下载设置未取得时保留分区与健康表单，并可重试恢复', a
   const partial = full();
   delete partial.downloads;
   partial.section_errors = { downloads: { title: '下载设置未取得', message: '请重新读取。', error_id: 'test-error-id' } };
-  const host = await open(partial, '下载渠道');
+  const host = await open(partial, 'Download channels');
   expect(tabs(host).map(tab => tab.textContent)).toEqual(names);
-  expect(chosen(host).textContent).toBe('下载渠道');
+  expect(chosen(host).textContent).toBe('Download channels');
   expect(host.querySelector('.ui-board-group-active')?.textContent).toContain('下载设置未取得');
   expect(host.querySelector('[data-folder-row]')).not.toBeNull();
   serve(full());
-  await click(buttonNamed('重新读取', host.querySelector('.ui-board-group-active')!));
+  await click(buttonNamed('Reload', host.querySelector('.ui-board-group-active')!));
   await settle();
   expect(host.textContent).not.toContain('下载设置未取得');
-  expect(section(host, '云下载')).not.toBeNull();
+  expect(section(host, 'Cloud download')).not.toBeNull();
 });
 
 it('局部配置错误出现在对应分区且不替换其他未保存输入', async () => {
   const host = await open(full());
-  const input = host.querySelector<HTMLInputElement>('input[aria-label^="媒体目录 "]')!;
+  const input = host.querySelector<HTMLInputElement>('input[aria-label^="Media folder "]')!;
   await type(input, 'D:\\Edited');
   await act(async () => {
     queryClient.setQueryData(CONFIGURATION_KEY, { ...full(), section_errors: {
@@ -171,9 +171,9 @@ it('局部配置错误出现在对应分区且不替换其他未保存输入', a
   });
   expect(input.value).toBe('D:\\Edited');
   expect(host.querySelector('.ui-board-group-active')?.textContent).not.toContain('存储空间未取得');
-  await click(tabs(host).find(tab => tab.textContent === '应用与维护'));
+  await click(tabs(host).find(tab => tab.textContent === 'App & maintenance'));
   expect(host.querySelector('.ui-board-group-active')?.textContent).toContain('存储空间未取得');
-  await click(tabs(host).find(tab => tab.textContent === '网络与访问'));
+  await click(tabs(host).find(tab => tab.textContent === 'Network & access'));
   expect(host.querySelector('.ui-board-group-active')?.textContent).toContain('公网入口未取得');
   expect(host.querySelector('#peachProxy')).not.toBeNull();
 });
@@ -185,6 +185,6 @@ it('媒体来源未取得时隐藏会提交媒体配置的表单，其他设置�
   expect(host.querySelector('[data-folder-row]')).toBeNull();
   expect(host.querySelector('#configPort')).toBeNull();
   expect(host.querySelector('#peachProxy')).not.toBeNull();
-  await click(tabs(host).find(tab => tab.textContent === '网络与访问'));
+  await click(tabs(host).find(tab => tab.textContent === 'Network & access'));
   expect(host.querySelector('.ui-board-group-active')?.textContent).toContain('媒体目录未取得');
 });

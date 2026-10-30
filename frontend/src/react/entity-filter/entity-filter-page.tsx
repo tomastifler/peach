@@ -268,7 +268,7 @@ export function Segments({ name, label, value, options, onChange }: {
 
 export function Shuffle({ onPress, busy = false }: { onPress(): void; busy?: boolean }) {
   return (
-    <FilterIconButton data-entity-batch="" label="换一批" busy={busy} busyStyle="strand" icon={ShuffleIcon} onPress={onPress} />
+    <FilterIconButton data-entity-batch="" label="Shuffle" busy={busy} busyStyle="strand" icon={ShuffleIcon} onPress={onPress} />
   );
 }
 

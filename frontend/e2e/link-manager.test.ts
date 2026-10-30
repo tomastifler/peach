@@ -30,15 +30,15 @@ describe('链接检查身份与断链动效', () => {
       try {
         const { page } = opened;
         await page.locator('[data-link-check-rays]').waitFor();
-        for (const title of ['地址已失效', '本次未访问成功']) {
+        for (const title of ['Address is dead', '本次未访问成功']) {
           const table = page.getByRole('grid', { name: title, exact: true });
           await table.waitFor();
           assert.equal(await table.locator('[data-link-identity]').getAttribute('href'), '/performers/31');
           assert.equal(await table.locator('[data-link-identity] img').count(), 1);
           assert.equal(await table.locator('[data-link-address] img').count(), 1);
           assert.equal(await table.locator('[data-link-name] img').count(), 0);
-          assert.ok((await table.innerText()).includes('Peach 资料'));
-          assert.ok((await table.innerText()).includes('链接名称'));
+          assert.ok((await table.innerText()).includes('Peach info'));
+          assert.ok((await table.innerText()).includes('Link name'));
           await verifyColumnContentWidth(table, 'url', '[data-link-address]');
           await verifyColumnContentWidth(table, 'note', '[data-link-result]');
         }
@@ -150,13 +150,13 @@ describe('链接检查身份与断链动效', () => {
             action: node.querySelector('button')?.textContent };
         });
         assert.notEqual(face.background, 'rgba(0, 0, 0, 0)');
-        assert.equal(face.border, '1px'); assert.equal(face.action, '添加关注');
+        assert.equal(face.border, '1px'); assert.equal(face.action, 'Add follow');
         await settle(page);
         const geometry = await layout(page);
         assert.ok(geometry.scrollWidth <= geometry.viewportWidth);
         assert.deepEqual(geometry.offenders, []); assert.deepEqual(opened.problems, []);
         const timeOrigin = await page.evaluate(() => performance.timeOrigin);
-        await empty.getByRole('button', { name: '添加关注', exact: true }).click();
+        await empty.getByRole('button', { name: 'Add follow', exact: true }).click();
         await page.getByRole('textbox', { name: '来源链接、名字或 id', exact: true }).waitFor();
         assert.equal(new URL(page.url()).searchParams.get('tab'), 'add');
         assert.equal(await page.evaluate(() => performance.timeOrigin), timeOrigin);

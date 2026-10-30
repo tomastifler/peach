@@ -1,9 +1,9 @@
-/* 组件可提前绑定覆盖式滚动条；全站增量入口会接管未显式绑定的滚动区。 */
+/* Components can bind the overlay scrollbar ahead of time; the site-wide incremental entry takes over scroll areas not explicitly bound. */
 import { useEffect, useRef } from 'react';
 
 import { attachOverlayScrollbar } from '@peach/legacy/ui';
 
-/** 会滚的元素的 ref。普通内容区的轨道与容器同级，定位浮层的轨道由自身承载。 */
+/** The ref of a scrollable element. The track of a normal content area is a sibling of the container, and the track of a positioned overlay is carried by itself. */
 export function useOverlayScrollbar<T extends HTMLElement>() {
   const ref = useRef<T>(null);
   const owned = useRef<{ node: T; control: ReturnType<typeof attachOverlayScrollbar> } | null>(null);

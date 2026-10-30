@@ -20,8 +20,8 @@ describe('馆藏表格列宽与占位图', () => {
         o_count: 2, first_seen: '2026-01-03', last_played: 1767312000,
         code: 'TEST-001', release_date: '2026-01-02',
       }], total: 1 } }));
-      await page.getByRole('radiogroup', { name: '馆藏显示方式' }).locator('label')
-        .filter({ has: page.getByRole('radio', { name: '列表', exact: true }) }).click();
+      await page.getByRole('radiogroup', { name: 'Library view' }).locator('label')
+        .filter({ has: page.getByRole('radio', { name: 'List', exact: true }) }).click();
       const row = page.locator('[data-catalog-row][data-id="99001"]');
       await row.waitFor();
       const geometry = await row.evaluate(node => {
@@ -41,14 +41,14 @@ describe('馆藏表格列宽与占位图', () => {
       assert.ok(geometry.titleWidth < 320 && geometry.clamp === '2' && geometry.fullHeight > geometry.titleHeight
         && geometry.titleHeight <= geometry.lineHeight * 2 + 1, JSON.stringify(geometry));
       assert.equal(await row.locator('[data-list-name]').getAttribute('title'), name);
-      const defaultLabels = ['作品', '标签', '时长', '分辨率', '体积', '评分', '观看次数'];
+      const defaultLabels = ['作品', 'Tags', 'Duration', 'Resolution', 'Size', 'Rating', 'Play count'];
       const visibleLabels = () => page.locator('[data-catalog-table] th:not([data-table-space]) > span').allTextContents();
       assert.deepEqual(await visibleLabels(), defaultLabels);
-      await page.getByRole('button', { name: '显示列', exact: true }).click();
-      await page.getByRole('button', { name: '显示全部列', exact: true }).click();
+      await page.getByRole('button', { name: 'Columns', exact: true }).click();
+      await page.getByRole('button', { name: 'Show all columns', exact: true }).click();
       await page.keyboard.press('Escape');
-      assert.deepEqual(await visibleLabels(), ['作品', '标签', '番号', '时长', '分辨率', '体积', '评分', '观看次数', '高潮计数', '观看时间', '入库时间', '发行时间']);
-      for (const label of ['分辨率', '评分', '高潮计数', '观看次数', '时长', '体积', '入库时间', '观看时间', '发行时间', '番号']) {
+      assert.deepEqual(await visibleLabels(), ['作品', 'Tags', 'Product code', 'Duration', 'Resolution', 'Size', 'Rating', 'Play count', 'O count', 'Watched', 'Added', 'Released']);
+      for (const label of ['Resolution', 'Rating', 'O count', 'Play count', 'Duration', 'Size', 'Added', 'Watched', 'Released', 'Product code']) {
         await page.getByRole('columnheader', { name: label, exact: false }).waitFor();
       }
       assert.ok((await row.textContent())?.includes('1920 × 1080'));
@@ -78,9 +78,9 @@ describe('馆藏表格列宽与占位图', () => {
       await resizer.press('Tab');
       await page.waitForFunction(width => document.querySelector('[data-catalog-table] th[data-key="name"]')!.getBoundingClientRect().width > width, beforeKeyboard);
       const resizedWidth = (await header.boundingBox())!.width;
-      await page.getByRole('button', { name: '显示列', exact: true }).click();
+      await page.getByRole('button', { name: 'Columns', exact: true }).click();
       const columnMenu = page.getByRole('dialog', { name: '表格显示列' });
-      await columnMenu.locator('label').filter({ has: page.getByRole('checkbox', { name: '评分', exact: true }) }).click();
+      await columnMenu.locator('label').filter({ has: page.getByRole('checkbox', { name: 'Rating', exact: true }) }).click();
       await page.keyboard.press('Escape');
       assert.equal(await page.getByRole('columnheader', { name: /^评分/ }).count(), 0);
       await page.reload({ waitUntil: 'load' });
@@ -92,11 +92,11 @@ describe('馆藏表格列宽与占位图', () => {
         const url = new URL(response.url());
         return url.pathname === '/api/items' && url.searchParams.get('sort') === 'rating';
       });
-      await page.getByRole('option', { name: '评分', exact: true }).click();
+      await page.getByRole('option', { name: 'Rating', exact: true }).click();
       await sortResponse;
       assert.equal(await page.getByRole('columnheader', { name: /^评分/ }).count(), 0);
-      await page.getByRole('button', { name: '显示列', exact: true }).click();
-      await page.getByRole('button', { name: '显示全部列', exact: true }).click();
+      await page.getByRole('button', { name: 'Columns', exact: true }).click();
+      await page.getByRole('button', { name: 'Show all columns', exact: true }).click();
       await page.keyboard.press('Escape');
       await page.getByRole('columnheader', { name: /^评分/ }).waitFor();
       const scroll = page.locator('[data-catalog-table] .overflow-x-auto');
@@ -105,11 +105,11 @@ describe('馆藏表格列宽与占位图', () => {
         return { left: node.scrollLeft, extra: node.scrollWidth - node.clientWidth };
       });
       assert.ok(scrolled.extra > 0 && scrolled.left > 0, JSON.stringify(scrolled));
-      await page.getByRole('button', { name: '重置列宽', exact: true }).click();
+      await page.getByRole('button', { name: 'Reset column widths', exact: true }).click();
       await page.waitForFunction(width => Math.abs(document.querySelector('[data-catalog-table] th[data-key="name"]')!.getBoundingClientRect().width - width) <= 1, initialWidth);
       await scroll.evaluate(node => { node.scrollLeft = 0 });
-      await page.getByRole('button', { name: '显示列', exact: true }).click();
-      await page.getByRole('button', { name: '恢复默认显示', exact: true }).click();
+      await page.getByRole('button', { name: 'Columns', exact: true }).click();
+      await page.getByRole('button', { name: 'Restore default view', exact: true }).click();
       await page.keyboard.press('Escape');
       assert.deepEqual(await visibleLabels(), defaultLabels);
       const measured = await layout(page);

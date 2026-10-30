@@ -1,4 +1,4 @@
-"""任务中心的领域结果：明细留在原处，摘要保留可读的数量。"""
+"""Domain results of the Task Center: details stay where they are, and summaries keep readable counts."""
 from __future__ import annotations
 
 
@@ -15,7 +15,7 @@ RESULT_FIELDS = {
 
 
 def _resource_scan_counts(result: dict) -> dict:
-    """资源扫描的文件、目录与缓存数量。"""
+    """File, directory and cache counts of a resource scan."""
     summary = {field: result[field] for field in ('missing', 'purge', 'vanish', 'empty', 'unreadable')
                if isinstance(result.get(field), int)}
     cache = result.get('cache') if isinstance(result.get('cache'), dict) else {}
@@ -25,7 +25,7 @@ def _resource_scan_counts(result: dict) -> dict:
 
 
 def _source_check_counts(state: dict) -> dict:
-    """来源检查的成功、新增与补查失败数量。"""
+    """Success, new and backfill-failure counts of a source check."""
     rows = [row for row in state['results'] if isinstance(row, dict)]
     summary = {
         'source_failed': sum(row.get('ok') is False for row in rows),
@@ -36,12 +36,12 @@ def _source_check_counts(state: dict) -> dict:
         source = row.get('source')
         if not isinstance(source, int) or isinstance(source, bool) or source <= 0:
             continue
-        for field, kind in (('error', '检查失败'), ('backfill_error', '补查失败')):
+        for field, kind in (('error', 'Check failed'), ('backfill_error', 'Backfill failed')):
             if (field == 'error' and row.get('ok') is False) or row.get(field):
                 summary['issues'].append({
                     'source': source, 'label': str(row.get('label') or row.get('name') or row.get('ref') or source),
                     'provider': str(row.get('provider_label') or row.get('provider') or ''),
-                    'kind': kind, 'error': str(row.get(field) or '来源未返回检查结果'),
+                    'kind': kind, 'error': str(row.get(field) or 'The source returned no check result'),
                 })
     for field in ('added', 'updated', 'discovered', 'without_code'):
         if field not in state and any(field in row for row in rows):
@@ -51,7 +51,7 @@ def _source_check_counts(state: dict) -> dict:
 
 
 def result_counts(task_key: str, state: dict) -> dict:
-    """只折算已知的结果结构；缺失的明细不推断成零。"""
+    """Only known result structures are converted; missing details are not inferred as zero."""
     summary = {}
     if task_key == 'link-check':
         for field in ('gone', 'unclear'):

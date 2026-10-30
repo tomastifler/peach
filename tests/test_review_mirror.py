@@ -157,7 +157,7 @@ class ReviewMirrorTests(unittest.TestCase):
             'https://writer.test/api/review': legacy})
         result = ReviewMirror('https://writer.test', self.ca, self.cache, opener=opener).resolve(LOCAL_EMPTY)
         self.assertEqual(result['mirror']['state'], 'unavailable')
-        self.assertIn('未提供复核状态', result['mirror']['error'])
+        self.assertIn('provided no review status', result['mirror']['error'])
         self.assertEqual(result['queues'], LOCAL_EMPTY['queues'])
 
     def test_macos_keychain_ca_is_added_without_replacing_the_file_ca(self):

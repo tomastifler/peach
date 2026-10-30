@@ -65,7 +65,7 @@ _CID = re.compile(r"^(?:h_\d+|\d+)?([a-z]+)(\d+)([a-z]*)$")
 
 
 def code_from_cid(value: str) -> str:
-    """DMM 商品号的数字头属于发行目录，尾字母保留为作品身份。"""
+    """DMM the numeric head of a product number belongs to the release catalog, and the trailing letter is kept as work identity."""
     matched = _CID.fullmatch(str(value or "").lower())
     if not matched:
         return ""
@@ -74,7 +74,7 @@ def code_from_cid(value: str) -> str:
 
 
 def code_parts(code: str) -> tuple[str, str, str] | None:
-    """番号拆成（数字前缀，字母段，序号及尾字母），例如 `DANDY-851C` → `('', 'DANDY', '851C')`。"""
+    """Split a code into (numeric prefix, letter segment, serial number and trailing letter), for example `DANDY-851C` → `('', 'DANDY', '851C')`."""
     matched = _CODE.match(str(code or "").strip().upper())
     return (matched.group(1) or "", matched.group(2), matched.group(3) + matched.group(4)) if matched else None
 

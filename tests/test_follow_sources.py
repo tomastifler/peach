@@ -2133,7 +2133,7 @@ class IwaraConnectorTests(unittest.TestCase):
         connector, _ = self.connector([self.PROFILE, {"results": [video]}])
         item = connector.fetch("creator").candidates[0]
         self.assertIsNone(item.media_url)
-        self.assertIn("外部播放器", item.extra["media_error"])
+        self.assertIn("external player", item.extra["media_error"])
 
     def test_invalid_list_and_access_failures_are_not_empty_successes(self):
         for payload in ({}, {"results": {}}, {"results": [{"title": "missing id"}]},

@@ -83,38 +83,38 @@ MAX_FOLLOWUP_DEPTH = 2
 
 #: 任务登记表：key → 给人看的名字。不在表里的 key 由界面原样显示，不猜。
 TASK_LABELS = {
-    "follow-check": "追更检查",
-    "follow-resolve": "关注来源查找",
-    "library-processing": "扫描与采集",
-    "taste-refresh": "口味分析",
-    "link-check": "链接检查",
-    "link-prune": "失效链接清理",
-    "resource-scan": "资源同步检查",
-    "resource-apply": "资源同步清理",
-    "scraping-cover": "封面采集",
-    "media-repair": "媒体修复",
-    "upgrade-repairs": "自动修复",
-    "upgrade-library": "自动修复资料",
-    "organize": "按模板整理",
-    "batch": "批量操作",
-    "scrape-codes": "番号资料刮削",
-    "jav-covers": "封面批量抓取",
-    "entity-avatar": "补全资料图片",
-    "performer-profile": "补全女优资料",
-    "performer-alias": "补全女优别名",
-    "studio-mark": "补厂牌官网与标识",
-    "creator-identity": "查创作者身份",
-    "code-samples": "补番号样张",
-    "feed-check": "订阅源拉取",
-    "feed-scrape": "取新作资料",
-    "feed-cover": "补新作封面",
-    "want-scrape": "取想要的资料",
-    "timeline-thumbnails": "视频缩略图采集",
-    "download-postprocess": "云下载后处理",
-    "seed-import": "导入初始资料",
-    "follow-creator": "关注作者建档",
-    "amane-bridge": "重建 amane 桥",
-    "face-models": "下载人脸模型",
+    "follow-check": "Follow check",
+    "follow-resolve": "Follow source lookup",
+    "library-processing": "Scan and collect",
+    "taste-refresh": "Taste analysis",
+    "link-check": "Link check",
+    "link-prune": "Dead link cleanup",
+    "resource-scan": "Resource sync check",
+    "resource-apply": "Resource sync cleanup",
+    "scraping-cover": "Cover collection",
+    "media-repair": "Media repair",
+    "upgrade-repairs": "Automatic repair",
+    "upgrade-library": "Automatic metadata repair",
+    "organize": "Organize by template",
+    "batch": "Batch operation",
+    "scrape-codes": "Code metadata scrape",
+    "jav-covers": "Bulk cover fetch",
+    "entity-avatar": "Fill in profile images",
+    "performer-profile": "Fill in actress profiles",
+    "performer-alias": "Fill in actress aliases",
+    "studio-mark": "Studio website and logo backfill",
+    "creator-identity": "Creator identity lookup",
+    "code-samples": "Release sample backfill",
+    "feed-check": "Feed fetch",
+    "feed-scrape": "Fetch new-release metadata",
+    "feed-cover": "Backfill new-release covers",
+    "want-scrape": "Fetch want-list metadata",
+    "timeline-thumbnails": "Video thumbnail collection",
+    "download-postprocess": "Cloud download post-processing",
+    "seed-import": "Import seed data",
+    "follow-creator": "Create follow creator profile",
+    "amane-bridge": "Rebuild the amane bridge",
+    "face-models": "Download face models",
 }
 
 
@@ -284,7 +284,7 @@ class TaskRunStore:
             return self._start(task_key, trigger=trigger, mutex_key=mutex_key,
                                conflict=conflict, total=total, label=label, pid=pid)
 
-    def suspend(self, run_id: int, *, label: str = '等待安装完成后继续',
+    def suspend(self, run_id: int, *, label: str = 'Waiting for installation to finish before continuing',
                 paused_for_update: bool = True) -> None:
         if not self.enabled:
             return
@@ -538,8 +538,8 @@ class TaskRunStore:
     def _claim_followup(self, task_keys, first=()) -> TaskRun | None:
         """领走这几类里最早的一条待跑后继并标 `running`；没有就返回 None。
 
-        `task_keys` 是调用方这条通道负责的任务种类，`first` 是其中插队先领的那几类
-        （ADR-0114）。同一档里按 id 升序领，先声明的先跑。
+        `task_keys` are the task kinds this channel of the caller is responsible for, `first` are the kinds among them that jump the queue and are claimed first
+        (ADR-0114). Within one tier they are claimed in ascending id order, and those declared first run first.
         """
         keys = tuple(dict.fromkeys(str(key) for key in task_keys or ()))
         if not self.enabled or not keys:
@@ -660,8 +660,8 @@ class TaskRunStore:
     def prune(self, task_key: str, keep: int = DEFAULT_KEEP) -> int:
         """每个 task_key 只留最近 `keep` 条终态记录，返回删掉多少条。
 
-        活跃任务保留，指向已清退历史的父任务和根任务关联由删除触发器置空。
-        阈值用 `LIMIT 1 OFFSET keep` 取「第 keep+1 新的那条 id」。
+        Active tasks are kept, and parent and root task links pointing to purged history are nulled by the delete trigger.
+        The threshold uses `LIMIT 1 OFFSET keep` take the "(keep+1)th newest one id".
         """
         if not self.enabled or keep < 0:
             return 0
@@ -731,8 +731,8 @@ class TaskRunStore:
         按行数翻页会让后继占满这一页、把派出它们的那一轮挤到下一页，页面上就只剩一串
         没有父卡片可挂的散行。父行已被 `prune` 掉的后继自己算顶层。
 
-        后继还在排或在跑的那几轮不算「完成」，由 `active_parents` 单独交给「正在进行」：
-        自动修复每分钟派一批，它们留在这里会占满第一页，「最近完成」就只剩一个「加载更早」。
+        Rounds whose successors are still queued or running do not count as "completed"; they are handed separately by `active_parents` to "In progress":
+        Automatic repair dispatches a batch every minute; if they stayed here they would fill the first page, and "Recently completed" would be left with just a "Load earlier".
         """
         size = max(1, min(int(limit), 500))
         marks = ",".join(f"'{name}'" for name in TERMINAL_STATUSES)
@@ -767,7 +767,7 @@ class TaskRunStore:
         return [_row(row) for row in rows]
 
     def active_parents(self) -> list[TaskRun]:
-        """自己已经结束、派出的后继还有在排或在跑的那几轮，新的在前。"""
+        """Rounds that have finished themselves but whose dispatched successors still have some queued or running, newest first."""
         if not self.enabled:
             return []
         marks = ",".join(f"'{name}'" for name in ACTIVE_STATUSES)
@@ -779,10 +779,10 @@ class TaskRunStore:
         return [_row(row) for row in rows]
 
     def followup_counts(self, parent_ids) -> dict[int, dict[str, int]]:
-        """这几轮直接派出的后继按状态各有几条。
+        """How many successors each of these rounds dispatched directly, by status.
 
-        活动页只取得到最近几十条后继，一轮派出上千条时，父任务还算不算在进行、
-        做到第几条，要靠这份计数回答，不能数页面上那几行。
+        The activity page only gets the latest few dozen successors; when a round dispatches over a thousand, whether the parent task still counts as in progress,
+        and how far along it is must be answered by this count, not by counting the rows on the page.
         """
         ids = sorted({int(run_id) for run_id in parent_ids})
         if not self.enabled or not ids:

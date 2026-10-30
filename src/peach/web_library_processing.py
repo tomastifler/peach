@@ -10,10 +10,10 @@ from .processing_control import control_for, initial_estimate, valid_mode, mode_
 
 ACTIVE = ('running', 'pausing', 'paused', 'stopping')
 
-#: 回给页面的状态字段：`frontend/src/react/library-processing/library-processing.ts` 的
-#: `LibraryProcessingData`，加上对应任务中心那一行的 `run_id`。状态文件里另有续跑用的 `local_metadata`（带完整媒体路径）、
-#: `asset_ids`、`completed_metadata` 等大字段，页面一个都不读；照发的话每页每 10 秒轮询一次
-#: 就是两兆多，还把媒体路径交给了浏览器。续跑与重试读的是 `_current()`，不经过这里。
+#: State fields returned to the page: `frontend/src/react/library-processing/library-processing.ts` 's
+#: `LibraryProcessingData`, plus the matching Task Center row's `run_id`. The state file also holds these for resuming: `local_metadata` (with full media paths),
+#: `asset_ids`, `completed_metadata` and other large fields, none of which the page reads; sent as is, each page polling every 10 seconds
+#: would be over two megabytes and also hand media paths to the browser. Resuming and retrying read `_current()`, and do not pass through here.
 PUBLIC_FIELDS = frozenset({
     'run_id', 'metadata_only', 'status', 'outcome', 'speed_mode', 'eta_seconds_min', 'eta_seconds_max', 'eta_kind',
     'eta_scope', 'eta_initial', 'job_id', 'stage', 'requested_stage', 'steps', 'checked', 'total',
@@ -27,7 +27,7 @@ PUBLIC_FIELDS = frozenset({
 
 
 def public_state(state):
-    """任务状态的页面投影：只留 `PUBLIC_FIELDS`。"""
+    """Page projection of task state: keeps only `PUBLIC_FIELDS`."""
     return {key: value for key, value in state.items() if key in PUBLIC_FIELDS}
 
 
@@ -42,7 +42,7 @@ def _current(contract):
     if live and live.get('job_id') == stored.get('job_id'):
         return {**stored, **live}
     if live and live.get('started_at', 0) > stored.get('started_at', 0):
-        # 抢处理锁之前失败时还未写进度文件，不能再用上一轮终态遮住这次错误。
+        # A failure before grabbing the processing lock has not yet written the progress file, and the previous round's final state must not mask this error.
         return live
     return stored
 
@@ -79,7 +79,7 @@ def q_library_processing(contract, _args):
     from .library_new_assets import pending
     state['new_asset_count'] = len(pending(contract.db_path))
     if state.get('status') not in ACTIVE and recovery.get('status') == 'blocked':
-        state.update(status='failed', outcome='interrupted', error=f"任务未能自动恢复：{recovery.get('error') or '请重新发起任务'}")
+        state.update(status='failed', outcome='interrupted', error=f"The task could not be recovered automatically: {recovery.get('error') or 'Please start the task again'}")
     # 上一趟任务的状态文件里没有这个字段，而它那份完整清单还在磁盘上：按 job_id
     # 推出地址补回去，界面才有得可给。
     if state.get('issue_count') and state.get('job_id') and not state.get('issues_log'):
@@ -95,20 +95,20 @@ def _request_skip(control, previous, body):
             or previous.get('status') != 'running'
             or previous.get('current_asset_id') != asset_id
             or previous.get('current_action') not in ('querying_metadata', 'fetching_cover')):
-        raise ValueError('当前影片已变化或不在采集外部资料，请刷新后重试')
+        raise ValueError('The current movie has changed or is not collecting external metadata; please refresh and retry')
     control.skip_current(str(body['job_id']), asset_id)
 
 
 def _archive_notice(contract, config, body):
     previous = _current(contract)
     if not body.get('job_id') or body['job_id'] != previous.get('job_id'):
-        raise ValueError('任务已变化，请刷新页面后重试')
+        raise ValueError('The task has changed; please refresh the page and retry')
     if previous.get('status') in ACTIVE:
-        raise ValueError('任务结束后才能归档提示')
+        raise ValueError('The notice can be archived only after the task ends')
     from .library_processing import _save, state_path
     saved = json.loads(state_path(config).read_text(encoding='utf-8'))
     if saved.get('job_id') != body['job_id']:
-        raise ValueError('任务已变化，请刷新页面后重试')
+        raise ValueError('The task has changed; please refresh the page and retry')
     _save(state_path(config), {**saved, 'archived':True})
     return q_library_processing(contract, {})
 
@@ -121,7 +121,7 @@ def _cancel_processing(contract, config, control, previous, job_id):
     if not (live and thread is not None and thread.is_alive()) and not _writer_active(config):
         from .job_recovery import finish
         from .library_processing import _save, state_path
-        previous.update(status='cancelled', outcome='cancelled', stage='已停止', error='')
+        previous.update(status='cancelled', outcome='cancelled', stage='Stopped', error='')
         _save(state_path(config), previous)
         finish(contract.db_path, 'library-processing', job_id, 'cancelled')
         if previous.get('run_id') is not None:
@@ -150,7 +150,7 @@ def _control_action(contract, config, body):
     if action == 'archive':
         return _archive_notice(contract, config, body)
     if action not in ('pause', 'resume', 'set_speed', 'skip_current', 'cancel'):
-        raise ValueError('处理动作无效')
+        raise ValueError('Invalid processing action')
     previous = _current(contract)
     job_id = body.get('job_id')
     if action != 'set_speed' and not job_id:
@@ -166,7 +166,7 @@ def _control_action(contract, config, body):
     if action == 'cancel':
         return _cancel_processing(contract, config, control, previous, str(job_id))
     if previous.get('status') == 'stopping':
-        raise ValueError('正在等待任务停止，请稍后重试')
+        raise ValueError('Waiting for the task to stop; please retry later')
     if action == 'skip_current':
         _request_skip(control, previous, body)
         return q_library_processing(contract, {})
@@ -217,7 +217,7 @@ def q_library_processing_issues(contract, args):
     state = _current(contract)
     job_id = str(args.get('job_id') or '')
     if not job_id or job_id != str(state.get('job_id') or ''):
-        raise ValueError('任务已变化，请刷新页面后重试')
+        raise ValueError('The task has changed; please refresh the page and retry')
     path = issues_path(settings_file.active(), job_id)
     if path.is_file():
         raw = path.read_text(encoding='utf-8')
@@ -229,11 +229,11 @@ def q_library_processing_issues(contract, args):
             saved = json.loads(state_path(settings_file.active()).read_text(encoding='utf-8'))
             rows = saved.get('issues', [])
             if not rows:
-                raise ValueError('未取得完整问题记录，请导出诊断日志')
+                raise ValueError('The complete problem record was not obtained; please export diagnostic logs')
         raw = json.dumps(rows, ensure_ascii=False)
     revision = hashlib.sha256(raw.encode()).hexdigest()
     if args.get('revision') and args['revision'] != revision:
-        raise ValueError('问题记录已变化，请重新导出')
+        raise ValueError('The problem record has changed; please export again')
     offset = max(0, int(args.get('offset') or 0))
     limit = max(1, min(200, int(args.get('limit') or 50)))
     return {'job_id': job_id, 'revision':revision, 'total': len(rows), 'offset': offset,
@@ -273,25 +273,25 @@ def _retry_ids(previous, body):
     chosen = []
     for value in requested:
         if isinstance(value, bool) or not isinstance(value, int) or value not in allowed:
-            raise ValueError('重试项目不属于原任务的失败集合')
+            raise ValueError('The retry items do not belong to the failure set of the original task')
         chosen.append(value)
     return chosen
 
 
 def _expand_new_scope(db_path, body):
-    """校验增量发现与待补全集合的互斥关系，并冻结已登记的范围。"""
+    """Validate the mutual exclusion between incremental discovery and the set to be completed, and freeze the registered scope."""
     if 'incremental' in body:
         if type(body['incremental']) is not bool:
-            raise ValueError('新增文件范围必须为开关值')
+            raise ValueError('The new-file scope must be a switch value')
         if body['incremental'] and any(key in body for key in ('asset_ids', 'retry', 'scope')):
-            raise ValueError('新增文件发现不能与其他处理范围同时使用')
+            raise ValueError('New-file discovery cannot be used together with other processing scopes')
     if 'scope' in body:
         if body['scope'] != 'new' or 'asset_ids' in body or 'retry' in body:
-            raise ValueError('新入库范围不能与其他处理范围同时使用')
+            raise ValueError('The new-import scope cannot be used together with other processing scopes')
         from .library_new_assets import pending
         ids = pending(db_path)
         if not ids:
-            raise ValueError('暂无待处理的新入库影片')
+            raise ValueError('No newly imported movies pending processing')
         body['asset_ids'] = ids
 
 
@@ -300,7 +300,7 @@ def _processing_request(contract, config, previous, body):
     if not config.configured or not config.locations:
         raise ValueError('Add a media directory first')
     if contract.db_path.resolve() != (config.directory('database') / 'ledger.db').resolve():
-        raise ValueError('当前馆藏与媒体配置不一致')
+        raise ValueError('The current library and media configuration are inconsistent')
     body = dict(body or {})
     _expand_new_scope(contract.db_path, body)
     retry_ids = _retry_ids(previous, body)
@@ -312,9 +312,9 @@ def _processing_request(contract, config, previous, body):
     stage = str((body or {}).get('stage') or
                 (previous.get('requested_stage') if retry_ids is not None else None) or ALL_STAGES)
     if stage not in STAGES:
-        raise ValueError('处理阶段无效')
+        raise ValueError('Invalid processing stage')
     if body.get('incremental') and stage not in (ALL_STAGES, SCAN_STAGE):
-        raise ValueError('新增文件发现只支持扫描或同步')
+        raise ValueError('New-file discovery supports only scan or sync')
     from .media_processing_policy import metadata_only
     if stage == PREVIEWS_STAGE and metadata_only(config.directory('state')):
         raise ValueError('Video preview generation is turned off; turn it on in the library settings first')
@@ -357,8 +357,8 @@ def w_library_processing(contract, body, *, resume=False):
             contract.cache_bust()
     # 起步那行字按这一趟真正要做的事写：点了「只扫描」却看到「读取本地资料」，
     # 人会以为点错了。
-    labels = {ALL_STAGES: '准备处理', SCAN_STAGE: '准备扫描文件', COLLECT_STAGE: '准备采集资料',
-              METADATA_STAGE: '准备采集资料', PREVIEWS_STAGE: '准备生成预览图'}
+    labels = {ALL_STAGES: 'Preparing to process', SCAN_STAGE: 'Preparing to scan files', COLLECT_STAGE: 'Preparing to collect metadata',
+              METADATA_STAGE: 'Preparing to collect metadata', PREVIEWS_STAGE: 'Preparing to generate previews'}
     estimate_ids = asset_ids if asset_ids is not None else retry_ids
     if incremental:
         from .library_new_assets import pending

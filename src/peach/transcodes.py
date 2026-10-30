@@ -42,7 +42,7 @@ class _TranscodeAttempt:
 
 
 class TranscodeUnavailable(RuntimeError):
-    """转码不可用；本机保留有界工具证据，远程仅投影错误码和类别。"""
+    """Transcoding unavailable; local keeps bounded tool evidence, and remote projects only the error code and category."""
 
     def __init__(self, message='', *, diagnostics=None):
         super().__init__(message)
@@ -56,7 +56,7 @@ class TranscodeCancelled(TranscodeUnavailable):
 
 
 class TranscodeNeedsSession(TranscodeUnavailable):
-    """片源要整片转码，但请求没带可取消的流会话，也没有现成缓存。"""
+    """The source needs a whole-film transcode, but the request carries no cancellable stream session and there is no ready cache."""
 
 
 class TranscodeService:
@@ -85,7 +85,7 @@ class TranscodeService:
         return source.suffix.lower() not in BROWSER_NATIVE_SUFFIXES
 
     def diagnostic_profile(self, source: Path) -> dict:
-        """只读本次进程已有的探测缓存，不为诊断读取媒体或启动工具。"""
+        """Read only the probe cache already in this process, without reading media or starting tools for diagnostics."""
         from dataclasses import asdict
         with self._locks_guard:
             matches = [(key, profile) for key, profile in self._native_profiles.items() if key[0] == str(source)]
@@ -145,10 +145,10 @@ class TranscodeService:
         self, asset_id: int, source: Path, *, session: str = "", registry=None,
         convert: bool = True,
     ) -> tuple[Path, bool]:
-        """浏览器能直接放的路径，以及它是不是转码产物。
+        """The path the browser can play directly, and whether it is a transcode product.
 
-        `convert=False` 时只交现成的整片缓存，缺缓存就抛 `TranscodeNeedsSession`。
-        没有会话的请求取消不了，浏览器断开后整片 FFmpeg 还会跑到结束。
+        `convert=False` returns only a ready whole-film cache, and a missing cache raises `TranscodeNeedsSession`.
+        A request without a session cannot be cancelled, and after the browser disconnects the whole-film FFmpeg keeps running to the end.
         """
         profile = None
         if not self.needs_transcode(source):
@@ -301,7 +301,7 @@ class TranscodeService:
 
         整片转码要占满一个编码位、写一份和原片同量级的缓存，只有编码本身不被支持才值得。
         缺 `ctts` 的片源画面解得出来，错的只是容器写的显示顺序，交给 HLS 转码分片按需修
-        就够。卡片悬停预览直接打不带会话的 `/stream`，那条路只交现成缓存，见 `browser_path`。
+        is enough. Card hover previews directly hit the session-less `/stream`, that path returns only a ready cache, see `browser_path`.
         """
         return TranscodeService._browser_compatible(
             source, replace(profile, decode_order_timestamps=False),

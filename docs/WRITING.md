@@ -21,11 +21,11 @@ The README keeps the information needed to get started. Put field definitions in
 
 ## Public and Private Records
 
-- 项目介绍使用「影片刮削与媒体管理」定位，说明实际功能、访问条件与限制。来源名称、协议标识、依赖署名与许可证保持准确；通用介绍不以内容题材宣传产品。
-- README、网站、演示站、Release、issue、PR 与讨论区的截图、录屏和附件使用不含露骨画面的演示资料，保留来源、署名与许可记录；不发布个人馆藏画面或可直接播放的馆藏媒体。
-- 本机交接、运行状态、个人待办、会话复盘、馆藏盘点和逐条复核记录保存到 `<Peach 数据目录>/state/project-context/`、`review/` 或 `archive/`，不进入 Git。
-- 公开文档使用中性账号、`<项目目录>` 等占位路径与 RFC 5737 文档地址。主机名、网络布局、媒体文件名与馆藏数量不从真实部署复制。
-- 公开参考证据保留来源、许可和复现方法；本机样本清单、原始日志与账号信息留在私有记录中。
+- The project is introduced with the positioning "video metadata scraping and media management", stating the actual features, access conditions and limits. Source names, protocol identifiers, dependency credits and licenses stay accurate; the general introduction does not promote the product by content genre.
+- Screenshots, screen recordings and attachments in the README, website, demo site, Releases, issues, PRs and discussions use demo material with no explicit imagery, keep source, credit and license records, and do not publish personal library imagery or directly playable library media.
+- Local handoffs, run state, personal to-dos, session retrospectives, library inventories and item-by-item review records are stored under `<Peach data directory>/state/project-context/`, `review/` or `archive/`, and do not enter Git.
+- Public documents use neutral accounts, placeholder paths such as `<project directory>`, and RFC 5737 documentation addresses. Hostnames, network layout, media file names and library counts are not copied from real deployments.
+- Public reference evidence keeps its source, license and reproduction method; local sample lists, raw logs and account information stay in private records.
 
 ## UI Text
 

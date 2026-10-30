@@ -650,8 +650,8 @@ def _attach_index_favorites(connection, rows: list[dict]) -> None:
         row["favorite"] = row.get("entity_id") in favorites
 
 
-#: 索引页账本那一段读到的表：计数与代表作、分类、事务所成员与官网、片商旗下 label、
-#: 订阅状态，以及收藏（存在 `profile` 里，按别名与重定向解析成规范实体）。
+#: Tables read by the ledger section of the index page: counts and representative works, categories, agency members and official sites, and under a maker the label,
+#: subscription status, and favorites (stored in `profile`, resolved to canonical entities by aliases and redirects).
 INDEX_TABLES = ("asset", "asset_entity", "asset_tag", "asset_tag_preference", "entity",
                 "entity_alias", "entity_redirect", "entity_classification", "entity_external_ref",
                 "entity_identity_link", "entity_link", "entity_membership", "label_maker",
@@ -659,10 +659,10 @@ INDEX_TABLES = ("asset", "asset_entity", "asset_tag", "asset_tag_preference", "e
 
 
 def q_index(contract: WebContract, kind, q="", limit=600, offset=0, category=""):
-    """全部艺人 / 创作者 / 厂牌 / 事务所 / 标签的索引页数据。
+    """Index page data for all performers / creators / labels / agencies / tags.
 
-    账本那一段十来条 SQL，名册页合计三四百毫秒；没有搜索词时按 `INDEX_TABLES` 的版本缓存。
-    搜索词的键空间不封闭，带搜索词照旧现算。读目录索引的头像与标识标志在缓存之外现做。
+    The ledger section is a dozen or so SQL, totaling three to four hundred milliseconds for the roster page; without a search term it is cached by `INDEX_TABLES` version.
+    The key space of search terms is open, so queries with a search term are computed fresh as before. Avatar and logo flags read from the catalog index are computed outside the cache.
     """
     def read():
         return _index_rows(contract, kind, q, limit, offset, category)
@@ -671,7 +671,7 @@ def q_index(contract: WebContract, kind, q="", limit=600, offset=0, category="")
     else:
         rows, has_more, category_counts = contract.cached_until_changed(
             repr(("index", kind, limit, offset, category)), read, tables=INDEX_TABLES)
-    # 下面还要往每行补目录索引的标志，不能写进缓存里那一份。
+    # Flags from the catalog index still have to be added to each row below and must not be written into the cached copy.
     rows = [dict(row) for row in rows]
     result = _decorate_index(contract, kind, rows, has_more, category_counts)
     if kind == 'tags':

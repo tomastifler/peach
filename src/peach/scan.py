@@ -20,7 +20,7 @@
 字幕 sidecar 顺带在这里登记：遍历时每个目录的文件名已经在手上，配对判据只看同目录，
 `subtitles.py` 负责判定，本模块只负责把结论落进 `asset_subtitle`。
 
-刮削器与播放器写在正片旁边的附属文件不登记（`is_sidecar`）：本地预告片、花絮、主题媒体、NFO、海报与背景图、
+ Sidecar files that scrapers and players write next to the main feature are not registered (`is_sidecar`): local trailers, behind-the-scenes clips, theme media, NFO, posters and backgrounds,
 `extrafanart/` 里的剧照、截图工具拼出的缩略图。它们描述一部片，本身不是作品，登记进来就会在
 馆藏里冒出成百张「图片」，把真正的图集淹掉。
 
@@ -86,18 +86,18 @@ class ScanTargetError(ValueError):
 
 
 class ScanPathConflict(ScanTargetError):
-    """同一规范路径的既有记录须由用户复核，摄取不选择或合并身份。"""
+    """Existing records for the same canonical path must be reviewed by the user; ingestion neither selects nor merges identities."""
 
     def __init__(self, entries):
         self.asset_ids = tuple(entry[0] for entry in entries)
         self.paths = tuple(entry[1] for entry in entries)
-        ids = '、'.join(str(value) for value in self.asset_ids)
-        super().__init__(f'同一规范路径有多条文件记录（记录 {ids}）：{self.paths[0]}；'
-                         '已保留全部记录，请复核；其他文件继续处理')
+        ids = ', '.join(str(value) for value in self.asset_ids)
+        super().__init__(f'The same canonical path has multiple file records (records {ids}): {self.paths[0]}; '
+                         'All records were kept; please review. Other files continue to be processed')
 
 
 def _registered_paths(connection, location, root):
-    """既有路径按 Windows 语义分组，歧义记录单列供复核。"""
+    """Existing paths are grouped by Windows semantics, with ambiguous records listed separately for review."""
     declared = PureWindowsPath(root)
     groups = {}
     for asset_id, path in connection.execute(
@@ -117,7 +117,7 @@ def _upsert_records(connection, batch, registered, conflicts):
     for location, path, *values in batch:
         key = str(PureWindowsPath(path)).casefold()
         if key in conflicts:
-            # 枚举确认文件仍在，只刷新观测时间；身份、处置与个人资料保持各自原值。
+            # Enumeration confirms the file is still there and only refreshes the observation time; identity, disposition and personal data keep their own original values.
             connection.executemany('UPDATE asset SET last_seen=? WHERE id=?',
                                    [(values[-1], asset_id) for asset_id in conflicts[key].asset_ids])
             continue
@@ -257,7 +257,7 @@ def walk_root_for(
     if index < len(location_mounts) and is_address(str(location_mounts[index])):
         resource = resolve(root)
         if resource is None:
-            raise ScanTargetError('SMB 目录尚未保存到媒体库配置')
+            raise ScanTargetError('SMB directory has not yet been saved to the media library configuration')
         return resource
     if index >= len(location_mounts) or str(location_mounts[index]) in ("", ".") or is_unmapped(Path(location_mounts[index])):
         if windows:
@@ -435,12 +435,12 @@ class ScanResult:
     path_conflicts: int = 0
 
     def summary(self) -> str:
-        return (f"✓ {self.location}: {self.files:,} 文件 / "
-                f"{self.total_bytes / 1024 ** 4:.2f} TB / 耗时 {self.seconds:.0f}s；"
-                f"附属文件未登记 {self.sidecars:,} 个；清单中已消失 {self.gone:,} 个；"
-                f"字幕 {self.subtitles:,} 条（孤立 {self.orphan_subtitles:,} 条）；"
-                f"垃圾移入回收站 {self.junk_isolated:,} 个，待复核 {self.junk_review:,} 个；"
-                f"路径重复待复核 {self.path_conflicts:,} 组")
+        return (f"✓ {self.location}: {self.files:,} files / "
+                f"{self.total_bytes / 1024 ** 4:.2f} TB / took {self.seconds:.0f}s; "
+                f"unregistered sidecar files {self.sidecars:,}; gone from the manifest {self.gone:,}; "
+                f"subtitles {self.subtitles:,} (orphaned {self.orphan_subtitles:,}); "
+                f"junk moved to the recycle bin {self.junk_isolated:,}, pending review {self.junk_review:,}; "
+                f"duplicate paths pending review {self.path_conflicts:,}")
 
 
 def _walk(top: Path, pending: list[str] | None = None, *, onerror=lambda error: None, read_directory=None):
@@ -568,7 +568,7 @@ def _pending_directories(previous, walk_root):
 
 
 def _scan_resume_state(walk_root, resume_state):
-    """只接受来源身份匹配的断点，并还原已完成的扫描结果。"""
+    """Accept only a checkpoint whose source identity matches, and restore the completed scan results."""
     from .smb_media import SmbResource
     mapping = f'{walk_root.uri}|{walk_root}' if isinstance(walk_root, SmbResource) else str(walk_root)
     previous = resume_state or {}
@@ -580,7 +580,7 @@ def _scan_resume_state(walk_root, resume_state):
 
 
 def _record_directory_subtitles(connection, location, directory, here, conflicts, now):
-    """只给身份唯一的文件配对字幕，断点中的目录资料遵守相同判据。"""
+    """Pair subtitles only with files of unique identity; directory metadata from a checkpoint follows the same criterion."""
     sidecars = subtitles.directory_sidecars(
         directory, here, [name for name in here if medium_of(name) == 'video'])
     unambiguous = [sidecar for sidecar in sidecars if sidecar.path.casefold() not in conflicts
@@ -589,7 +589,7 @@ def _record_directory_subtitles(connection, location, directory, here, conflicts
 
 
 def _scan_file_stat(connection, identities, registered, observations, location, ledger_path, directory, entry, *, direct):
-    """读取本次文件快照，接回已移动的身份，并积累提交后的身份观测。"""
+    """Read this run's file snapshot, reattach moved identities, and accumulate identity observations after commit."""
     stat = entry.stat()
     if identities is not None:
         native = Path(directory) / entry.name

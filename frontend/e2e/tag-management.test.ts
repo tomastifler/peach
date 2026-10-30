@@ -22,16 +22,16 @@ describe('标签管理的完整操作', () => {
       await page.reload();
       await page.locator('[data-index-head] input[type="search"]').fill(suffix);
       await page.locator('[data-index-head] input[type="search"]').press('Enter');
-      await page.getByRole('button', { name: '管理标签', exact: true }).click();
+      await page.getByRole('button', { name: 'Manage tags', exact: true }).click();
       assert.equal(await page.locator('[data-index-head] input[type="search"]').count(), 1);
       assert.equal(await page.locator('[data-tag-manager] input[type="search"]').count(), 0);
       assert.equal(await page.getByRole('heading', { name: '标签管理', exact: true }).count(), 0);
       await page.getByRole('button', { name: '返回标签浏览', exact: true }).click();
       assert.equal(await page.getByRole('button', { name: `编辑标签 ${first}`, exact: true }).count(), 0);
-      await page.getByRole('button', { name: '管理标签', exact: true }).click();
+      await page.getByRole('button', { name: 'Manage tags', exact: true }).click();
       await page.getByRole('button', { name: `编辑标签 ${first}`, exact: true }).click();
       const editorClass = await page.locator('dialog[open]').getAttribute('class');
-      await page.getByRole('button', { name: '取消', exact: true }).click();
+      await page.getByRole('button', { name: 'Cancel', exact: true }).click();
       const chip = (name: string) => page.locator(`[data-tag-manager] [data-tag-chip][data-k="${name}"]`);
       await page.getByRole('button', { name: '重命名', exact: true }).click();
       await page.getByRole('textbox', { name: '标签名称', exact: true }).fill(renamed);
@@ -51,7 +51,7 @@ describe('标签管理的完整操作', () => {
       const survivor = inventory.items.find((row: { aliases: string[] }) => row.aliases.includes(first));
       assert.ok(survivor);
       await chip(survivor.k).click();
-      await page.getByRole('button', { name: '隐藏', exact: true }).click();
+      await page.getByRole('button', { name: 'Hide', exact: true }).click();
       await page.getByRole('button', { name: '隐藏标签', exact: true }).click();
       await chip(survivor.k).waitFor({ state: 'detached' });
       await page.getByRole('group', { name: '标签管理操作', exact: true }).waitFor({ state: 'detached' });
@@ -67,7 +67,7 @@ describe('标签管理的完整操作', () => {
       assert.ok(await edit.evaluate(node => !!node.closest('[data-tag-token]')));
       assert.equal(await edit.textContent(), '');
       await page.getByRole('button', { name: '返回标签浏览', exact: true }).click();
-      assert.equal(await page.getByRole('radio', { name: '标签云', exact: true }).isChecked(), true);
+      assert.equal(await page.getByRole('radio', { name: 'Tag cloud', exact: true }).isChecked(), true);
       const token = page.locator('[data-tag-token]').filter({has: page.locator(`[data-tag-chip][data-k="${survivor.k}"]`)});
       const iconGeometry = await token.evaluate(node => {
         const outer = node.getBoundingClientRect();

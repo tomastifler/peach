@@ -1,4 +1,4 @@
-/* 索引页：艺人、创作者、厂牌、事务所、系列名册和标签词表。
+/* Index page: performer, creator, studio, agency and series rosters and the tag vocabulary.
  *
  * 地址栏是唯一真相。壳从地址读出 kind／q／scope／view／category 作初值挂上来，页面换档
  * （厂牌↔事务所、本地↔在线、类型、视图、过滤词）只改自己的状态并经 `route` 写回地址，
@@ -40,9 +40,9 @@ import { TagManager } from './tag-manager';
 /* 厂牌与事务所是两种实体，不是同一份数据的两种筛选：厂牌出片，事务所出人。所以这个开关切的
    是地址。场记板归厂牌，公文包归事务所，字形各说各的那一件事。 */
 const MAKER_TABS: BoardTab<'studios' | 'agencies' | 'series'>[] = [
-  { value: 'studios', label: '厂牌', symbol: 'clapperboard' },
-  { value: 'agencies', label: '事务所', symbol: 'briefcase' },
-  { value: 'series', label: '系列', symbol: 'list' },
+  { value: 'studios', label: 'Studios', symbol: 'clapperboard' },
+  { value: 'agencies', label: 'Agencies', symbol: 'briefcase' },
+  { value: 'series', label: 'Series', symbol: 'list' },
 ];
 /* 本地与在线是两套词表：计数口径、类别划分和点开去哪儿都不同，所以也是页面级的 Tabs。 */
 const SCOPE_TABS: BoardTab<IndexScope>[] = [
@@ -58,9 +58,9 @@ const PEOPLE_TABS: BoardTab<'performers' | 'creators' | 'online'>[] = [
 /* 公司那一格摆的是标识而不是脸，沿用艺人那套词就是提示说着「竖幅头像」、屏幕上摆着方标识。
    档位仍是同一个设置值，分开的只有说法。 */
 const LAYOUTS: Record<'people' | 'company' | 'series', readonly (readonly [PeopleLayout, string, string])[]> = {
-  people: [['big', '大图 · 竖幅头像', 'maximize'], ['compact', '紧凑 · 圆形头像', 'layout-grid']],
-  company: [['big', '大图 · 完整标识', 'maximize'], ['compact', '紧凑 · 圆形标识', 'layout-grid']],
-  series: [['big', '大图 · 系列图片', 'maximize'], ['compact', '紧凑 · 系列图片', 'layout-grid']],
+  people: [['big', 'Large · portrait avatars', 'maximize'], ['compact', 'Compact · round avatars', 'layout-grid']],
+  company: [['big', 'Large · full logos', 'maximize'], ['compact', 'Compact · round logos', 'layout-grid']],
+  series: [['big', 'Large · series images', 'maximize'], ['compact', 'Compact · series images', 'layout-grid']],
 };
 
 function LayoutSwitch(
@@ -140,7 +140,7 @@ export function IndexPage(props: IndexProps) {
   const total = result.data?.pages[0]?.total;
   useTagPageBounds(kind === 'tags' && !result.isPlaceholderData ? total : undefined, pagination, changePage);
   const readout = kind === 'tags'
-    ? (result.isPending || result.isError ? '' : `${(total ?? items.length).toLocaleString()} 个标签`)
+    ? (result.isPending || result.isError ? '' : `${(total ?? items.length).toLocaleString()} tags`)
     : countText(items.length, !!result.hasNextPage);
   /* 分类计数只随名册、词表和过滤词变，与选中哪一类无关。换分类时新一页还没到，沿用同一份
      名册上一次拿到的计数：分类按钮行不先塌成「全部」加当前项、等数据回来再弹开。头一回
@@ -171,7 +171,7 @@ export function IndexPage(props: IndexProps) {
       go({ scope: next, category: 'all', view: next === 'online' ? 'alphabet' : view });
     }} />
     : isCompany(kind) || kind === 'series'
-        ? <BoardTabs tabs={MAKER_TABS} value={kind as 'studios' | 'agencies' | 'series'} label="资料类型"
+        ? <BoardTabs tabs={MAKER_TABS} value={kind as 'studios' | 'agencies' | 'series'} label="Record type"
           onChange={(next) => go({ kind: next })} />
         : null;
 
@@ -199,8 +199,8 @@ export function IndexPage(props: IndexProps) {
     }
     if (result.isError) {
       return (
-        <EmptyState icon={spriteGlyph('alert')} title={`没能读取${title}`}
-          actions={<Button variant="secondary" onClick={() => void result.refetch()}>立即重试</Button>}>
+        <EmptyState icon={spriteGlyph('alert')} title={`Could not load ${title}`}
+          actions={<Button variant="secondary" onClick={() => void result.refetch()}>Retry</Button>}>
           {requestErrorMessage(result.error)}
         </EmptyState>
       );
@@ -228,9 +228,9 @@ export function IndexPage(props: IndexProps) {
         {isPeople(kind) ? <LayoutSwitch kind={kind} layout={layout} onChange={changeLayout} /> : null}
         <LibraryShortcuts kind={kind === 'tags' ? 'tag' : kind === 'series' ? 'series' : kind === 'studios' ? 'studio' : kind === 'agencies' ? 'agency' : kind === 'creators' ? 'creator' : 'performer'} />
         {kind === 'tags' ? <Button variant={managing ? 'primary' : 'ghost'} iconOnly className="flex-none" data-tag-mode=""
-          leadingIcon={spriteGlyph('pencil')} aria-label={managing ? '返回标签浏览' : '管理标签'} title={managing ? '返回标签浏览' : '管理标签'} aria-pressed={managing}
+          leadingIcon={spriteGlyph('pencil')} aria-label={managing ? 'Back to tag browsing' : 'Manage tags'} title={managing ? 'Back to tag browsing' : 'Manage tags'} aria-pressed={managing}
           onClick={() => { props.exitSelectMode(); setPicked(new Set()); setManaging(!managing) }} /> : null}
-        <IndexSearch label={`过滤${title}`} value={q} onQuery={(next) => { if (next !== q) go({ q: next }, !!next) }} />
+        <IndexSearch label={`Filter ${title}`} value={q} onQuery={(next) => { if (next !== q) go({ q: next }, !!next) }} />
       </div>
       {kind === 'performers' || kind === 'creators' ? (
         <BoardTabs tabs={PEOPLE_TABS} value={onlineAuthors ? 'online' : kind} label="People roster"
@@ -262,18 +262,18 @@ export function IndexPage(props: IndexProps) {
       ) : null}
       <div data-index-body="">{body()}</div>
       {kind === 'tags' && !result.isPending && !result.isError ? <div className="mt-5">
-        <DataTableFooter label="标签" total={total ?? items.length} pagination={pagination} onChange={changePage} unit="个标签" pageUnit="个" pageSizes={TAG_PAGE_SIZES} />
+        <DataTableFooter label="Tags" total={total ?? items.length} pagination={pagination} onChange={changePage} unit=" Tags" pageUnit=" " pageSizes={TAG_PAGE_SIZES} />
       </div> : null}
       {more ? (
         <div className="mt-5 flex justify-center">
           {/* 按下去到下一批画出来之间要有东西在动：这一段是一次网络往返加一屏头像，光把键按灰了
-              说不出「还在走」和「点了没反应」的区别。用户按下的键走 Spinner（同播放墙的「载入更多」），
-              键上的字不变，键宽留够放下转圈，下面的内容不跟着跳。 */}
+              cannot tell "still running" from "the click did nothing". The key the user pressed uses a Spinner (same as the wall's "Load more"),
+              the label on the key stays the same, the key is wide enough to hold the spinner, and the content below does not jump. */}
           <Button variant="secondary" data-index-more="" className="min-w-31"
             disabled={result.isFetchingNextPage} aria-busy={result.isFetchingNextPage || undefined}
             onClick={() => void result.fetchNextPage()}>
-            {result.isFetchingNextPage ? <span className="contents" dangerouslySetInnerHTML={{ __html: spinnerHtml('正在载入下一批') }} /> : null}
-            载入更多
+            {result.isFetchingNextPage ? <span className="contents" dangerouslySetInnerHTML={{ __html: spinnerHtml('Loading the next batch') }} /> : null}
+            Load more
           </Button>
         </div>
       ) : null}
@@ -288,7 +288,7 @@ export function IndexPage(props: IndexProps) {
 }
 
 const LABELS: Record<IndexKind, string> = {
-  tags: '标签', performers: '艺人', creators: '卖家', studios: '厂牌', agencies: '事务所', series: '系列',
+  tags: 'Tags', performers: 'Performers', creators: 'Creators', studios: 'Studios', agencies: 'Agencies', series: 'Series',
 };
 
 /** 空馆藏、筛选无结果与在线来源还没有内容分别给出可执行的去处。文案同目录页的空态
@@ -298,21 +298,21 @@ function IndexEmpty(
 ) {
   if (filtered) {
     return (
-      <EmptyState icon={spriteGlyph('search')} title="没有符合条件的内容"
-        actions={<Button size="small" onClick={onClear}>清除筛选</Button>}>
-        清除筛选或搜索条件后查看全部内容。
+      <EmptyState icon={spriteGlyph('search')} title="No matching content"
+        actions={<Button size="small" onClick={onClear}>Clear filters</Button>}>
+        Clear the filters or search to see all content.
       </EmptyState>
     );
   }
   // 在线那一档数的是来源上的东西，名字也跟着来源的说法：艺人页在线摆的是关注来源里的创作者。
   const label = online && kind === 'performers' ? 'Creators' : LABELS[kind];
   const follow = (
-    <ButtonLink size="small" variant={online ? 'primary' : 'secondary'} href="/subscriptions?tab=add">添加关注</ButtonLink>
+    <ButtonLink size="small" variant={online ? 'primary' : 'secondary'} href="/subscriptions?tab=add">Add follow</ButtonLink>
   );
   return (
     <EmptyState icon={spriteGlyph(kind === 'tags' ? 'tags' : 'user-round')} title={`No ${label.toLowerCase()} yet`}
       actions={online ? follow : <>
-        <ButtonLink size="small" href="/settings/library">添加媒体</ButtonLink>
+        <ButtonLink size="small" href="/settings/library">Add media</ButtonLink>
         {follow}
       </>}>
       {online ? `Once you add followed sources and fetch content, ${label.toLowerCase()} from those sources will appear here.` : 'Once you add content and fill in metadata, the matching information will appear here.'}

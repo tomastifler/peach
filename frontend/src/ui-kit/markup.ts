@@ -30,8 +30,8 @@ function noteDetailsHtml({label='',items=[],footnote=''}:NoteDetails={}){
 
 /* Inline, persistent context beside the field/card/section it describes.
    恢复动作有两种形态：留在本页执行的走按钮，要离开本页才做得成的走链接。
-   两者占同一个格子、同一枚 `data-note-action`，Note 的版式不因为它是 <a> 改变；
-   都是次要样式，与 React `Note` 的 `action` 一致，主动作留给 Note 所在区域自己的那一枚。 */
+   Both occupy the same cell and the same `data-note-action`; the Note layout does not change because it is an <a>;
+   both use the secondary style, matching React `Note` / `action`, with the primary action left to the one in the Note's own area. */
 /** Geist Note：字段、卡片、分区旁的持久反馈。 */
 export function noteHtml(message:any,{variant='secondary',label='',className='',size='medium',filled=false,actionLabel='',actionHref='',details=null}:{
   variant?: 'secondary' | 'warning' | 'error' | 'success' | (string & {});
@@ -124,14 +124,14 @@ export function searchInputHtml({label,id='',name='',value='',placeholder='',att
 }
 
 /**
- * 列表续页时 Loading Dots 旁那一句：目录哨兵、垃圾文件队列等无限滚动列表共用。三颗点已经在动，
- * 字不带省略号。
+ * The line next to Loading Dots when a list continues: shared by infinite-scroll lists such as the catalog sentinel and the junk files queue. The three dots are already moving,
+ * so the text carries no ellipsis.
  */
-export const LOAD_MORE_STATUS = '载入中';
+export const LOAD_MORE_STATUS = 'Loading';
 
 /** Geist Loading Dots: indeterminate work continuing in the background. The dots already say
  *  "still going", so the label never ends in an ellipsis. */
-export function loadingDotsHtml(label='正在处理', {className=''}={}):string{
+export function loadingDotsHtml(label='Processing', {className=''}={}):string{
   return `<span class="ui-geist-loading${className?` ${esc(className)}`:''}" role="status">
     <span class="ui-geist-loading-dots" aria-hidden="true"><i></i><i></i><i></i></span>
     <span>${esc(label)}</span></span>`;

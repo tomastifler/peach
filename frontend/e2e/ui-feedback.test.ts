@@ -6,9 +6,9 @@ import { launch, layout, settle, VIEWPORTS, visit } from './harness.ts';
 /* 每个分区取一块不随本机配置出没的卡：骨架按终态结构画，随配置变的卡（下载渠道的「云下载」
    跟着媒体库里有没有网盘）照本机上次记下的结构画，新开的浏览器里没有记录，按最小结构画。 */
 const sections = [
-  ['library', '媒体库与入库', '媒体库与目录'], ['subscriptions', '来源与订阅', '作品资料站点'],
-  ['downloads', '下载渠道', '浏览器添加 JAV'], ['network', '网络与访问', 'Peach 代理'],
-  ['maintenance', '应用与维护', '开机自启'], ['diagnostics', '系统诊断', '库健康'],
+  ['library', 'Library & import', 'Libraries and folders'], ['subscriptions', 'Sources & subscriptions', 'Title info sites'],
+  ['downloads', 'Download channels', 'Add JAV from browser'], ['network', 'Network & access', 'Peach proxy'],
+  ['maintenance', 'App & maintenance', 'Launch at startup'], ['diagnostics', 'System diagnostics', '库健康'],
 ] as const;
 
 describe('等待反馈与文件夹模式', () => {
@@ -28,7 +28,7 @@ describe('等待反馈与文件夹模式', () => {
         await root.waitFor();
         assert.equal((await root.locator('.ui-board-local-nav [aria-selected="true"]').innerText()).trim(), name);
         assert.ok(await root.locator(`[aria-label="${title}"]`).count());
-        if (key !== 'library') assert.equal(await root.locator('[aria-label="媒体库与目录"]').count(), 0);
+        if (key !== 'library') assert.equal(await root.locator('[aria-label="Libraries and folders"]').count(), 0);
         if (key === 'library') assert.equal(await root.locator('[data-folder-row]').count(), 1);
         const geometry = await layout(page);
         assert.ok(geometry.scrollWidth <= geometry.viewportWidth, JSON.stringify(geometry));
@@ -50,7 +50,7 @@ describe('等待反馈与文件夹模式', () => {
         const { page } = opened;
         await page.locator('#catalogFolderHeader [data-skeleton]').waitFor();
         if (!viewport.mobile) {
-          const tree = page.locator('#catalogFoldersTree [aria-label="正在读取目录树"]');
+          const tree = page.locator('#catalogFoldersTree [aria-label="Loading folder tree"]');
           await tree.waitFor();
           assert.equal(await tree.locator(':scope > div').count(), 8);
           const bounds = await tree.boundingBox();
@@ -79,12 +79,12 @@ describe('等待反馈与文件夹模式', () => {
       });
       try {
         const { page } = opened;
-        const group = page.locator('#catalogFolderHeader [aria-label="子文件夹"]');
+        const group = page.locator('#catalogFolderHeader [aria-label="Subfolders"]');
         await group.waitFor();
         assert.equal(await group.getByRole('button').count(), 12);
         await page.getByRole('button', { name: '展开全部 40 个文件夹' }).click();
         assert.equal(await group.getByRole('button').count(), 40);
-        const collapse = page.getByRole('button', { name: '收起文件夹' });
+        const collapse = page.getByRole('button', { name: 'Collapse folders' });
         assert.equal(await collapse.getAttribute('aria-expanded'), 'true');
         await collapse.click();
         assert.equal(await group.getByRole('button').count(), 12);
@@ -96,7 +96,7 @@ describe('等待反馈与文件夹模式', () => {
 
     it(`${viewport.name} 文件夹滚动条内缩且各滚动位置均在面板内`, async () => {
       const opened = await visit(browser, '/?browse=folders', viewport, async page => {
-        const roots = Array.from({ length: 50 }, (_, i) => ({ id: `root-${i}`, name: `媒体目录 ${i}`,
+        const roots = Array.from({ length: 50 }, (_, i) => ({ id: `root-${i}`, name: `Media folders ${i}`,
           parent: null, path: `R:\\demo\\${i}`, location: 'local', root: `root-${i}`,
           has_children: false, files: 1, videos: 1 }));
         await page.route('**/api/folders?*', route => route.fulfill({ json: {
@@ -106,7 +106,7 @@ describe('等待反馈与文件夹模式', () => {
       try {
         const { page } = opened;
         if (viewport.mobile) await page.getByRole('button', { name: '打开文件夹目录' }).click();
-        const scroller = page.locator('[aria-label="文件夹导航"]:visible .folder-tree-scroller');
+        const scroller = page.locator('[aria-label="Folder navigation"]:visible .folder-tree-scroller');
         await scroller.waitFor();
         await scroller.locator('..').locator('.ovtrack.ov-y').waitFor();
         for (const height of [160, 32]) {
@@ -146,7 +146,7 @@ describe('等待反馈与文件夹模式', () => {
       });
       try {
         const { page } = opened;
-        const toggle = page.getByRole('button', { name: '文件夹模式', exact: true });
+        const toggle = page.getByRole('button', { name: 'Folder mode', exact: true });
         await toggle.waitFor();
         assert.equal(await toggle.getAttribute('aria-pressed'), 'true');
         await page.locator('[data-folder-header-host]').getByRole('button', { name: '示例文件夹' }).click();

@@ -74,16 +74,16 @@ function WantRow({ want, readOnly, busy, onReset, onRemove, onCloudDownload, dow
           <p data-want-note="" className="text-caption-1-regular text-text-secondary">{searchNote(want)}</p> : null}
         {want.scrape_error ? <ErrorLine text={want.scrape_error} prefix="Details unavailable: " tone="muted" /> : null}
         <div className="mt-1 flex flex-wrap items-center gap-2">
-          {source ? <ButtonLink data-button-link="" variant="secondary" size="small" trailingIcon={RiExternalLinkLine} href={source} target="_blank" rel="noopener noreferrer">来源页</ButtonLink> : null}
+          {source ? <ButtonLink data-button-link="" variant="secondary" size="small" trailingIcon={RiExternalLinkLine} href={source} target="_blank" rel="noopener noreferrer">Source page</ButtonLink> : null}
           <Button variant="secondary" size="small" leadingIcon={RiDeleteBinLine} disabled={readOnly} {...busyProps(busy === `remove:${want.id}`)}
-            onClick={onRemove}>移除</Button>
+            onClick={onRemove}>Remove</Button>
           {want.phase === 'given_up' ? (
             <Button variant="secondary" size="small" disabled={readOnly} {...busyProps(busy === `reset:${want.id}`)}
               onClick={onReset}>Search again</Button>
           ) : null}
-          {/* 还在找的两段才给云下载：未发售的没有资源可下，已入库的已经到手。 */}
+          {/* Only the two segments still being searched for offer cloud download: unreleased ones have no resources to download, and ones already in the library are already in hand. */}
           {want.phase === 'searching' || want.phase === 'given_up' ? (
-            <Button variant="secondary" size="small" onClick={onCloudDownload}>查找资源</Button>
+            <Button variant="secondary" size="small" onClick={onCloudDownload}>Find resources</Button>
           ) : null}
         </div>
       </div>
@@ -122,8 +122,8 @@ function WantPhase({ phase, label, rows, row }: {
         </Radio>)}
       </SegmentedRadioGroup> : null}
       </div>
-      {!filtered.length ? <EmptyState size="compact" icon={RiStarLine} title="暂无符合条件的作品"
-        actions={<Button size="small" onClick={() => { setMagnetFilter('all'); setPage(1) }}>查看全部</Button>}>{null}</EmptyState> : null}
+      {!filtered.length ? <EmptyState size="compact" icon={RiStarLine} title="No matching works yet"
+        actions={<Button size="small" onClick={() => { setMagnetFilter('all'); setPage(1) }}>View all</Button>}>{null}</EmptyState> : null}
       <ul className="flex flex-col gap-4">{filtered.slice(win.start, win.end).map(row)}</ul>
       {win.pages > 1 ? (
         <div data-want-pager="" className="flex flex-wrap items-center justify-between gap-3">
@@ -213,10 +213,10 @@ export function WantList({ readOnly, toast, query = '', clearQuery }: WantListPr
       {downloads.data && !downloads.data.available ? <Note tone="neutral">Cloud download is only available on devices allowed to modify the database.</Note> : null}
 
       {data && !items.length ? (
-        <EmptyState size="compact" icon={RiStarLine} title={query ? '没有符合条件的作品' : '还没有想要的作品'}
-          actions={query && clearQuery ? <Button size="small" onClick={clearQuery}>清除搜索</Button>
-            : !query && !readOnly ? <EmptyFocusButton target='input[aria-label="番号"]'>添加作品</EmptyFocusButton> : undefined}>
-          {query ? '试试其他番号、女优或标题。' : '输入番号，添加想看的作品。'}
+        <EmptyState size="compact" icon={RiStarLine} title={query ? 'No matching works' : 'No wanted works yet'}
+          actions={query && clearQuery ? <Button size="small" onClick={clearQuery}>Clear search</Button>
+            : !query && !readOnly ? <EmptyFocusButton target='input[aria-label="Code"]'>Add work</EmptyFocusButton> : undefined}>
+          {query ? 'Try another code, actress or title.' : 'Enter a code to add a work you want to watch.'}
         </EmptyState>
       ) : null}
 

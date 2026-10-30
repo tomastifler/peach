@@ -1,4 +1,4 @@
-"""诊断通道的本机传输回执，不保存载荷或服务端错误正文。"""
+"""Local transport receipt for the diagnostics channel; payloads and server error bodies are not saved."""
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -15,7 +15,7 @@ def record(permit, event_id, result):
     try:
         _record(permit, event_id, result)
     except Exception:
-        # 本机回执不可写不能阻止原本获准的诊断，也不能触发错误钩子。
+        # A local receipt that cannot be written must not block a diagnostic that was otherwise allowed, nor trigger the error hook.
         pass
 
 

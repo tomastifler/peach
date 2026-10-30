@@ -18,7 +18,7 @@ const SIZE: Record<Size, string> = {
 /* 小号纯图标键在 Board UI 里是强制 32×32、内边距归零（`size-8 p-0`）；中号纯图标沿用基础尺寸。 */
 const ICON_ONLY: Record<Size, string> = { medium: SIZE.medium, small: 'size-8 rounded-lg p-0 text-body-medium' };
 const ICON: Record<Size, string> = { medium: 'size-5 shrink-0', small: 'size-[18px] shrink-0' };
-/* 带字按键的字形与文字同行，同 `Button` 的 `iconInline`：画框按所在文字字号缩放。 */
+/* The glyph of a button with text sits in line with the text, the same as `Button`'s `iconInline`: the frame scales with the font size of the text it is in. */
 const ICON_INLINE = 'size-(--icon-inline) shrink-0';
 const LABEL: Record<Size, string> = {
   medium: 'inline-flex items-center justify-center px-1 shrink-0',
@@ -34,10 +34,10 @@ const VARIANT: Record<Variant, string> = {
 export const islandGlyph = (name: string, cls: string): string =>
   `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><use href="#i-${name}"/></svg>`;
 
-/** 收藏入口在页面等待阶段保留图标与尺寸，交互由已就绪的页面接管。玻璃筛选条里取紧凑档，
- *  实体页标题右侧的工具行取默认档，与 `react/styles.css` 里 `[data-filter-action]` 的两档同高。 */
+/** The favorites entry keeps its icon and size while the page waits, and the ready page takes over the interaction. In the glass filter bar it takes the compact tier,
+ *  and the tool row to the right of an entity page title takes the default tier, the same height as the two tiers of `[data-filter-action]` in `react/styles.css`. */
 export function islandShortcutsEntry(size: 'compact' | 'default' = 'compact'): string {
-  return `<span data-shortcuts-entry class="inline-flex flex-none"><button type="button" data-shortcuts-trigger data-filter-action data-skeleton-action disabled tabindex="-1" aria-label="我的收藏" title="我的收藏" class="inline-grid ${size === 'default' ? 'size-9' : 'size-8'} flex-none place-items-center rounded-(--control-radius) border border-(--border-10) bg-(--surface) text-(--muted)">${islandGlyph('star', 'size-4')}</button></span>`;
+  return `<span data-shortcuts-entry class="inline-flex flex-none"><button type="button" data-shortcuts-trigger data-filter-action data-skeleton-action disabled tabindex="-1" aria-label="My favorites" title="My favorites" class="inline-grid ${size === 'default' ? 'size-9' : 'size-8'} flex-none place-items-center rounded-(--control-radius) border border-(--border-10) bg-(--surface) text-(--muted)">${islandGlyph('star', 'size-4')}</button></span>`;
 }
 
 /** 与 Board Input 的中号外框、前缀和正文使用相同几何。 */
@@ -61,7 +61,7 @@ export function islandButton(
   { variant = 'primary', size = 'medium', glyph, label, attrs = '', compact = false }: IslandButton,
 ): string {
   const shape = label ? SIZE[size] : ICON_ONLY[size];
-  /* `compact` 的键带着字（窄行里由样式收起），按带字的那一版排。 */
+  /* A `compact` button carries text (collapsed by styles in narrow rows), so lay it out as the version with text. */
   const icon = glyph ? islandGlyph(glyph, label ? ICON_INLINE : ICON[size]) : '';
   const text = label ? `<span class="${LABEL[size]}"${compact ? ' data-compact-label' : ''}>${label}</span>` : '';
   return `<button type="button" class="${BASE} ${shape} ${VARIANT[variant]}"${attrs ? ` ${attrs}` : ''}>${icon}${text}</button>`;
@@ -81,7 +81,7 @@ export function islandSelect(
   { size?: SelectSize; className?: string; attrs?: string; prefix?: string } = {},
 ): string {
   const shape = SELECT[size];
-  /* `prefix` 与组件的同名参数同位：值前一截浅色的名字。 */
+  /* `prefix` is in the same position as the component's same-named parameter: a light-colored name before the value. */
   const value = `<span class="flex min-w-0 items-center truncate ${shape.value}">${label}</span>`;
   const body = prefix
     ? `<span class="flex min-w-0 items-center ${size === 'sm' ? 'gap-1.5' : 'gap-2'}"><span aria-hidden="true" class="shrink-0 text-text-tertiary">${prefix}</span>${value}</span>`

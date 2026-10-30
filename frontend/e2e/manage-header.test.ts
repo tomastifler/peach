@@ -4,7 +4,7 @@
  * 窄屏标题收档的那几页，以及面包屑普通左键走路由不整页重载。回收站说明行先占位后落读数、同页重画
  * 不闪回占位，由 `design-cards.test.ts` 的回收站几何用例量。
  *
- * 批量条：目录、回收站、垃圾文件（待判断与已排除）与关注页各自列出的键和计数。回收站与垃圾文件的
+ * 批量条：目录、回收站、Junk files（待判断与已排除）与关注页各自列出的键和计数。回收站与垃圾文件的
  * 名单由桩给：演示库里两处都是空的。写接口一次都不点。 */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
@@ -18,7 +18,7 @@ import { launch, settle, visit, VIEWPORTS, type Viewport } from './harness.ts';
 const WIDE: Viewport = { name: 'wide', width: 1600, height: 900, mobile: false };
 const MOBILE = VIEWPORTS.find((viewport) => viewport.mobile)!;
 
-/** 数据管理 hub 进页会顺手查一次站外链接状态，演示库里那一问的结果与本文件无关。 */
+/** Data management hub 进页会顺手查一次站外链接状态，演示库里那一问的结果与本文件无关。 */
 const unrelated = (problems: string[]) => problems.filter((line) => !line.includes('/api/links/check'));
 
 /** `[路径, 标题, 面包屑当前项, 窄屏收档]`。数据管理之下的子页标题让给子页自己的名字。 */
@@ -205,7 +205,7 @@ describe('批量条', () => {
         await page.goto(new URL('/trash', page.url()).href, { waitUntil: 'load' });
         await cards.first().waitFor({ timeout: 15_000 });
         await settle(page);
-        // 说明行右端的「清空回收站」：桌面是 Geist 32px 小键，手机回到本项目 44px 命中区。
+        // 说明行右端的「Empty trash」：桌面是 Geist 32px 小键，手机回到本项目 44px 命中区。
         const empty = await page.locator('[data-manage-lede] [data-empty-trash]').boundingBox();
         assert.equal(Math.round(empty!.height), viewport.mobile ? 44 : 32, '清空回收站的键高');
         await pickTwo(cards);

@@ -1,4 +1,4 @@
-"""版本化存量补修：本地事务、证据回执和有界后台派发。"""
+"""Versioned backlog repair: local transactions, evidence receipts and bounded background dispatch."""
 from __future__ import annotations
 
 import json
@@ -31,13 +31,13 @@ def _read(path: Path) -> dict:
     except FileNotFoundError:
         return {}
     if not isinstance(value, dict):
-        raise ValueError('更新后的处理记录格式无效')
+        raise ValueError('Invalid format of the post-update processing record')
     return value
 
 
 def _title(row) -> str:
-    """任务中心里这一条写哪部片：有番号写番号，没有就写文件名。"""
-    return str(row['code'] or row['name'] or f'影片 {row["id"]}')
+    """Which movie this entry in the Task Center names: the code if there is one, otherwise the file name."""
+    return str(row['code'] or row['name'] or f'Movie {row["id"]}')
 
 
 def _counts(connection) -> dict:
@@ -82,7 +82,7 @@ def _catalog_plan(connection, sources: Path, *, catalog: bool = True) -> dict:
     aliases = composite_alias_repair.collect(connection)
     for row in aliases:
         if is_protected(row['source']):
-            row.update(verdict='review', note='人工别名保持原样')
+            row.update(verdict='review', note='Manual alias kept as is')
     return {'codes': codes, 'fields': fields, 'names': names, 'aliases': aliases,
             'text': text, 'catalog': True}
 
@@ -114,7 +114,7 @@ def _catalog_apply(connection, plan: dict) -> dict:
 
 
 def _stale_previews(contract, row):
-    """本地配套海报和九宫格分别按所属规则校验。"""
+    """Local companion posters and contact sheets are verified against their own rules."""
     from .media_processing_policy import metadata_only
     from .platform import translate_ledger_path
     poster = Path(getattr(contract, 'poster_root', Path(contract.candidate_root) / 'posters')) / f'{row["id"]}_4.jpg'
@@ -128,7 +128,7 @@ def _stale_previews(contract, row):
 
 
 class UpgradeRepairs:
-    """一个数据目录一份回执；网络与媒体工作由现有任务通道执行。"""
+    """One receipt per data directory; network and media work is executed by existing task channels."""
 
     def __init__(self, contract, *, available: bool, config=None):
         self.contract, self.available = contract, available
@@ -148,9 +148,9 @@ class UpgradeRepairs:
         try:
             receipt = _read(self.receipt)
         except (OSError, ValueError, TypeError):
-            return {'state': 'failed', 'items': [{'id': 'receipt', 'label': '更新后自动处理', 'state': 'failed',
-                                                 'message': '更新后的处理记录无法读取'}],
-                    'available': True, 'message': '处理记录无法读取，请重试'}
+            return {'state': 'failed', 'items': [{'id': 'receipt', 'label': 'Post-update automatic processing', 'state': 'failed',
+                                                 'message': 'Post-update processing record cannot be read'}],
+                    'available': True, 'message': 'Processing record cannot be read; please retry'}
         local = receipt.get('local', {})
         queued = receipt.get('queued', {})
         states = []
@@ -166,14 +166,14 @@ class UpgradeRepairs:
         review = int(local.get('review_count', 0)) + len(receipt.get('deferred', []))
         state = 'failed' if self.error else 'running' if active else 'failed' if failed else 'review' if review else (
             'complete' if receipt.get('dispatch_complete') and local else 'pending')
-        items = [{'id': REVISION, 'label': '更新已有资料', 'state': local.get('state', 'pending'),
+        items = [{'id': REVISION, 'label': 'Update existing metadata', 'state': local.get('state', 'pending'),
                   'changed': local.get('changed', {}), 'review_count': review},
-                 {'id': 'background', 'label': '后台更新进度', 'state': state,
+                 {'id': 'background', 'label': 'Background update progress', 'state': state,
                   'pending': active, 'failed': failed, 'queued': len(queued)}]
         return {'state': state, 'items': items, 'available': self.available, 'message': self.error}
 
     def prepare(self) -> None:
-        """服务恢复任务前应用本地确定性修复。"""
+        """Apply local deterministic repairs before the service resumes tasks."""
         if not self.available or not self.contract.task_runs.enabled:
             return
         self.root.mkdir(parents=True, exist_ok=True)
@@ -209,9 +209,9 @@ class UpgradeRepairs:
                 violations = {tuple(row) for row in connection.execute('PRAGMA foreign_key_check')}
                 changed = _catalog_apply(connection, plan)
                 if connection.execute('PRAGMA integrity_check').fetchone()[0] != 'ok':
-                    raise RuntimeError('更新已有资料时账本完整性校验失败')
+                    raise RuntimeError('Ledger integrity check failed while updating existing metadata')
                 if any(tuple(row) not in violations for row in connection.execute('PRAGMA foreign_key_check')):
-                    raise RuntimeError('更新已有资料时关联校验失败')
+                    raise RuntimeError('Relationship check failed while updating existing metadata')
                 after = _counts(connection)
                 receipt = {'revision': REVISION, 'local': {'state': 'succeeded', 'changed': changed,
                            'review_count': review, 'before': before, 'after': after, 'backup': str(backup)},
@@ -241,7 +241,7 @@ class UpgradeRepairs:
         encoded = json.dumps(receipt, ensure_ascii=False)
         with self.contract.database.write_transaction(notify=False) as connection:
             if connection.execute('SELECT 1 FROM ledger_upgrade_repair WHERE id=?', (REVISION,)).fetchone() is None:
-                raise ValueError('更新后的处理记录需要重新准备，请重试')
+                raise ValueError('The post-update processing record needs to be prepared again; please retry')
             connection.execute('UPDATE ledger_upgrade_repair SET result_json=? WHERE id=? AND result_json<>?',
                                (encoded, REVISION, encoded))
         atomic_write_text(self.receipt, encoded)
@@ -330,14 +330,14 @@ class UpgradeRepairs:
             return
         except Exception as exc:
             self.error = str(exc)
-            LOGGER.exception('升级补修派发失败')
+            LOGGER.exception('Upgrade repair dispatch failed')
 
     def _dispatch(self, planned, receipt):
         store = self.contract.task_runs
         orphan = store.blocking(TASK_KEY)
         if orphan is not None:
-            store.finish(orphan.id, 'failed', error='资料派发被中断，正在重新安排')
-        run = store.start(TASK_KEY, trigger='scheduled', mutex_key=TASK_KEY, label='安排自动更新资料')
+            store.finish(orphan.id, 'failed', error='Metadata dispatch was interrupted and is being rescheduled')
+        run = store.start(TASK_KEY, trigger='scheduled', mutex_key=TASK_KEY, label='Scheduling automatic metadata update')
         if run is None:
             return False
         try:
@@ -351,16 +351,16 @@ class UpgradeRepairs:
                     child = store.blocking(row.key)
                     if child is not None:
                         queued[row.key] = child.id
-            store.finish(run.id, 'succeeded', summary={'outcome': f'已安排 {len(result["queued"])} 项处理'})
+            store.finish(run.id, 'succeeded', summary={'outcome': f'Scheduled {len(result["queued"])} items of processing'})
         except Exception as exc:
             store.finish(run.id, 'failed', error=str(exc))
             raise
         return True
 
     def retry(self) -> dict:
-        """显式重试失败项；用户取消的任务保持取消。"""
+        """Explicitly retry failed items; tasks cancelled by the user stay cancelled."""
         if not self.available:
-            raise ValueError('更新后自动处理只在本机写入端可用')
+            raise ValueError('Post-update automatic processing is available only on the local writer')
         self.prepare()
         with FileLock(str(self.receipt) + '.lock', timeout=0):
             receipt = _read(self.receipt)
@@ -405,7 +405,7 @@ def _media_run(contract, key: str, handle) -> dict:
     service = getattr(contract, 'upgrade_repairs', None)
     with contract.database.read_connection() as connection:
         found = connection.execute('SELECT id,code,name FROM asset WHERE id=?', (asset_id,)).fetchone()
-    title = _title(found) if found else f'影片 {asset_id}'
+    title = _title(found) if found else f'Movie {asset_id}'
     def active():
         return service is None or not service.stopping.is_set()
     try:
@@ -415,14 +415,14 @@ def _media_run(contract, key: str, handle) -> dict:
                              state_file=state_file, resume_state=previous or None,
                              active=active,
                              report=lambda state: handle.progress(
-                                 label=f"{title} · {state.get('stage') or '更新影片资料'}"))
+                                 label=f"{title} · {state.get('stage') or 'Updating movie metadata'}"))
     except InterruptedError:
         if not active():
-            raise JobPaused('服务重启后继续') from None
+            raise JobPaused('Continues after the service restarts') from None
         raise
     if result.get('status') not in ('complete', 'succeeded') or result.get('issue_count'):
-        raise RuntimeError(result.get('error') or '影片升级补全未完成，请在任务中心查看后重试')
-    return {'outcome': '影片升级补全完成', 'name': title, 'asset_id': asset_id}
+        raise RuntimeError(result.get('error') or 'Movie upgrade backfill did not finish; please check the Task Center and retry')
+    return {'outcome': 'Movie upgrade backfill complete', 'name': title, 'asset_id': asset_id}
 
 
-TYPE = register(FollowupType(MEDIA_TASK, '更新影片资料', True, _media_run))
+TYPE = register(FollowupType(MEDIA_TASK, 'Update movie metadata', True, _media_run))

@@ -1,4 +1,4 @@
-"""JavDB 原题与同番号来源身份的证据版本。"""
+"""JavDB evidence version of the original title and same-code source identity."""
 from __future__ import annotations
 
 import re
@@ -17,5 +17,5 @@ def current_candidate(payload: object) -> bool:
 
 
 def cache_key(key: str) -> str:
-    """只隔离旧的番号身份与作品详情，明确来源ID的资源缓存继续复用。"""
+    """Isolate only old code identity and work details; resource caches with an explicit source ID continue to be reused."""
     return f'javdb-{RULE}:{key}' if key.startswith(('movie-id:', 'movie:')) else key

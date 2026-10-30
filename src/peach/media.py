@@ -188,7 +188,7 @@ class FilesystemBackend:
 class MediaEngine:
     """按 asset id 解析媒体文件。
 
-    媒体根目录决定本机文件或 SMB 资源；工具输入使用受控的回环读取入口。
+    The media root directory decides whether a resource is a local file or SMB; tool input uses a controlled loopback read entry point.
     """
 
     def __init__(self, repository: LedgerRepository, filesystem: FilesystemBackend):

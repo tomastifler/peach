@@ -13,9 +13,9 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 CUDA_DECODE_CODECS = frozenset({"h264", "hevc", "vp9", "av1"})
 VIDEOTOOLBOX_DECODE_CODECS = frozenset({"h264", "hevc", "av1", "prores"})
-#: D3D11VA 与 CUDA 同一份名单：名单外的编码（如 vc1）硬解出错时 FFmpeg 不报错，绿帧直接进缓存。
+#: D3D11VA shares one list with CUDA: for codecs outside the list (such as vc1), when hardware decoding errors, FFmpeg reports nothing and green frames go straight into the cache.
 D3D11_DECODE_CODECS = CUDA_DECODE_CODECS
-#: AMF 只认 AMD 显卡上的 D3D11 设备，混合显卡机器上默认序号常是别家，按序号逐个试。
+#: AMF only recognizes D3D11 devices on AMD graphics cards; on hybrid-GPU machines the default index is often another vendor's, so indexes are tried one by one.
 D3D11_ADAPTER_PROBES = 4
 BACKENDS = ("auto", "software", "nvenc", "amf", "qsv", "vaapi", "videotoolbox")
 PROBE_TIMEOUT_SECONDS = 10
@@ -33,14 +33,14 @@ def videotoolbox_decode_options(codec: str) -> tuple[str, ...]:
 
 
 def d3d11va_decode_options(codec: str, device: str = "") -> tuple[str, ...]:
-    """Windows 显卡解码。不指定 `-hwaccel_output_format`，解出的帧回到内存交给任意编码器。"""
+    """Windows GPU decoding. Without specifying `-hwaccel_output_format`, the decoded frames return to memory and are handed to any encoder."""
     if codec not in D3D11_DECODE_CODECS:
         return ()
     return ("-hwaccel", "d3d11va", *(("-hwaccel_device", device) if device else ()))
 
 
 def _run_probe(ffmpeg: Path, label: str, arguments: tuple[str, ...]) -> bool:
-    """跑一条只吃合成画面、输出丢弃的探测命令；失败记一条警告。"""
+    """Run a probe command that consumes only synthetic frames and discards its output; a failure logs a warning."""
     command = (str(ffmpeg), "-hide_banner", "-loglevel", "error", "-nostdin", *arguments,
                "-f", "null", "-")
     try:
@@ -50,17 +50,17 @@ def _run_probe(ffmpeg: Path, label: str, arguments: tuple[str, ...]) -> bool:
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        logger.warning("转码硬件探测失败 %s：%s", label, exc)
+        logger.warning("Transcode hardware probe failed %s: %s", label, exc)
         return False
     if result.returncode:
-        logger.warning("转码硬件探测失败 %s：%s", label,
+        logger.warning("Transcode hardware probe failed %s: %s", label,
                        result.stderr.decode("utf-8", "replace")[-1000:])
     return result.returncode == 0
 
 
 @lru_cache(maxsize=8)
 def _d3d11va_ready(ffmpeg: str) -> bool:
-    """这份 FFmpeg 在这台机器上建得出 D3D11 设备。没有显卡的虚拟机或远程桌面会失败。"""
+    """This FFmpeg can create a D3D11 device on this machine. A VM or remote desktop without a GPU will fail."""
     return _run_probe(Path(ffmpeg), "d3d11va", ("-init_hw_device", "d3d11va", *_SYNTHETIC_FRAME))
 
 
@@ -74,9 +74,9 @@ def _frame_codec(ffprobe: str, source: str, size: int, modified: int) -> str:
 
 
 def frame_decode_options(ffmpeg: str, source: str) -> tuple[str, ...]:
-    """本机抽帧按文件世代复用编码探测，解码初始化失败由调用方回退。
+    """Local frame extraction reuses the encode probe per file generation; decode initialization failures fall back at the caller.
 
-    Windows 只给名单内的编码开 D3D11VA，编码探测不到就软件解码。
+    Windows enables the following only for codecs on the list: D3D11VA, software decoding is used when the encode probe finds nothing.
     """
     if sys.platform not in ("darwin", "win32") or not Path(ffmpeg).is_file():
         return ()
@@ -112,10 +112,10 @@ class HardwareEncoder:
     device: str = ""
 
     def attempts(self, codec: str) -> tuple[HardwareAttempt, ...]:
-        """依次尝试的命令片段；最后一项总是软件解码，探测靠它喂合成画面。
+        """Command fragments tried in turn; the last is always software decoding, and the probe relies on it to feed synthetic frames.
 
-        `d3d11va` 只解码不编码，这里只给探测用的建设备命令，解码参数见
-        `HardwareTranscoder.decode_options`。
+        `d3d11va` only decodes and does not encode; here only the device-creation command used for probing is given, and for decode parameters see
+        `HardwareTranscoder.decode_options`.
         """
         if self.backend == "d3d11va":
             return (HardwareAttempt("d3d11va", ("-init_hw_device", "d3d11va"), ()),)
@@ -156,10 +156,10 @@ class HardwareEncoder:
 
 
 class HardwareTranscoder:
-    """首次重编码时探测，结果按 FFmpeg 路径缓存；不读取媒体或写入缓存文件。
+    """Probed at the first re-encode, and the result is cached by FFmpeg path; it reads no media and writes no cache files.
 
-    设置页「播放编解码方式」选软件时什么都不探测；选自动时 Windows 依次试 NVENC、AMF、
-    QSV 编码，三者都不可用也用 D3D11VA 解码再交给 libx264，见 `decode_options`。
+    When the settings page "Playback codec method" is set to software nothing is probed; when set to automatic, Windows tries in turn NVENC, AMF,
+    QSV encoding; if none of the three is available, D3D11VA decoding is still used and the frames are handed to libx264, see `decode_options`.
     """
 
     def __init__(self, *, enabled: bool = True, state_root: Path | None = None):
@@ -167,7 +167,7 @@ class HardwareTranscoder:
         self.state_root = state_root
         self.backend = os.environ.get("PEACH_TRANSCODE_BACKEND", "auto").strip().lower()
         if self.backend not in BACKENDS:
-            raise ValueError("PEACH_TRANSCODE_BACKEND 必须为 " + "、".join(BACKENDS))
+            raise ValueError("PEACH_TRANSCODE_BACKEND must be one of " + ", ".join(BACKENDS))
         self.device = os.environ.get("PEACH_VAAPI_DEVICE", "").strip()
         self._encoders: dict[Path, tuple[HardwareEncoder, ...]] = {}
         self._lock = threading.Lock()
@@ -192,14 +192,14 @@ class HardwareTranscoder:
         return tuple(candidates)
 
     def active(self) -> bool:
-        """设置页与环境变量都没把播放转码限定成软件。每次现读，改设置不用重启。"""
+        """Neither the settings page nor the environment variable restricts playback transcoding to software. It is read fresh each time, so changing settings needs no restart."""
         from .media_processing_policy import acceleration
         if self.state_root is not None and acceleration(self.state_root) == "software":
             return False
         return self.enabled and self.backend != "software"
 
     def diagnostic_snapshot(self) -> dict:
-        """读取当前硬件策略与已有探测结果，不启动新的硬件探测。"""
+        """Read the current hardware policy and existing probe results without starting a new hardware probe."""
         with self._lock:
             results = [sorted({encoder.backend for encoder in encoders}) for encoders in self._encoders.values()]
         return {'backend': self.backend, 'enabled': self.active(),
@@ -229,9 +229,9 @@ class HardwareTranscoder:
         return tuple(item for item in self._available(ffmpeg) if item.backend != "d3d11va")
 
     def decode_options(self, ffmpeg: Path, codec: str) -> tuple[str, ...]:
-        """libx264 前的显卡解码参数；只有 Windows 的 D3D11VA 这一种，与显卡厂商无关。
+        """libx264 front-end GPU decode parameters; there is only one kind, Windows D3D11VA, independent of the GPU vendor.
 
-        硬件编码全不可用时，HEVC 软件解码占去 libx264 转码约三分之一的 CPU。
+        When no hardware encoder is available, HEVC software decoding takes about a third of the libx264 transcode's CPU.
         """
         if not any(item.backend == "d3d11va" for item in self._available(ffmpeg)):
             return ()
@@ -239,7 +239,7 @@ class HardwareTranscoder:
 
     @staticmethod
     def _amf_adapter(ffmpeg: Path, encoder: HardwareEncoder) -> HardwareEncoder:
-        """找出 AMF 能接上的 D3D11 显卡序号；都不行就只用软件解码加 AMF 编码。"""
+        """Find the D3D11 GPU index that AMF can attach to; if none works, use only software decoding plus AMF encoding."""
         output = _WINDOWS_ENCODER_OUTPUT["amf"][:-2]
         for index in range(D3D11_ADAPTER_PROBES):
             if _run_probe(ffmpeg, f"amf d3d11va:{index}", (

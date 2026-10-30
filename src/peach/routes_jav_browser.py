@@ -28,7 +28,7 @@ def userscript():
 def userscript_bridge():
     return HTMLResponse('<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">'
                         '<meta name="peach-userscript-bridge" content="1">'
-                        '<title>Peach 用户脚本连接</title></head><body></body></html>',
+                        '<title>Peach userscript connection</title></head><body></body></html>',
                         headers={"Cache-Control": "no-store", "X-Frame-Options": "SAMEORIGIN",
                                  "Content-Security-Policy": "default-src 'none'; frame-ancestors 'self'; base-uri 'none'"})
 
@@ -73,11 +73,11 @@ async def errors(request: Request, service=Depends(browser_client)):
     async for part in request.stream():
         body.extend(part)
         if len(body) > 16 * 1024:
-            raise HTTPException(413, "错误记录过长")
+            raise HTTPException(413, "Error record too long")
     try:
         data = json.loads(body)
     except (ValueError, UnicodeError):
-        raise HTTPException(400, "错误记录格式无效") from None
+        raise HTTPException(400, "Invalid error record format") from None
     return JSONResponse(service.diagnostics.record(data), headers={"Cache-Control": "no-store"})
 
 

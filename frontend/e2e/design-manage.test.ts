@@ -1,4 +1,4 @@
-/* 设计决定：数据管理、索引页与资料页头。读 `getComputedStyle` 断言用户定过的外观；共用的桩与浏览器生命周期在 `design-fixture.ts`。 */
+/* 设计决定：Data management、索引页与资料页头。读 `getComputedStyle` 断言用户定过的外观；共用的桩与浏览器生命周期在 `design-fixture.ts`。 */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Browser, Page } from 'playwright-core';
@@ -9,7 +9,7 @@ import {
   waitingActionFaces, assertDisabledFace, followTab, followSource, installDesignBrowser,
 } from './design-fixture.ts';
 
-describe('设计决定：数据管理、索引页与资料页头', () => {
+describe('设计决定：Data management、索引页与资料页头', () => {
   let browser: Browser;
   installDesignBrowser((next) => { browser = next; });
 
@@ -74,7 +74,7 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
         const release = await holdApi(page);
         await page.reload({ waitUntil: 'load' });
         await page.locator('[data-skeleton="cleanup"] #mediaRepair footer').waitFor({ timeout: 15_000 });
-        const geometry = () => page.locator('section[aria-label="扫描与采集"], section[aria-label="媒体修复"]')
+        const geometry = () => page.locator('section[aria-label="Scan and collection"], section[aria-label="Media repair"]')
           .evaluateAll(cards => cards.map(card => {
             const style = (part: Element) => {
               const css = getComputedStyle(part);
@@ -88,7 +88,7 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
         assert.equal(waiting.length, 2);
         for (const card of waiting) assert.equal(card.face[3], '1px', '骨架卡缺少外框');
         release();
-        await page.locator('section[aria-label="媒体修复"] footer > button:not([data-skeleton-action])')
+        await page.locator('section[aria-label="Media repair"] footer > button:not([data-skeleton-action])')
           .waitFor({ timeout: 15_000 });
         await settle(page);
         assert.deepEqual(await geometry(), waiting, '骨架与内容卡的容器布局不一致');
@@ -112,15 +112,15 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
       const expected = await disabledTokens(page);
       const waiting = await waitingActionFaces(page, '[data-skeleton="cleanup"] [data-skeleton-action]');
       assert.deepEqual(waiting.filter((face) => !face.name.includes('skeleton')).map((face) => face.name).filter(Boolean),
-        ['同步新增文件', '更多同步方式', '开始修复', '预览', '检查死链']);
+        ['Sync new files', 'More sync options', 'Start repair', 'Preview', 'Check for dead links']);
       for (const face of waiting) assertDisabledFace(face, expected);
       const ring = await page.locator('[data-skeleton="cleanup"] [data-split-button]')
         .evaluate((element) => getComputedStyle(element).boxShadow);
       assert.ok(ring.includes(expected.ring), `骨架里的分体键外圈不是禁用那一档描边：${ring}`);
       const sizes = await controlFaces(page, {
-        同步新增文件: '#libraryProcessing [data-split-button] > button:first-child',
+        'Sync new files': '#libraryProcessing [data-split-button] > button:first-child',
         更多方式: '#libraryProcessing [data-split-button] > button:last-child',
-        开始修复: '#mediaRepair footer > button',
+        'Start repair': '#mediaRepair footer > button',
       });
       release();
       await page.locator('[data-skeleton="cleanup"]').waitFor({ state: 'detached', timeout: 15_000 });
@@ -131,9 +131,9 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
         .waitFor({ timeout: 15_000 });
       await settle(page);
       const final = await controlFaces(page, {
-        同步新增文件: 'section[aria-label="扫描与采集"] [data-split-button] > button:first-child',
-        更多方式: 'section[aria-label="扫描与采集"] [data-split-button] > button:last-child',
-        开始修复: 'section[aria-label="媒体修复"] footer > button',
+        'Sync new files': 'section[aria-label="Scan and collection"] [data-split-button] > button:first-child',
+        更多方式: 'section[aria-label="Scan and collection"] [data-split-button] > button:last-child',
+        'Start repair': 'section[aria-label="Media repair"] footer > button',
       });
       for (const name of Object.keys(sizes)) {
         assert.equal(sizes[name]!.size, final[name]!.size, `${name} 接管时尺寸跳了`);
@@ -634,9 +634,9 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
 
   it('统计、高清版和配置空清单有背景与边框，窄屏不越界', { timeout: 60_000 }, async () => {
     const cases = [
-      { path: '/stats', title: '还没有视频', height: 320 },
-      { path: '/quality-goals', title: '没有标记中的高清版目标', height: 320 },
-      { path: '/settings/diagnostics', title: '清单为空', height: 240 },
+      { path: '/stats', title: 'No videos yet', height: 320 },
+      { path: '/quality-goals', title: 'No HD upgrade targets marked', height: 320 },
+      { path: '/settings/diagnostics', title: 'List is empty', height: 240 },
       { path: '/settings/subscriptions', title: '没有可配置的来源', height: 240 },
     ];
     for (const viewport of [DESKTOP, MOBILE]) {
@@ -817,7 +817,7 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
             document.documentElement.classList.toggle('dark', value === 'dark');
           }, theme);
           const card = page.getByRole('region', { name: 'paused 的关注来源', exact: true });
-          const badge = card.getByText('已暂停', { exact: true });
+          const badge = card.getByText('Paused', { exact: true });
           assert.equal(await badge.evaluate((node) => getComputedStyle(node).color),
             await tokenColor(page, '.peach-react', '--color-text-primary'));
           assert.notEqual(await badge.evaluate((node) => getComputedStyle(node).backgroundColor),
@@ -995,8 +995,8 @@ describe('设计决定：数据管理、索引页与资料页头', () => {
     const opened = await openFollowManage(browser);
     try {
       await opened.page.getByRole('link', { name: /^来源与订阅设置/ }).click();
-      await opened.page.getByRole('tab', { name: '来源与订阅', exact: true, selected: true }).waitFor();
-      await opened.page.getByRole('region', { name: '可配置凭据', exact: true }).waitFor();
+      await opened.page.getByRole('tab', { name: 'Sources & subscriptions', exact: true, selected: true }).waitFor();
+      await opened.page.getByRole('region', { name: 'Configurable credentials', exact: true }).waitFor();
       await settle(opened.page);
       const faces: Record<string, string> = {};
       for (const state of ['需要', '已配置', '暂时无法连接', '不需要']) {

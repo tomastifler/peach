@@ -22,7 +22,7 @@ const slots = (html: string): string => html.repeat(EMPTY_SLOTS);
 export function catalogFilterSkeletonHtml(views: readonly CatalogView[], state: string, head?: Pick<CatalogFilterProps, 'sorts' | 'layout'>): string {
   const viewHtml = views.map((view) => `<a href="${esc(view.href)}" data-catalog-view="${esc(view.k)}"`
     + ` data-entity-press="" aria-pressed="${state === view.k}">${esc(view.label)}</a>`).join('');
-  /* 两排照本机上次画好时的结构：上次没人的那排取回后也是收起的。 */
+  /* The two rows follow the structure from the last time this machine drew them: a row with nobody in it last time is also collapsed after the fetch returns. */
   const shape = rememberedTiers();
   return `<div class="peach-react"><div class="contents" data-catalog-root="" data-loading="">`
     + `<div data-catalog-tiers="" aria-busy="true"${shape.performers || shape.studios ? '' : ' hidden'}>`
@@ -33,7 +33,7 @@ export function catalogFilterSkeletonHtml(views: readonly CatalogView[], state: 
       + slots('<span data-catalog-placeholder="studio" aria-hidden="true"><span></span><span>&nbsp;</span></span>')
       + `</div>` : '')
     + `</div>`
-    + `<div role="group" aria-label="筛选与排序" data-filter-glass="" data-glass-pane="" data-filter-frame=""`
+    + `<div role="group" aria-label="Filter and sort" data-filter-glass="" data-glass-pane="" data-filter-frame=""`
     + ` data-catalog-frame="" class="sticky top-topbar z-10 mb-5.5 flex flex-col mx-4">`
     + `<div role="group" aria-label="Views and tags" data-filter-row="top"`
     + ` class="flex h-12 min-w-0 items-center overscroll-x-contain px-3 py-2 gap-1.5 overflow-visible">`

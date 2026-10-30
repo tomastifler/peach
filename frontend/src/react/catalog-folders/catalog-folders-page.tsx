@@ -102,14 +102,14 @@ export function CatalogFolders({ treeTarget, headerTarget, enabled = true }: {
         {data?.selected ? <IconButton aria-label="Set folder purpose" icon={RiFolderSettingsLine} size="small"
           onClick={() => setEditing(true)} /> : null}
       </div>
-      {query.error && !drawer ? <Note tone="error" action={<Button variant="secondary" size="small" onClick={() => { void query.refetch() }}>立即重试</Button>}>{errorMessage(query.error)}</Note> : null}
-      {data?.conflicts?.length ? <Note tone="warning" action={<Button variant="secondary" size="small" onClick={() => setEditing(true)}>查看归属冲突</Button>}>{data.conflicts.length} 项保留现有归属</Note> : null}
+      {query.error && !drawer ? <Note tone="error" action={<Button variant="secondary" size="small" onClick={() => { void query.refetch() }}>Retry now</Button>}>{errorMessage(query.error)}</Note> : null}
+      {data?.conflicts?.length ? <Note tone="warning" action={<Button variant="secondary" size="small" onClick={() => setEditing(true)}>View ownership conflicts</Button>}>{data.conflicts.length} items keep their existing ownership</Note> : null}
       {data?.selected ? <div className="folder-scope-row">
         <Checkbox size="sm" isSelected={params.get('folder_recursive') !== '0'}
           onChange={on => actions.navigate(folderHref(address, { folder_recursive: on ? null : '0' }))}>Include subfolders</Checkbox>
         <span className="text-caption-1-regular text-text-tertiary">{data.rule ? `${PURPOSES[data.rule.purpose]}${data.rule.name ? ` · ${data.rule.name}` : ''}` : 'Personal category'}</span>
       </div> : null}
-      {query.isPending ? <div data-skeleton="" aria-busy="true" aria-label="正在读取文件夹" className="folder-children">{Array.from({ length: 6 }, (_, i) => <span key={i} className="skeleton-sheen h-8 w-28 rounded-lg" />)}</div> : null}
+      {query.isPending ? <div data-skeleton="" aria-busy="true" aria-label="Loading folders" className="folder-children">{Array.from({ length: 6 }, (_, i) => <span key={i} className="skeleton-sheen h-8 w-28 rounded-lg" />)}</div> : null}
       {data?.children.length ? <FolderChildren key={key} nodes={data.children} go={go} /> : null}
     </div>, headerHost)}
     <ModalFrame isOpen={drawer} onOpenChange={setDrawer} width="form" label="Folder directory">
@@ -128,11 +128,11 @@ function FolderChildren({ nodes, go }: { nodes: MediaFolder[]; go(id: string): v
   const id = useId();
   const visible = expanded ? nodes : nodes.slice(0, 12);
   return <div className="flex min-w-0 flex-col items-start gap-2">
-    <div id={id} className="folder-children" aria-label="子文件夹">{visible.map(node =>
+    <div id={id} className="folder-children" aria-label="Subfolders">{visible.map(node =>
       <Button key={node.id} variant="secondary" size="small" leadingIcon={RiFolder3Line}
         onClick={() => go(node.id)}><span className="truncate">{node.name}</span></Button>)}</div>
     {nodes.length > 12 ? <Button variant="ghost" size="small" aria-expanded={expanded} aria-controls={id}
-      onClick={() => setExpanded(value => !value)}>{expanded ? '收起文件夹' : `展开全部 ${nodes.length} 个文件夹`}</Button> : null}
+      onClick={() => setExpanded(value => !value)}>{expanded ? 'Collapse folders' : `Show all ${nodes.length} folders`}</Button> : null}
   </div>;
 }
 
@@ -156,7 +156,7 @@ function FolderTree({ scope, selected, current, go, reportedError }: {
   const render = (node: MediaFolder) => {
     const loaded = childMap.get(node.id);
     return <TreeViewItem key={node.id} id={node.id} label={node.name} icon={RiFolder3Line} expandedIcon={RiFolderOpenLine}
-      iconClassName="size-(--icon-inline)" trailingContent={node.parent ? undefined : node.location === 'local' ? '本地' : node.location}>
+      iconClassName="size-(--icon-inline)" trailingContent={node.parent ? undefined : node.location === 'local' ? 'Local' : node.location}>
       {node.has_children ? loaded ? loaded.map(render)
         : <TreeViewItem id={`${node.id}:loading`} label="Loading folders" isDisabled /> : null}
     </TreeViewItem>;
@@ -165,20 +165,20 @@ function FolderTree({ scope, selected, current, go, reportedError }: {
     if (selection !== 'all') { const id = selection.values().next().value; if (id && !String(id).endsWith(':loading')) go(String(id)); }
   };
   const failed = [roots.error, ...branches.map(branch => branch.error)].find(error => error && error !== reportedError);
-  return <section aria-label="文件夹导航" className="catalog-folder-navigation flex min-h-0 min-w-0 flex-col gap-3">
-    <Input aria-label="查找文件夹" placeholder="查找文件夹" leadingIcon={RiSearchLine} value={search}
+  return <section aria-label="Folder navigation" className="catalog-folder-navigation flex min-h-0 min-w-0 flex-col gap-3">
+    <Input aria-label="Find folder" placeholder="Find folder" leadingIcon={RiSearchLine} value={search}
       onChange={setSearch} size="small" />
-    {failed ? <Note tone="error" action={<Button variant="secondary" size="small" onClick={() => { void roots.refetch(); branches.forEach(branch => { if (branch.error) void branch.refetch() }) }}>立即重试</Button>}>{errorMessage(failed)}</Note> : null}
+    {failed ? <Note tone="error" action={<Button variant="secondary" size="small" onClick={() => { void roots.refetch(); branches.forEach(branch => { if (branch.error) void branch.refetch() }) }}>Retry now</Button>}>{errorMessage(failed)}</Note> : null}
     <div className="folder-tree-frame relative flex min-h-0 flex-col overflow-hidden rounded-3xl"><div ref={scroll} className="folder-tree-scroller">
-      {roots.error ? null : roots.isPending ? <div data-skeleton="" aria-busy="true" aria-label="正在读取目录树" className="flex flex-col gap-2">{Array.from({ length: 8 }, (_, i) => <div key={i} className="flex h-8 items-center gap-2 px-3"><span className="skeleton-sheen size-4" /><span className="skeleton-sheen h-4 flex-1" /></div>)}</div>
-        : deferredSearch ? <div className="flex flex-col gap-1">{searchQuery.isPending ? <div data-skeleton="" aria-busy="true" className="h-8 skeleton-sheen" aria-label="正在查找文件夹" />
+      {roots.error ? null : roots.isPending ? <div data-skeleton="" aria-busy="true" aria-label="Loading folder tree" className="flex flex-col gap-2">{Array.from({ length: 8 }, (_, i) => <div key={i} className="flex h-8 items-center gap-2 px-3"><span className="skeleton-sheen size-4" /><span className="skeleton-sheen h-4 flex-1" /></div>)}</div>
+        : deferredSearch ? <div className="flex flex-col gap-1">{searchQuery.isPending ? <div data-skeleton="" aria-busy="true" className="h-8 skeleton-sheen" aria-label="Searching folders" />
           : searchQuery.error ? <Note tone="error">{errorMessage(searchQuery.error)}</Note>
           : searchQuery.data?.matches.length ? searchQuery.data.matches.map(node => <Button key={node.id} variant="secondary" size="small" leadingIcon={RiFolder3Line}
-            onClick={() => { setSearch(''); go(node.id) }}>{node.name}</Button>) : <EmptyState size="compact" icon={RiSearchLine} title="没有匹配的文件夹"
-              actions={<Button size="small" onClick={() => setSearch('')}>清除搜索</Button>}>换个目录名称试试。</EmptyState>}</div>
-        : !roots.data?.roots.length ? <EmptyState size="compact" icon={RiFolder3Line} title="尚未添加媒体目录"
-          actions={<ButtonLink size="small" href="/settings/library">添加媒体</ButtonLink>}>在媒体库设置中添加目录并扫描。</EmptyState>
-        : <TreeView aria-label="媒体目录" size="sm" expandedKeys={expanded} onExpandedChange={setExpanded}
+            onClick={() => { setSearch(''); go(node.id) }}>{node.name}</Button>) : <EmptyState size="compact" icon={RiSearchLine} title="No matching folders"
+              actions={<Button size="small" onClick={() => setSearch('')}>Clear search</Button>}>Try a different folder name.</EmptyState>}</div>
+        : !roots.data?.roots.length ? <EmptyState size="compact" icon={RiFolder3Line} title="No media folders added yet"
+          actions={<ButtonLink size="small" href="/settings/library">Add media</ButtonLink>}>Add folders in the library settings and scan.</EmptyState>
+        : <TreeView aria-label="Media folders" size="sm" expandedKeys={expanded} onExpandedChange={setExpanded}
           selectedKeys={new Set(selected ? [selected] : [])} onSelectionChange={choose}
           >
           {roots.data?.roots.map(render)}

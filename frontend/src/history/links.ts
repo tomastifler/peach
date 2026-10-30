@@ -1,7 +1,7 @@
 import { isOverlayPath, overlayTarget } from './overlay';
 import { routeMetaOf } from './route-meta';
 
-/** 当前标签页里尚未处理且已登记的站内页面链接。 */
+/** In-site page links in the current tab that are not yet handled and are registered. */
 export function navigationLinkPath(event: MouseEvent): string | null {
   if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return null;
   const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href]') : null;

@@ -75,7 +75,7 @@ class ReviewCsvTests(unittest.TestCase):
         with self.assertRaises(csv.Error) as caught:
             read_rows(target)
         self.assertIn(target.name, str(caught.exception))
-        self.assertIn('，第 3 行：', str(caught.exception))
+        self.assertIn(', line 3: ', str(caught.exception))
         self.assertEqual(target.read_text(encoding=ENCODING, newline=''), original)
 
     def test_an_unexpected_field_is_an_error_by_default(self):

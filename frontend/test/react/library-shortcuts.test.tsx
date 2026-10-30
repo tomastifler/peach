@@ -11,7 +11,7 @@ beforeEach(() => { registerNameWritings([]); setNameLanguage('zh-CN') });
 afterEach(() => { queryClient.clear() });
 const empty: Shortcuts = { favorites: [], filters: [] };
 
-describe('我的收藏', () => {
+describe('My favorites', () => {
   it('显示语言同步可见名称和无障碍名称，取消收藏仍提交原名称', async () => {
     const favorite = { key: 'entity:3', entity_id: 3, kind: 'performer', name: '枫花恋' };
     const data = { favorites: [favorite], filters: [] };
@@ -24,16 +24,16 @@ describe('我的收藏', () => {
     }));
     queryClient.setQueryData(SHORTCUTS_KEY, data);
     await mount(<QueryClientProvider client={queryClient}><LibraryShortcuts /></QueryClientProvider>);
-    await click(document.querySelector('[aria-label="我的收藏"]')); await settle();
+    await click(document.querySelector('[aria-label="My favorites"]')); await settle();
     const link = document.querySelector('[data-shortcuts-row] a');
     expect(link?.textContent).toContain('楓カレン');
     expect(link?.getAttribute('aria-label')).toBe('楓カレン');
     expect(link?.getAttribute('href')).toBe('/performers/3');
-    await type(document.querySelector('input[aria-label="搜索收藏"]'), '楓カレン');
+    await type(document.querySelector('input[aria-label="Search favorites"]'), '楓カレン');
     expect(document.querySelectorAll('[data-shortcuts-row]')).toHaveLength(1);
-    await type(document.querySelector('input[aria-label="搜索收藏"]'), '枫花恋');
+    await type(document.querySelector('input[aria-label="Search favorites"]'), '枫花恋');
     expect(document.querySelectorAll('[data-shortcuts-row]')).toHaveLength(1);
-    await click(document.querySelector('[aria-label="取消收藏楓カレン"]')); await settle();
+    await click(document.querySelector('[aria-label="Unfavorite 楓カレン"]')); await settle();
     expect(writes[0]).toMatchObject({ action: 'favorite', entity_id: 3, name: '枫花恋', on: false });
   });
   it('同名在线标签和本地实体独立收藏，在线链接打开关注筛选', async () => {
@@ -53,10 +53,10 @@ describe('我的收藏', () => {
     expect(isFavorite([local], online)).toBe(false);
     expect(isFavorite([online], local)).toBe(false);
     expect(favoriteHref(online)).toBe('/follow?tag=%E6%88%B7%E5%A4%96');
-    await click(host.querySelector('[aria-label="收藏户外"]')); await settle();
+    await click(host.querySelector('[aria-label="Favorite 户外"]')); await settle();
     expect(writes[0]).toMatchObject({ action: 'favorite', scope: 'online', tag_id: 'outdoors', on: true });
     expect(host.querySelector('[data-favorite]')?.getAttribute('aria-pressed')).toBe('true');
-    await click(host.querySelector('[aria-label="取消收藏户外"]')); await settle();
+    await click(host.querySelector('[aria-label="Unfavorite 户外"]')); await settle();
     expect(writes[1]).toMatchObject({ scope: 'online', tag_id: 'outdoors', on: false });
     expect(data.favorites).toEqual([local]);
   });
@@ -86,18 +86,18 @@ describe('我的收藏', () => {
       return { ok: true, json: async () => calls.length === 1 ? answer.answer : empty };
     }));
     const host = await mount(<QueryClientProvider client={queryClient}>
-      <FavoriteButton item={{ entity_id: 1, kind: 'studio', name: '厂牌' }} />
+      <FavoriteButton item={{ entity_id: 1, kind: 'studio', name: 'Studios' }} />
     </QueryClientProvider>);
-    await click(host.querySelector('[aria-label="Favorite 厂牌"]'));
+    await click(host.querySelector('[aria-label="Favorite Studios"]'));
     const button = host.querySelector('button')!;
     expect(button.disabled).toBe(false);
     expect(button.getAttribute('aria-busy')).toBe('true');
     await click(button);
     expect(calls).toHaveLength(1);
-    await answer.release({ favorites: [{ key: 'entity:1', entity_id: 1, kind: 'studio', name: '厂牌' }], filters: [] });
+    await answer.release({ favorites: [{ key: 'entity:1', entity_id: 1, kind: 'studio', name: 'Studios' }], filters: [] });
     await settle();
     expect(button.getAttribute('aria-pressed')).toBe('true');
-    await click(host.querySelector('[aria-label="Unfavorite 厂牌"]'));
+    await click(host.querySelector('[aria-label="Unfavorite Studios"]'));
     await settle();
     expect(calls[1]).toMatchObject({ action: 'favorite', entity_id: 1, on: false });
     expect(button.getAttribute('aria-pressed')).toBe('false');

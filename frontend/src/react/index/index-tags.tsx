@@ -53,7 +53,7 @@ function AlphaTag({ tag, actions }: { tag: TagEntry; actions: TagActions }) {
       <span className="flex-none text-caption-1-regular text-text-secondary">{tag.n.toLocaleString()}</span>
     </button>
     {actions.favorites !== false ? <FavoriteButton item={tagFavorite(tag, actions.online)} /> : null}
-    {actions.edit ? <EntityActionButton label={`编辑标签 ${tag.label}`} onClick={() => actions.edit?.(tag.k)}><Pencil /></EntityActionButton> : null}
+    {actions.edit ? <EntityActionButton label={`Edit tag ${tag.label}`} onClick={() => actions.edit?.(tag.k)}><Pencil /></EntityActionButton> : null}
     </div>
   );
 }
@@ -98,7 +98,7 @@ export function TagCloud({ tags, actions }: { tags: TagEntry[]; actions: TagActi
         </button>
         {actions.favorites !== false || actions.edit ? <span data-tag-actions="" className="inline-flex flex-none items-center gap-1">
           {actions.favorites !== false ? <FavoriteButton item={tagFavorite(tag, actions.online)} /> : null}
-          {actions.edit ? <EntityActionButton label={`编辑标签 ${tag.label}`} onClick={() => actions.edit?.(tag.k)}><Pencil /></EntityActionButton> : null}
+          {actions.edit ? <EntityActionButton label={`Edit tag ${tag.label}`} onClick={() => actions.edit?.(tag.k)}><Pencil /></EntityActionButton> : null}
         </span> : null}
         </span>
       ))}
@@ -128,13 +128,13 @@ export function TagFilters(
 ) {
   const alphaScroll = useHorizontalScroller<HTMLElement>();
   return (
-    <FilterGlassRows label="标签筛选" topLabel="标签类型"
+    <FilterGlassRows label="Tag filters" topLabel="Tag type"
       top={<>
-        {status ? <div role="group" aria-label="标签状态" className="flex flex-none items-center gap-1.75 border-r border-(--glass-low) pr-3">
-          {[[false, '使用中'], [true, '已隐藏']].map(([hidden, label]) => <FilterPill key={String(hidden)}
+        {status ? <div role="group" aria-label="Tag status" className="flex flex-none items-center gap-1.75 border-r border-(--glass-low) pr-3">
+          {[[false, 'In use'], [true, 'Hidden']].map(([hidden, label]) => <FilterPill key={String(hidden)}
             data-tag-pill="" data-tag-cat="all" pressed={!status.blocked && status.hidden === hidden} onPress={() => status.onChange(Boolean(hidden))}>{label}</FilterPill>)}
           {status.onBlocked ? <FilterPill data-tag-pill="" data-tag-cat="all" pressed={!!status.blocked}
-            onPress={status.onBlocked}>已屏蔽内容</FilterPill> : null}
+            onPress={status.onBlocked}>Blocked content</FilterPill> : null}
         </div> : null}
         {categories.map(([key, label]) => (
         <FilterPill key={key} data-tag-pill="" data-tag-cat={key === 'all' ? 'all' : tagColorKey(online, key)}

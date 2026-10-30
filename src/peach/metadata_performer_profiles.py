@@ -203,7 +203,7 @@ def enrich_performer_profiles(database, groups, avatar_root: Path,
                 reason = describe_failure(error)
                 LOGGER.warning("performer avatar failed: entity=%s url=%s: %s",
                                entity_id, profile["avatar_url"], reason, exc_info=True)
-                issue(profile["asset_id"], f'{profile["name"]} 的头像未取得：{reason}')
+                issue(profile["asset_id"], f'{profile["name"]} avatar not retrieved: {reason}')
                 if isinstance(error, SourcePaused) or isinstance(error.__cause__, SourcePaused):
                     break
             # 每张之后上报一次：这一段每张都要联网，不报进度就会被判成「长时间没有进展」。

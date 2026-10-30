@@ -1,4 +1,4 @@
-"""本机同类读取与资料采集的近期流量样本。"""
+"""Recent traffic samples for similar local reads and metadata collection."""
 from __future__ import annotations
 
 import json

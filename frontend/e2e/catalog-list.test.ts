@@ -106,8 +106,8 @@ describe('馆藏卡片与列表', () => {
       const { page } = opened;
       try {
         await page.locator('#grid [data-media-card]').first().waitFor({ state: 'visible' });
-        await page.getByRole('radiogroup', { name: '馆藏显示方式' }).locator('label')
-          .filter({ has: page.getByRole('radio', { name: '列表', exact: true }) }).click();
+        await page.getByRole('radiogroup', { name: 'Library view' }).locator('label')
+          .filter({ has: page.getByRole('radio', { name: 'List', exact: true }) }).click();
         await withPageDiagnostics(page, '切到列表后第一页没有出现', () =>
           page.locator('[data-catalog-row][data-id="9044"]').waitFor());
         assert.equal(await page.locator('[data-catalog-row]').count(), 20);

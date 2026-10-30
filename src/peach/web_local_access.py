@@ -1,4 +1,4 @@
-"""Web 请求的本机访问判断；配置与本地播放器共用。"""
+"""Web local-access check for requests; shared by configuration and the local player."""
 from __future__ import annotations
 
 import ipaddress
@@ -10,18 +10,18 @@ from . import distribution, tunnel
 
 
 def managed_configuration() -> bool:
-    """托盘或无桌面入口负责消费配置保存后的重载标记。"""
+    """The tray or headless entry is responsible for consuming the reload marker after a configuration save."""
     return (distribution.standalone() or os.environ.get("PEACH_TRAY_MANAGED") == "1"
             or os.environ.get("PEACH_HEADLESS_MANAGED") == "1")
 
 
 def tunnel_forwarded(request: Request) -> bool:
-    """隧道转发请求按公网来源处理。"""
+    """Tunnel-forwarded requests are treated as public-network sources."""
     return tunnel.from_edge(getattr(request.app.state, "tunnel", None), request.headers)
 
 
 def local_client(request: Request) -> bool:
-    """桌面限本机，Docker 允许本机与私有网络，拒绝代理转发。"""
+    """Desktop is limited to this machine, Docker allows this machine and private networks and rejects proxy forwarding."""
     if not request.client or tunnel_forwarded(request):
         return False
     server = request.scope.get("server")

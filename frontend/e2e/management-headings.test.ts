@@ -35,7 +35,7 @@ describe('任务中心标题排版', () => {
       assert.equal(waiting.size, '20px');
       release();
       await page.locator('[data-skeleton="board/tasks"]').waitFor({ state: 'detached' });
-      for (const title of ['正在进行', '本次未执行', '最近完成']) {
+      for (const title of ['正在进行', 'Not run this time', '最近完成']) {
         const heading = page.getByRole('heading', { name: title, exact: true });
         await heading.waitFor();
         assert.deepEqual(await heading.evaluate(read), waiting);

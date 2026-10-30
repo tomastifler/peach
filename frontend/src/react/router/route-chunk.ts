@@ -1,15 +1,15 @@
-/* 低频页面的代码按页拆成独立 chunk（ADR-0118）：路由表的首屏取数阶段与接口请求并行装载，取齐后同步画页。
+/* Low-frequency page code is split into independent per-page chunks (ADR-0118): the route table's first-screen data stage loads in parallel with API requests, and the page is drawn synchronously once everything is in.
  *
- * 不用 `React.lazy`：页面要在 `openManagedRoute` 取齐后的同一个任务里 `flushSync` 画完，lazy 组件第一次渲染
- * 总要抛一次 thenable，等于多画一帧空白。这里的 `get()` 只在 `preload()` 落地之后调用。
+ * Does not use `React.lazy`: the page must be drawn with `flushSync` in the same task once `openManagedRoute` has everything, and a lazy component's first render
+ * always throws a thenable once, which amounts to drawing one extra blank frame. Here `get()` is only called after `preload()` has landed.
  *
- * 打开页面时装载失败，可能是服务端已经换了一版产物、旧入口指着的 chunk 不在了：服务还活着就整页重载一次拿新入口，
- * 同一会话里短时间内只重载一次；服务端连不上时照常抛错，交给页面的错误边界。空闲预热失败不重载，留到打开时再试。 */
+ * A load failure when opening a page may mean the server has switched to a new build and the chunk the old entry points to is gone: if the service is still alive, reload the whole page once to pick up the new entry,
+ * reloading only once within a short time in the same session; if the server is unreachable the error is thrown as usual and handed to the page's error boundary. An idle-preload failure does not reload; it is retried when the page is opened. */
 
 export interface RouteChunk<M> {
-  /** 打开页面时装载这一页的模块。失败的那一次不记住，下次打开重试。 */
+  /** Loads this page's module when the page is opened. A failed attempt is not remembered and is retried the next time it is opened. */
   preload(): Promise<M>;
-  /** 已装载的模块；还没装上就抛错。 */
+  /** The loaded module; throws if it is not loaded yet. */
   get(): M;
 }
 
@@ -26,7 +26,7 @@ async function recoverStaleBuild(): Promise<void> {
     sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
     location.reload();
   } catch {
-    // 服务端连不上或存储不可用：不重载，错误交给调用方。
+    // Server unreachable or storage unavailable: do not reload; the error goes to the caller.
   }
 }
 
@@ -41,19 +41,19 @@ export function routeChunk<M>(load: () => Promise<M>): RouteChunk<M> {
   return {
     preload: () => attempt().catch(async (error: unknown) => { await recoverStaleBuild(); throw error }),
     get: () => {
-      if (!loaded) throw new Error('页面代码还没装载');
+      if (!loaded) throw new Error('Page code is not loaded yet');
       return loaded.module;
     },
   };
 }
 
-/** 立刻装载全部低频页。直接调用路由表 `page()` 而不经首屏取数的地方（组件测试）先等它。 */
+/** Loads all low-frequency pages immediately. Places that call the route table's `page()` directly without the first-screen data stage (component tests) wait for it first. */
 export function loadRouteChunks(): Promise<void> {
   return Promise.all(warmers.map(warm => warm())).then(() => {});
 }
 
-/** 首屏稳定后在浏览器空闲时逐个装载全部低频页，之后第一次进入这些页面不再等代码。没有
- *  `requestIdleCallback` 的环境不预热，打开时照常装载。 */
+/** Once the first screen is stable, loads all low-frequency pages one by one while the browser is idle, so the first visit to these pages no longer waits for code. Environments without
+ *  `requestIdleCallback` do not preload and load as usual on open. */
 export function warmRouteChunks(): void {
   const idle = globalThis.requestIdleCallback;
   if (typeof idle !== 'function') return;

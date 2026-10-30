@@ -32,7 +32,7 @@ export function MediaRepairCard({ toast = () => {} }: { toast?(message: string):
     start: (library) => apiSend<MediaRepairState>(MEDIA_REPAIR_URL, { library, restart: true }),
     onFinish: (result) => {
       if (result.status === 'complete' && !result.failed && !result.missing_tool) {
-        toast(result.repaired ? `已修复 ${result.repaired.toLocaleString()} 部视频` : '已检查媒体库，没有需要修复的视频');
+        toast(result.repaired ? `Repaired ${result.repaired.toLocaleString()} videos` : 'Library checked; no videos need repair');
       }
     },
   });
@@ -52,11 +52,11 @@ export function MediaRepairCard({ toast = () => {} }: { toast?(message: string):
   const start = () => {
     if (!selected) return;
     void confirmModal({
-      title: `修复媒体库「${selected.name}」`,
-      body: '缺时间戳表的片子另存一份修好的头，原文件不动；缺索引的片子重建后替换原文件，'
-        + '坏原件改名成同目录的隐藏文件（.文件名.peach-original）留着。'
-        + (selected.metered ? '这个库在计费来源上，每修一部都要把片子完整拉一遍。' : ''),
-      confirmLabel: '修复媒体库',
+      title: `Repair library "${selected.name}"`,
+      body: 'For videos missing a timestamp table, a repaired header is saved separately and the original file is untouched; for videos missing an index, the file is rebuilt and replaces the original, '
+        + 'and the broken original is renamed to a hidden file in the same folder (.filename.peach-original) and kept.'
+        + (selected.metered ? ' This library is on a metered source, so repairing each video requires pulling it in full.' : ''),
+      confirmLabel: 'Repair library',
       onConfirm: async () => { await repair.start.mutateAsync(selected.id) },
     });
   };
@@ -65,12 +65,12 @@ export function MediaRepairCard({ toast = () => {} }: { toast?(message: string):
 
   const outcome = repair.outcome;
   const line = statusLine(running ? state : outcome ?? IDLE_REPAIR);
-  const problem = action.error || outcome?.error || (repair.query.error ? '读不到媒体修复的状态' : '');
+  const problem = action.error || outcome?.error || (repair.query.error ? 'Could not read the media repair status' : '');
   return (
     <div className="flex flex-col gap-4">
       <Fieldset layout="split" label="Media repair" footer={
         <>
-          <Select aria-label="媒体库" prefix="媒体库" className="w-48" selectedKey={selected?.id ?? null}
+          <Select aria-label="Library" prefix="Library" className="w-48" selectedKey={selected?.id ?? null}
             isDisabled={running || !libraries.length}
             onSelectionChange={(key) => { if (key !== null) setChosen(String(key)); }}>
             {libraries.map((row) => (
@@ -95,7 +95,7 @@ export function MediaRepairCard({ toast = () => {} }: { toast?(message: string):
       </Fieldset>
       <div aria-live="polite" className="flex flex-col gap-4 empty:hidden">
         {outcome?.status === 'complete' && outcome.missing_tool
-          ? <Note tone="warning" title="缺少 untrunc" action={<Button variant="ghost" size="small" onClick={repair.dismiss}>关闭提示</Button>}>{missingToolText(outcome)}</Note>
+          ? <Note tone="warning" title="untrunc missing" action={<Button variant="ghost" size="small" onClick={repair.dismiss}>Dismiss notice</Button>}>{missingToolText(outcome)}</Note>
           : null}
         {problem ? <Note tone="error">{problem}</Note> : null}
       </div>

@@ -186,8 +186,8 @@ export function FollowFeedPage(props: FollowFeedProps) {
           onClear={() => route({ author: '', provider: '', work: '', tags: [], durMin: 0, durMax: 0 })} />
         {facets.broken.length ? <BrokenNote count={facets.broken.length} /> : null}
         <List key={query.queryKey.join('\u0000')} retryKey={result.dataUpdatedAt} pending={listPending} facets={facets} data={data} context={context}
-          props={props} checkAction={<Button size="small" variant="secondary" aria-label="检查每个来源的更新" aria-busy={job.busy || undefined}
-            aria-disabled={job.busy || undefined} onClick={() => { if (!job.busy) void job.start(false) }}>检查更新</Button>} />
+          props={props} checkAction={<Button size="small" variant="secondary" aria-label="Check each source for updates" aria-busy={job.busy || undefined}
+            aria-disabled={job.busy || undefined} onClick={() => { if (!job.busy) void job.start(false) }}>Check for updates</Button>} />
         {data.has_more || canBackfill ? (
           <div data-follow-pagination="">
             {data.has_more ? (
@@ -195,7 +195,7 @@ export function FollowFeedPage(props: FollowFeedProps) {
                 {data.groups.length < FOLLOW_AUTO_LOAD_LIMIT ? (
                   <LoadMore key={result.data?.pages.length} entity enabled={() => !job.busyRef.current}
                     load={async () => { await result.fetchNextPage({ throwOnError: true }) }}>
-                    <CHEVRON_DOWN className="size-(--icon-inline)" />加载更多
+                    <CHEVRON_DOWN className="size-(--icon-inline)" />Load more
                   </LoadMore>
                 ) : (
                   <ManualMore busy={result.isFetchingNextPage}
@@ -210,8 +210,8 @@ export function FollowFeedPage(props: FollowFeedProps) {
                   aria-busy={job.busy || undefined}
                   onClick={() => void job.start(true)}>
                   {job.olderBusy
-                    ? <><span className="contents" dangerouslySetInnerHTML={{ __html: spinnerHtml('抓取中') }} /><span>抓取中</span></>
-                    : '抓更早的一页'}
+                    ? <><span className="contents" dangerouslySetInnerHTML={{ __html: spinnerHtml('Fetching') }} /><span>Fetching</span></>
+                    : 'Fetch an earlier page'}
                 </Button>
                 <span data-follow-backfill="">{backfillState(facets.sources)}</span>
               </span>
@@ -230,7 +230,7 @@ function Head({ children }: { children?: ReactNode }) {
       <h2 data-follow-title="">Follow</h2>
       <span data-follow-head-actions="">
         <ButtonLink variant="secondary" leadingIcon={SETTINGS} data-follow-manage="" href={manageHref()}>
-          管理关注
+          Manage follows
         </ButtonLink>
         {children}
       </span>
@@ -244,7 +244,7 @@ function ManualMore({ busy, error, load }: { busy: boolean; error: string; load(
   return (
     <>
       <button type="button" data-entity-more="" aria-busy={busy || undefined} aria-disabled={busy || undefined} onClick={load}>
-        <CHEVRON_DOWN className="size-(--icon-inline)" />加载更多
+        <CHEVRON_DOWN className="size-(--icon-inline)" />Load more
       </button>
       {error ? <RetryNote message={error} onRetry={load} /> : null}
     </>
@@ -532,12 +532,12 @@ function Combo({ conditions, onDrop, onClear }: {
 function BrokenNote({ count }: { count: number }) {
   return (
     <div data-follow-broken="" dangerouslySetInnerHTML={{
-      __html: `<div class="geist-note geist-note-error fwarn" role="alert">${icon('alert')}<span>${count} 个来源上次检查失败，去<a class="flink" href="${esc(manageHref())}" data-follow-manage>管理关注</a>看原因。</span></div>`,
+      __html: `<div class="geist-note geist-note-error fwarn" role="alert">${icon('alert')}<span>${count} sources failed their last check; go to <a class="flink" href="${esc(manageHref())}" data-follow-manage>Manage follows</a> to see why.</span></div>`,
     }} />
   );
 }
 
-/** 管理页入口随当前地址算：旧地址上的 `tab` 仍按 `followManageEntry` 的约定改道。 */
+/** The manage-page entry is computed from the current address: a `tab` on an old address is still rerouted by the `followManageEntry` convention. */
 const manageHref = () => followManageEntry(window.location.search);
 
 /* ── 列表 ── */
@@ -606,11 +606,11 @@ function Empty({ data, filtered, clear, checkAction }: {
   const noMatch = !!data.groups.length || filtered;
   const hasSources = !!data.sources.length;
   return <div data-follow-empty="" className="contents"><EmptyState icon={spriteGlyph(noMatch ? 'search-x' : 'rss')}
-    title={noMatch ? '当前筛选下没有更新' : hasSources ? '还没有更新' : '还没有关注任何来源'}
-    actions={noMatch ? <Button size="small" onClick={clear}>清除筛选</Button>
-      : hasSources ? checkAction : <ButtonLink size="small" href="/subscriptions?tab=add">添加关注</ButtonLink>}>
-    {noMatch ? '切换媒体类型、创作者、来源、时长或标签后再试。'
-      : hasSources ? '检查来源更新后，新内容会集中显示在这里。' : '添加创作者或订阅来源后，更新会集中显示在这里。'}
+    title={noMatch ? 'No updates under the current filters' : hasSources ? 'No updates yet' : 'Not following any sources yet'}
+    actions={noMatch ? <Button size="small" onClick={clear}>Clear filters</Button>
+      : hasSources ? checkAction : <ButtonLink size="small" href="/subscriptions?tab=add">Add follow</ButtonLink>}>
+    {noMatch ? 'Change the media type, creator, source, duration or tag and try again.'
+      : hasSources ? 'After checking sources for updates, new content will appear here.' : 'After adding a creator or subscribing to a source, updates will appear here.'}
   </EmptyState></div>;
 }
 

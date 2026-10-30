@@ -1,4 +1,4 @@
-/* 「存储空间」：勾选几类一起清理或全部清理，不能清理的写明原因；统计中按上次的文件数报进度；
+/* 「Storage」：勾选几类一起清理或全部清理，不能清理的写明原因；统计中按上次的文件数报进度；
  * 容器部署给出宿主机上的迁移步骤。 */
 import { expect, it, vi } from 'vitest';
 import * as legacyUi from '@peach/legacy/ui';
@@ -19,7 +19,7 @@ const measured: StorageState = {
       category('database', '数据库', 2 ** 30, 0, false, 'Peach 的全部资料都在这里'),
       category('backups', '数据库备份', 2 ** 30, 2 ** 29, true, '更早的无法再恢复'),
       category('playback', '播放缓存', 2 ** 30, 2 ** 30, true, '再次播放时重新转码'),
-      category('previews', '预览图', 2 ** 30, 0, false, '重建要重新读取整部影片'),
+      category('previews', 'Previews', 2 ** 30, 0, false, '重建要重新读取整部影片'),
       category('logs', '日志', 2 ** 20, 0, true, '只清理已归档的日志'),
     ],
   },
@@ -49,15 +49,15 @@ it('不能清理的勾选框禁用并写明原因，勾几类一起清，全部�
   const host = await mount(<StorageSettings initial={measured} receipt={vi.fn()} />);
 
   expect(box(host, 'database').disabled).toBe(true);
-  expect(host.querySelector('[data-category="previews"]')!.textContent).toContain('不能清理：重建要重新读取整部影片');
+  expect(host.querySelector('[data-category="previews"]')!.textContent).toContain('Cannot be cleaned: 重建要重新读取整部影片');
   expect(box(host, 'logs').disabled).toBe(true);
-  expect(host.querySelector('[data-category="logs"]')!.textContent).toContain('没有可以清理的文件');
-  expect(host.querySelector('[data-category="playback"]')!.textContent).toContain('清理后再次播放时重新转码');
-  expect(buttonNamed('清理所选', host)!.disabled).toBe(true);
+  expect(host.querySelector('[data-category="logs"]')!.textContent).toContain('No files that can be cleaned');
+  expect(host.querySelector('[data-category="playback"]')!.textContent).toContain('After cleanup: 再次播放时重新转码');
+  expect(buttonNamed('Clean selected', host)!.disabled).toBe(true);
 
   await click(box(host, 'playback'));
-  expect(host.textContent).toContain('已选 1 类，可释放 1.0 GB');
-  await click(buttonNamed('清理所选', host));
+  expect(host.textContent).toContain('Selected 1 categories, can free 1.0 GB');
+  await click(buttonNamed('Clean selected', host));
   await settle();
   expect(seen[0]!.danger).toBe(false);
   expect(sentBody(fetcher)).toEqual({ categories: ['playback'] });
@@ -66,11 +66,11 @@ it('不能清理的勾选框禁用并写明原因，勾几类一起清，全部�
   const again = await mount(<StorageSettings initial={measured} receipt={vi.fn()} />);
   const all = fetchMock(200, measured);
   vi.stubGlobal('fetch', all);
-  await click(buttonNamed('全部清理', again));
+  await click(buttonNamed('Clean all', again));
   await settle();
   // 备份在里面时确认框是危险样式；正文逐类写清理后会怎样。
   expect(seen[1]!.danger).toBe(true);
-  expect(String(seen[1]!.body)).toContain('数据库备份 512 MB（清理后更早的无法再恢复）');
+  expect(String(seen[1]!.body)).toContain('数据库备份 512 MB (after cleanup: 更早的无法再恢复)');
   expect(sentBody(all)).toEqual({ categories: ['backups', 'playback'] });
 });
 
@@ -82,8 +82,8 @@ it('统计中按上次的文件数画进度，读数是已走过的文件与大�
   const host = await mount(<StorageSettings initial={measuring} receipt={vi.fn()} />);
   const bar = host.querySelector('[role="progressbar"]')!;
   expect([bar.getAttribute('aria-valuenow'), bar.getAttribute('aria-valuemax')]).toEqual(['120', '300']);
-  expect(host.textContent).toContain('已统计 120 个文件 · 1.0 GB，上次共 300 个');
-  expect(buttonNamed('全部清理', host)!.disabled).toBe(true);
+  expect(host.textContent).toContain('Counted 120 files · 1.0 GB, last time 300 in total');
+  expect(buttonNamed('Clean all', host)!.disabled).toBe(true);
 });
 
 it('容器部署不给更改位置，列出在宿主机上迁移的几步', async () => {
@@ -96,8 +96,8 @@ it('容器部署不给更改位置，列出在宿主机上迁移的几步', asyn
     },
   };
   const host = await mount(<StorageSettings initial={docker} receipt={vi.fn()} />);
-  expect(buttonNamed('更改位置', host)!.disabled).toBe(true);
-  const steps = host.querySelector('ol[aria-label="在宿主机上迁移"]')!;
+  expect(buttonNamed('Change location', host)!.disabled).toBe(true);
+  const steps = host.querySelector('ol[aria-label="Move on the host"]')!;
   expect([...steps.querySelectorAll('code')].map((node) => node.textContent))
     .toEqual(['docker compose down', 'docker compose up -d']);
 });

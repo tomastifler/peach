@@ -1,4 +1,4 @@
-"""保存扫描已登记、尚未交给资料处理的新影片范围。"""
+"""Save the range of new movies registered by a scan but not yet handed to metadata processing."""
 from contextlib import closing
 import json
 from pathlib import Path
@@ -30,7 +30,7 @@ def _read(db):
         completed = {int(key.split(':',1)[0]) for key in state.get('completed_metadata', [])}
         ids = [value for value in ids if value not in completed]
     if not isinstance(ids,list) or any(type(value) is not int or value<=0 for value in ids):
-        raise ValueError('新入库处理范围无效，请重新扫描媒体库')
+        raise ValueError('Invalid new-import processing scope; please rescan the media library')
     return set(ids)
 
 

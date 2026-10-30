@@ -154,11 +154,11 @@ class DownloadPostprocessTests(unittest.TestCase):
     def test_collection_that_steps_aside_stays_queued_instead_of_failed(self):
         self.handle.run_id = 123
         self.contract.task_runs = Mock()
-        with patch.object(post, '_collect', side_effect=JobDeferred('等待扫描与采集完成后继续')):
+        with patch.object(post, '_collect', side_effect=JobDeferred('Waiting for scanning and collection to finish before continuing')):
             with self.assertRaises(JobDeferred):
                 self.run_task()
         task = self.store.get(self.task.id)
-        self.assertEqual((task.postprocess_state, task.postprocess_detail), ('queued', '等待扫描与采集完成后继续'))
+        self.assertEqual((task.postprocess_state, task.postprocess_detail), ('queued', 'Waiting for scanning and collection to finish before continuing'))
         self.contract.task_runs.enqueue_followups.assert_not_called()
 
     def test_metadata_or_organization_failure_never_dispatches_followups(self):

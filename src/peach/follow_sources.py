@@ -402,7 +402,7 @@ _PAHEAL_LIST_RE = re.compile(r"^/post/list/([^/]+)/\d+$")
 
 
 def canonical_source_ref(provider: str, ref: str) -> str:
-    """来源的稳定身份；booru 标签与 Iwara 用户名忽略大小写。"""
+    """Stable identity of a source; booru tags and Iwara usernames ignore case."""
     value = str(ref or "").strip()
     return value.casefold() if provider in {"rule34xxx", "rule34paheal", "iwara"} else value
 
@@ -772,7 +772,7 @@ class _BaseConnector:
 
 
 class IwaraConnector(_BaseConnector):
-    """Iwara 作者视频列表及播放格式；协议依据见 docs/REUSE.md。"""
+    """Iwara creator video list and playback formats; the protocol basis is in docs/REUSE.md."""
 
     provider = "iwara"
     API_ROOT = "https://apiq.iwara.tv"
@@ -790,7 +790,7 @@ class IwaraConnector(_BaseConnector):
         matched = re.fullmatch(r"/profile/([A-Za-z0-9_-]{1,80})(?:/videos)?/?",
                                parsed.path)
         if host not in {"iwara.tv", "ecchi.iwara.tv"} or not matched:
-            raise FollowSourceError("Iwara 请粘贴作者主页，例如 https://www.iwara.tv/profile/username")
+            raise FollowSourceError("Iwara Please paste the creator's profile page, for example https://www.iwara.tv/profile/username")
         ref = matched.group(1).casefold()
         return ParsedSource(provider, ref, f"https://www.iwara.tv/profile/{ref}", ref)
 
@@ -810,36 +810,36 @@ class IwaraConnector(_BaseConnector):
     def _check_status(self, response):
         if response.status in (401, 403):
             raise FollowSourceError(
-                f"Iwara 拒绝访问（HTTP {response.status}）：登录凭据可能已过期，"
-                "或站点要求浏览器验证，请核对来源与订阅设置")
+                f"Iwara denied access (HTTP {response.status}): login credentials may have expired, "
+                "or the site requires browser verification; please check the source and subscription settings")
         if response.status == 404:
-            raise FollowSourceError("Iwara 作者或视频未取得：可能已删除或需要有访问权的账号")
+            raise FollowSourceError("Iwara creator or video not retrieved: it may have been deleted or require an account with access")
         super()._check_status(response)
 
     def _object(self, response):
         payload = self.parse_json(response)
         if not isinstance(payload, dict):
-            raise FollowSourceError("Iwara 接口响应格式不符")
+            raise FollowSourceError("Iwara API response format mismatch")
         if payload.get("message"):
             code = str(payload["message"])
             if code in {"errors.privateVideo", "errors.notFound", "errors.unauthorized"}:
-                raise FollowSourceError("Iwara 内容未取得：请确认账号有访问权并更新登录凭据")
-            raise FollowSourceError("Iwara 接口拒绝请求，请在来源页面核对内容状态")
+                raise FollowSourceError("Iwara content not retrieved: please confirm the account has access and update login credentials")
+            raise FollowSourceError("Iwara API rejected the request; please check the content status on the source page")
         return payload
 
     def fetch(self, ref, *, etag=None, last_modified=None, page=0):
         handle = self.profile_handle(ref).casefold()
         if not handle:
-            raise FollowSourceError("Iwara 的 ref 必须是作者用户名")
+            raise FollowSourceError("Iwara ref must be the creator's username")
         if int(page) < 0:
-            raise FollowSourceError("Iwara 页码不能小于 0")
+            raise FollowSourceError("Iwara page number must not be less than 0")
         profile = self.fetch_json(f"{self.API_ROOT}/profile/{handle}")
         if not isinstance(profile, dict) or not isinstance(profile.get("user"), dict):
-            raise FollowSourceError("Iwara 作者资料格式不符")
+            raise FollowSourceError("Iwara creator profile format mismatch")
         user = profile["user"]
         user_id = str(user.get("id") or "")
         if not re.fullmatch(r"[A-Za-z0-9-]{1,80}", user_id):
-            raise FollowSourceError("Iwara 作者 ID 未取得")
+            raise FollowSourceError("Iwara creator ID not retrieved")
         url = self.API_ROOT + "/videos?" + urllib.parse.urlencode({
             "user": user_id, "page": int(page), "limit": self.PAGE_SIZE,
             "sort": "date", "rating": "all"})
@@ -850,9 +850,9 @@ class IwaraConnector(_BaseConnector):
         payload = self._object(response)
         rows = payload.get("results")
         if not isinstance(rows, list):
-            raise FollowSourceError("Iwara 视频列表格式不符")
+            raise FollowSourceError("Iwara video list format mismatch")
         if page and not rows:
-            raise FollowHistoryEnd("没有更多历史内容")
+            raise FollowHistoryEnd("No more history")
         candidates = []
         seen = set()
         for row in rows[:self.max_items]:
@@ -864,9 +864,9 @@ class IwaraConnector(_BaseConnector):
         return SourceFetch(candidates=tuple(candidates), raw_body=response.body, **common)
 
     def _candidate(self, row, user, handle):
-        """把列表字段映射为稳定 DTO，不保存短效文件地址。"""
+        """Map list fields to a stable DTO, and do not store short-lived file addresses."""
         if not isinstance(row, dict) or not self._VIDEO_ID_RE.fullmatch(str(row.get("id") or "")):
-            raise FollowSourceError("Iwara 视频条目缺少有效 ID")
+            raise FollowSourceError("Iwara video entry lacks a valid ID")
         video_id = row["id"]
         file = row.get("file") if isinstance(row.get("file"), dict) else {}
         file_id = str(file.get("id") or "")
@@ -876,7 +876,7 @@ class IwaraConnector(_BaseConnector):
         url = f"https://www.iwara.tv/video/{video_id}"
         extra = {"media_kind": "video", **self._tag_metadata(row.get("tags"))}
         if row.get("embedUrl"):
-            extra["media_error"] = "Iwara 此条目使用外部播放器，请打开来源页面观看"
+            extra["media_error"] = "Iwara this entry uses an external player; please open the source page to watch"
         return FollowCandidate(
             provider=self.provider, external_id=video_id,
             title=plain_text(str(row.get("title") or "")) or video_id,
@@ -888,7 +888,7 @@ class IwaraConnector(_BaseConnector):
 
     @staticmethod
     def _tag_metadata(value):
-        """仅接纳上游明确的 general 类型，其他类型保留原值。"""
+        """Accept only the general type explicitly stated upstream; other types keep their original value."""
         rows = value if isinstance(value, list) else []
         tags = [tag for tag in rows if isinstance(tag, dict)
                 and isinstance(tag.get("id"), str)]
@@ -918,22 +918,22 @@ class IwaraConnector(_BaseConnector):
             return False
 
     def playback_formats(self, video_id):
-        """播放时取得短效格式清单；凭据只发送到固定 API。"""
+        """Fetch the short-lived format list at playback time; credentials are sent only to the fixed API."""
         if not self._VIDEO_ID_RE.fullmatch(str(video_id or "")):
-            raise FollowSourceError("Iwara 视频 ID 无效")
+            raise FollowSourceError("Iwara video ID is invalid")
         response = self._get(f"{self.API_ROOT}/video/{video_id}")
         self._check_status(response)
         detail = self._object(response)
         file_url = str(detail.get("fileUrl") or "")
         if not file_url:
-            raise FollowSourceError("Iwara 正片地址未取得，请打开来源页面核对访问权")
+            raise FollowSourceError("Iwara main feature address not retrieved; please open the source page to check access")
         if not self.media_url_allowed(file_url):
-            raise FollowSourceError("Iwara 返回了不受信任的文件接口地址")
+            raise FollowSourceError("Iwara returned an untrusted file API address")
         parsed = urllib.parse.urlsplit(file_url)
         expires = urllib.parse.parse_qs(parsed.query).get("expires", [""])[0]
         if not expires.isdecimal():
-            raise FollowSourceError("Iwara 文件接口缺少有效期限")
-        # yt-dlp IwaraIE 的公开文件接口签名，固定 revision 见 docs/REUSE.md。
+            raise FollowSourceError("Iwara file API lacks a valid expiry")
+        # yt-dlp IwaraIE 's public file API signature; the pinned revision is in docs/REUSE.md.
         key = "_".join((parsed.path.rstrip("/").rsplit("/", 1)[-1], expires,
                         "mSvL05GfEmeEmsEYfGCnVpEjYgTJraJN"))
         response = self._get(file_url, connector_headers=False,
@@ -941,7 +941,7 @@ class IwaraConnector(_BaseConnector):
         self._check_status(response)
         rows = self.parse_json(response)
         if not isinstance(rows, list):
-            raise FollowSourceError("Iwara 播放格式清单不符")
+            raise FollowSourceError("Iwara playback format list mismatch")
         formats = []
         file = detail.get("file") if isinstance(detail.get("file"), dict) else {}
         source_height = file.get("height")
@@ -957,7 +957,7 @@ class IwaraConnector(_BaseConnector):
                 int(source_height) if name == "Source" and str(source_height).isdecimal() else 0)
             formats.append((level, value, name == "Source"))
         if not formats:
-            raise FollowSourceError("Iwara 正片格式未取得")
+            raise FollowSourceError("Iwara main feature format not retrieved")
         return tuple((level, value) for level, value, _ in sorted(
             formats, key=lambda entry: (entry[2], entry[0]), reverse=True))
 

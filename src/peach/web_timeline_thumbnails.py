@@ -79,7 +79,7 @@ def q_timeline(contract, args):
 
 
 def external_timeline(contract, asset_id: int) -> timeline_sources.Timeline | None:
-    """已有预览只读配对到具体资产；短时缓存索引，不读取视频内容。"""
+    """Existing previews are paired read-only to specific assets; the index is cached briefly and video content is not read."""
     def read():
         try:
             with contract.read_connection() as connection:

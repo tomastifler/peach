@@ -1,5 +1,5 @@
-# amane 桥的独立清单（ADR-0043）。amane 的传递依赖由本目录的 `uv.lock` 完整锁定，
-# 独立于 Peach 主 venv。桌面与 Docker 在构建时准备随包环境；源码部署在数据目录按锁准备。
+# Standalone manifest for the amane bridge (ADR-0043). amane's transitive dependencies are fully pinned by this directory's `uv.lock`,
+# independent of Peach's main venv. Desktop and Docker prepare the bundled environment at build time; source deployments prepare it from the lock in the data directory.
 #
 # 唯一直接依赖是 amane 的一个 revision。升级是人做的事：改这里的 sha，跑
 # `uv lock --project tools/amane-bridge`，读上游 diff 确认站点解析器的字段语义没变，

@@ -5,7 +5,7 @@
  * 起来（同遗留层 `revealSkeleton`），骨架还没到显示门槛就取完的直接落内容。
  *
  * 网格每接一页经 `onCount` 报一次总数与显示的卡数，读数画在首页筛选条（`catalog-filter` 岛）的
- * 下排。无限滚动见下面的 `LoadMore`：哨兵进入视口下方一屏
+ * the lower row. Infinite scrolling is `LoadMore` below: the sentinel enters one screen below the viewport
  * 内自动取下一页，点它等于手动取；失败在哨兵后面留一条可重试的 Note，之后只有手动才重试。 */
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useInfiniteQuery, type InfiniteData, type QueryKey } from '@tanstack/react-query';
@@ -43,7 +43,7 @@ function Icon({ name }: { name: string }) {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><use href={`#i-${name}`} /></svg>;
 }
 
-/** 元信息按实际网格列数选择固定或自然高度。 */
+/** Meta info uses fixed or natural height depending on the actual number of grid columns. */
 function MediaGrid({ children, selectMode }: { children: ReactNode; selectMode?: boolean }) {
   const grid = useRef<HTMLDivElement>(null);
   const [single, setSingle] = useState(false);
@@ -138,9 +138,9 @@ function GridBody(props: CatalogGridProps) {
     (item: MediaItem, anchor: HTMLElement) => actions.openResource(item, anchor), [actions]);
   const openShort = useCallback((item: MediaItem) => actions.openShort(item), [actions]);
 
-  /* 续页压过后台重读：结果版本一变，壳会作废这份查询，无限查询随即把已接上的每一页按顺序重取
-     一遍。续页若搭这一趟的车，就得等它取完全部 N 页，而且等完也不会多出一页。所以续页先停掉
-     路上的重读、直接取下一页；被停掉的那次刷新等下一次结果版本变化再补。 */
+  /* Continuation pages override the background re-read: when the result version changes, the shell invalidates this query, and the infinite query then refetches every page already attached
+     in order. If the continuation rode along with that trip, it would have to wait for all N pages to be fetched, and would not gain a page even after waiting. So the continuation first stops
+     the re-read on the way and fetches the next page directly; the interrupted refresh is made up on the next result version change. */
   const loadNext = useCallback(async () => {
     const next = await result.fetchNextPage();
     if (next.isFetchNextPageError) throw next.error;
@@ -231,8 +231,8 @@ export function LoadMore({ entity, load, enabled, children }: {
     } finally {
       busy.current = false;
     }
-    /* 这一趟没接上新页（例如被并进别的取数）时哨兵不会重挂，而一直待在视口里的哨兵不会再收到
-       相交通知：重新观察一次，让观察器按当前位置再判一遍。 */
+    /* When this trip did not attach a new page (for example, it was merged into another fetch), the sentinel is not re-mounted, and a sentinel that stays in the viewport receives no more
+       intersection notifications: observe once again so the observer re-judges by the current position. */
     const watching = observer.current;
     if (!failed.current && watching && node.current?.isConnected) {
       watching.unobserve(node.current);
@@ -264,8 +264,8 @@ export function LoadMore({ entity, load, enabled, children }: {
 }
 
 /** 竖屏带：每接一页请求一条，落点在这一页新增的那几行之间的行边界上随机取一个。
- *  请求跟着主列表的筛选与排序走；一条都没有、或这一页剪不出行边界，偏移量按遗留层归零或不动。
- *  分卷与版本按主网格同一个开关折叠（`collapseGroups`），一组跨几条带也只留第一次出现的那一张。 */
+ *  The request follows the main list's filters and sorting; if there is none, or this page cannot be cut at a row boundary, the offset is reset or left unchanged by the legacy layer.
+ *  Volumes and editions are collapsed under the same toggle as the main grid (`collapseGroups`); a group that spans several bands keeps only the first one that appears. */
 function useShortsStrips(
   props: CatalogGridProps, data: InfiniteData<GridPage, number> | undefined,
   tiles: readonly Tile[], pageStarts: readonly number[], body: RefObject<HTMLElement | null>,
@@ -303,7 +303,7 @@ function useShortsStrips(
     const addedFrom = Math.max(0, (pageStarts[arrived.page] ?? 0) - start);
     const boundaries = shortsBoundaries(tiles.length - start, addedFrom, columns);
     if (!boundaries.length) return;
-    /* 落点定了才折叠：剪不出落点的这一批下次照原偏移量重取，不能先记成已出现。 */
+    /* Fold only after the landing point is settled: a batch that cannot be cut at a landing point is refetched next time at the original offset, and must not be recorded as already seen. */
     const items = collapseGroups(arrived.items, seen.current, props.groupCollapse !== false);
     offset.current = arrived.more ? offset.current + SHORTS_BATCH : 0;
     if (!items.length) return;

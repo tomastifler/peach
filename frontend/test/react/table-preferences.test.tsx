@@ -3,7 +3,7 @@ import { beforeEach, expect, it } from 'vitest';
 import { useTablePreferences } from '../../src/react/components/table-column-preferences';
 import { mountRoot } from './render';
 
-const columns = [{ id: 'name', label: '名称', width: 280, required: true }, { id: 'extra', label: '补充', width: 160 }];
+const columns = [{ id: 'name', label: 'Name', width: 280, required: true }, { id: 'extra', label: '补充', width: 160 }];
 let first!: ReturnType<typeof useTablePreferences>, second!: ReturnType<typeof useTablePreferences>;
 function Probe() { first = useTablePreferences('first', columns); second = useTablePreferences('second', columns); return null }
 beforeEach(() => localStorage.clear());

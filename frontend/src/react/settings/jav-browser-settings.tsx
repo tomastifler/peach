@@ -23,7 +23,7 @@ export function JavBrowserSettings({ receipt, refreshKey }: { receipt(message: s
   const query = useQuery({ queryKey: ['jav-browser-settings', refreshKey],
     queryFn: ({ signal }) => apiGet<State>(URL, signal), refetchOnMount: 'always', refetchOnWindowFocus: 'always' });
   if (query.error && !query.data) return <ErrorText>{errorMessage(query.error)}</ErrorText>;
-  if (query.isFetching && !query.data) return <SectionSkeleton label="正在读取浏览器添加设置" html={javBrowserSkeleton} />;
+  if (query.isFetching && !query.data) return <SectionSkeleton label="Loading browser add settings" html={javBrowserSkeleton} />;
   return query.data ? <BrowserForm initial={query.data} receipt={receipt} /> : null;
 }
 
@@ -33,7 +33,7 @@ function BrowserForm({ initial, receipt }: { initial: State; receipt(message: st
   const [token, setToken] = useState('');
   const action = useAction();
   useEffect(() => {
-    /* 启用与否决定底栏几颗键，渠道就绪与否决定那句提示在不在：下次骨架照这个结构画。 */
+    /* Whether it is enabled decides how many keys are in the bottom bar, and whether a channel is ready decides whether that hint appears: the next skeleton is drawn in that structure. */
     rememberShape('javBrowser', { enabled: initial.enabled,
       ready: initial.providers.some(item => item.key === initial.provider && item.configured && item.target) });
     setState(initial);
@@ -54,27 +54,27 @@ function BrowserForm({ initial, receipt }: { initial: State; receipt(message: st
     <Stack>
       <div className="flex min-w-0 flex-col gap-4">
       <UserscriptStatus enabled={state.enabled} release={state.userscript} />
-      <div className="flex flex-col gap-1"><FieldLabel>浏览器添加的下载渠道</FieldLabel>
-      <Select aria-label="浏览器添加的下载渠道" selectedKey={provider || null} placeholder="暂无可用渠道"
+      <div className="flex flex-col gap-1"><FieldLabel>Download channel for browser adds</FieldLabel>
+      <Select aria-label="Download channel for browser adds" selectedKey={provider || null} placeholder="No channel available"
         onSelectionChange={key => { if (key !== null) setProvider(String(key)); }}
         isDisabled={!state.providers.length || Boolean(action.busy)}>
         {state.providers.map(item => <SelectItem key={item.key} id={item.key} textValue={item.label}>
           <SourceLabel source={item.key} label={item.label} />
         </SelectItem>)}
       </Select></div>
-      {!ready ? <Help>请在媒体库中添加支持云下载的网盘，并配置账号与目标目录。</Help> : null}
+      {!ready ? <Help>Add a cloud drive that supports cloud download to a library, and configure the account and target folder.</Help> : null}
       {state.problems?.map(problem => <Help key={problem}>{problem}</Help>)}
       {state.enabled && state.active_provider && !state.providers.some(item => item.key === state.active_provider)
-        ? <Help>已启用的下载渠道不可用，请选择渠道并更新令牌。</Help> : null}
-      <Input label="Peach 地址" value={window.location.origin} isReadOnly autoComplete="off" />
+        ? <Help>The enabled download channel is unavailable; choose a channel and update the token.</Help> : null}
+      <Input label="Peach address" value={window.location.origin} isReadOnly autoComplete="off" />
       {token ? <>
         <Input label="Browser add dedicated token" type="password" value={token} isReadOnly autoComplete="new-password" />
         <div><Button variant="secondary" type="button" onClick={() => {
           void action.run('copy', async () => navigator.clipboard.writeText(JSON.stringify({
             peach_pairing: 1, base: window.location.origin, token,
-          })), () => receipt('已复制配对信息'));
-        }} {...busyProps(action.busy === 'copy')}>复制配对信息</Button></div>
-        <Help>在用户脚本设置的「Peach 地址」中粘贴配对信息，即可填好地址与令牌。</Help>
+          })), () => receipt('Pairing info copied'));
+        }} {...busyProps(action.busy === 'copy')}>Copy pairing info</Button></div>
+        <Help>Paste the pairing info into "Peach address" in the userscript settings to fill in the address and token.</Help>
       </> : null}
       </div>
       {action.error ? <ErrorText>{action.error}</ErrorText> : null}

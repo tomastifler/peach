@@ -107,7 +107,7 @@ class FollowUpdateScheduler:
         self._last_checked = 0
         self._last_added = 0
         self._consecutive_failures = 0
-        #: 这一串连续失败里第一轮的开始时刻；成功一轮就清空。
+        #: Start time of the first round in this run of consecutive failures; cleared when a round succeeds.
         self._failing_since: str | None = None
 
     def start(self) -> None:
@@ -133,18 +133,18 @@ class FollowUpdateScheduler:
         return self.status()
 
     def run_now(self) -> dict:
-        """把下一轮提前到此刻，由调度线程照常跑完并结算失败计数。
+        """Pull the next round forward to now; the scheduler thread runs it as usual and settles the failure count.
 
-        手动检查走的是另一条路，不碰这里的 `last_error`；重试自动检查的失败只能让
-        这个任务自己再跑一轮。之后的轮次从这一轮起按原间隔排。
+        Manual checks take a different path and do not touch the `last_error`; retrying a failed automatic check can only make
+        this task run one more round by itself. Rounds after that are scheduled from this round at the original interval.
         """
         if not self.available:
             raise ValueError(self.unavailable_message)
         if not self._started or not self.config.enabled:
-            raise ValueError("自动运行没有开启")
+            raise ValueError("Automatic running is not enabled")
         with self._state_lock:
             already = self._running
-            # 提前标成运行中：调度线程领走这一轮之前，读状态的人不该再看到旧的失败。
+            # Mark as running in advance: before the scheduler thread claims this round, readers of the state must not still see the old failure.
             self._running = True
         if already:
             return self.status()
@@ -153,7 +153,7 @@ class FollowUpdateScheduler:
         except JobLookupError:
             with self._state_lock:
                 self._running = False
-            raise ValueError("自动运行没有开启") from None
+            raise ValueError("Automatic running is not enabled") from None
         return self.status()
 
     def _apply_job(self) -> None:

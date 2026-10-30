@@ -69,7 +69,7 @@ const playlistPage = { items: [] };
 /** 垃圾队列的一页：名字带着分类，认得出画的是哪一次取回来的。 */
 const junkPage = (kind: string) => ({
   items: [11, 12, 13].map((id) => ({
-    id, name: `垃圾 ${id} ${kind || '全部'}.mp4`, junk_kind: kind || 'video', why: '时长过短', location: 'local', cost: 'free',
+    id, name: `垃圾 ${id} ${kind || 'All'}.mp4`, junk_kind: kind || 'video', why: '时长过短', location: 'local', cost: 'free',
   })),
   total: 3, all_total: 3, dismissed_total: 0, counts: { video: 3 },
 });
@@ -85,7 +85,7 @@ function catalogFetch({ deferred = false } = {}) {
     if (!deferred || url.pathname !== '/api/items') return Promise.resolve(reply(body));
     return new Promise<Reply>((resolve, reject) => {
       pending.push(() => resolve(reply(body)));
-      init?.signal?.addEventListener('abort', () => { reject(new DOMException('已中止', 'AbortError')) });
+      init?.signal?.addEventListener('abort', () => { reject(new DOMException('Aborted', 'AbortError')) });
     });
   });
   vi.stubGlobal('fetch', fetched);

@@ -1,8 +1,8 @@
 /* 走出 Peach 的那一枚标（`icon('external-link', 'ui-externalmark')`），全站一个写法。
    2026-09-06 实测 vercel.com/geist/colors 的 `Learn More`：14px/20px 的文字配 16×16 图标、
    紧跟文字 2px、与文字行居中、颜色就是链接自己的 currentColor
-   （docs/reference-snapshots/vercel-geist-external-link-mark.md）。尺寸取全站行内字形
-   `--icon-inline`（1.2em），与 React 侧 `RiExternalLinkLine` 同大，12px 小字旁边它也跟着小、比例不变。
+   (docs/reference-snapshots/vercel-geist-external-link-mark.md). The size takes the site-wide inline glyph
+   `--icon-inline` (1.2em), the same as the React-side `RiExternalLinkLine`; next to 12px small text it also shrinks, with the proportion unchanged.
    全站只有这一条，页面各自不再调档：这一枚每次说的都是同一件事，尺寸和间距按页面
    分档的话，同一个意思就有八个长相，并排放着像是八种不同的标。
    间距只由所在链接的 gap 说：挂在标自己身上会和容器的 gap 叠起来。 */

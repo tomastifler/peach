@@ -160,7 +160,7 @@ class SubmitTests(_Server):
         self.assertEqual(self.provider.status(task).state, dl.RUNNING)
         self.fake.files.add(f"{TARGET}/ABC-123")
         self.assertEqual(self.provider.status(task).state, dl.DONE)
-        with self.assertRaisesRegex(dl.DownloadError, "到网盘中处理"):
+        with self.assertRaisesRegex(dl.DownloadError, "handle it in the cloud drive"):
             self.provider.cancel(task)
         self.assertNotIn("RemoveOfflineFiles", self.methods())
 

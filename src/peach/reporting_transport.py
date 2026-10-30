@@ -1,4 +1,4 @@
-"""复用固定版 Sentry HTTP 传输，记录有界传输结果并阻止测试外发。"""
+"""Reuse the pinned Sentry HTTP transport, record bounded transport results and block outbound sends from tests."""
 from __future__ import annotations
 
 import os
@@ -45,7 +45,7 @@ def transport_class(gate, callback):
 
         def _request(self, method, endpoint_type, body, headers):
             if os.environ.get("PEACH_REPORTING_TEST_MODE") == "1":
-                raise OSError("测试进程禁止远程诊断外发")
+                raise OSError("Test processes must not send remote diagnostics outbound")
             with http_client(timeout=self.TIMEOUT, follow_redirects=False) as client:
                 response = client.request(method, self._auth.get_api_url(endpoint_type),
                                           content=body, headers=headers)

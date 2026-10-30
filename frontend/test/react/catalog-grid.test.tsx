@@ -122,7 +122,7 @@ describe('续页', () => {
       if (!hold || offset !== 0) return Promise.resolve(reply(body));
       return new Promise<Reply>((resolve, reject) => {
         held.push(() => resolve(reply(body)));
-        init?.signal?.addEventListener('abort', () => { reject(new DOMException('已中止', 'AbortError')) });
+        init?.signal?.addEventListener('abort', () => { reject(new DOMException('Aborted', 'AbortError')) });
       });
     });
     vi.stubGlobal('fetch', fetcher);
@@ -158,7 +158,7 @@ describe('续页', () => {
     const filters = { sort: 'seed', q: '续页压过重读' };
     const host = await mount(<QueryClientProvider client={queryClient}><CatalogGridPage {...props(filters)} /></QueryClientProvider>);
     await until(() => cards(host) === 3, '第一页');
-    expect(host.querySelector('[data-load-more]')?.textContent, '三颗点已经在动，字不带省略号').toBe('载入中');
+    expect(host.querySelector('[data-load-more]')?.textContent, '三颗点已经在动，字不带省略号').toBe('Loading');
     await FakeObserver.latest().near();
     await until(() => cards(host) === 6, '第二页');
 
@@ -194,7 +194,7 @@ describe('续页', () => {
       const badges = cardsInStrip.map((card) => card.querySelector('[data-media-group]')?.textContent || '');
       if (collapse) {
         expect(cardsInStrip.map((card) => card.dataset.id)).toEqual(['41', '43']);
-        expect(badges).toEqual(['2 卷', '']);
+        expect(badges).toEqual(['2 parts', '']);
       } else {
         expect(cardsInStrip.map((card) => card.dataset.id)).toEqual(['41', '43', '42']);
         expect(badges.every((text) => !text), '各卷各自成卡，卡上不标整组卷数').toBe(true);
@@ -235,7 +235,7 @@ describe('续页', () => {
       await until(() => shorts(host).length > 0, '竖屏带插进网格');
       if (collapse) {
         expect(groupBadges(shorts(host))).toEqual([
-          ['4', '2 卷', '25:00', true], ['43', '', '—', false], ['9', '', '5:00', false],
+          ['4', '2 parts', '25:00', true], ['43', '', '—', false], ['9', '', '5:00', false],
         ]);
       } else {
         expect(groupBadges(shorts(host)), '合并关着各竖屏卷各自成卡').toEqual([
@@ -383,7 +383,7 @@ describe('作品卡', () => {
 
   it('大小未知和作品标签各自显示，观看次数不占卡片正文', async () => {
     const { host } = await render(item(11, { size: 0, play_count: 3, performers: ['甲'], tags: ['a', 'b', 'c', 'd'] }));
-    expect(host.querySelector('[data-media-size]')?.textContent).toBe('大小未知');
+    expect(host.querySelector('[data-media-size]')?.textContent).toBe('Size unknown');
     expect(host.querySelector('[data-media-watch-count]')).toBeNull();
     expect([...host.querySelectorAll('[data-media-tag]')].map((tag) => tag.textContent)).toEqual(['#a', '#b', '#c']);
   });
@@ -400,10 +400,10 @@ describe('作品卡', () => {
   });
 
   it('关注来源保存的条目用来源的缩略图和标签，标签不可点', async () => {
-    const { host } = await render(item(12, { follow_thumb_url: 'https://example.test/t.jpg', follow_item_id: 5, tags: ['本地'], follow_tags: ['来源'] }));
+    const { host } = await render(item(12, { follow_thumb_url: 'https://example.test/t.jpg', follow_item_id: 5, tags: ['Local'], follow_tags: ['Source'] }));
     expect(host.querySelector('[data-media-art] img')?.getAttribute('src')).toBe('https://example.test/t.jpg');
     const tag = host.querySelector<HTMLButtonElement>('[data-media-tag]');
-    expect([tag?.textContent, tag?.disabled]).toEqual(['#来源', true]);
+    expect([tag?.textContent, tag?.disabled]).toEqual(['#Source', true]);
   });
 
   it('看到一半的画一条进度，分卷组不画；比例写进封面格', async () => {
@@ -421,15 +421,15 @@ describe('作品卡', () => {
       part_group: { key: 'P', seed_id: 14, count: 2 },
       edition_group: { key: 'E', seed_id: 13, count: 2, editions: ['1080p', '4K 修复'] },
     }));
-    expect([...versions.host.querySelectorAll('[data-media-group]')].map((node) => node.textContent)).toEqual(['2 个版本']);
-    expect(versions.host.querySelector('[data-media-open]')?.getAttribute('aria-label')).toMatch(/版本$/);
+    expect([...versions.host.querySelectorAll('[data-media-group]')].map((node) => node.textContent)).toEqual(['2 editions']);
+    expect(versions.host.querySelector('[data-media-open]')?.getAttribute('aria-label')).toMatch(/editions$/);
 
     /* 按画幅筛时版本组只剩同画幅的那一个版本：照它的分卷组画，不标版本数。 */
     const oneVersion = await render(item(17, {
       part_group: { key: 'P', seed_id: 14, count: 2 },
       edition_group: { key: 'E', seed_id: 13, count: 1, editions: ['4K 修复'] },
     }));
-    expect([...oneVersion.host.querySelectorAll('[data-media-group]')].map((node) => node.textContent)).toEqual(['2 卷']);
+    expect([...oneVersion.host.querySelectorAll('[data-media-group]')].map((node) => node.textContent)).toEqual(['2 parts']);
   });
 
   it('竖屏格的番号作品只用视频帧图，不用番号封面：没有帧图就是「无预览」；横格照旧按封面设置出图', async () => {
@@ -439,8 +439,8 @@ describe('作品卡', () => {
       return img ? img.getAttribute('src') : host.querySelector('[data-media-nopic]')?.textContent;
     };
     const portraitGrid = { ...SMALL, portrait: true };
-    expect(pictureOf((await render(item(20, cover), { variant: 'short' })).host)).toBe('无预览');
-    expect(pictureOf((await render(item(21, cover), { layout: portraitGrid })).host), '显式筛竖屏的网格也是竖屏格').toBe('无预览');
+    expect(pictureOf((await render(item(20, cover), { variant: 'short' })).host)).toBe('No preview');
+    expect(pictureOf((await render(item(21, cover), { layout: portraitGrid })).host), '显式筛竖屏的网格也是竖屏格').toBe('No preview');
     expect(pictureOf((await render(item(23, { ...cover, has_thumb: true }), { variant: 'short' })).host),
       '封面设置为官方封面时竖屏格照样用帧图').toBe('/poster?id=23&c=4');
     expect(pictureOf((await render(item(22, cover))).host)).toMatch(/^\/cover\?code=FC2-PPV-3189161/);

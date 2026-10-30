@@ -357,7 +357,7 @@ describe('关注里的来源', () => {
     expect(host.querySelector('[data-entity-held]')).toBeNull();
   });
 
-  it('同名的那组只问不绑：按下「是同一个人」才交给壳，等的这一下键上是等待态', async () => {
+  it('同名的那组只问不绑：按下「Same person」才交给壳，等的这一下键上是等待态', async () => {
     let finish: () => void = () => {};
     const acts = actions({ confirmFollowAuthor: vi.fn(() => new Promise<void>((resolve) => { finish = resolve })) });
     const host = await open(props({ kind: 'creator', name: 'Auxtasy', actions: acts, entity: creator({

@@ -195,7 +195,7 @@ body[class~=drawer-open]{--railW:296px}
 [data-sidebar-head] #brandHome[aria-expanded=true]{box-shadow:0 0 0 2px var(--line);border-radius:var(--pill-radius)}
 [data-sidebar-head] #brandHome [class~=mark]{display:grid;place-items:center;background:none;border-radius:0}
 [data-sidebar-head] [class~=mark] svg{width:20px;height:20px;stroke-width:2}
-/* 导航条目是「图标＋名字」，字形随名字的字号缩放；收起成图标列时名字只是收窄到 0，字号不变，图标也不跳。 */
+/* A navigation item is "icon + name" and the glyph scales with the name's font size; when collapsed to an icon column the name just narrows to 0 and the font size stays the same, so the icon does not jump either. */
 [data-sidebar-drawer] [data-sidebar-nav] button svg{width:var(--icon-inline);height:var(--icon-inline);stroke-width:2}
 [data-sidebar-home-logo]{width:24px;height:24px;object-fit:contain;flex:none}
 [data-sidebar-drawer]:not([class~=open]) [data-sidebar-nav] button:has([data-sidebar-home-logo]){padding:6px}

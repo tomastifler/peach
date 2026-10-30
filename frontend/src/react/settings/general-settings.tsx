@@ -1,4 +1,4 @@
-/* 「应用与维护」的前半段：版本更新与开机自启。版本状态最常看，排在整组最前，自动更新的档位紧跟其后。 */
+/* The first half of "App & maintenance": version updates and launch at startup. Version status is looked at most, so it comes first in the group, with the auto-update tier right after it. */
 import { useState, type FormEvent } from 'react';
 
 import { SettingsRow } from '@/components/application/settings/settings-rows';

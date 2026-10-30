@@ -41,7 +41,7 @@ const SKELETON_TILES = 8;
 /** 格子的比例，与 `--aspect-avatar-choice` 同一个数。 */
 const TILE_ASPECT = 3 / 4;
 
-/** 框选使用服务端转换后的候选；本机文件在确认时提交原始字节。 */
+/** Box selection uses candidates converted by the server; local files submit the original bytes on confirmation. */
 interface Cropping { choice: AvatarChoice; file?: File }
 
 /** 进框选的四条路。都要先问服务端一次：图有多大、脸在哪。 */
@@ -105,7 +105,7 @@ function PickerBody({ kind, entityId, name, onPicked, close }: AvatarPickerProps
   const listing = useQuery({
     queryKey: key,
     queryFn: ({ signal }) => fetchAvatarChoices(kind, entityId, signal),
-    // 失败或索引过期时重新读取；有效候选在反复开合时复用。
+    // On failure or an expired index, read again; valid candidates are reused across repeated open and close.
     retryOnMount: true,
     refetchOnMount: (query) => query.state.data?.index_stale ? 'always' : false,
     refetchInterval: (query) => query.state.data?.index_refreshing && !query.state.error ? 1000 : false,
@@ -180,7 +180,7 @@ function PickerBody({ kind, entityId, name, onPicked, close }: AvatarPickerProps
           {problem ? (
             <Note tone="error" action={listingFailed ? (
               <Button variant="secondary" size="small" {...busyProps(listing.isFetching)}
-                onClick={() => { if (!listing.isFetching) void listing.refetch() }}>立即重试</Button>
+                onClick={() => { if (!listing.isFetching) void listing.refetch() }}>Retry now</Button>
             ) : undefined}>{problem}</Note>
           ) : null}
         </div>
@@ -254,14 +254,14 @@ function PickerBody({ kind, entityId, name, onPicked, close }: AvatarPickerProps
           {/* 原生文件选择器长相不可控，按钮归 BoardUI，输入框只留着接文件。 */}
           <input ref={file} type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/gif,image/bmp,image/tiff,image/x-icon,image/vnd.microsoft.icon,image/jp2,.jpg,.jpeg,.jpe,.jfif,.png,.webp,.avif,.gif,.bmp,.dib,.tif,.tiff,.ico,.jp2,.j2k,.jpf,.jpx" tabIndex={-1} aria-hidden
             className="hidden" onChange={pickFile} />
-          <span className="text-caption-1-regular text-text-secondary">支持常见图片格式，动图使用第一帧</span>
+          <span className="text-caption-1-regular text-text-secondary">Common image formats are supported; animated images use the first frame</span>
           {/* 地址一行至少 224px：窄屏下和「从本机选图片」挤不进一行就整行换下去，输入框不被压成一条缝。 */}
           <div className="flex min-w-0 flex-1 basis-56 items-center gap-2">
             <div className="min-w-0 flex-1">
               <Input type="url" aria-label="Image URL" placeholder="https://…" value={url} onChange={setUrl} />
             </div>
             <Button variant="secondary" disabled={!url.trim()} {...busyProps(opens('url'))}
-              onClick={() => { if (!busy) opening.mutate({ via: 'url', url: url.trim() }) }}>用这个地址</Button>
+              onClick={() => { if (!busy) opening.mutate({ via: 'url', url: url.trim() }) }}>Use this address</Button>
           </div>
         </div>
       </div>

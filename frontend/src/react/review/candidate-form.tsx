@@ -36,7 +36,7 @@ export function GenreTagList({ tags }: { tags: string[] }) {
   );
 }
 
-/** 来源依据独立展开，点击说明不会同时选中另一个来源。 */
+/** Source evidence expands independently; clicking the explanation does not select the other source at the same time. */
 function CandidateEvidence({ candidate, row }: { candidate: ReviewCandidate; row: ReviewRow }) {
   const [open, setOpen] = useState(false);
   const panel = useId();
@@ -47,9 +47,9 @@ function CandidateEvidence({ candidate, row }: { candidate: ReviewCandidate; row
     <div className="min-w-0">
       <Button variant="secondary" size="small" leadingIcon={CollapseChevron}
         aria-expanded={open} aria-controls={panel}
-        aria-label={`${open ? '收起' : '展开'} ${candidate.source || '该来源'} 的来源依据`}
+        aria-label={`${open ? 'Collapse' : 'Expand'} ${candidate.source || 'this source'} source evidence`}
         onClick={() => setOpen(!open)}>
-        <span data-copy-key="review.card.source_evidence">来源依据</span>{` · ${evidence.length}`}
+        <span data-copy-key="review.card.source_evidence">Source evidence</span>{` · ${evidence.length}`}
       </Button>
       <CollapseRegion id={panel} open={open}>
         <dl className="flex min-w-0 flex-col gap-2 px-3 pt-2 pb-1">
@@ -80,7 +80,7 @@ function CandidateEvidence({ candidate, row }: { candidate: ReviewCandidate; row
 
 function candidateHeading(candidate: ReviewCandidate) {
   const id = candidate.content_id || candidate.provider_id;
-  return `${candidate.source || '未标注来源'}${candidate.official ? ' · 官方优先' : ''}${id ? ` · ID ${id}` : ''}`;
+  return `${candidate.source || 'Source not labeled'}${candidate.official ? ' · Official preferred' : ''}${id ? ` · ID ${id}` : ''}`;
 }
 
 function CandidateValue({ candidate, reference }: { candidate: ReviewCandidate; reference?: string }) {
@@ -119,7 +119,7 @@ export function CandidateChoices(
     );
   }
   return (
-    <RadioGroup aria-label={`${fieldName || '资料'}的来源`} value={value} isDisabled={locked}
+    <RadioGroup aria-label={`${fieldName || 'Detail'} source`} value={value} isDisabled={locked}
       onChange={onChange}>
       <div className="flex min-w-0 flex-col gap-3">
       {candidates.map((candidate) => (
@@ -197,8 +197,8 @@ export function PendingGenres(
   const genres = pendingGenres(row);
   if (!genres.length) return null;
   return (
-    <div role="group" aria-label="未收录 genre" className="flex flex-col gap-2 border-t border-separator-border pt-4">
-      <h5 className="text-body-2-medium text-text-secondary">{`未收录 genre · ${genres.length}`}</h5>
+    <div role="group" aria-label="Unlisted genre" className="flex flex-col gap-2 border-t border-separator-border pt-4">
+      <h5 className="text-body-2-medium text-text-secondary">{`Unlisted genre · ${genres.length}`}</h5>
       <div role="list" className="flex flex-col">
         {genres.map((genre, index) => (
           <div key={genre} role="listitem"

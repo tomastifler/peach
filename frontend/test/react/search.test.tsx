@@ -12,7 +12,7 @@ import {
 import { mount, pending, settle } from './render';
 
 const performer = { kind: 'performer', label: '女优', total: 1, items: [{ value: '七海ひな', n: 12 }] };
-const tag = { kind: 'tag', label: '标签', total: 1, items: [{ value: '七海の夏', n: 3 }] };
+const tag = { kind: 'tag', label: 'Tags', total: 1, items: [{ value: '七海の夏', n: 3 }] };
 const asset = { kind: 'asset', label: '视频', total: 1, items: [{ value: 'ABW-101', id: 7, code: 'ABW-101', who: '七海ひな' }] };
 
 describe('下拉栏里摆什么', () => {
@@ -127,7 +127,7 @@ describe('输入框上的时序', () => {
   it('空搜索推荐显示封面，键盘选择新作打开作品详情', async () => {
     const s = await stage({ recommendations: async () => [{ kind: 'release', label: '订阅新作',
       items: [{ value: 'ABW-101', href: '/works/ABW-101', card: { id: 88, code: 'ABW-101' } }],
-      href: '/subscriptions', action: '管理订阅',
+      href: '/subscriptions', action: 'Manage subscriptions',
     }] });
     await act(async () => s.input.focus());
     await settle();
@@ -146,7 +146,7 @@ describe('输入框上的时序', () => {
     await act(async () => s.input.focus());
     await settle();
     await act(async () => s.api?.close());
-    await answer.release([{ kind: 'asset', label: '作品推荐', items: [{ value: '作品', id: 11 }] }]);
+    await answer.release([{ kind: 'asset', label: 'Recommended works', items: [{ value: '作品', id: 11 }] }]);
     await settle();
     expect(s.menu.hidden).toBe(true);
   });
@@ -194,7 +194,7 @@ describe('输入框上的时序', () => {
     expect(s.menu.hidden).toBe(false);
   });
   it('选择关注图片以指定附件进入图片详情', async () => {
-    const s = await stage({ recommendations: async () => [{ kind: 'photo', label: '关注图片',
+    const s = await stage({ recommendations: async () => [{ kind: 'photo', label: 'Followed images',
       items: [{ value: '图片作品', id: 88, href: '/posts/88', followMedia: 'images', mediaIndex: 2,
         card: { id: 88, thumb_url: '/image-thumb' } }],
     }] });

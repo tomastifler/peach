@@ -25,9 +25,9 @@ export interface DownloadPrefill { code?: string; title?: string; origin?: strin
   cover?: string; performers?: string; release_date?: string; duration?: number | null; studio?: string }
 
 const RECEIPTS: Partial<Record<DownloadSubmitResult['outcome'], string>> = {
-  submitted: '已提交离线下载，进度在任务中心',
-  adopted: '这个磁力已有任务，没有重复提交',
-  adopted_remote: '网盘中已有相同的下载任务，Peach 已开始跟踪进度',
+  submitted: 'Offline download submitted; progress is in the task center',
+  adopted: 'This magnet already has a task and was not submitted again',
+  adopted_remote: 'The cloud drive already has the same download task, and Peach has started tracking its progress',
 };
 
 export function CloudDownloadDialog({ prefill, close, receipt, provider }: {
@@ -137,8 +137,8 @@ function SubmitForm({ header, snapshot, prefill, close, receipt, provider: prefe
         <Input ref={input} label="Magnet link" placeholder="magnet:?xt=urn:btih:…" autoComplete="off" maxLength={4000}
           value={magnet} onChange={setMagnet} />
         <div className="flex flex-col gap-1">
-          <FieldLabel>下载到</FieldLabel>
-          <Select aria-label="下载到" selectedKey={provider || null} isDisabled={!configured.length}
+          <FieldLabel>Download to</FieldLabel>
+          <Select aria-label="Download to" selectedKey={provider || null} isDisabled={!configured.length}
             onSelectionChange={(key) => { if (key !== null) choose(String(key) as DownloadProviderKey) }}>
             {configured.map((row) => <SelectItem key={row.key} id={row.key} textValue={row.label}><SourceLabel source={row.key} label={row.label} /></SelectItem>)}
           </Select>

@@ -30,18 +30,18 @@ describe('原位改字', () => {
           tools.say('编辑就绪');
         });
         assert.equal(await page.getByRole('status').innerText(), '编辑就绪');
-        await page.getByRole('button', { name: '暂停编辑', exact: true }).click();
+        await page.getByRole('button', { name: 'Pause editing', exact: true }).click();
         assert.equal(await page.locator('body').getAttribute('data-active'), 'false');
-        await page.getByRole('button', { name: '继续编辑', exact: true }).click();
+        await page.getByRole('button', { name: 'Resume editing', exact: true }).click();
         assert.equal(await page.locator('body').getAttribute('data-active'), 'true');
         await page.evaluate(() => (globalThis as any).copyTools.setBusy(true));
-        await page.getByRole('button', { name: '暂停编辑', exact: true }).click();
-        await page.getByRole('button', { name: '退出编辑', exact: true }).click();
+        await page.getByRole('button', { name: 'Pause editing', exact: true }).click();
+        await page.getByRole('button', { name: 'Exit editing', exact: true }).click();
         assert.equal(await page.locator('body').getAttribute('data-active'), 'true');
         assert.equal(await page.locator('body').getAttribute('data-exited'), null);
         await page.evaluate(() => (globalThis as any).copyTools.setBusy(false));
-        await page.getByRole('button', { name: '导出修改', exact: true }).click();
-        await page.getByRole('button', { name: '退出编辑', exact: true }).click();
+        await page.getByRole('button', { name: 'Export changes', exact: true }).click();
+        await page.getByRole('button', { name: 'Exit editing', exact: true }).click();
         assert.equal(await page.locator('body').getAttribute('data-exported'), 'true');
         assert.equal(await page.locator('body').getAttribute('data-exited'), 'true');
         await page.evaluate(() => {
@@ -85,8 +85,8 @@ describe('原位改字', () => {
           dialog.showModal();
         });
         await page.locator('#first [data-copy-bar]').waitFor();
-        await page.getByRole('button', { name: '暂停编辑', exact: true }).click();
-        await page.getByRole('button', { name: '继续编辑', exact: true }).click();
+        await page.getByRole('button', { name: 'Pause editing', exact: true }).click();
+        await page.getByRole('button', { name: 'Resume editing', exact: true }).click();
         assert.equal(await page.locator('body').getAttribute('data-dialog-clicks'), '0');
         await page.locator('#copy').click({ position: { x: 8, y: 8 } });
         const input = page.locator('#copy [contenteditable]');
@@ -94,7 +94,7 @@ describe('原位改字', () => {
         assert.equal(await page.locator('#copy').innerText(), '弹层说明');
         await page.evaluate(() => document.querySelector<HTMLDialogElement>('#second')!.showModal());
         await page.locator('#second [data-copy-bar]').waitFor();
-        await page.getByRole('button', { name: '暂停编辑', exact: true }).click();
+        await page.getByRole('button', { name: 'Pause editing', exact: true }).click();
         await page.evaluate(() => document.querySelector<HTMLDialogElement>('#second')!.close());
         await page.locator('#first [data-copy-bar]').waitFor();
         await page.evaluate(() => document.querySelector<HTMLDialogElement>('#first')!.close());
@@ -122,7 +122,7 @@ describe('原位改字', () => {
           });
           return bodyHeight;
         }, '.peach-react *{box-sizing:border-box}' + styles);
-        const dock = page.getByRole('group', { name: '文案编辑', exact: true });
+        const dock = page.getByRole('group', { name: 'Copy editing', exact: true });
         await dock.waitFor();
         assert.equal(await page.locator('dialog .body').evaluate(node => node.getBoundingClientRect().height),
           originalBodyHeight, '全页浮条不增加设置内容高度');
@@ -142,7 +142,7 @@ describe('原位改字', () => {
         await page.mouse.up();
         const dragged = await dock.boundingBox();
         assert.ok(dragged && Math.abs(dragged.y - before.y + 120) <= 1);
-        await dock.getByRole('button', { name: '暂停编辑', exact: true }).click();
+        await dock.getByRole('button', { name: 'Pause editing', exact: true }).click();
         assert.equal(await page.locator('body').getAttribute('data-active'), 'false');
         assert.deepEqual(await dock.boundingBox(), dragged, '点击按钮不拖动工具条');
         await page.evaluate(() => document.querySelector('aside')!.shadowRoot!.querySelector('dialog')!.close());
@@ -160,7 +160,7 @@ describe('原位改字', () => {
         await page.setContent('<meta charset="utf-8"><style>[data-copy-highlight]{pointer-events:none}[data-copy-input]{padding:2px 6px;border:0;background:#141518;color:white}</style><header style="position:fixed;top:8px;left:20px;font:13px/20.8px sans-serif"><a id="link" href="#download">下载最新版 →</a></header><button id="button" style="margin:90px 20px">操作名称</button>');
         await page.addScriptTag({ content: await readFile(new URL('../src/copy-editor-core.js', import.meta.url), 'utf8') });
         await page.evaluate(() => (globalThis as any).PeachCopyEditorCore.create({save(_edit: unknown, text: string) {
-          if (text === '保存失败') throw Error('临时失败');
+          if (text === 'Save failed') throw Error('临时失败');
           return {};
         }}));
         for (const id of ['link', 'button']) {
@@ -173,7 +173,7 @@ describe('原位改字', () => {
           await input.fill('取消修改'); await input.press('Escape');
           assert.equal(await target.innerText(), original);
           assert.equal(await target.locator('[data-copy-editor]').count(), 0);
-          await target.click(); await input.fill('保存失败'); await input.press('Enter');
+          await target.click(); await input.fill('Save failed'); await input.press('Enter');
           assert.equal(await target.innerText(), original);
           assert.equal(await target.locator('[data-copy-editor]').count(), 0);
           await target.click(); await input.fill('已修改'); await input.press('Enter');
@@ -197,7 +197,7 @@ describe('原位改字', () => {
             for (let part = walker.nextNode(); part; part = walker.nextNode()) nodes.push(part);
             return { element, nodes };
           }, save(_edit: unknown, text: string) {
-            if (text === '保存失败') throw Error('临时失败');
+            if (text === 'Save failed') throw Error('临时失败');
             return {};
           } });
         });
@@ -207,7 +207,7 @@ describe('原位改字', () => {
         await box.fill('取消修改'); await box.press('Escape');
         assert.equal(await page.locator('#copy code').count(), 2);
         await page.locator('#copy code').first().click();
-        await box.fill('保存失败'); await box.press('Enter');
+        await box.fill('Save failed'); await box.press('Enter');
         assert.equal(await page.locator('#copy').innerText(), '配置保存在 /data，媒体在 /media。');
         assert.equal(await page.locator('#copy code').count(), 2);
         await page.locator('#copy code').first().click();
@@ -346,7 +346,7 @@ describe('原位改字', () => {
         await page.locator('#copy').click({ position: { x: 5, y: 8 } });
         await inline.fill('待处理 {problems} 项，限流 {paused} 项。');
         await inline.press('Enter');
-        await page.getByRole('status').filter({ hasText: '已保存修改' }).waitFor();
+        await page.getByRole('status').filter({ hasText: 'Saved changes' }).waitFor();
         assert.equal(await page.locator('#copy').innerText(), '待处理 768 项，限流 533 项。');
         assert.deepEqual(saves[1], { original, replacement: '待处理 {problems} 项，限流 {paused} 项。', candidate });
         assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
@@ -359,7 +359,7 @@ describe('原位改字', () => {
         const { page } = opened;
         await page.getByRole('region', { name: 'Data upload', exact: true }).waitFor();
         await settle(page);
-        const dock = page.getByRole('group', { name: '文案编辑', exact: true });
+        const dock = page.getByRole('group', { name: 'Copy editing', exact: true });
         await dock.waitFor();
         const measured = await dock.evaluate(node => {
           const style = getComputedStyle(node), rect = node.getBoundingClientRect();
@@ -442,10 +442,10 @@ describe('原位改字', () => {
         await input.fill('修改按钮');
         await input.press('Enter');
         assert.equal(await page.locator('#action').innerText(), '修改按钮');
-        await page.getByRole('button', { name: '暂停编辑', exact: true }).click();
+        await page.getByRole('button', { name: 'Pause editing', exact: true }).click();
         await page.locator('#copy').click();
         assert.equal(await page.locator('[contenteditable]').count(), 0);
-        await page.getByRole('button', { name: '继续编辑', exact: true }).click();
+        await page.getByRole('button', { name: 'Resume editing', exact: true }).click();
         const edits = await page.evaluate(() => JSON.parse(localStorage.getItem('peach.copy-edits.v1')!));
         assert.equal(edits['原位说明'], '点别处保存');
       } finally { await context.close(); }

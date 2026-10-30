@@ -1,7 +1,7 @@
 /* 媒体目录的行：配置页「这台电脑」与首启页共用。
  *
- * 一行是一块描边卡：路径框、「选择文件夹」、多行时的移除键，下面按含义分两排、每格上方一行标签：
- * 先是这个目录怎么读（来源、读取策略），再是它显示成哪个媒体库（所属、名称，配置页另有图标）。行的增删、
+ * Each row is an outlined card: the path box, "Choose folder", the remove key when there are several rows, and below them two rows grouped by meaning, each cell with a label above:
+ * first how this folder is read (source, reading policy), then which library it appears as (owner, name; the settings page also has an icon). Adding and removing rows,
  * 按行错误、新行接焦点与选择文件夹的忙态归 `useFolderRows`；弹系统对话框那一请求由调用方注入，这里不认识任何端点，首启页的独立
  * 页面包因此不必带上主界面的请求封装。 */
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
@@ -37,8 +37,8 @@ export const MEDIA_SOURCES: readonly SourceOption[] = MEDIA_SOURCE_OPTIONS;
 export const sourceMark = (location: string) => MEDIA_SOURCE_ICONS[location] || 'database';
 export const isCloudSource = (location: string) => CLOUD_LOCATIONS.includes(location);
 
-/** 行内一格：上方块级标签，下面是控件。标签只写给看的人；控件的无障碍名由各自带序号的
- *  `aria-label` 给，标签文字是它的一段，读屏与语音输入按看到的字也找得到。 */
+/** One cell in a row: a block-level label above and the control below. The label is written only for sighted people; the control's accessible name comes from its own numbered
+ *  `aria-label` , and the label text is part of it, so screen readers and voice input can also find it by what they see. */
 export function FolderField({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
   return (
     <div className={cx('flex min-w-0 flex-col gap-1', className)}>
@@ -48,7 +48,7 @@ export function FolderField({ label, className, children }: { label: string; cla
   );
 }
 
-/** 一排字段。宽度够时并排，窄了逐格换行；按顶端对齐，标签同高所以控件也齐，某格下面多一句报错只往下长。 */
+/** A row of fields. Side by side when wide enough, wrapping cell by cell when narrow; aligned to the top, so with equal-height labels the controls line up too, and an error message under one cell only grows downward. */
 export function FolderFieldLine({ children }: { children: ReactNode }) {
   return <div className="flex w-full flex-wrap items-start gap-2">{children}</div>;
 }
@@ -57,19 +57,19 @@ export function MediaReadPolicy({ index, cost, error, onChange }: {
   index: number; cost: SourceCost | ''; error?: string; onChange(cost: SourceCost): void;
 }) {
   return <div data-media-read-policy={index} className="flex w-full flex-col gap-1 @lg:w-32">
-    <Label elementType="span" aria-hidden>读取策略</Label>
-    <Select aria-label={`媒体读取策略 ${index + 1}`} placeholder="选择读取策略" isRequired
+    <Label elementType="span" aria-hidden>Reading policy</Label>
+    <Select aria-label={`Media reading policy ${index + 1}`} placeholder="Choose reading policy" isRequired
       validationBehavior="aria" isInvalid={Boolean(error)} selectedKey={cost || null}
       onSelectionChange={(key) => { if (key === 'free' || key === 'metered') onChange(key); }}>
-      <SelectItem id="free">正常读取</SelectItem>
-      <SelectItem id="metered">代理保护</SelectItem>
+      <SelectItem id="free">Normal reads</SelectItem>
+      <SelectItem id="metered">Proxy protection</SelectItem>
     </Select>
     {error ? <ErrorText>{error}</ErrorText> : null}
   </div>;
 }
 
 export function MediaReadPolicyHelp() {
-  return <Help>读取策略选「代理保护」时，会限制自动读取视频。</Help>;
+  return <Help>When the reading policy is "Proxy protection", automatic video reads are restricted.</Help>;
 }
 
 export interface FolderRowValue { path: string; location: string }
@@ -187,8 +187,8 @@ export function FolderRow({ label, path, onPath, error, inputRef, picking, onPic
   );
 }
 
-/** 媒体来源下拉，每项带站标；本地磁盘是雪碧图的 `hard-drive`。上方标「来源」，
- * 无障碍名称由带序号的 `aria-label` 给。 */
+/** Media source dropdown, each item with a site mark; the local disk is the sprite's `hard-drive`. The label above reads "Source",
+ * and the accessible name comes from the numbered `aria-label`. */
 export function SourceSelect({ index, value, onChange, options = MEDIA_SOURCES }: {
   index: number;
   value: string;
@@ -196,8 +196,8 @@ export function SourceSelect({ index, value, onChange, options = MEDIA_SOURCES }
   options?: readonly SourceOption[];
 }) {
   return (
-    <FolderField label="来源" className="w-full @lg:w-60">
-      <Select className="w-full" aria-label={`媒体来源 ${index + 1}`} selectedKey={value}
+    <FolderField label="Source" className="w-full @lg:w-60">
+      <Select className="w-full" aria-label={`Media source ${index + 1}`} selectedKey={value}
         onSelectionChange={(key) => { if (key !== null) onChange(String(key)); }}>
         {options.map(([kind, name]) => (
           <SelectItem key={kind} id={kind} textValue={name}><SourceMark mark={sourceMark(kind)} />{name}</SelectItem>

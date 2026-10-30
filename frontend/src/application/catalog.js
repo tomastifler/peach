@@ -118,8 +118,8 @@ export async function rateCatalogItem(it,star,onChange,signal){
   };
   try{
     const rating=await save(value,signal);
-    receiptsState.actionReceipt(rating?`已评 ${ratingStars(rating)} 星`:'已取消评分',{undo:()=>save(before)});
-  }catch(error){if(!signal?.aborted)receiptsState.actionFailure('评分',error);throw error}
+    receiptsState.actionReceipt(rating?`Rated ${ratingStars(rating)} stars`:'Rating cleared',{undo:()=>save(before)});
+  }catch(error){if(!signal?.aborted)receiptsState.actionFailure('Rating',error);throw error}
 }
 
 export async function getBarsData(context){
@@ -291,8 +291,8 @@ export function renderBarsLoading(filterState,requestSeq){
   paintCatalogFilter({tiers:null,tiersPending:true,state:filterState.state||''});
 }
 
-/* 两排头像只在真有一趟取数在路上时挂忙态：这一趟作废（换页把序号推走了）或失败，而后来的那一趟
-   没有接着取，忙态就由它撤掉；不取头像的页面（视频墙、作品页）从不挂。 */
+/* The two rows of avatars only get the busy state when a fetch is really on its way: when this trip is superseded (a page change pushed the sequence number away) or fails, and a later
+   trip has not continued fetching, the busy state is cleared by it; pages that do not fetch avatars (video wall, work page) never get it. */
 function releaseBarsPending(requestSeq){
   if(catalogState.barsPendingSeq!==requestSeq)return;
   catalogState.barsPendingSeq=0;
@@ -392,8 +392,8 @@ export function comboItems(filters){
   const items=[];
   if(filters.creator)items.push({kind:'clear',key:'creator',label:`${catalogState.COMBO_LABELS.creator} ${filters.creator}`});
   if(filters.studio)items.push({kind:'clear',key:'studio',label:`${catalogState.COMBO_LABELS.studio} ${filters.studio}`});
-  if(filters.owner==='none')items.push({kind:'clear',key:'owner',label:`${catalogState.COMBO_LABELS.owner} 未归属`});
-  if(filters.year)items.push({kind:'clear',key:'year',label:`发行年份 ${filters.year.split(',').map(year=>year==='none'?'未知年份':year).join('、')}`});
+  if(filters.owner==='none')items.push({kind:'clear',key:'owner',label:`${catalogState.COMBO_LABELS.owner} Unassigned`});
+  if(filters.year)items.push({kind:'clear',key:'year',label:`Release year ${filters.year.split(',').map(year=>year==='none'?'Unknown year':year).join(', ')}`});
   catalogState.tagList(filters.tag).forEach(t=>items.push({kind:'untag',key:t,label:tagLabel(t)}));
   return items;
 }
@@ -462,7 +462,7 @@ export function catalogGridLayout(){
   return gridLayout({active:javActive()||home,home,portrait:state.orient==='竖屏'});
 }
 
-export function catalogSkeletonHtml(label='正在读取作品'){
+export function catalogSkeletonHtml(label='Loading works'){
   return catalogContentSkeletonHtml(label,catalogCardRatio());
 }
 

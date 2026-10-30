@@ -135,7 +135,7 @@ function Tiers(props: CatalogFilterProps) {
   const shownPerformers = usePaged(performers, tiers.performers, tiers.key, ROW_FIRST,
     empty ? undefined : more('performers'));
   const shownStudios = usePaged(studios, tiers.studios, tiers.key, ROW_FIRST, empty ? undefined : more('studios'));
-  /* 取回之前照本机上次的结构画占位，壳骨架同一份记录。 */
+  /* Before the fetch returns, draw the placeholder per this machine's last structure, the same record as the shell skeleton. */
   const shape = useMemo(() => loading ? rememberedTiers() : null, [loading]);
   const hasPerformers = shape ? shape.performers : props.empty || tiers.performers.length > 0;
   const hasStudios = shape ? shape.studios : props.empty || tiers.studios.length > 0;
@@ -305,8 +305,8 @@ function usePaged<T>(row: RefObject<HTMLElement | null>, items: T[], key: string
       });
     });
   }, [row]);
-  /* 量宽度合到下一帧：提交后当场量、每个 `scroll` 事件当场量，都赶在刚写完的样式后面，
-   * 一次就是一遍整树重算；横滚时一帧来好几个 `scroll`，也只需要量一次。 */
+  /* Merge width measurement into the next frame: measuring on the spot after a commit, or on every `scroll` event, always runs right after styles were just written,
+   * and each time that is a whole-tree recalculation; when several `scroll` events arrive in one frame during horizontal scrolling, one measurement is enough. */
   const frame = useRef(0);
   const schedule = useCallback(() => {
     if (!frame.current) frame.current = requestAnimationFrame(() => { frame.current = 0; fill() });

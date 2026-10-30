@@ -88,7 +88,7 @@ async function connect(r: Loaded) {
   await act(async () => { r.connectManagedRoutes(Promise.resolve(r.prefetchManagedRoute)) });
 }
 
-const SECTIONS: ManageEntry[] = [['stats', '统计', 'chart'], ['cleanup', '数据管理', 'database'], ['trash', '回收站', 'trash']];
+const SECTIONS: ManageEntry[] = [['stats', '统计', 'chart'], ['cleanup', 'Data management', 'database'], ['trash', 'Trash', 'trash']];
 const MENU = SECTIONS.filter(([key]) => key !== 'trash');
 
 const props = (section: string, path: string, patch: Partial<ManageHeaderProps> = {}): ManageHeaderProps =>
@@ -154,7 +154,7 @@ describe('换手', () => {
       .filter((line) => !line.startsWith('USE'));
     expect(shape(host.root)).toEqual(shape(skeleton));
     expect(host.root.querySelector('[data-pill-thumb]')).not.toBeNull();
-    expect(title(host.root)).toBe('垃圾文件');
+    expect(title(host.root)).toBe('Junk files');
   });
 
   it('骨架与首帧在同一个任务里换掉：每个任务边界上宿主里要么是骨架、要么是画好的页头，宿主上不多包 .peach-react', async () => {
@@ -214,7 +214,7 @@ describe('换手', () => {
     render(props('', '/'));
     expect(root.childElementCount).toBe(0);
     render(props('cleanup', '/data-cleanup'));
-    expect(title(root)).toBe('数据管理');
+    expect(title(root)).toBe('Data management');
     expect(root.querySelector('[data-manage-title]')!.hasAttribute('data-compact')).toBe(true);
     expect(root.querySelector('[data-manage-crumb]')).toBeNull();
   });
@@ -233,7 +233,7 @@ describe('管理条与面包屑', () => {
     expect(host.openManage).toHaveBeenCalledWith('stats');
   });
 
-  it('数据管理之下的子页按下「数据管理」，骨架与组件同一个判据；管理条上没有的区不按下任何一项', async () => {
+  it('数据管理之下的子页按下「Data management」，骨架与组件同一个判据；管理条上没有的区不按下任何一项', async () => {
     const first = props('trash', '/trash');
     const { root, render } = await setup(first);
     const pressed = () => [...root.querySelectorAll('[data-manage][aria-pressed="true"]')].map((node) => node.getAttribute('data-manage'));
@@ -306,7 +306,7 @@ describe('常驻组件', () => {
     api.render(props('cleanup', '/junk-files'));
     expect(title(root)).toBe('Junk files');
     api.render(props('trash', '/trash'));
-    expect([title(root), root.querySelectorAll('[data-trash-lede-skeleton]').length]).toEqual(['回收站', 2]);
+    expect([title(root), root.querySelectorAll('[data-trash-lede-skeleton]').length]).toEqual(['Trash', 2]);
   });
 
   it('抛错只卸组件、宿主还在，批量条照画；之后句柄是空操作、不抛，这一面空到刷新为止，只报一次', async () => {

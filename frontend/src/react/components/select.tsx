@@ -1,6 +1,6 @@
-/* BoardUI 下拉加一段浅色前缀。工具栏和重复块里的下拉没有字段标签，只看选中值说不清在选什么，
- * 前缀写在框内值的前面（「排序」「来源」「媒体库」），读屏仍按 `aria-label` 读。上游副本不改，
- * 前缀经 `renderValue` 放进值区；值区自带 5px（`sm` 4px）间距，前缀再补一段，与值隔开 8px（`sm` 6px）。 */
+/* BoardUI dropdown with a light-colored prefix added. Dropdowns in toolbars and repeated blocks have no field label, and the selected value alone does not say what is being chosen,
+ * so the prefix is written before the value inside the box ("Sort", "Source", "Library"), while screen readers still read the `aria-label`. The upstream copy is not modified,
+ * the prefix is placed into the value area via `renderValue`; the value area has its own 5px (`sm` 4px) spacing, and the prefix adds a bit more, separating it from the value by 8px (`sm` 6px). */
 import type { ReactNode } from 'react';
 import type { SelectValueRenderProps } from 'react-aria-components';
 import { Select as BoardSelect, type SelectProps as BoardSelectProps } from '@/components/base/select/select';
@@ -8,14 +8,14 @@ import { Select as BoardSelect, type SelectProps as BoardSelectProps } from '@/c
 export { SelectItem } from '@/components/base/select/select';
 
 export interface SelectProps<T extends object> extends BoardSelectProps<T> {
-  /** 框内值前面的浅色名称，只给看的人，不进无障碍名称。 */
+  /** The light-colored name before the value in the box, only for sighted users, not part of the accessible name. */
   prefix?: ReactNode;
 }
 
 export function Select<T extends object>({ prefix, renderValue, size, ...props }: SelectProps<T>) {
   if (prefix === undefined || prefix === null) return <BoardSelect {...props} size={size} renderValue={renderValue} />;
   const gap = size === 'sm' ? 'me-0.5' : 'me-0.75';
-  // React Aria 调值区渲染函数时带着 `defaultChildren`（选中项自己的内容），上游的参数类型没写它。
+  // React Aria calls the value-area render function with `defaultChildren` (the selected item's own content), which upstream's parameter type does not declare.
   const value = (values: SelectValueRenderProps<T>): ReactNode => (
     <>
       <span aria-hidden className={`shrink-0 text-text-tertiary ${gap}`}>{prefix}</span>

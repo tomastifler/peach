@@ -36,14 +36,14 @@ class JobPaused(JobPolicyError):
 
 
 class JobDeferred(RuntimeError):
-    """后台任务这会儿跑不了，得给别的任务让路；回到队列，`ready()` 为真时再领。"""
+    """The background task cannot run right now and must yield to other tasks; it returns to the queue, `ready()` returns true, then it is claimed again."""
 
     def ready(self) -> bool:
         return True
 
 
 class JobCancelled(InterruptedError):
-    """用户停止任务；已保存结果保留，不再自动恢复。"""
+    """User stopped the task; saved results are kept and not recovered automatically."""
 
 
 class JobAlreadyRunning(JobPolicyError):
@@ -424,7 +424,7 @@ class BackgroundJob:
         return ""
 
     def _summary(self, state: dict) -> dict:
-        """结算摘要保留标量与领域定义的问题清单。"""
+        """Settlement summaries keep scalars and the problem list defined by the domain."""
         from .task_results import result_counts
         summary: dict[str, object] = {}
         for key, value in state.items():
@@ -640,8 +640,8 @@ class BackgroundJob:
         except JobPaused:
             with self.lock:
                 if self.state is not None and self.state.get(self.id_key) == job_id:
-                    self.state.update(waiting_for_update=True, stage='等待安装完成后继续', error='',
-                                      message='任务已暂停，安装完成后自动继续。')
+                    self.state.update(waiting_for_update=True, stage='Waiting for installation to finish before continuing', error='',
+                                      message='Task paused; it continues automatically after installation finishes.')
         except JobCancelled:
             with self.lock:
                 if self.state is not None and self.state.get(self.id_key) == job_id:

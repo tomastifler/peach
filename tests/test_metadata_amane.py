@@ -227,7 +227,7 @@ class PreparationTests(unittest.TestCase):
             with patch.object(Path, 'mkdir', side_effect=PermissionError('blocked')):
                 with self.assertRaises(metadata_amane.PreparationError) as caught:
                     metadata_amane.ensure(tools, proxy_options={'trust_env': False})
-            self.assertIn('安装目录无法读写', str(caught.exception))
+            self.assertIn('install directory cannot be read or written', str(caught.exception))
 
     def test_local_and_non_jav_rows_do_not_require_a_bridge(self):
         from peach.library_processing import _RemoteSession, _MissCache, COLLECTED_FIELDS
@@ -336,7 +336,7 @@ class PreparationTests(unittest.TestCase):
                     (root / "pyproject.toml").write_text(manifest, encoding="utf-8")
                     facts = metadata_amane.describe(root / "tools", root=root)
                     self.assertFalse(facts["bundled"])
-                    self.assertTrue(facts["problem"].startswith("amane 桥的清单读不出来"))
+                    self.assertTrue(facts["problem"].startswith("amane bridge manifest cannot be read"))
 
     def test_the_settings_route_answers_with_the_problem_instead_of_failing(self):
         from types import SimpleNamespace
@@ -500,13 +500,13 @@ class PackagedRuntimeTests(unittest.TestCase):
                         patch.object(metadata_amane, 'find_uv', side_effect=AssertionError('无需 uv')):
                     facts = metadata_amane.describe(self.tools)
                     rebuilt = metadata_amane.rebuild(self.tools)
-                    with self.assertRaisesRegex(MetadataProviderError, '重新安装'):
+                    with self.assertRaisesRegex(MetadataProviderError, 'please reinstall'):
                         metadata_amane.AmaneBridge.create(self.tools)
                 self.assertFalse(facts['installed'])
                 self.assertFalse(facts['bundled'])
-                self.assertIn('重新安装', facts['problem'])
+                self.assertIn('please reinstall', facts['problem'])
                 self.assertFalse(rebuilt['ok'])
-                self.assertIn('重新安装', rebuilt['error'])
+                self.assertIn('please reinstall', rebuilt['error'])
 
     def test_missing_or_malformed_docker_runtime_requests_reinstallation(self):
         for content in (None, '[]', 'null', '{', '{}'):
@@ -519,7 +519,7 @@ class PackagedRuntimeTests(unittest.TestCase):
                         patch.object(metadata_amane, 'find_uv', side_effect=AssertionError('无需 uv')):
                     result = metadata_amane.rebuild(self.tools)
                 self.assertFalse(result['ok'])
-                self.assertIn('重新安装', result['error'])
+                self.assertIn('please reinstall', result['error'])
 
     def test_desktop_runtime_is_discovered_beside_the_bridge_resources(self):
         self.write_runtime()
@@ -545,7 +545,7 @@ class BridgeQueryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as empty:
             with self.assertRaises(MetadataProviderError) as caught:
                 metadata_amane.AmaneBridge.create(Path(empty))
-        self.assertIn("amane bridge is not installed", str(caught.exception))
+        self.assertIn("amane bridge not installed", str(caught.exception))
 
     def test_query_runs_the_pinned_interpreter_and_reads_the_last_json_line(self):
         calls = []
@@ -814,7 +814,7 @@ class ProviderStageTests(unittest.TestCase):
         missing = Path(self.temporary.name) / "missing" / "bridge.py"
         with patch.object(metadata_amane, "BRIDGE_SCRIPT", missing), self.assertRaises(Unavailable) as caught:
             provider.amane("FC2-PPV-1234567", route=("fc2club",))
-        self.assertIn("amane 桥脚本缺失", str(caught.exception))
+        self.assertIn("amane bridge script is missing", str(caught.exception))
 
     def test_a_hit_comes_back_as_source_payload_pairs_and_is_cached(self):
         provider = self.provider(report(fc2club=FOUND, avsox={"status": "not_found", "reason": "not_found"}))

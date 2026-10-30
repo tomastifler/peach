@@ -274,7 +274,7 @@ def name_entries(cell: str) -> list[dict]:
 
     text = _text(cell)
     groups = list(_PAREN.finditer(text))
-    # 「別名」栏也放以 (注) 开头的更名、复出说明；整格是注释，原文仍留在资料快照中。
+    # "別名" column also holds, starting with (注), renaming and comeback notes; the whole cell is a comment, and the original text remains in the metadata snapshot.
     if groups and groups[0].start() == 0 and groups[0].group(1).strip() == "注":
         return []
     reading_at = next((index for index in range(len(groups) - 1, -1, -1)

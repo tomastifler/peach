@@ -74,7 +74,7 @@ describe('设计决定：人物与厂牌资料页', () => {
         assert.equal(shown.peekCount, 4);
         assert.equal(shown.sub, '128 videos · Capsule Agency');
         assert.equal(shown.face, '/entity-image?kind=performer&id=90301&thumb=1');
-        for (const [name, note] of [['别名', shown.matched], ['作品数', shown.count]] as const) {
+        for (const [name, note] of [['Aliases', shown.matched], ['作品数', shown.count]] as const) {
           assert.ok(note.smaller && note.quieter, `${name}没有退成注脚：${JSON.stringify(note)}`);
         }
         assert.equal(shown.count.trailing, 10, '作品数没有靠右贴着行的内边距');
@@ -717,7 +717,7 @@ describe('设计决定：人物与厂牌资料页', () => {
         ok: true, more: false, items: [{
           id: 1, code: 'ABC-001', title: '标题', link: 'https://javdb.com/v/x', cover_url: null,
           has_cover: true, cover_frame: null, poster_box: null, release_date: '2026-09-01',
-          studio: '厂牌', performers: name, source_name: '', read: false, ignored: false,
+          studio: 'Studios', performers: name, source_name: '', read: false, ignored: false,
           scrape_error: null }] } }));
       // 封面比数据晚到一截：整页要等它，而不是先换上真卡、再在封面格里微光一遍。
       await opened.page.route(/\/cover\?code=ABC-001/, async (route) => {
@@ -1016,14 +1016,14 @@ describe('设计决定：人物与厂牌资料页', () => {
         const page = opened.page;
         await page.route('**/api/feeds', route => route.fulfill({ json: {
           unread: 81, sources: Array.from({ length: 25 }, (_, i) => ({
-            id: i + 1, kind: 'javdb-actor', kind_label: 'JAV 订阅', name: `测试订阅 ${i + 1}`,
+            id: i + 1, kind: 'javdb-actor', kind_label: 'JAV subscriptions', name: `测试订阅 ${i + 1}`,
             url: `https://example.com/actors/${i + 1}`, entity_id: null, entity_name: null,
             has_image: false, enabled: true, interval_minutes: 360, last_fetched_at: null,
             last_error: null, last_new_count: 0, seen: 0,
           })),
         } }));
         await page.reload({ waitUntil: 'load' });
-        await page.getByRole('tab', { name: '关注列表', exact: true }).waitFor();
+        await page.getByRole('tab', { name: 'Follow list', exact: true }).waitFor();
         const card = page.getByRole('region', { name: 'JAV 订阅列表', exact: true });
         await card.getByText('1–20 / 25 个订阅源', { exact: true }).waitFor();
         assert.equal(await card.locator('[role="row"][data-key]').count(), 20);
@@ -1063,7 +1063,7 @@ describe('设计决定：人物与厂牌资料页', () => {
             document.documentElement.dataset.theme = value;
             document.documentElement.classList.toggle('dark', value === 'dark');
           }, theme);
-          await tabs.getByRole('tab', { name: '添加关注', exact: true }).click();
+          await tabs.getByRole('tab', { name: 'Add follow', exact: true }).click();
           await page.waitForFunction(() => {
             const host = document.querySelector('[role="tablist"][aria-label="关注管理区域"]')!;
             const selected = host.querySelector('[aria-selected=true]')!.getBoundingClientRect();
@@ -1080,7 +1080,7 @@ describe('设计决定：人物与厂牌资料页', () => {
           assert.equal(face.track, 'rgba(0, 0, 0, 0)', 'Pills 容器应透明');
           assert.notEqual(face.selected, face.track, '当前分类应有独立底色');
           assert.equal(face.shadow, 'none', 'Pills 不使用浮起滑块');
-          await tabs.getByRole('tab', { name: '添加关注', exact: true }).focus();
+          await tabs.getByRole('tab', { name: 'Add follow', exact: true }).focus();
           await page.keyboard.press('Home');
           await page.keyboard.press('Enter');
           assert.equal(await tabs.getByRole('tab', { name: 'Follow list', exact: true }).getAttribute('aria-selected'), 'true');
@@ -1094,9 +1094,9 @@ describe('设计决定：人物与厂牌资料页', () => {
             }] }],
           }),
         }));
-        await tabs.getByRole('tab', { name: '添加关注', exact: true }).click();
+        await tabs.getByRole('tab', { name: 'Add follow', exact: true }).click();
         await page.getByRole('textbox', { name: '来源链接、名字或 id' }).fill('主题测试来源');
-        await page.getByRole('region', { name: '添加创作者关注', exact: true }).getByRole('button', { name: '查找', exact: true }).click();
+        await page.getByRole('region', { name: 'Add creator follow', exact: true }).getByRole('button', { name: '查找', exact: true }).click();
         const result = page.getByText('主题测试来源', { exact: true }).locator('..');
         await result.waitFor();
         for (const theme of ['light', 'dark']) {
@@ -1120,8 +1120,8 @@ describe('设计决定：人物与厂牌资料页', () => {
       try {
         const page = opened.page;
         await page.getByRole('link', { name: /^来源与订阅设置/ }).click();
-        await page.getByRole('tab', { name: '来源与订阅', exact: true, selected: true }).waitFor();
-        await page.getByRole('region', { name: '可配置凭据', exact: true }).waitFor();
+        await page.getByRole('tab', { name: 'Sources & subscriptions', exact: true, selected: true }).waitFor();
+        await page.getByRole('region', { name: 'Configurable credentials', exact: true }).waitFor();
         await settle(page);
         for (const theme of ['light', 'dark']) {
           await page.evaluate(value => {

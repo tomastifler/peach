@@ -3,10 +3,10 @@ from .review_csv import candidate_root_version
 from .web_state import path_version
 
 
-#: 每个版本键覆盖的账本表。前端按键刷新一组页面（`frontend/src/react/result-updates.tsx`
-#: 的 `READINGS`），那些页面背后按表缓存的计算读到的表必须落在刷新它的某个键里，
-#: 否则服务端已经换了新结果，页面却不来取。对照由 `tests/test_ledger_revision.py` 的
-#: `ResultVersionTablesTests` 核对。
+#: The ledger tables covered by each version key. The frontend refreshes a group of pages by key (`frontend/src/react/result-updates.tsx`
+#: 's `READINGS`), the tables read by the per-table cached computations behind those pages must fall under some key that refreshes them,
+#: otherwise the server already has new results while the page does not come to fetch them. This is checked by `tests/test_ledger_revision.py` 's
+#: `ResultVersionTablesTests`.
 RESULT_TABLES = {
     'catalog': ('asset', 'asset_entity', 'asset_tag', 'asset_subtitle', 'asset_preference',
                 'asset_tag_preference', 'entity', 'entity_alias', 'entity_redirect',

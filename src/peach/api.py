@@ -107,7 +107,7 @@ COMPRESSION_EXCLUDED_TYPES = (
 
 
 class ResponseHeadersMiddleware:
-    """在 ASGI 响应头阶段设置缓存与安全策略，原样传递连接和异常。"""
+    """Set cache and security policy at the ASGI response-header stage, passing connections and exceptions through unchanged."""
 
     def __init__(self, app):
         self.app = app
@@ -190,7 +190,7 @@ def _restore_task_center(contract) -> None:
     recovered = contract.task_runs.recover_interrupted()
     if recovered:
         LOGGER.info("task center recovered %s interrupted run(s)", len(recovered))
-    # 先接上再叫醒后继：排着的补头像后继一跑就可能去取人脸模型。
+    # Attach first, then wake the successor: once a queued avatar-backfill successor runs it may go and fetch the face model.
     from . import face_models
     face_models.attach(contract.task_runs)
     requeued = contract.task_runs.enabled and contract.followups.resume()
@@ -220,7 +220,7 @@ def _start_ledger_services(settings: PeachSettings, contract, services) -> bool:
             contract.task_runs.enabled = contract.task_runs.available()
         except Exception as exc:
             repairs.error = str(exc)
-            LOGGER.exception('自动迁移失败，后台任务保持停止')
+            LOGGER.exception('Automatic migration failed; background tasks stay stopped')
             return False
     if not status["readable"] or status["schema"] != "current":
         LOGGER.warning("数据库未就绪，依赖数据库的后台任务保持停止（数据库：%s；结构：%s）；数据库准备完成后重启服务。",
@@ -231,7 +231,7 @@ def _start_ledger_services(settings: PeachSettings, contract, services) -> bool:
             repairs.prepare()
         except Exception as exc:
             repairs.error = str(exc)
-            LOGGER.exception('升级补修未完成，后台任务保持停止')
+            LOGGER.exception('Upgrade repair did not finish; background tasks stay stopped')
             return False
     _restore_task_center(contract)
     from .web_job_recovery import restore
@@ -287,7 +287,7 @@ def _installation_in_progress(database):
 
 
 class _LedgerActivation:
-    """安装确认期只提供网页；确认后启动后台，退出时等待在途准备收尾。"""
+    """During install confirmation only the web pages are served; after confirmation the background starts, and on exit it waits for in-flight preparation to wrap up."""
 
     def __init__(self, app, settings, contract, services, automatic_updates, sharing):
         self.app, self.settings, self.contract = app, settings, contract
@@ -332,7 +332,7 @@ class _LedgerActivation:
                 await self.resume()
         except Exception as exc:
             self.contract.upgrade_repairs.error = str(exc)
-            LOGGER.exception('安装后的后台服务未能启动')
+            LOGGER.exception('The background service failed to start after install')
         finally:
             self.app.state.ledger_background_deferred = False
 
@@ -511,8 +511,8 @@ def create_app(
         loop = asyncio.get_running_loop()
         previous_error_handler = loop.get_exception_handler()
         loop.set_exception_handler(asyncio_handler)
-        # 握手要等 cloudflared 连上边缘，断网时会等满 `wait_timeout`；放在后台，本机访问
-        # 不等公网入口。连接进度由 `tunnel_manager.snapshot()` 报告。
+        # The handshake waits for cloudflared to reach the edge, and when offline it waits the full `wait_timeout`; it runs in the background, so local access does
+        # not wait for the public entrance. Connection progress comes from `tunnel_manager.snapshot()`.
         tunnel_startup = asyncio.create_task(asyncio.to_thread(_start_tunnel, settings, tunnel_manager))
         services = (follow_scheduler, feed_scheduler, push_discovery, downloads, recovery_service, jav_browser, upgrade_repairs)
         activation = _LedgerActivation(_app, settings, contract, services, automatic_updates, sharing)
@@ -557,8 +557,8 @@ def create_app(
             face_models.detach(contract.task_runs)
             if mdns is not None:
                 await asyncio.to_thread(mdns.stop)
-            # stop 让还在等边缘的握手当场返回；握手若刚好在 stop 之后才拉起子进程，
-            # 第二次 stop 把它收掉。
+            # stop lets a handshake still waiting for the edge return immediately; if a handshake only spawns the child process just after stop,
+            # a second stop reaps it.
             await asyncio.to_thread(tunnel_manager.stop)
             await tunnel_startup
             await asyncio.to_thread(tunnel_manager.stop)
@@ -679,7 +679,7 @@ def create_app(
     # JSON 契约、页面脚本与样式是仅有的几类大文本响应，压下去省的字节最多：
     # `/api/items`、主界面 bundle 与样式都通过内容类型选择压缩。
     # `add_middleware` 是 `insert(0)`，最后加的在最外层，所以压缩看到的是上面
-    # ResponseHeadersMiddleware 补完 Cache-Control 之后的最终响应头。
+    # ResponseHeadersMiddleware final response headers after Cache-Control is completed.
     # 自己写内容类型闸门的 ASGI 中间件是重复劳动：Starlette 这个已经按 Content-Type
     # 排除、跳过 206 与已编码响应、逐块流式压缩，还会把大块丢到工作线程去压，
     # 不占事件循环。只需要把它的排除名单补齐（见 COMPRESSION_EXCLUDED_TYPES）。

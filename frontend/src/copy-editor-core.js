@@ -1,10 +1,10 @@
-/* Peach 原位改字核心。以 classic script 同步注册，保存由各端适配器提供。 */
+/* Peach in-place copy editing core. Registered synchronously as a classic script; saving is provided by each client's adapter. */
 (() => {
   const SKIP = '[data-copy-editor],script,style,textarea,input,select,svg,[contenteditable]';
   const INTERACT = '[role="tab"],[role="switch"],[role="radio"],[role="radiogroup"],[role="slider"],[role="checkbox"],[role="combobox"],[data-platform-option],[aria-expanded],[aria-pressed],[aria-haspopup],summary,input,select,label,[data-copy-interact]';
   const spacing = new WeakMap();
 
-  // 连续文字共用输入框，未改动的前后片段留在各自的行内元素里。
+  // Consecutive text shares one input box; the unchanged leading and trailing fragments stay in their own inline elements.
   function replaceTextParts(parts, text) {
     const before = parts.join('');
     let start = 0, suffix = 0;
@@ -35,15 +35,15 @@
     let result;
     try { result = JSON.parse(raw); }
     catch {
-      const error = new Error(`未取得保存结果（HTTP ${response.status}），请刷新页面核对；服务未返回 JSON`);
+      const error = new Error(`Save result not received (HTTP ${response.status}); refresh the page to verify. The server did not return JSON`);
       error.unconfirmed = response.ok;
       throw error;
     }
     if (!response.ok || result?.ok === false) {
-      throw new Error(result?.error || (typeof result?.detail === 'string' ? result.detail : `请求失败（HTTP ${response.status}）`));
+      throw new Error(result?.error || (typeof result?.detail === 'string' ? result.detail : `Request failed (HTTP ${response.status})`));
     }
     if (result === null || typeof result !== 'object') {
-      const error = new Error(`未取得保存结果（HTTP ${response.status}），请刷新页面核对`);
+      const error = new Error(`Save result not received (HTTP ${response.status}); refresh the page to verify`);
       error.unconfirmed = true;
       throw error;
     }
@@ -88,7 +88,7 @@
       const left = (viewport?.offsetLeft ?? 0) + 12, top = (viewport?.offsetTop ?? 0) + 12;
       const width = viewport?.width ?? innerWidth, height = viewport?.height ?? innerHeight;
       Object.assign(bar.style, { left: '0px', top: '0px', right: 'auto', bottom: 'auto', transform: 'none' });
-      // 模态框的 transform 可能改变 fixed 的包含块，拖动坐标仍按实际视口计算。
+      // A modal's transform can change the containing block of fixed elements; drag coordinates are still computed from the actual viewport.
       const origin = bar.getBoundingClientRect();
       position = { x: Math.max(left, Math.min(x, left + width - origin.width - 24)),
         y: Math.max(top, Math.min(y, top + height - origin.height - 24)) };
@@ -122,7 +122,7 @@
       event.preventDefault(); const rect = bar.getBoundingClientRect(), step = event.shiftKey ? 40 : 10;
       move(rect.left + direction[0] * step, rect.top + direction[1] * step);
     };
-    handle.title = '拖动工具栏空白处移动，方向键微调，双击空白处或 Esc 复位';
+    handle.title = 'Drag the empty area of the toolbar to move it, use arrow keys to nudge, double-click the empty area or press Esc to reset';
     handle.dataset.copyDrag = '';
     const events = { pointerdown: down, pointermove: motion, pointerup: stop, pointercancel: stop, keydown: key,
       dblclick: event => { if (!event.target.closest('button,a,input,select,textarea,[contenteditable]')) reset(); } };
@@ -157,17 +157,17 @@
     for (const type of ['pointerdown', 'click']) host.addEventListener(type, event => event.stopPropagation());
     const bar = document.createElement('div'); bar.dataset.copyEditor = ''; bar.dataset.copyBar = '';
     bar.popover = 'manual'; bar.tabIndex = 0;
-    bar.dataset.selectionDock = ''; bar.dataset.glassPane = ''; bar.setAttribute('role', 'group'); bar.setAttribute('aria-label', '文案编辑');
+    bar.dataset.selectionDock = ''; bar.dataset.glassPane = ''; bar.setAttribute('role', 'group'); bar.setAttribute('aria-label', 'Copy editing');
     const hint = document.createElement('span'); hint.id = 'peach-copy-hint'; hint.hidden = true;
-    hint.textContent = '点击文字修改，回车或点别处保存，Esc 取消；暂停编辑后可操作页面。';
+    hint.textContent = 'Click text to edit; press Enter or click elsewhere to save, Esc to cancel; pause editing to use the page.';
     bar.setAttribute('aria-describedby', hint.id);
-    const state = document.createElement('span'); state.dataset.copyState = ''; state.textContent = '改字模式'; bar.append(state);
+    const state = document.createElement('span'); state.dataset.copyState = ''; state.textContent = 'Text edit mode'; bar.append(state);
     const status = document.createElement('span'); status.dataset.copyFeedback = ''; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
     const say = (text, tone = '') => {
       status.textContent = text; state.title = text || '';
-      state.textContent = tone === 'err' ? '保存失败' : text?.includes('Enter 保存') ? '正在编辑'
-        : text?.startsWith('已保存') ? '已保存' : text === '已取消' ? '已取消'
-        : text?.includes('…') ? '处理中' : active ? '改字模式' : '编辑已暂停';
+      state.textContent = tone === 'err' ? 'Save failed' : text?.includes('Enter to save') || text?.includes('Enter 保存') ? 'Editing'
+        : text?.startsWith('Saved') || text?.startsWith('已保存') ? 'Saved' : text === 'Cancelled' || text === '已取消' ? 'Cancelled'
+        : text?.includes('…') ? 'Working' : active ? 'Text edit mode' : 'Editing paused';
     };
     const button = (text, action) => {
       const node = document.createElement('button'); node.type = 'button'; node.textContent = text;
@@ -175,12 +175,12 @@
     };
     let active = true, busy = false, recovery = null, choice = null;
     const toolbarDrag = attachToolbarDrag(bar);
-    const toggle = button('暂停编辑', () => {
+    const toggle = button('Pause editing', () => {
       if (busy) return;
-      active = !active; options.onToggle?.(active); toggle.textContent = active ? '暂停编辑' : '继续编辑'; say('');
+      active = !active; options.onToggle?.(active); toggle.textContent = active ? 'Pause editing' : 'Resume editing'; say('');
     });
-    button('导出修改', () => options.onExport?.());
-    button('退出编辑', () => { if (!busy) options.onExit?.(); });
+    button('Export changes', () => options.onExport?.());
+    button('Exit editing', () => { if (!busy) options.onExit?.(); });
     bar.append(status); host.append(hint, bar);
     const localStyles = new Map();
     const shadowObservers = new Map();
@@ -213,7 +213,7 @@
       for (const [root, style] of localStyles) if (!root.host.isConnected) { style.remove(); localStyles.delete(root); }
       let moved = false;
       for (const node of [highlight, host, choice?.node]) if (node && node.parentElement !== parent) { parent.append(node); moved = true; }
-      // 保持模态框内的可交互资格，工具条本身在顶层按整个视口定位，不受弹窗裁切。
+      // Keep interactivity inside the modal; the toolbar itself is positioned at the top level against the whole viewport and is not clipped by the dialog.
       if (!bar.matches(':popover-open')) bar.showPopover();
       const nextFooter = parent.matches('dialog') ? parent.querySelector('footer,.footer') : null;
       if (footer !== nextFooter) { if (footer) layout.unobserve(footer); footer = nextFooter; if (footer) layout.observe(footer); }
@@ -231,10 +231,10 @@
           recovery.remove(); recovery = null; action();
         });
       },
-      choose(items, rect, { label = '选项', message = '' } = {}) {
+      choose(items, rect, { label = 'Option', message = '' } = {}) {
         choice?.cancel();
         const select = document.createElement('select'); select.dataset.copyEditor = ''; select.dataset.copyChoice = '';
-        select.setAttribute('aria-label', label); select.add(new Option(`请选择${label}`, ''));
+        select.setAttribute('aria-label', label); select.add(new Option(`Choose ${label}`, ''));
         items.forEach((item, index) => select.add(new Option(item.label, String(index))));
         Object.assign(select.style, { left: Math.max(16, Math.min(rect.left, innerWidth - 300)) + 'px',
           top: Math.max(16, Math.min(rect.bottom + 8, innerHeight - 60)) + 'px' });
@@ -316,7 +316,7 @@
       setBusy(true);
       try {
         const prepared = await options.prepare?.(ed);
-        if (prepared === null || destroyed || !node.isConnected || (ed.element ? ed.element.textContent : node.data) !== before) { say('已取消'); return; }
+        if (prepared === null || destroyed || !node.isConnected || (ed.element ? ed.element.textContent : node.data) !== before) { say('Cancelled'); return; }
         ed = { ...ed, ...prepared };
         const input = !!node.parentElement.closest('button,a,[role="button"]');
         const box = document.createElement(input ? 'input' : 'span');
@@ -343,10 +343,10 @@
             ed.element.append(box);
           } else node.replaceWith(...[ed.lead, box, ed.trail].filter(Boolean));
         }
-        box.setAttribute('aria-label', '修改文字'); editing = ed; positionInput(); box.focus();
+        box.setAttribute('aria-label', 'Edit text'); editing = ed; positionInput(); box.focus();
         if (input) box.select();
         else { const range = document.createRange(); range.selectNodeContents(box); getSelection()?.removeAllRanges(); getSelection()?.addRange(range); }
-        hideHighlight(); say(ed.candidate?.template ? '保留 {占位符}，只改文字 · Enter 保存 · Esc 取消' : 'Enter 保存 · Esc 取消');
+        hideHighlight(); say(ed.candidate?.template ? 'Keep {placeholder}, edit text only · Enter to save · Esc to cancel' : 'Enter to save · Esc to cancel');
         box.addEventListener('keydown', event => {
           event.stopPropagation(); if (event.isComposing) return;
           if (event.key === 'Enter' && !(ed.multiline && event.shiftKey)) { event.preventDefault(); commit(); }
@@ -374,9 +374,9 @@
       const text = (ed.multiline ? value : value.replace(/\s*\n\s*/g, ' ')).trim();
       const connected = ed.node.isConnected || ed.box.isConnected;
       putBack(ed);
-      if (cancel || !connected) { say('已取消'); return; }
+      if (cancel || !connected) { say('Cancelled'); return; }
       if (text === ed.core) return;
-      setBusy(true); say('保存中…');
+      setBusy(true); say('Saving…');
       let persisted = false;
       try {
         const result = await options.save(ed, text) ?? {};
@@ -387,11 +387,11 @@
           ed.nodes.forEach((node, i) => { node.data = parts[i]; });
           cleanInline(ed.element);
         } else if (result.remove) ed.node.remove(); else ed.node.data = ed.lead + rendered + ed.trail;
-        say(result.message || (rendered ? '已保存修改' : '已删除文字'), 'ok');
+        say(result.message || (rendered ? 'Saved changes' : 'Text deleted'), 'ok');
         await options.onSaved?.(ed, { ...result, text: rendered });
       } catch (error) {
         if (!persisted && !ed.element) ed.node.data = ed.before;
-        say((persisted ? '已保存，界面更新未完成：' : error.unconfirmed ? '未确认保存：' : '没保存：') + error.message, 'err');
+        say((persisted ? 'Saved, but the page update did not finish: ' : error.unconfirmed ? 'Save not confirmed: ' : 'Not saved: ') + error.message, 'err');
       } finally { setBusy(false); }
     }
     document.addEventListener('mousemove', move, { passive: true });

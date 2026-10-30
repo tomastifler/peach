@@ -62,8 +62,8 @@ def _tasks(contract, args):
     # 还在跑的那一轮已经跑完的后继：它们挂在「正在进行」那张卡下面，不在哪一页里。
     finished += contract.task_runs.settled_followups(
         [row.id for row in running if not row.followup])
-    # 后继还在排或在跑、自己已经结束的父任务：它可能比「最近完成」这一页还早，不单独下发的话，
-    # 它派出的后继在页面上找不到父卡，会一条条散开。它不进 `finished`，翻页游标才不会跳过中间那段。
+    # Parent tasks that have finished themselves while successors are still queued or running: they may be older than the "Recently completed" page, and if not sent separately,
+    # its dispatched successors would find no parent card on the page and scatter one by one. It does not go into `finished`, so that the paging cursor does not skip the middle section.
     shown = {row.id for row in (*running, *finished)}
     working = [row for row in contract.task_runs.active_parents() if row.id not in shown]
     return {
@@ -85,15 +85,15 @@ def _tasks(contract, args):
 
 
 def _active(contract, limit: int) -> list:
-    """正在跑的一条不落，排队的取最近几条：一轮派出上千条后继时，按 id 取最近的只剩排队那些，
-    真正在跑的那条反而被挤掉。"""
+    """The running one is never dropped, and for the queued ones the latest few are taken: when a round dispatches over a thousand successors, taking the latest by id would leave only the queued ones,
+    and the one actually running would be squeezed out instead."""
     started = contract.task_runs.query(status="running", limit=500)
     queued = contract.task_runs.query(status="pending", limit=limit)
     return sorted({row.id: row for row in (*started, *queued)}.values(), key=lambda row: row.id, reverse=True)
 
 
 def _parent_counts(contract, rows) -> dict[str, dict[str, int]]:
-    """后继只下发了一部分，父任务做到哪一步、还算不算在进行，按这份计数回答。"""
+    """Successors are sent down only in part; how far the parent task has got and whether it still counts as in progress are answered by this count."""
     counts = contract.task_runs.followup_counts(row.id for row in rows if not row.followup)
     return {str(parent): states for parent, states in counts.items()}
 
@@ -116,7 +116,7 @@ def q_task(contract, run_id):
 
 
 def _payload_reader(contract):
-    """同一轮的完成检查点可补充摘要，读取不回写任务记录。"""
+    """A completion checkpoint of the same round can supplement the summary, and reading does not write back to the task record."""
     from .job_recovery import read
 
     saved = {}

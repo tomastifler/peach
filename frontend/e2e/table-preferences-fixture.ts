@@ -38,7 +38,7 @@ async function verifyToolbarWrapping(page: Page) {
         return a.left >= r.left - 1 && a.right <= r.right + 1;
       }));
       assert.ok(footers.every(Boolean), `${width}px 分页操作越出容器`);
-      const pagination = await page.locator('nav').filter({ has: page.getByRole('button', { name: '上一页', exact: true }) })
+      const pagination = await page.locator('nav').filter({ has: page.getByRole('button', { name: 'Previous page', exact: true }) })
         .evaluateAll(roots => roots.map(root => {
           const buttons = [...root.querySelectorAll(':scope > button')];
           return buttons.length === 2 && Math.abs(buttons[0]!.getBoundingClientRect().y - buttons[1]!.getBoundingClientRect().y) < 1;
@@ -55,7 +55,7 @@ async function verifyToolbarWrapping(page: Page) {
 export async function verifyTablePreferences(page: Page, table: Locator, label: string, identity: string, optional: { id: string; label: string }, restoreView?: () => Promise<unknown>) {
   await table.waitFor();
   await verifyToolbarWrapping(page);
-  const controls = page.getByRole('group', { name: `${label}列设置`, exact: true });
+  const controls = page.getByRole('group', { name: `${label} column settings`, exact: true });
   const header = table.locator(`th[data-key="${identity}"]`);
   const width = async () => header.evaluate(node => node.getBoundingClientRect().width);
   const initial = await width();
@@ -86,8 +86,8 @@ export async function verifyTablePreferences(page: Page, table: Locator, label: 
     assert.ok(await scroll.evaluate(node => node.scrollLeft) >= Math.min(80, range) - 2, label);
     assert.equal(await table.locator('tbody input[type="checkbox"]:checked:not([role="switch"])').count(), 0, label);
   }
-  await controls.getByRole('button', { name: '显示列', exact: true }).click();
-  const menu = page.getByRole('dialog', { name: `${label}显示列`, exact: true });
+  await controls.getByRole('button', { name: 'Columns', exact: true }).click();
+  const menu = page.getByRole('dialog', { name: `${label} visible columns`, exact: true });
   const actionLayout = await menu.evaluate(element => {
     const actions = element.querySelector<HTMLElement>('[data-selection-actions]')!;
     const buttons = [...actions.querySelectorAll('button')].map(button => {
@@ -124,11 +124,11 @@ export async function verifyTablePreferences(page: Page, table: Locator, label: 
   await table.waitFor();
   assert.ok(Math.abs(await width() - resized) <= 1, label);
   assert.equal(await table.locator(`th[data-key="${optional.id}"]`).count(), 0);
-  await controls.getByRole('button', { name: '显示列', exact: true }).click();
-  await menu.getByRole('button', { name: '恢复默认显示', exact: true }).click();
+  await controls.getByRole('button', { name: 'Columns', exact: true }).click();
+  await menu.getByRole('button', { name: 'Restore default view', exact: true }).click();
   await page.keyboard.press('Escape');
   await table.locator(`th[data-key="${optional.id}"]`).waitFor();
-  await controls.getByRole('button', { name: '重置列宽', exact: true }).click();
+  await controls.getByRole('button', { name: 'Reset column widths', exact: true }).click();
   await page.waitForFunction(({ node, initial }) => node && Math.abs(node.getBoundingClientRect().width - initial) <= 1,
     { node: await header.elementHandle(), initial }, { timeout: 5000 });
   assert.ok(Math.abs(await width() - initial) <= 1, label);

@@ -37,13 +37,13 @@ it('自定义未知名称和图像加载失败使用通用标识，更换来源�
 
 it('添加浏览器的表单取消在左、添加在右', async () => {
   const host = await open();
-  await click(buttonNamed('添加浏览器', host));
-  expect(actionOrder(host.querySelector('form'))).toEqual(['取消', '添加']);
+  await click(buttonNamed('Add browser', host));
+  expect(actionOrder(host.querySelector('form'))).toEqual(['Cancel', 'Add']);
 });
 
 it('删除浏览器来源会删掉已导入的历史，确认弹层用危险样式', async () => {
   const modal = vi.spyOn(legacyUi, 'confirmModal').mockResolvedValue({ confirmed: false });
   const host = await open();
-  await click(host.querySelector('[aria-label="删除 Chrome"]'));
-  expect(modal.mock.calls[0]?.[0]).toMatchObject({ title: '删除 Chrome', confirmLabel: '删除浏览器来源', danger: true });
+  await click(host.querySelector('[aria-label="Delete Chrome"]'));
+  expect(modal.mock.calls[0]?.[0]).toMatchObject({ title: 'Delete Chrome', confirmLabel: 'Delete browser source', danger: true });
 });

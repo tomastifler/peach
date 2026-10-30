@@ -49,7 +49,7 @@ class StatusCommandTests(unittest.TestCase):
                 redirect_stdout(io.StringIO()):
             self.assertEqual(cli._migrate(arguments), 0)
             arguments.action = 'upgrade'
-            with self.assertRaisesRegex(SystemExit, '写入端迁移并同步'):
+            with self.assertRaisesRegex(SystemExit, 'migrate on the writer first and then sync'):
                 cli._migrate(arguments)
         self.assertEqual(database.read_bytes(), before)
         self.assertEqual(list(database.parent.iterdir()), [database])
@@ -166,7 +166,7 @@ class InitCommandTests(unittest.TestCase):
         with self.assertRaises(SystemExit) as caught:
             self._init("--mount", "locla=/mnt/media")
         self.assertIn("locla", str(caught.exception))
-        self.assertIn("尚未声明媒体来源", str(caught.exception))
+        self.assertIn("no media sources declared yet", str(caught.exception))
 
     def test_mount_without_an_equals_sign_is_refused(self):
         with self.assertRaises(SystemExit) as caught:
@@ -599,7 +599,7 @@ class ProcessCommandTests(unittest.TestCase):
             rows=connection.execute('SELECT status,parent_run_id FROM task_run').fetchall()
         self.assertEqual(code,130)
         self.assertEqual(rows,[('cancelled',None)])
-        self.assertIn('已保存结果保留',output.getvalue())
+        self.assertIn('results already saved are kept',output.getvalue())
 
 
 class ReplicationAssemblyTests(unittest.TestCase):

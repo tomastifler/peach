@@ -18,7 +18,7 @@
   grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--tile)), 1fr));
   gap: 24px;
 }
-/* 同一网格行里的卡片共享完整高度。 */
+/* Cards in the same grid row share the full height. */
 .peach-react [data-media-grid] > [data-media-card] { align-self: stretch; }
 body[data-surface="/trash"] .peach-react [data-media-grid] > [data-media-card] { align-self: stretch; }
 /* 详情页接着看那一排：岛根挂在作品详情的横排 `[data-related-row]` 里，卡片在这一层横着排，卡距同那一排。 */
@@ -45,9 +45,9 @@ body[data-surface="/trash"] .peach-react [data-media-grid] {
   transform-origin: center;
   transition: transform .18s ease, filter .18s ease, background-color .15s ease, box-shadow .15s ease;
 }
-/* 媒体库来源色是常驻底色，同一媒体库的卡常常整排相邻。淡色和悬停面一样往卡片盒外铺 8px，
- * 头像、标签离色块边留出 8px；网格行距、列距都是 24px，相邻两张有色卡之间仍隔 8px 页面底色，
- * 不连成一片。颜色由 `library-tint.ts` 按 `library_id` 给，用户没选颜色的媒体库不上色。 */
+/* The library source color is a permanent base tint, and cards of the same library are often adjacent in a whole row. The light tint, like the hover surface, extends 8px outside the card box,
+ * leaving 8px between the avatar/tags and the edge of the color block; grid row and column gaps are both 24px, so two adjacent tinted cards are still separated by 8px of page background and
+ * do not merge into one patch. The color is supplied by `library-tint.ts` by `library_id`; libraries with no color chosen by the user are not tinted. */
 .peach-react [data-media-card][data-library]:not([data-pending-delete], [data-variant="resource"], [data-variant="junk"]) {
   --library-surface: color-mix(in oklab, var(--library-color) 9%, transparent);
   --library-hover: color-mix(in oklab, var(--library-color) 15%, transparent);
@@ -67,8 +67,8 @@ body[data-surface="/trash"] .peach-react [data-media-grid] {
 .peach-react [data-media-card][data-variant="short"] { flex: none; width: 214px; }
 .peach-react [data-media-card][data-variant="next"] { flex: none; width: 216px; }
 body[data-density="dense"] .peach-react [data-media-card][data-variant="short"] { width: calc(214px * 168 / 336); }
-/* 悬停面往卡片盒外多铺 8px：不动网格尺寸、不挤相邻卡，只让命中反馈比内容大一圈；同一时刻
- * 只有一张卡在铺，列距另一半留给邻卡。回收站的资源卡与垃圾卡是有边的面，不铺。 */
+/* The hover surface extends 8px beyond the card box: it does not change grid size or squeeze neighboring cards, and only makes the hit feedback one ring larger than the content; at any moment
+ * only one card is extending, leaving the other half of the column gap to the neighbor. Trash resource cards and junk cards are surfaces with borders and do not extend. */
 .peach-react [data-media-card]:not([data-variant="resource"], [data-variant="junk"]):is(:hover, :focus-within) {
   background: var(--hover);
   box-shadow: 0 0 0 8px var(--hover);
@@ -77,8 +77,8 @@ body[data-density="dense"] .peach-react [data-media-card][data-variant="short"] 
   background: var(--library-hover);
   box-shadow: 0 0 0 8px var(--library-hover);
 }
-/* 稍后看与已标记是个人状态，和来源色分开：封面左下角各一枚带色图标，两枚可以同时出现。
- * 鼠标不在卡上时也一直显示；颜色之外还有字形，不靠颜色单独分辨。 */
+/* Watch later and flagged are personal states, separate from the source color: one colored icon each at the bottom-left of the cover, and both can appear at once.
+ * They are shown even when the mouse is not over the card; besides color there is also a glyph, so they are not told apart by color alone. */
 .peach-react [data-media-status] {
   position: absolute;
   z-index: 3;
@@ -157,8 +157,8 @@ body[data-surface="/trash"] .peach-react button[data-media-title] {
 
 /* ── 视口外跳过渲染 ──
  * 跳过的是卡里的两块，封面与元信息区；卡片盒照常排版。封面高度由 `aspect-ratio` 从列宽推出，
- * 元信息区高度由它自己的排版 token 推出：多列预留两行标题（2.7em）、一行归属与一行标签。
- * 跳过渲染连带 paint containment，裁切边是元信息区的 padding box，所以
+ * The meta area's height derives from its own typography tokens: multi-column reserves two title lines (2.7em), one byline line and one tag line.
+ * Skipping rendering brings paint containment with it, and the clip edge is the meta area's padding box, so
  * 四周垫 8px 再用 -8px 抵消，头像的悬停描边和焦点环不被裁；垫出来的一圈不接指针。
  * 接着看那一排只有一行、往横向排，屏外的卡不改变整页高度，不套这份估计。 */
 .peach-react [data-media-meta] {
@@ -235,7 +235,7 @@ body:not([data-surface="/trash"]) .peach-react [data-media-card]:not([data-follo
   letter-spacing: .12em;
   text-transform: uppercase;
 }
-/* 远程封面取不到时由 `data-drop` 换上的占位字，与「无封面」一样排在格子正中。 */
+/* Placeholder text swapped in by `data-drop` when the remote cover cannot be fetched; like "No cover", it is centered in the cell. */
 .peach-react [data-media-art] > .media-nopic { position: absolute; inset: 0; display: grid; place-items: center; }
 /* 悬停预览：本地源是分段跳播的视频，远端源是接触印相格子的扫视图，都由壳插进封面格，
  * 不透明黑底盖掉下面的封面。 */
@@ -250,12 +250,12 @@ body:not([data-surface="/trash"]) .peach-react [data-media-card]:not([data-follo
 }
 .peach-react [data-media-pic] > video { opacity: 0; transition: opacity .2s; }
 .peach-react [data-media-pic] > video[data-playing] { opacity: 1; }
-/* 竖屏格一律 9:16（`media-card.tsx` 的 `PORTRAIT_RATIO`），而九宫格切出来的视频海报是 480×850～876，
- * 比例差 0.5%～3%。contain 会沿短的那一轴留下 0.5–3px 的黑底，落点又随竖屏带插在哪一行而带小数，
- * 读起来就是贴在框边、时有时无的一条色线；有的海报自己最外一列还是九宫格切缝的暗像素。
- * 竖屏格里的视频画面一律铺满，四边各外扩 1px 让切缝落到圆角裁切之外。JAV 封面（`.cover`）
- * 归共享取景（`framing.ts`），接触印相扫视图要整格看全，都不在此列。旧样式表的类名按属性读，
- * 不在 React 样式产物里另立同名类规则（`legacy-class-names.test.ts`）。 */
+/* Portrait cells are always 9:16 (`PORTRAIT_RATIO` in `media-card.tsx`), while video posters cut from the contact sheet are 480×850 to 876,
+ * a ratio difference of 0.5% to 3%. `contain` leaves 0.5-3px of black along the shorter axis, and the landing spot carries fractions depending on which row the portrait strip is inserted in,
+ * so it reads as an on-and-off colored line stuck to the frame edge; some posters also have dark pixels from the contact-sheet seams in their outermost column.
+ * Video frames in portrait cells are always filled edge to edge, expanded 1px on each side so the seams fall outside the rounded-corner clip. JAV covers (`.cover`)
+ * use the shared framing (`framing.ts`), and the contact-sheet view needs to be seen whole per cell, so neither is covered here. Class names from the old stylesheet are read by attribute,
+ * and no same-named class rule is created in the React style output (`legacy-class-names.test.ts`). */
 .peach-react [data-media-pic][data-pic-portrait] :is(img[class~="poster"]:not([class~="cover"]), video) {
   inset: -1px;
   width: calc(100% + 2px);
@@ -514,7 +514,7 @@ body:not([data-surface="/trash"]) .peach-react [data-media-card]:not([data-follo
 .peach-react :is([data-longhover] [data-media-seek], [data-media-card]:is(:hover, :has(:focus-visible)) [data-media-later]) button { pointer-events: auto; }
 .peach-react :is([data-media-preview], :is([data-media-later], [data-media-seek]) button):hover { background: rgb(0 0 0 / .34); }
 .peach-react [data-media-seek] svg { width: 34px; height: 34px; }
-/* 稍后看是卡片悬浮动作，取紧凑档。 */
+/* Watch later is a floating card action, use the compact size. */
 .peach-react [data-media-later] button { width: var(--control-h-compact); height: var(--control-h-compact); padding: 0; }
 .peach-react [data-media-later] svg { width: 18px; height: 18px; }
 .peach-react [data-media-later] button[aria-pressed="true"] { background: var(--ink); color: var(--ground); }
@@ -559,7 +559,7 @@ body:not([data-surface="/trash"]) .peach-react [data-media-card]:not([data-follo
   font-family: Bahnschrift, "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", sans-serif;
   font-size: var(--fs-sm);
 }
-/* 常态只占实际堆叠宽度；展开头像浮在文字上方，不改变标题位置。 */
+/* In the normal state it only takes the actual stacked width; the expanded avatars float over the text without changing the title position. */
 .peach-react [data-media-avatars] {
   --media-avatar-visible: var(--media-avatar-count);
   --media-avatar-gaps: max(1, calc(var(--media-avatar-visible) - 1));
@@ -600,12 +600,12 @@ body:not([data-surface="/trash"]) .peach-react [data-media-card]:not([data-follo
 }
 .peach-react [data-media-avatars] > :is(:hover, :focus-visible) + * { --lift-y: -1.8px; }
 .peach-react [data-media-avatars] > :is(:hover, :focus-visible) + * + * { --lift-y: -.81px; }
-/* 接着看与竖屏条保留两枚共演头像。 */
+/* Continue-watching and portrait strips keep two co-star avatars. */
 .peach-react :is([data-variant="next"], [data-variant="short"]) [data-media-avatars] { --media-avatar-visible: min(2, var(--media-avatar-count)); }
 .peach-react :is([data-variant="next"], [data-variant="short"]) [data-media-avatars] > :nth-child(n+3) { display: none; }
 
 .peach-react [data-media-text] { container: media-meta / inline-size; display: flex; flex: 1; flex-direction: column; gap: 6px; min-width: 0; }
-/* 多列卡片的标题预留两行，署名与标签各占一行。 */
+/* Multi-column card titles reserve two lines, with the byline and tags one line each. */
 .peach-react [data-media-title] {
   display: -webkit-box;
   width: 100%;
@@ -699,7 +699,7 @@ body:not([data-surface="/trash"]) .peach-react [data-media-card]:not([data-follo
   -webkit-box-orient: vertical;
 }
 .peach-react [data-media-next-reason]:focus-visible { outline: 2px solid var(--tungsten); outline-offset: 2px; }
-/* 窄卡片把日期与体积移到独立一行，保留署名的截断与完整日期。 */
+/* Narrow cards move the date and size to a separate line, keeping the byline truncation and the full date. */
 @container media-meta (width < 360px) {
   .peach-react [data-media-card]:not([data-variant="next"]) [data-media-byline] { flex-wrap: wrap; row-gap: 2px; }
   .peach-react [data-media-card]:not([data-variant="next"]) [data-media-facts] { flex-basis: 100%; }
@@ -749,7 +749,7 @@ body:not([data-surface="/trash"]) .peach-react [data-media-card]:not([data-follo
   .peach-react [data-media-tags] > :nth-child(n+3) { display: none; }
 }
 
-/* 密集一档保留标题、身份和标签；窄卡片的日期另起一行。缺少标签时仍保留标签位置；
+/* The dense tier keeps title, identity and tags; the date of narrow cards goes on its own line. The tag slot is still kept when tags are missing;
  * 普通卡也留出叠层卡的 7px，每行是否出现分卷卡不决定整行高度。回收站的网格列宽是自己定的，
  * 不跟密度走，卡是有边的面，这一套不套给它。 */
 body[data-density="dense"]:not([data-surface="/trash"]) .peach-react [data-media-grid] > :is([data-media-card], [data-mix-card]) { padding-top: 7px; }
@@ -857,9 +857,9 @@ body[data-surface="/trash"] .peach-react [data-media-tags] {
 
 /* ── 竖屏带 ──
  * 短片带是这一叠卡里的一张，和上下两段视频平级：同一张面、同一圈发丝边、同一个圆角。
- * 宽屏上整块往左铺过侧栏轨道，面板铺到视口边上，左边两个圆角也就去掉了。
- * 带子的面是 `--ground`，浅色下与全站悬停面 `--hover` 同为 #F7F7F7：卡片和「进入」键的悬停在这里
- * 铺出去等于没铺。带内的悬停面按次级按钮那一档在带子底色上压一层，两种主题都比底色深一档。 */
+ * On wide screens the whole block extends left across the sidebar rail and the panel reaches the viewport edge, so the two left rounded corners are removed as well.
+ * The strip's surface is `--ground`, which in light theme equals the site-wide hover surface `--hover` at #F7F7F7: the hover of cards and the "Enter" button would extend here to no effect.
+ * The hover surface inside the strip is layered on the strip's base color at the secondary button level, one step darker than the base in both themes. */
 .peach-react [data-shorts-strip] {
   --hover: color-mix(in srgb, var(--ink) 8%, var(--ground));
   padding: 16px;
@@ -868,7 +868,7 @@ body[data-surface="/trash"] .peach-react [data-media-tags] {
   background: var(--ground);
   font: var(--board-body);
 }
-/* 标题行压在横滚行往上垫出的那一截之上，「进入」键照样点得到。 */
+/* The title row sits above the stretch padded upward by the horizontal-scroll row, so the "Enter" button can still be clicked. */
 .peach-react [data-shorts-strip] > h2 {
   position: relative;
   z-index: 1;
@@ -905,9 +905,9 @@ body[data-surface="/trash"] .peach-react [data-media-tags] {
 }
 .peach-react [data-shorts-enter]:hover { background: var(--hover); }
 .peach-react [data-shorts-enter] svg { width: var(--icon-inline); height: var(--icon-inline); fill: none; stroke: currentColor; stroke-width: 2; }
-/* 横滚行是滚动容器，`overflow-x:auto` 连带把纵向也裁在内边距框上。长悬停的卡上移 7px 再放大 6.5%，
- * 外面还铺着 8px 悬停面：一张 214×486 的卡往上要 31px、往下 17px、左右 16px 才不被切。内边距按这个
- * 留足，再用等量负外边距抵掉，卡片位置不动。 */
+/* The horizontal-scroll row is a scroll container, and `overflow-x:auto` also clips vertically at the padding box. A long-hover card moves up 7px and scales up 6.5%,
+ * with an 8px hover surface still around it: a 214×486 card needs 31px above, 17px below and 16px left and right to avoid being cut. The padding is sized
+ * to leave enough room, then offset by an equal negative margin so the card position does not move. */
 .peach-react [data-shorts-row] {
   display: flex;
   gap: 13px;
@@ -960,7 +960,7 @@ body[data-surface="/trash"] .peach-react [data-media-tags] {
   box-shadow: 0 0 0 8px var(--hover);
 }
 
-/* 单列按实际内容定高，列数由网格的真实布局决定。 */
+/* A single column's height is set by its actual content; the column count is decided by the grid's real layout. */
 body .peach-react [data-media-grid][data-single-column] [data-media-card] [data-media-meta] {
   min-height: 0; height: auto; content-visibility: visible; contain-intrinsic-block-size: none;
 }

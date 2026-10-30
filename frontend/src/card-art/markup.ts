@@ -39,10 +39,10 @@ export const STAND_IN_TITLE = 'Frame from a representative work, not the person'
 export const withVersion = (url: string, version: string | null | undefined): string =>
   version ? `${url}&v=${encodeURIComponent(version)}` : url;
 
-/** 封面派生档（`/cover?thumb=`）：`1` 长边 1600，`2` 长边 800；`0` 是原件。 */
+/** Cover derived tier (`/cover?thumb=`): `1` is 1600 on the long edge, `2` is 800 on the long edge; `0` is the original. */
 export type CoverTier = 0 | 1 | 2;
 
-/** 封面地址。`thumb` 是派生档，`true` 即 1600 那一档；`upgradeCover` 按显示尺寸往上换，版本号留在后面。 */
+/** Cover URL. `thumb` is the derived tier, and `true` means the 1600 tier; `upgradeCover` swaps upward by display size, with the version number kept at the end. */
 export const coverUrl = (item: { code?: string | null; cover_key?: string; cover_version?: string },
   thumb: boolean | CoverTier = false): string => {
   const tier = thumb === true ? 1 : thumb || 0;
@@ -50,16 +50,16 @@ export const coverUrl = (item: { code?: string | null; cover_key?: string; cover
     item.cover_version);
 };
 
-/** 卡片网格起步取 800 那一档的屏幕像素密度上限。 */
+/** The screen pixel density cap at which the card grid starts at the 800 tier. */
 export const CARD_COVER_SMALL_DPR = 1.5;
 
-/* 卡片网格的封面先取哪一档。卡片在 1440 宽桌面上铺开 168–360 CSS px，一倍屏要不到 400
-   设备像素，800 那一档就够；更密的屏起步取 1600 那一档，大位封面不必先糊后清、多下一张。
-   起步档不够清楚的，由 `upgradeCover` 量过显示尺寸再往上换。 */
+/* Which tier of cover the card grid fetches first. Cards spread 168-360 CSS px on a 1440-wide desktop, and a 1x screen needs less than 400
+   device pixels, so the 800 tier is enough; denser screens start at the 1600 tier, so large covers need not go blurry-then-sharp with an extra download.
+   When the starting tier is not sharp enough, `upgradeCover` measures the display size and swaps upward. */
 export const cardCoverUrl = (item: { code?: string | null; cover_key?: string; cover_version?: string }): string =>
   coverUrl(item, (window.devicePixelRatio || 1) <= CARD_COVER_SMALL_DPR ? 2 : 1);
 
-/** 库外作品的官方封面：`/cover-image` 按番号在服务端查地址，经 Peach 的出网设置取图，浏览器不直连图床。 */
+/** Official covers for works outside the library: `/cover-image` looks up the URL by product code on the server and fetches the image through Peach's outbound network settings; the browser never connects to the image host directly. */
 export const remoteCoverUrl = (item: { code?: string | null }): string =>
   `/cover-image?code=${encodeURIComponent(item.code || '')}`;
 
@@ -91,9 +91,9 @@ export function performerLabel(item: { is_jav?: boolean } | null | undefined): s
    兜底链最后一环必须真的把 `<img>` 拿掉（`data-drop="self"`）：留着取不到图的
    `<img>`，`:has(img)` 仍然匹配，首字母垫底回不来，浏览器还会把 alt 画出来。
 
-   `thumb` 要的是实体图缩到长边 640 的那一份，默认就取它：顶栏、卡片署名、同台艺人、
-   身份格这些圆框都在 70 CSS px 以内，640 在三倍屏上也有富余。只有资料页大位传 `false`
-   取原件——那里就是要看清，人脸放大也要原件的像素。
+   `thumb` wants the copy of the entity image scaled to 640 on the long edge, and takes it by default: the round frames in the top bar, card bylines, co-star performers and
+   identity cells are all within 70 CSS px, and 640 leaves headroom even on 3x screens. Only the profile page's large slot passes `false`
+   to get the original - that is where it must be seen clearly, and zoomed-in faces need the original's pixels.
 
    `version` 是服务端随 `has_image` 下发的 `image_version`，`logoVersion` 是 `logo_version`。
 
@@ -302,9 +302,9 @@ export function mixFace(item: CoverItem, size: 'big' | 'small', eager: boolean, 
   return frameArtwork(item, eager);
 }
 
-/** 视频自己的画面：本地预览格切出的帧图。没有帧图就是空，卡片写「无预览」。
- *  竖屏格（竖屏带与筛竖屏的网格）只展示竖屏比例的视频，番号作品在那里也只用它，不借番号官方
- *  封面：封面是整部作品的宣传图，多是横图，和这一卷竖屏视频不是同一个画面。 */
+/** The video's own picture: the frame image cut from the local preview grid. With no frame image it is empty, and the card says "No preview".
+ *  Portrait cells (the portrait strip and portrait-filtered grids) only show videos in portrait ratio, and works with a product code only use it there as well, without borrowing the official
+ *  cover for the product code: the cover is the whole work's promo image, mostly landscape, and not the same picture as this portrait video volume. */
 export function frameArtwork(item: CoverItem, eager: boolean): Artwork {
   if (!item.has_thumb && !item.has_local_poster) return NO_ARTWORK;
   return { kind: 'thumb', html: `<img class="poster" src="/poster?id=${item.id}&c=4" width="640" height="360" alt="" loading="${eager ? 'eager' : 'lazy'}" decoding="async">` };
@@ -387,5 +387,5 @@ export function mixLabel(item: IdentityItem, tagLabel: (tag: string) => string):
   if (item.is_jav && performer) return entityDisplayName('performer', performer);
   if (item.creator) return entityDisplayName('creator', item.creator);
   return (performer ? entityDisplayName('performer', performer) : '') || item.studio || item.code
-    || tagLabel((item.tags || [])[0] || '') || '为你推荐';
+    || tagLabel((item.tags || [])[0] || '') || 'Recommended for you';
 }

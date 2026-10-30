@@ -14,7 +14,7 @@ function read(key: string): Record<string, unknown> {
   } catch { return {} }
 }
 function persist(key: string, value: unknown) {
-  try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* 当前页面保留选择。 */ }
+  try { localStorage.setItem(key, JSON.stringify(value)) } catch { /* The current page keeps the selection. */ }
 }
 
 export function useTableColumnWidths(key: string, sizes: Record<string, ColumnSize>) {
@@ -24,7 +24,7 @@ export function useTableColumnWidths(key: string, sizes: Record<string, ColumnSi
   }));
   const [widths, setWidths] = useState(() => {
     const saved = read(key);
-    // 历史偏好包含整张表的默认像素值；默认身份宽度采用自适应，定制宽度保留。
+    // Historical preferences contain the default pixel values for the whole table; the default identity width is adaptive, while customized widths are kept.
     for (const [id, size] of Object.entries(sizes)) if (size.flex && saved[id] === size.width) delete saved[id];
     return bounded(saved);
   });
@@ -37,7 +37,7 @@ export function useTableColumnWidths(key: string, sizes: Record<string, ColumnSi
   };
   const reset = () => {
     setWidths(bounded({}));
-    try { localStorage.removeItem(key) } catch { /* 当前页面使用默认列宽。 */ }
+    try { localStorage.removeItem(key) } catch { /* The current page uses the default column widths. */ }
   };
   return { widths: bounded(widths), resize, save, reset };
 }
@@ -53,7 +53,7 @@ export function useTableColumnVisibility(key: string, ids: string[], required: s
   return { visibility, change };
 }
 
-/** 每张表使用独立偏好；身份列和勾选列保留，隐藏列仍可排序。 */
+/** Each table uses its own preferences; the identity and checkbox columns are kept, and hidden columns can still be sorted. */
 export function useTablePreferences(id: string, columns: TableColumnSpec[], keys?: { widths: string; visibility: string }) {
   const sizes = useMemo(() => Object.fromEntries(columns.map(column => [column.id, {
     width: column.width ?? 180, min: column.min ?? 96, max: column.max ?? (column.flex ? 2000 : 800), flex: column.flex,
@@ -64,7 +64,7 @@ export function useTablePreferences(id: string, columns: TableColumnSpec[], keys
     Object.fromEntries(columns.filter(column => column.visible === false).map(column => [column.id, false])));
   const flexible = columns.some(column => column.flex && visible.visibility[column.id] !== false && sizing.widths[column.id] === '1fr');
   return { ...sizing, ...visible, columns, spaceWidth: flexible ? 0 : '1fr' as const,
-    // 自适应列只承接多出来的空间，窄屏上不缩到默认宽度以下；手动调整后才允许到最小宽度。
+    // The adaptive column only takes the extra space, and on narrow screens it does not shrink below the default width; only after manual adjustment may it go down to the minimum width.
     columnProps: (column: string) => sizing.widths[column] === '1fr'
       ? { width: '1fr' as const, minWidth: sizes[column]!.width, maxWidth: undefined }
       : { width: sizing.widths[column], minWidth: sizes[column]!.min, maxWidth: sizes[column]!.max },

@@ -120,8 +120,8 @@ function requestEscape(): void {
 
 function StageDialog({ view: current }: { view: View }) {
   const ref = useRef<HTMLDialogElement>(null);
-  /* 全局键盘入口与浮窗共用 requestEscape，在 keydown 上 preventDefault，避免焦点在 body 时
-     绕过弹层判断。原生 cancel 保留给其他关闭请求；不可取消的事件不能阻止浏览器关闭浮窗。 */
+  /* The global keyboard entry and the popup share requestEscape and call preventDefault on keydown, so that when focus is on the body
+     it cannot bypass the overlay check. Native cancel is kept for other close requests; a non-cancelable event cannot stop the browser from closing the popup. */
   useLayoutEffect(() => {
     const dialog = ref.current!;
     // 文件选择框的 cancel 会冒泡；详情只处理自己的关闭请求。
@@ -155,9 +155,9 @@ function StageDialog({ view: current }: { view: View }) {
       {phase === 'skeleton' ? null : (
         /* 窄屏下滚的是 `[data-stage-scroll]`，全站那条覆盖式滚动条挂在它的兄弟位置（`<dialog>` 在顶层，
            轨道挂到它外面会落进遮罩底下）；「接着看」是 `[data-stage-grid]` 的兄弟，也得一起装进来。里面那层
-           `.peach-react` 不占盒子，token 与 Preflight 从它开始作用。
-           详情里打开的弹层、下拉与气泡（查找资源、裁剪封面、推荐理由）一律挂进这个 dialog：落在 `body`
-           上会被顶层的浮窗整个盖住，判据见 `overlay-host.ts`。 */
+           `.peach-react` takes up no box, and tokens and Preflight start applying from it.
+           Overlays, dropdowns and popovers opened inside the details (find resources, crop cover, recommendation reason) are all attached to this dialog: landing on `body`
+            would be fully covered by the top-layer popup; see `overlay-host.ts` for the criterion. */
         <div key="content" data-stage-scroll=""><div className="peach-react">
           <UNSAFE_PortalProvider getContainer={() => overlayHost(ref.current)}>{body}</UNSAFE_PortalProvider>
         </div></div>
@@ -353,7 +353,7 @@ async function swap(request: StageRequest, dialog: HTMLDialogElement): Promise<v
 /* 详情浮窗的退场跟设置弹层同一条：`data-closing` 让 `board-dialog-out` 和遮罩淡出演完，再拆。等待有
    上限：`animation` 被别的规则关掉时 animationend 不会来。 */
 function exit(): Promise<void> {
-  /* 退场动画的透明度会带着 dialog 里的 Toast 一起淡掉；先放回 body，让它随浮窗淡出露出来。 */
+  /* The exit animation's opacity would fade out the Toast inside the dialog too; put it back in body first so it shows through as the popup fades out. */
   adoptToasts(null);
   const dialog = stageDialog();
   if (!dialog?.open || dialog.hasAttribute('data-closing') || matchMedia('(prefers-reduced-motion: reduce)').matches) {
@@ -380,7 +380,7 @@ function dispose({ miniplayer = true }: { miniplayer?: boolean } = {}): void {
   const dialog = stageDialog();
   // 舞台拆掉之前收起挂在舞台里的悬停预览（「接着看」那一排的卡）。
   if (dialog) releaseHoverPreviews(dialog);
-  // 右键菜单开着时挪进了舞台、Toast 栈打开时就挪了进来：先放回 body，别跟着浮窗一起被卸掉。
+  // The context menu was moved into the stage when it was open, and the Toast stack when it opened: put them back in body first so they are not unmounted along with the popup.
   closePlayerMenu();
   adoptToasts(null);
   if (dialog?.open) dialog.close();
@@ -398,7 +398,7 @@ function dispose({ miniplayer = true }: { miniplayer?: boolean } = {}): void {
     }
   };
   restorePosition();
-  // 背景列表接管布局后的滚动锚定也回到打开详情时的位置。
+  // Scroll anchoring after the background list takes over the layout also returns to the position when the details were opened.
   requestAnimationFrame(restorePosition);
 }
 

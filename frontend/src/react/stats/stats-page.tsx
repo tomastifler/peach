@@ -42,8 +42,8 @@ import {
   type Attribution, type Count, type RecentPlay, type StatsData, type StorageVolume, type TagSource, type TopTag,
 } from './stats';
 
-/** 空馆藏与没有存储来源时「添加媒体」去的那一栏设置。 */
-const MEDIA_SETTINGS = settingsPath('媒体库与入库');
+/** The settings section that "Add media" goes to when the library is empty or there is no storage source. */
+const MEDIA_SETTINGS = settingsPath('Library & import');
 
 /** 收起时露这么多条排行。三十条一次铺开会把下面两个面板整个顶到屏外。 */
 const RANKING_PREVIEW = 10;
@@ -54,16 +54,16 @@ const VIEWING_COLOR = CHART_COLORS[4];
 
 const CARD = `${cardClass()} flex flex-col gap-4`;
 
-const NO_VIDEO_HINT = '添加媒体目录或关注来源后，这里会显示馆藏统计。';
-const NO_TAG_HINT = '补全资料或添加标签后，这里会显示馆藏中的内容标签。';
-const NO_WATCH_HINT = '开始播放后，这里会显示最近的真实观看证据。';
-const NO_TAG_SOURCE_HINT = '补充作品资料或手动添加标签后，这里会显示各个标签来源对应的视频数量。';
-const NO_VOLUME_HINT = '添加媒体目录后，这里会显示存储空间。';
-const NO_LIBRARY_HINT = '把媒体目录归进媒体库后，这里会按库显示视频数。';
-const NO_LENGTH_HINT = '探测时长后，这里会显示时长分布。';
-const NO_QUALITY_HINT = '探测画质后，这里会显示画质分布。';
-const NO_PLAY_TIME_HINT = '开始播放后，这里会显示播放落在一周的哪些时段。';
-const NO_REPLAY_HINT = '开始播放后，这里会显示每个作品播了几次。';
+const NO_VIDEO_HINT = 'Library statistics appear here after you add a media folder or followed source.';
+const NO_TAG_HINT = 'Content tags in the library appear here after you complete details or add tags.';
+const NO_WATCH_HINT = 'Recent real viewing evidence appears here after you start playing.';
+const NO_TAG_SOURCE_HINT = 'The number of videos for each tag source appears here after you add work details or tags manually.';
+const NO_VOLUME_HINT = 'Storage space appears here after you add a media folder.';
+const NO_LIBRARY_HINT = 'Video counts per library appear here after you assign media folders to libraries.';
+const NO_LENGTH_HINT = 'The duration distribution appears here after durations are detected.';
+const NO_QUALITY_HINT = 'The quality distribution appears here after quality is detected.';
+const NO_PLAY_TIME_HINT = 'The times of the week when you play appear here after you start playing.';
+const NO_REPLAY_HINT = 'How many times each work was played appears here after you start playing.';
 
 /** 进度条的读数：超出总数时按满格画，读屏值也不越过上限。 */
 const within = (value: number, max: number) => Math.min(Math.max(value, 0), max);
@@ -127,10 +127,10 @@ function InventoryDetail({ data }: { data: StatsData } & StatsProps) {
   const videos = data.by_loc.reduce((sum, row) => sum + row.videos, 0);
   if (!videos) {
     return (
-      <EmptyState icon={RiVideoLine} title="还没有视频" actions={
+      <EmptyState icon={RiVideoLine} title="No videos yet" actions={
         <>
-          <ButtonLink variant="secondary" href="/subscriptions?tab=add" size="small">添加关注</ButtonLink>
-          <ButtonLink variant="primary" href={MEDIA_SETTINGS} size="small">添加媒体</ButtonLink>
+          <ButtonLink variant="secondary" href="/subscriptions?tab=add" size="small">Add follow</ButtonLink>
+          <ButtonLink variant="primary" href={MEDIA_SETTINGS} size="small">Add media</ButtonLink>
         </>
       }>{NO_VIDEO_HINT}</EmptyState>
     );
@@ -194,7 +194,7 @@ function VolumeRow({ volume }: { volume: StorageVolume }) {
             {fmtSize(used)}
             <span className="ml-1.5 text-caption-1-regular text-text-secondary">{percentText(used, total)}</span>
           </b>
-        ) : volume.online ? <StatusLabel>容量未取得</StatusLabel> : <ConnectionStatus online={false} />}
+        ) : volume.online ? <StatusLabel>Capacity unavailable</StatusLabel> : <ConnectionStatus online={false} />}
       </header>
       {total != null
         ? <Progress label={`${volume.label} space usage`} value={within(used, Math.max(total, 1))} max={Math.max(total, 1)} />
@@ -212,8 +212,8 @@ function VolumeRow({ volume }: { volume: StorageVolume }) {
 function StorageDetail({ volumes }: { volumes: StorageVolume[] } & StatsProps) {
   if (!volumes.length) {
     return (
-      <EmptyState icon={RiHardDrive2Line} title="还没有存储来源" actions={
-        <ButtonLink variant="primary" href={MEDIA_SETTINGS} size="small">添加媒体</ButtonLink>
+      <EmptyState icon={RiHardDrive2Line} title="No storage sources yet" actions={
+        <ButtonLink variant="primary" href={MEDIA_SETTINGS} size="small">Add media</ButtonLink>
       }>{NO_VOLUME_HINT}</EmptyState>
     );
   }
@@ -227,8 +227,8 @@ function StorageDetail({ volumes }: { volumes: StorageVolume[] } & StatsProps) {
 function TagRanking({ tags, tagLabel, onTag, hasMedia }: { tags: TopTag[]; hasMedia: boolean } & StatsProps) {
   if (!tags.length) {
     return (
-      <EmptyState icon={RiPriceTag3Line} title="还没有内容标签"
-        actions={<ButtonLink variant="secondary" href={hasMedia ? '/data-cleanup' : '/settings/library'} size="small">{hasMedia ? '补全资料' : '添加媒体'}</ButtonLink>}>{NO_TAG_HINT}</EmptyState>
+      <EmptyState icon={RiPriceTag3Line} title="No content tags yet"
+        actions={<ButtonLink variant="secondary" href={hasMedia ? '/data-cleanup' : '/settings/library'} size="small">{hasMedia ? 'Complete details' : 'Add media'}</ButtonLink>}>{NO_TAG_HINT}</EmptyState>
     );
   }
   return (
@@ -251,8 +251,8 @@ function TagRanking({ tags, tagLabel, onTag, hasMedia }: { tags: TopTag[]; hasMe
 function RecentWatches({ rows, hasMedia }: { rows: RecentPlay[]; hasMedia: boolean }) {
   if (!rows.length) {
     return (
-      <EmptyState icon={RiHistoryLine} title="还没有观看记录"
-        actions={<ButtonLink variant="secondary" href={hasMedia ? '/' : '/settings/library'} size="small">{hasMedia ? '浏览馆藏' : '添加媒体'}</ButtonLink>}>{NO_WATCH_HINT}</EmptyState>
+      <EmptyState icon={RiHistoryLine} title="No viewing history yet"
+        actions={<ButtonLink variant="secondary" href={hasMedia ? '/' : '/settings/library'} size="small">{hasMedia ? 'Browse library' : 'Add media'}</ButtonLink>}>{NO_WATCH_HINT}</EmptyState>
     );
   }
   return (
@@ -287,8 +287,8 @@ function RecentWatches({ rows, hasMedia }: { rows: RecentPlay[]; hasMedia: boole
 function TagSources({ sources, videos }: { sources: TagSource[]; videos: number }) {
   if (!sources.length) {
     return (
-      <EmptyState icon={RiPriceTag3Line} title="还没有标签来源"
-        actions={<ButtonLink variant="secondary" href={videos ? '/data-cleanup' : '/settings/library'} size="small">{videos ? '补全资料' : '添加媒体'}</ButtonLink>}>{NO_TAG_SOURCE_HINT}</EmptyState>
+      <EmptyState icon={RiPriceTag3Line} title="No tag sources yet"
+        actions={<ButtonLink variant="secondary" href={videos ? '/data-cleanup' : '/settings/library'} size="small">{videos ? 'Complete details' : 'Add media'}</ButtonLink>}>{NO_TAG_SOURCE_HINT}</EmptyState>
     );
   }
   return (

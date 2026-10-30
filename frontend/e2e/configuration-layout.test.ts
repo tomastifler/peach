@@ -9,7 +9,7 @@ describe('配置表单与行间距', () => {
   after(async () => { await browser?.close() });
   for (const viewport of VIEWPORTS) {
     it(`${viewport.name}：云下载空检查报告不占据分隔区域`, async () => {
-      const opened = await visit(browser, '/settings/library?section=' + encodeURIComponent('下载渠道'), viewport);
+      const opened = await visit(browser, '/settings/library?section=' + encodeURIComponent('Download channels'), viewport);
       const { page } = opened;
       try {
         await page.route('**/api/configuration', async route => {
@@ -22,8 +22,8 @@ describe('配置表单与行间距', () => {
           quota: null, suggested_target: null, suggested_pikpak_root: '', problems: [],
         } }));
         await page.reload();
-        const form = page.getByRole('form', { name: '云下载', exact: true });
-        await form.getByRole('button', { name: '检查连接', exact: true }).click();
+        const form = page.getByRole('form', { name: 'Cloud download', exact: true });
+        await form.getByRole('button', { name: 'Check connection', exact: true }).click();
         await settle(page);
         assert.equal(await form.locator('dl').count(), 0);
         assert.equal(await form.locator('.border-t').count(), 1);
@@ -38,9 +38,9 @@ describe('配置表单与行间距', () => {
       const opened = await visit(browser, '/settings/subscriptions', viewport);
       const { page } = opened;
       try {
-        const section = page.getByRole('form', { name: '资源搜索', exact: true });
-        await section.getByText('索引器连接帮助', { exact: true }).click();
-        const link = section.getByRole('link', { name: '详细配置说明', exact: true });
+        const section = page.getByRole('form', { name: 'Resource search', exact: true });
+        await section.getByText('Indexer connection help', { exact: true }).click();
+        const link = section.getByRole('link', { name: 'Detailed setup guide', exact: true });
         await link.waitFor({ state: 'visible' });
         assert.equal(await link.evaluate(node => node.parentElement?.tagName), 'P');
         const head = page.locator('b').filter({ hasText: /^F95zone$/ }).locator('..');
@@ -62,7 +62,7 @@ describe('配置表单与行间距', () => {
       try {
         await page.route('**/api/configuration', async route => {
           const data = await (await route.fetch()).json();
-          await route.fulfill({ json: { ...data, updates: { ...data.updates, installation: '独立测试包',
+          await route.fulfill({ json: { ...data, updates: { ...data.updates, installation: 'Standalone test build',
             state: 'available', latest_version: '1.0.0', message: '有新版本可下载。', package_kind: 'update',
             asset_size: 12 * 1048576, release_url: 'https://github.com/peach-mitao/peach/releases/tag/v1.0.0' },
             update_job: { state: 'idle', progress: 0 } } });
@@ -94,7 +94,7 @@ describe('配置表单与行间距', () => {
           ] } });
         });
         await page.reload();
-        const form = page.getByRole('form', { name: '媒体库与目录', exact: true });
+        const form = page.getByRole('form', { name: 'Libraries and folders', exact: true });
         const protectedFolder = form.locator('[data-media-read-policy="0"] [aria-haspopup="listbox"]');
         await protectedFolder.waitFor();
         // 带品牌图的四个媒体库，标题行的图标、文件夹行的来源与所属媒体库各显示一枚站标。
@@ -111,8 +111,8 @@ describe('配置表单与行间距', () => {
         }));
         assert.deepEqual(marks, Array.from({ length: 12 }, () => ({ inline: true, sized: true })));
         assert.ok(!(await form.innerText()).includes('（只读）'));
-        assert.ok((await protectedFolder.textContent())?.includes('代理保护'));
-        assert.ok((await form.locator('[data-media-read-policy="1"]').textContent())?.includes('正常读取'));
+        assert.ok((await protectedFolder.textContent())?.includes('Proxy protection'));
+        assert.ok((await form.locator('[data-media-read-policy="1"]').textContent())?.includes('Normal reads'));
         if (!viewport.mobile) {
           const spread = (boxes: { y: number; height: number }[]) => {
             const centers = boxes.map(box => box.y + box.height / 2);
@@ -147,12 +147,12 @@ describe('配置表单与行间距', () => {
             && native.left >= label.left - 1 && native.right <= label.right + 1;
         }));
         assert.ok(inputBounds.length > 7 && inputBounds.every(Boolean), '图标网格的隐藏单选输入框越出所属格子');
-        await icons.getByRole('radio', { name: '磁盘', exact: true }).focus();
+        await icons.getByRole('radio', { name: 'Disk', exact: true }).focus();
         const iconScroll = await page.evaluate(() => window.scrollY);
         await page.keyboard.press('ArrowRight');
         assert.equal(await icons.getByRole('radio', { name: '资料库', exact: true }).isChecked(), true);
         assert.equal(await page.evaluate(() => window.scrollY), iconScroll, '选择图标移动了页面');
-        await page.getByRole('dialog').filter({ has: icons }).getByRole('button', { name: '取消', exact: true }).click();
+        await page.getByRole('dialog').filter({ has: icons }).getByRole('button', { name: 'Cancel', exact: true }).click();
         await protectedFolder.click();
         await page.getByRole('option', { name: 'Normal reads', exact: true }).click();
         await settle(page);

@@ -44,8 +44,8 @@ export function preloadImages(html: string, count: number, ms: number): Promise<
 
 /** 拉取由定时器做，页面只读已经发现的那些：进这一页顺手发一轮请求，等于把每次刷新都变成对别人
  *  服务器的一次拉取。骨架还占着时（首屏）先把头几张封面取到手再整行换掉：否则骨架退场、真卡进来，
- *  封面格里又是一轮微光，同一行等了两遍。慢的那几张不等满，到点照换。
- *  一行取几部按设置弹窗「新作显示数量」（`feedLimit`），改了由壳作废两行的查询重取。 */
+ *  Inside the cover cell there is another round of shimmer, so the same row waited twice. The slow few are not waited on in full and are swapped in when time is up.
+ *  How many works a row takes follows the settings dialog's "New works shown" (`feedLimit`); when changed, the shell invalidates the queries of both rows and refetches. */
 export async function fetchFeedNew(entityId: number | null, rowHtml: FeedRowHtml, preload: boolean): Promise<FeedNew> {
   const query = new URLSearchParams({ limit: String(appSettingsStore().value.feedLimit) });
   if (entityId) query.set('entity', String(entityId));

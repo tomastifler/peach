@@ -77,7 +77,7 @@ def _ingest_name_id(connection: Connection, kind: str, name: str) -> int | None:
                    "SELECT a.entity_id,a.alias FROM entity_alias a JOIN entity e ON e.id=a.entity_id WHERE e.kind='tag'")
                    if normalize_entity_name(canonical_tag_name(row[1])) == normalized}
     if kind == 'tag' and len(matches) > 1:
-        raise ValueError('标签别名存在冲突，请先合并重复标签')
+        raise ValueError('Tag aliases conflict; please merge the duplicate tags first')
     return next(iter(matches)) if len(matches) == 1 else None
 
 
@@ -336,7 +336,7 @@ def rewrite_flat_projection(connection: Connection, kind: str, entity_id: int,
 
 def prefer_entity_name(connection: Connection, entity_id: int, chosen: str, *,
                        source: str = "user:preferred-name") -> dict:
-    """把实体已有别名设为统一名称，并同步作品署名。"""
+    """Make an entity's existing alias its unified name, and sync work credits."""
     row = connection.execute("SELECT kind,canonical_name,metadata_json FROM entity WHERE id=?", (entity_id,)).fetchone()
     if row is None:
         raise ValueError("entity not found")
@@ -706,7 +706,7 @@ def _creator_ingest_identity(connection, name, asset_id):
 
 
 def _entity_metadata_payload(connection, entity_id: int, kind: str, payload: str) -> str:
-    """来源资料更新保留用户标签决定与公司档案。"""
+    """Source metadata updates keep the user's tag decisions and company profiles."""
     if kind not in {'tag', 'studio', 'agency'}:
         return payload
     held = connection.execute('SELECT metadata_json FROM entity WHERE id=?', (entity_id,)).fetchone()

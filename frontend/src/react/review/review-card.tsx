@@ -1,6 +1,6 @@
 /* 队列里的一张卡：问的是什么、凭什么判、以及三个结论。
  *
- * 待处理卡依次提供忽略、稍后处理、通过，主操作靠右；已忽略卡只提供恢复。 */
+ * Pending cards offer Ignore, Handle later and Approve in order, with the primary action on the right; ignored cards offer only Restore. */
 import { useRef } from 'react';
 
 import { avatarInner } from '@peach/card-art';
@@ -25,7 +25,7 @@ import {
   canApprove, ENTITY_REVIEW_KINDS, rowEvidence, rowFieldName, rowSubject, rowTags, rowTitle,
 } from './review';
 
-/* 卡面与管理页同层；来源选择是卡内唯一带单选边框的表单。 */
+/* The card face sits on the same layer as the management page; the source choice is the only form in the card with a radio border. */
 const CARD = cardClass({
   variant: 'filled', padding: 'none', bordered: 'soft', className: 'flex flex-col overflow-hidden',
 });
@@ -75,7 +75,7 @@ export function ReviewCard(props: ReviewCardProps) {
   /* Checkbox 的 `onChange` 只给新状态，Shift 要从触发它的那一下事件里取：按下先于变更，
      键盘的空格也一样。 */
   const range = useRef(false);
-  /* 当前资料与候选共用一个滚动区，卡头和判断操作保持可见。 */
+  /* Current details and candidates share one scroll area, and the card header and decision actions stay visible. */
   const body = useOverlayScrollbar<HTMLDivElement>();
   const metadata = category === 'metadata_fields';
   const subjectKind = ENTITY_REVIEW_KINDS[category] || '';
@@ -128,8 +128,8 @@ export function ReviewCard(props: ReviewCardProps) {
         ? <AssetPicker assets={assets} picked={choice.assets} locked={locked}
             onPicked={(next) => onChoice({ ...choice, assets: next })} />
         /* 空白一片会被当成界面坏了。真实原因是这些作品还没抽帧，说清楚比留白好。 */
-        : <EmptyState size="compact" icon={RiImageLine} title="这批作品尚未抽帧">
-            {`${row.video_count || ''} 条作品还没有可用预览；批准后仍会按所选资料写入标签。`}
+        : <EmptyState size="compact" icon={RiImageLine} title="Frames have not been extracted for these works yet">
+            {`${row.video_count || ''} works have no usable preview yet; after approval, tags are still written from the chosen details.`}
           </EmptyState>)
       : category === 'fc2_similarity'
         ? null
@@ -186,22 +186,22 @@ export function ReviewCard(props: ReviewCardProps) {
               </p>
             : null}
           {!asEntity && origin ? origin : null}
-          {metadata && (evidence || row.current_value !== undefined) ? <div role="region" aria-label="当前信息"
+          {metadata && (evidence || row.current_value !== undefined) ? <div role="region" aria-label="Current info"
             className="flex min-w-0 flex-col gap-1 border-b border-separator-border pb-4">
             <div className="flex flex-wrap items-center gap-2">
-              <h5 data-copy-key="review.card.current_value" className="text-caption-1-medium text-text-secondary">当前值</h5>
+              <h5 data-copy-key="review.card.current_value" className="text-caption-1-medium text-text-secondary">Current value</h5>
               {row.current_owner?.startsWith('user:') || row.current_owner?.startsWith('review:')
-                ? <Chip variant="caption" color="neutral">人工确认</Chip> : null}
+                ? <Chip variant="caption" color="neutral">Manually confirmed</Chip> : null}
             </div>
             <p className="text-body-2-regular text-text-primary wrap-anywhere">
               {row.current_value === undefined ? evidence : row.current_value
                 ? <ComparisonText value={row.current_value}
                     reference={(row.candidates?.find(candidate => candidate.candidate_key === choice.candidateKey)
                       || row.candidates?.[0])?.display_value} />
-                : '尚无资料'}
+                : 'No details yet'}
             </p>
             {row.videos !== undefined ? <p className="text-caption-1-regular text-text-secondary">
-              {`${Number(row.videos).toLocaleString()} 个${row.asset_path ? '匹配文件' : '同番号文件'}`}
+              {`${Number(row.videos).toLocaleString()} ${row.asset_path ? 'matching files' : 'files with the same code'}`}
             </p> : null}
           </div> : null}
           {tags.length || category === 'creator_tags' ? (
@@ -213,12 +213,12 @@ export function ReviewCard(props: ReviewCardProps) {
           ) : null}
           {metadata ? <div className="flex flex-wrap items-center justify-between gap-2">
             <h5 className="text-caption-1-medium text-text-secondary">
-              <span data-copy-key="review.card.candidate_sources">候选来源</span>{` · ${row.candidates?.length || 0}`}
+              <span data-copy-key="review.card.candidate_sources">Candidate sources</span>{` · ${row.candidates?.length || 0}`}
             </h5>
             {row.current_value || (row.candidates?.length || 0) > 1 ? <span
               data-copy-key={row.current_value ? 'review.card.compare_current' : 'review.card.compare_sources'}
               className="text-caption-1-regular text-text-tertiary">
-              {row.current_value ? '与当前值比较' : '来源间差异'}
+              {row.current_value ? 'Compare with current value' : 'Differences between sources'}
             </span> : null}
           </div> : null}
           {preview}
@@ -231,15 +231,15 @@ export function ReviewCard(props: ReviewCardProps) {
 
       <footer className={cx(FIELDSET_FOOT.stack, 'shrink-0')}>
         {queueView !== 'ignored' ? <LinkButton variant="secondary" size="small" className="me-auto" disabled={locked} {...busyProps(busy)}
-          onClick={() => onDecide('rejected')}>忽略</LinkButton> : null}
+          onClick={() => onDecide('rejected')}>Ignore</LinkButton> : null}
         {queueView === 'pending' ? <Button variant="secondary" size="small" disabled={locked} {...busyProps(busy)}
-          onClick={() => onDecide('skipped')}>稍后处理</Button> : <Button
+          onClick={() => onDecide('skipped')}>Handle later</Button> : <Button
           variant={queueView === 'ignored' ? 'primary' : 'secondary'} size="small" disabled={locked} {...busyProps(busy)}
-          onClick={() => onDecide('restore')}>恢复待处理</Button>}
+          onClick={() => onDecide('restore')}>Restore to pending</Button>}
         {queueView !== 'ignored' ? <Button variant="primary" size="small" disabled={locked || !approvable} {...busyProps(busy)}
-          title={approvable ? undefined : '没有可采用的资料，可先保留或忽略'}
+          title={approvable ? undefined : 'No details to adopt; you can keep or ignore it for now'}
           onClick={() => onDecide('approved')}>
-          {approvable ? '通过' : '不可通过'}
+          {approvable ? 'Approve' : 'Cannot approve'}
         </Button> : null}
         {problem
           ? <p role="status" className="w-full text-body-2-regular text-text-error-primary">{problem}</p>

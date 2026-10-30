@@ -101,22 +101,22 @@
 }
 /* 搜索框使用浏览器原生模糊，尺寸变化不依赖异步 SVG 位移贴图。 */
 .top .search.search.search{--glass-optic:blur(22px)}
-/* 漂移的两团由宿主里那一层 `[data-glass-drift]` 画：同样两倍大的画布、同一条李萨如轨迹，只是画布
-   本身靠 `transform` 推着走，整段动画在合成线程上跑。`background-position` 每一帧都要主线程把整块
-   玻璃重画一遍，首页静置三秒里这一项就占掉三百多毫秒。
-   换算：画布两倍大时，`background-position` 的 P% 等于画布左上角挪到 -P×元素宽，也就是挪自身宽度
-   的 -P/2，关键帧逐个对应（-10%→5%、7.6%→-3.8%、50%→-25%、92.4%→-46.2%、110%→-55%），都是线性插值，
-   轨迹一点不差。横竖两根轴的时长不同，分在嵌套的两层上各走各的。
-   宿主自己那两层光斑尺寸压成 0、漂移撤掉，斜光和底色原样留着；没挂上这一层的宿主仍走上面那条。
-   负层号把它压在宿主的面之上、内容之下，和原来那两层背景的位置一样；快照那一下宿主的
-   `backdrop-filter` 被撤掉，`isolation` 保证它仍是层叠上下文，光斑不会掉到宿主底色后面。
-   侧栏抽屉和它里面的光晕层不挂这一层：抽屉的 `backdrop-filter` 带着 SVG 位移滤镜（`url(#peach-optic-…)`），
-   它里面合成层上的位移每一帧都让主线程重新分层，首页实测静置三秒分层就占一秒多，比原来逐帧重画还贵。
-   设置分区导航与收藏侧栏也不挂：它们自己是滚动容器，绝对定位的子层会跟着内容滚走。 */
+/* The two drifting blobs are drawn by the layer in the host, `[data-glass-drift]`: the same double-size canvas and the same Lissajous path, except the canvas
+   itself is pushed along by `transform`, so the whole animation runs on the compositor thread. `background-position` would require the main thread to repaint the whole
+   glass pane every frame, and over three idle seconds on the home page that alone took more than three hundred milliseconds.
+   Conversion: with a double-size canvas, `background-position`'s P% equals moving the canvas's top-left corner to -P × element width, which is moving by its own width
+   times -P/2; the keyframes correspond one by one (-10%→5%, 7.6%→-3.8%, 50%→-25%, 92.4%→-46.2%, 110%→-55%), all linear interpolation,
+   so the path is exactly the same. The two axes have different durations, so they are split across two nested layers that each run on their own.
+   The host's own two glow-spot layers are shrunk to size 0 and their drift removed, while the diagonal light and base color are kept as is; a host without this layer still follows the path above.
+   A negative z-index puts it above the host's surface and below the content, the same position as the original two background layers; at the moment of the snapshot the host's
+   `backdrop-filter` is removed, and `isolation` guarantees it is still a stacking context, so the glow spots never fall behind the host's base color.
+   The sidebar drawer and the glow layer inside it do not take this layer: the drawer's `backdrop-filter` carries an SVG displacement filter (`url(#peach-optic-…)`),
+   and the displacement on its compositing layer makes the main thread re-layer every frame; measured on the home page, three idle seconds of layering took over a second, which is more expensive than the original per-frame repaint.
+   The settings section navigation and the favorites sidebar do not take it either: they are scroll containers themselves, and an absolutely positioned child layer would scroll away with the content. */
 :is(.board-filter-frame,.entitycollectionhead,.top .search,.top>.ib,[data-glass-pane]):has(>[data-glass-drift]){
   background-size:0 0,0 0,auto!important;animation-name:none!important;isolation:isolate}
 :where(.top>.ib):has(>[data-glass-drift]){position:relative}
-/* 同一枚按钮会被挪出顶栏（桌面上侧栏开关进抽屉标题行），那里它不是玻璃，这一层也不出。 */
+/* The same button can be moved out of the top bar (on desktop the sidebar toggle goes into the drawer title row); there it is not glass and this layer does not appear either. */
 [data-glass-drift]{display:none}
 :is(.board-filter-frame,.entitycollectionhead,.top .search,.top>.ib,[data-glass-pane])>[data-glass-drift]{
   display:block;position:absolute;inset:0;z-index:-3;overflow:hidden;border-radius:inherit;pointer-events:none}
@@ -124,16 +124,16 @@
   animation:calc(41s * var(--glow-drift-scale)) linear infinite;animation-play-state:var(--glow-drift-play)}
 [data-glass-drift]>span>span{position:absolute;inset:0;
   animation:calc(67s * var(--glow-drift-scale)) linear infinite;animation-play-state:var(--glow-drift-play)}
-/* 静止位置就是原来的 `background-position:50% 20%,80% 70%`：减少动效时动画撤掉，停在这里。 */
+/* The resting position is the original `background-position:50% 20%,80% 70%`: when motion is reduced the animation is removed and it stays here. */
 [data-glass-drift]>[data-drift="a"]{transform:translateX(-25%);animation-name:drift-k1-x}
 [data-glass-drift]>[data-drift="a"]>span{transform:translateY(-10%);animation-name:drift-k3-y;background:var(--glass-drift-a)}
 [data-glass-drift]>[data-drift="b"]{transform:translateX(-40%);animation-name:drift-k2-x}
 [data-glass-drift]>[data-drift="b"]>span{transform:translateY(-35%);animation-name:drift-k1-y;background:var(--glass-drift-b)}
-/* 高对比、减少透明度与不支持背景模糊时宿主换成实底，原来那两层光斑跟着没了，这一层同样不出。 */
+/* With high contrast, reduced transparency or no backdrop blur support the host switches to a solid background, the original two glow-spot layers disappear with it, and this layer does not appear either. */
 html.board-high-contrast [data-glass-drift]{display:none!important}
 @media(prefers-reduced-transparency:reduce),(prefers-contrast:more){[data-glass-drift]{display:none!important}}
 @supports not (backdrop-filter:blur(1px)){[data-glass-drift]{display:none!important}}
-/* 四组关键帧就是 glassdriftx／glassdrifty 那几列百分比各自除以 -2。 */
+/* The four keyframe sets are the percentage columns of glassdriftx / glassdrifty each divided by -2. */
 @keyframes drift-k1-x{0%{transform:translateX(-25%)}12.5%{transform:translateX(-3.8%)}25%{transform:translateX(5%)}37.5%{transform:translateX(-3.8%)}50%{transform:translateX(-25%)}62.5%{transform:translateX(-46.2%)}75%{transform:translateX(-55%)}87.5%{transform:translateX(-46.2%)}100%{transform:translateX(-25%)}}
 @keyframes drift-k2-x{0%{transform:translateX(-25%)}12.5%{transform:translateX(-46.2%)}25%{transform:translateX(-55%)}37.5%{transform:translateX(-46.2%)}50%{transform:translateX(-25%)}62.5%{transform:translateX(-3.8%)}75%{transform:translateX(5%)}87.5%{transform:translateX(-3.8%)}100%{transform:translateX(-25%)}}
 @keyframes drift-k1-y{0%{transform:translateY(-25%)}12.5%{transform:translateY(-3.8%)}25%{transform:translateY(5%)}37.5%{transform:translateY(-3.8%)}50%{transform:translateY(-25%)}62.5%{transform:translateY(-46.2%)}75%{transform:translateY(-55%)}87.5%{transform:translateY(-46.2%)}100%{transform:translateY(-25%)}}
@@ -504,7 +504,7 @@ button,input,select,textarea{font-family:inherit}
 .board-glow-toggle[data-glow-native] .board-glow-mark-glow{background:linear-gradient(135deg,var(--glass-native-a) 50%,var(--glass-native-b) 50%)}
 .board-glow-menu footer{margin-top:10px;padding:0 4px}
 .board-glow-menu footer .geist-button{width:100%}
-/* 外框取默认档，与同排的光晕钮、设置钮同高；两枚内芯取行内档，四周各让 4px。 */
+/* The outer frame uses the default tier and matches the height of the glow and settings buttons in the same row; the two inner cores use the inline tier, inset 4px on every side. */
 .board-theme-toggle{position:relative;isolation:isolate;display:flex;gap:4px;padding:4px;border-radius:24px;background:var(--picked)}
 .board-theme-toggle button{display:grid;place-items:center;width:var(--control-h-inline);height:var(--control-h-inline);flex:none;padding:0;border:0;border-radius:50%;background:transparent;color:var(--muted);cursor:pointer}
 .board-theme-toggle button[aria-pressed=true]{color:var(--ink)}
@@ -520,8 +520,8 @@ button,input,select,textarea{font-family:inherit}
    缓动跟滑板同一条弹簧：这一列上会动的东西只有一种手感。 */
 .board-theme-thumb{position:absolute;z-index:-1;left:4px;top:4px;width:var(--control-h-inline);height:var(--control-h-inline);background:var(--ground);border-radius:50%;box-shadow:0 1px 3px light-dark(#0001,#0008);will-change:transform;transition:transform calc(var(--spring-pane-ms) * 1ms) var(--spring-pane)}
 .board-theme-toggle.is-dark .board-theme-thumb{transform:translateX(calc(var(--control-h-inline) + 4px))}
-/* 侧栏收到 60px 时按 DOM 顺序竖排。配色钮与设置钮都是 36px，左右各留 10px
-   内边距后在侧栏里居中，两枚圆心落在同一条竖线上。 */
+/* When the sidebar shrinks to 60px they stack vertically in DOM order. The color button and settings button are both 36px, and with 10px
+   of padding on each side they are centered in the sidebar, with both circle centers on one vertical line. */
 @media(min-width:761px){[data-sidebar-drawer]:not(.open) .board-sidebar-foot{flex-direction:column;padding:12px 10px}[data-sidebar-drawer]:not(.open) .board-foot-actions{flex-direction:column}[data-sidebar-drawer]:not(.open) .board-theme-toggle{background:transparent}[data-sidebar-drawer]:not(.open) .board-theme-toggle button[aria-pressed=true],[data-sidebar-drawer]:not(.open) .board-theme-thumb{display:none}}
 @media(prefers-reduced-motion:reduce){.board-theme-thumb{transition:none}}
 .board-library-avatar svg{width:20px;height:20px;stroke-width:2}.board-library-avatar{background:none;border-radius:0}
@@ -789,7 +789,7 @@ html.board-high-contrast :is(.card .badge,[data-glass-pane]){background:var(--gr
 :root[data-theme="dark"] :is(.iconswitch:not(.themeswitch),.insightswitch,.follow-workspace-switch)>.board-segment-thumb{background:color-mix(in srgb,var(--color-text-primary) 14%,var(--color-background-tertiary-default));box-shadow:0 1px 2px #00000040}
 @media(prefers-color-scheme:dark){:root:not([data-theme]) :is(.iconswitch:not(.themeswitch),.insightswitch,.follow-workspace-switch)>.board-segment-thumb{background:color-mix(in srgb,var(--color-text-primary) 14%,var(--color-background-tertiary-default));box-shadow:0 1px 2px #00000040}}
 /* 浮层上的分段器（版式、大小这类）跟同一排的圆键、药丸和「仅显示图片」那枚开关一样高
-   （紧凑档 32px），滑块就是整枚选项：轨道不留内边距，选项 32px 见方、图标 16px，圆角跟那块滑动
+   (compact tier 32px), the thumb is the whole option: the track has no padding, options are 32px square with 16px icons, and the corner radius follows the sliding
    玻璃同一个 8px。轨道留 3px 的话滑块比旁边那块玻璃矮一圈、圆角也小一档，同一块料在
    同一排里出现两种尺寸。筛选行与排序行上下留白都是 8px，排序滚动容器不再自己多垫。 */
 .board-filter-frame.board-filter-frame .iconswitch[data-board-segments]{padding:0;border-radius:8px;gap:2px}
@@ -959,7 +959,7 @@ body[data-surface="/trash"] .catalog-skeleton .skeletoncard>*{background:color-m
 .follow-workspace-switch button:hover{background:none;color:var(--color-text-primary)}
 .follow-workspace-switch button[aria-selected=true]{background:none;color:var(--color-text-primary);box-shadow:none}
 .geist-note-details a{color:var(--ink)}
-/* 原生隐藏输入框随复核标签定位，不占用可见控件的布局空间。 */
+/* The native hidden input is positioned with the review label and takes no layout space from the visible control. */
 .peach-react [data-review-key] label{position:relative}
 .peach-react [data-review-key] label>span:has(>input){top:0;left:0}
 .peach-react [data-review-key] label>span>input{position:absolute;top:0;left:0}

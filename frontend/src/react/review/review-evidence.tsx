@@ -42,10 +42,10 @@ function RequestedSourceImage({ source }: { source: string }) {
             className={`size-full object-contain ${status === 'loading' ? 'invisible' : ''}`} onLoad={() => setStatus('ready')}
             onError={() => setStatus('failed')} />
         : source ? <div className="flex flex-col items-center gap-2">
-            {status === 'failed' ? <span className="text-body-2-regular text-text-secondary">未取得来源图片</span> : null}
-            <Button variant="secondary" size="small" aria-label={status === 'failed' ? '立即重试加载来源图片' : undefined}
+            {status === 'failed' ? <span className="text-body-2-regular text-text-secondary">Source image unavailable</span> : null}
+            <Button variant="secondary" size="small" aria-label={status === 'failed' ? 'Retry loading source image' : undefined}
               onClick={() => setStatus('loading')}>
-              {status === 'failed' ? '立即重试' : '查看来源图片'}
+              {status === 'failed' ? 'Retry' : 'View source image'}
             </Button>
           </div> : <span className="text-body-2-regular text-text-secondary">Source image unavailable</span>}
     </div>
@@ -185,10 +185,10 @@ export function AssetPicker(
   return (
     <div className="flex flex-col gap-2">
       <SelectionActions prefix={<span className="tabular-nums text-body-2-regular text-text-secondary">
-          {`已选 ${chosen.size} / ${assets.length}`}
+          {`Selected ${chosen.size} / ${assets.length}`}
         </span>} actions={[
-          { label: '全选', disabled: locked, onPress: () => onPicked(assets.map(asset => asset.id)) },
-          { label: '清空', disabled: locked, onPress: () => onPicked([]) },
+          { label: 'Select all', disabled: locked, onPress: () => onPicked(assets.map(asset => asset.id)) },
+          { label: 'Clear', disabled: locked, onPress: () => onPicked([]) },
         ]} />
       <div className="review-asset-grid gap-1.5">
         {assets.map((asset, index) => {

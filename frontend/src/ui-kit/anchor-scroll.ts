@@ -1,8 +1,8 @@
-/** 原生滚动沿用浏览器的时长与曲线，减少动态效果时直接定位。 */
+/** Native scrolling uses the browser's duration and curve, and jumps straight to the position when reduced motion is on. */
 export const routeScrollBehavior = (): ScrollBehavior =>
   window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth';
 
-/** 页面内容与字体就绪后，在布局帧里定位；导航已变化时不再滚动。 */
+/** Once page content and fonts are ready, position in a layout frame; no longer scroll if navigation has changed. */
 export async function scrollToAnchor(hash: string, isCurrent: () => boolean): Promise<void> {
   let id: string;
   try { id = decodeURIComponent(hash.slice(1)) } catch { return }

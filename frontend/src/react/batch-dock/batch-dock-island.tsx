@@ -48,9 +48,9 @@ export function BatchDockSurface() {
 }
 
 function BatchDock({ host: at, props: view }: { host: BatchDockHost; props: BatchDockProps }) {
-  /* 浮条在不在由 `<body>` 上的 `data-batch-dock-open` 说给样式表（`batch-dock.css` 给网格与详情底部
-   * 让位）。写成 `body:has(...)` 的话，播放墙平移、卡片插进页面时每批节点都让整棵 body 子树重算样式，
-   * 实测一次 40–60ms。 */
+  /* Whether the dock is shown is told to the style sheet by `data-batch-dock-open` on `<body>` (`batch-dock.css` makes the grid and the detail bottom
+   * yield). Written as `body:has(...)`, panning the video wall or inserting cards into the page would make every batch of nodes recompute styles for the whole body subtree,
+   * measured at 40-60ms each time. */
   const open = view.count > 0;
   useLayoutEffect(() => { document.body.toggleAttribute('data-batch-dock-open', open) }, [open]);
   useLayoutEffect(() => () => { document.body.removeAttribute('data-batch-dock-open') }, []);

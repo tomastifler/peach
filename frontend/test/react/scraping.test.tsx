@@ -110,11 +110,11 @@ it('首屏用 prefetch 缓存画出来源与任务，挂载时不重复请求', 
   expect(section(host, 'HD cover')).not.toBeNull();
   const bridge = section(host, 'amane');
   expect(bridge).not.toBeNull();
-  expect(bridge?.textContent).toContain('已安装版本0.16.1');
-  expect(bridge?.textContent).toContain('FC2PPVDB、AVSOX');
-  expect(bridge?.textContent).toContain('首次需要时，Peach 会自动准备锁定的 0.16.1 版本');
-  expect(bridge?.textContent).toContain('安装包内已有可用环境时直接使用');
-  expect(buttonNamed('重新安装', bridge!)).not.toBeNull();
+  expect(bridge?.textContent).toContain('Installed version0.16.1');
+  expect(bridge?.textContent).toContain('FC2PPVDB, AVSOX');
+  expect(bridge?.textContent).toContain('When first needed, Peach automatically prepares the locked 0.16.1 version');
+  expect(bridge?.textContent).toContain('if the installer already contains a usable environment, it is used directly');
+  expect(buttonNamed('Reinstall', bridge!)).not.toBeNull();
   // 连接方式是 BoardUI 的 Select，画出来的是按钮；原生 select 是 React Aria 藏在后面
   // 供表单取值的那一个，不是这一行的长相。
   expect(host.querySelector('[aria-haspopup=listbox]')?.textContent?.trim()).toBe('Peach proxy');
@@ -150,9 +150,9 @@ it('保存后清空秘密输入，列表就地换成服务端回的那一条，�
     },
   });
   expect(password(host)?.value, '保存回来之后页面上不再留着刚交上去的那一份').toBe('');
-  expect(host.textContent).toContain('登录有效性待验证');
-  expect(buttonNamed('撤销 Cookie', host)).not.toBeNull();
-  expect(toast).toHaveBeenCalledWith('来源设置已保存');
+  expect(host.textContent).toContain('Login validity not yet verified');
+  expect(buttonNamed('Revoke cookie', host)).not.toBeNull();
+  expect(toast).toHaveBeenCalledWith('Source settings saved');
   expect(calls.filter((call) => call.path === '/api/scraping' && call.method === 'GET'),
     '保存换的是列表里的一条，不为它把整页重取一遍').toHaveLength(1);
 });
@@ -196,10 +196,10 @@ it('连接结果按来源名称与这一跳查的是什么说成一句话', asyn
   await click(buttonNamed('Check connection', host));
   await settle();
 
-  expect(host.querySelector('[role=status] [data-connection-tone="success"]')?.textContent).toBe('可访问');
-  expect(host.querySelector('[role=status]')?.textContent).toContain('JavBus：可连接 · 800 × 538');
-  expect(host.querySelector('[role=alert] [data-connection-tone="error"]')?.textContent).toBe('连接失败');
-  expect(host.querySelector('[role=alert]')?.textContent).toContain('JavBus 高清图片：不能连接。需要登录');
+  expect(host.querySelector('[role=status] [data-connection-tone="success"]')?.textContent).toBe('Reachable');
+  expect(host.querySelector('[role=status]')?.textContent).toContain('JavBus: reachable · 800 × 538');
+  expect(host.querySelector('[role=alert] [data-connection-tone="error"]')?.textContent).toBe('Connection failed');
+  expect(host.querySelector('[role=alert]')?.textContent).toContain('JavBus HD images: unreachable. 需要登录');
 });
 
 it('Cookie 二选一：切过去的那一种才交，另一种连输入都不留', async () => {
@@ -336,7 +336,7 @@ it('amane 桥：安装包缺桥文件时卡片写出原因，安装键停用', a
   const bridge = section(host, 'amane')!;
   expect(bridge.textContent).toContain(problem);
   expect(bridge.textContent).not.toContain('Peach 内置的');
-  expect(buttonNamed('安装', bridge)?.disabled).toBe(true);
+  expect(buttonNamed('Install', bridge)?.disabled).toBe(true);
 });
 
 it('登录外链只写主机名；数据库里认不出的连接方式原样列成一项，下拉框不落到空占位', () => {

@@ -17,7 +17,7 @@ it('装上之前 get() 抛错，装上之后同步拿到模块，第二次打开
   const { routeChunk } = await import('../src/react/router/route-chunk');
   const load = vi.fn(async () => ({ Page: 'page' }));
   const chunk = routeChunk(load);
-  expect(() => chunk.get()).toThrow('页面代码还没装载');
+  expect(() => chunk.get()).toThrow('Page code is not loaded yet');
   await chunk.preload();
   await chunk.preload();
   expect(chunk.get()).toEqual({ Page: 'page' });

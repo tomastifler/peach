@@ -97,7 +97,7 @@ export function wireAnchoredMenu(
      菜单自己的滚动不算——它装不下时本来就要在内部滚，滚一下就关等于底下那几项
      根本够不着；别处那一排横滚也不算，判据见 `scrollMovesAnchor`。 */
   const closeFromViewport=(event:Event)=>{
-    // 整页滚动直接收起；局部滚动核对锚点位置，避开菜单打开前已排队的事件。
+    // Whole-page scrolling closes it directly; local scrolling checks the anchor position, avoiding events already queued before the menu opened.
     if(!scrollMovesAnchor(event,toggle)||!anchorPosition)return;
     const anchor=toggle.getBoundingClientRect();
     if(event.target===document||event.target===window

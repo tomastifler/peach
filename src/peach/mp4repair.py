@@ -208,7 +208,7 @@ def _ctts(offsets: list[int]) -> bytes:
 
 
 def _edit_times(elst: bytes | None, adjust: Callable[[int], int]) -> bytes | None:
-    """保留编辑段长与播放速率，只映射媒体起点。"""
+    """Keep the edit segment length and playback rate, mapping only the media start."""
     if elst is not None and len(elst) >= 8:
         version = elst[0]
         width = 20 if version == 1 else 12
@@ -227,12 +227,12 @@ def _edit_times(elst: bytes | None, adjust: Callable[[int], int]) -> bytes | Non
 
 def _retimed_edit_list(elst: bytes | None, shift: int, segment_duration: int,
                        tolerance: int = 0) -> bytes:
-    """让编辑列表跟上 ctts 的整体平移。
+    """Make the edit list follow the overall shift of ctts.
 
-    平移把每一帧的显示时刻都推后 `shift`，起播点要跟着推同样多，否则音画差这么多。
-    已有的 media_time 与 `shift` 差半帧以内时原样保留：原封装已经为 ctts 补过这一刀，
-    表丢了而这行留着，加回去就复原了；写成两倍反而会真的切掉两帧。
-    空编辑（media_time 为 -1）是延迟起播，跟显示顺序无关，原样放过。
+    The shift pushes every frame's display time later by `shift`, and the start point must be pushed by the same amount, otherwise audio and video would be off by that much.
+    When an existing media_time differs from `shift` by less than half a frame, keep it as is: the original muxing has already applied this correction for ctts,
+    if the table was lost and this row stays, adding it back restores things; writing it as double would actually cut off two frames.
+    An empty edit (media_time is -1) is a delayed start, unrelated to display order, and is passed through as is.
     """
     payload = _edit_times(elst, lambda value: value + shift
                           if value >= 0 and abs(value - shift) > tolerance else value)
@@ -240,7 +240,7 @@ def _retimed_edit_list(elst: bytes | None, shift: int, segment_duration: int,
 
 
 def _half_frame(decode_times: list[int]) -> int:
-    """最短帧长的一半，媒体刻度。"""
+    """Half of the shortest frame duration, in media timescale."""
     gaps = [later - earlier for earlier, later in zip(decode_times, decode_times[1:]) if later > earlier]
     return min(gaps) // 2 if gaps else 0
 
@@ -309,28 +309,28 @@ class _Layout:
 
 
 def _layout(source: Path) -> _Layout:
-    """读出 `mdat` 和 `moov`，返回拼回虚拟文件所需的几段。
+    """Read out `mdat` and `moov`, and return the segments needed to reassemble the virtual file.
 
-    faststart 文件把 `moov` 放在媒体前面，尾部只允许没有盒子；下载器常见的布局则把
-    `moov` 放在末尾。后一种只多读媒体之后的索引段，媒体仍按原字节流发送，不复制原片。
+    faststart files put `moov` before the media, with only box-free trailing bytes allowed at the end; the layout common with downloaders puts
+    `moov` at the end. The latter reads only the extra index segment after the media, and the media is still sent as the original byte stream without copying the original.
     """
     from .smb_media import SmbResource
     with (source.open() if isinstance(source, SmbResource) else open(source, 'rb')) as handle:
         boxes = _top_level(handle)
         kinds = {kind for kind, *_ in boxes}
         if not {b"moov", b"mdat"} <= kinds:
-            raise RepairUnavailable("顶层缺 moov 或 mdat")
+            raise RepairUnavailable("Top level is missing moov or mdat")
         if any(sum(box[0] == kind for box in boxes) != 1 for kind in (b"moov", b"mdat")):
-            raise RepairUnavailable("顶层必须各有一个 moov 和 mdat")
+            raise RepairUnavailable("Top level must have exactly one moov and mdat")
         mdat = next(box for box in boxes if box[0] == b"mdat")
         moov = next(box for box in boxes if box[0] == b"moov")
         if mdat[3] - mdat[2] <= 0 or moov[3] - moov[1] > HEADER_LIMIT:
-            raise RepairUnavailable("moov 太大或 mdat 是空的")
+            raise RepairUnavailable("moov is too large or mdat is empty")
         if mdat[2] > HEADER_LIMIT:
-            raise RepairUnavailable("媒体前的索引段太大")
+            raise RepairUnavailable("The index segment before the media is too large")
         if moov[1] < mdat[1]:
             if any(box[1] > mdat[1] for box in boxes):
-                raise RepairUnavailable("mdat 后面还有盒子，这个布局还没支持")
+                raise RepairUnavailable("mdat is followed by more boxes; this layout is not supported yet")
             handle.seek(moov[1])
             moov_box = handle.read(moov[3] - moov[1])
             handle.seek(0)
@@ -340,7 +340,7 @@ def _layout(source: Path) -> _Layout:
             return _Layout(before, mdat_header, b"", mdat, moov_box, moov[2] - moov[1], moov[1])
         after_size = handle.seek(0, 2) - mdat[3]
         if after_size > HEADER_LIMIT - mdat[2]:
-            raise RepairUnavailable("媒体后的索引段太大")
+            raise RepairUnavailable("The index segment after the media is too large")
         handle.seek(0)
         before = handle.read(mdat[1])
         handle.seek(mdat[1])
@@ -382,7 +382,7 @@ def repaired_header(source: Path, ffprobe: Path) -> RepairedHeader:
     if layout.moov_before_start is None and elst and elst.payload:
         def checked_start(value: int) -> int:
             if value > shift + _half_frame(decode_times):
-                raise RepairUnavailable("尾部索引的编辑起点无法区分预卷与裁剪")
+                raise RepairUnavailable("The edit start of the trailing index cannot distinguish pre-roll from trimming")
             return value
 
         _edit_times(elst.payload, checked_start)
@@ -409,12 +409,12 @@ def repaired_header(source: Path, ffprobe: Path) -> RepairedHeader:
     rebuilt = root.serialize()
     prefix = assemble(rebuilt)
     if len(prefix) - mdat[2] != delta:
-        raise RepairUnavailable("重建后的头长度对不上")
+        raise RepairUnavailable("The rebuilt header length does not match")
     return RepairedHeader(prefix=prefix, payload_start=mdat[2], payload_end=mdat[3], suffix=layout.suffix)
 
 
 def has_tail_moov(source: Path) -> bool:
-    """只读顶层盒子位置，识别旧布局判据会跳过的尾部索引。"""
+    """Read only top-level box positions, identifying trailing indexes that the old layout criterion would skip."""
     from .smb_media import SmbResource
     with (source.open() if isinstance(source, SmbResource) else open(source, 'rb')) as handle:
         boxes = _top_level(handle)
@@ -436,26 +436,26 @@ def write_sidecar(path: Path, header: RepairedHeader) -> None:
 
 
 def _time_runs(payload: bytes) -> list[tuple[int, int]]:
-    """边车内的 version 0 时间表；保留游程，不展开整片帧时间。"""
+    """The version-0 time table in the sidecar; keeps runs without expanding per-frame times for the whole film."""
     if len(payload) < 8 or payload[:4] != bytes(4):
-        raise RepairUnavailable("旧边车的时间表版本无效")
+        raise RepairUnavailable("The old sidecar's time table version is invalid")
     count = struct.unpack_from(">I", payload, 4)[0]
     if len(payload) != 8 + count * 8:
-        raise RepairUnavailable("旧边车的时间表长度不符")
+        raise RepairUnavailable("The old sidecar's time table length does not match")
     return [struct.unpack_from(">II", payload, 8 + index * 8) for index in range(count)]
 
 
 def _legacy_timing(stts: bytes, ctts: bytes) -> tuple[int, int]:
-    """从旧边车的游程表还原整体平移与最短半帧，不展开每帧时间。"""
+    """Restore the overall shift and the shortest half-frame from the old sidecar's run table, without expanding per-frame times."""
     times = _time_runs(stts)
     offsets = _time_runs(ctts)
     samples = sum(run for run, _ in times)
     if not samples or sum(run for run, _ in offsets) != samples:
-        raise RepairUnavailable("旧边车的样本数不符")
+        raise RepairUnavailable("The old sidecar's sample count does not match")
     shift, remainder = divmod(sum(run * value for run, value in offsets), samples)
     if remainder:
-        raise RepairUnavailable("旧边车的整体平移量不完整")
-    # 最后一帧的 duration 不是两个相邻 DTS 的间距，与新头的半帧判据保持一致。
+        raise RepairUnavailable("The old sidecar's overall shift is incomplete")
+    # The last frame's duration is not the gap between two adjacent DTS values, consistent with the new header's half-frame criterion.
     remaining, gaps = samples - 1, []
     for run, delta in times:
         if remaining and run and delta:
@@ -465,16 +465,16 @@ def _legacy_timing(stts: bytes, ctts: bytes) -> tuple[int, int]:
 
 
 def _upgrade_legacy_header(header: RepairedHeader) -> RepairedHeader:
-    """按旧写入规则撤回重复平移，不读原片或重新解码。
+    """Revert a duplicated shift per the old write rule, without reading the original or re-decoding.
 
-    显示时刻是解码时刻的置换，故旧 ctts 的偏移加权均值就是整体 shift。
-    旧规则将不等于 shift 的起点再加 shift；接近两倍 shift 的存量起点因此减回一份。
-    新版边车单独标识，不能对已经按半帧判据生成的头再次执行这个转换。
+    Display times are a permutation of decode times, so the weighted mean of the old ctts offsets is the overall shift.
+    For starts not equal to shift, the old rule added one more shift; existing starts close to twice shift are therefore reduced by one.
+    The new sidecar is identified separately, and this conversion must not be applied again to a header already generated under the half-frame criterion.
     """
     span = next(((body, stop) for kind, body, stop in _iter_boxes(
         header.prefix, 0, len(header.prefix)) if kind == b"moov"), None)
     if span is None:
-        raise RepairUnavailable("旧边车没有 moov")
+        raise RepairUnavailable("The old sidecar has no moov")
     root = _Box(b"moov", None, _parse(header.prefix, *span))
     video = next((child for child in root.children if child.kind == b"trak" and _is_video(child)), None)
     stbl = _sample_table(video) if video else None
@@ -483,18 +483,18 @@ def _upgrade_legacy_header(header: RepairedHeader) -> RepairedHeader:
     edts = video.find(b"edts") if video else None
     elst = edts.find(b"elst") if edts else None
     if not (stts and stts.payload and ctts and ctts.payload and elst and elst.payload):
-        raise RepairUnavailable("旧边车缺少修复时间表")
+        raise RepairUnavailable("The old sidecar lacks the repair time table")
     shift, tolerance = _legacy_timing(stts.payload, ctts.payload)
     payload = _edit_times(elst.payload, lambda value: value - shift
                           if value > shift and abs(value - 2 * shift) <= tolerance else value)
     if payload is None:
-        raise RepairUnavailable("旧边车的编辑列表无效")
+        raise RepairUnavailable("The old sidecar's edit list is invalid")
     if payload == elst.payload:
         return header
     elst.payload = payload
     rebuilt = root.serialize()
     if len(rebuilt) != span[1] - span[0] + 8:
-        raise RepairUnavailable("旧边车的重建头长度不符")
+        raise RepairUnavailable("The old sidecar's rebuilt header length does not match")
     return RepairedHeader(header.prefix[:span[0] - 8] + rebuilt + header.prefix[span[1]:],
                           header.payload_start, header.payload_end, header.suffix)
 
@@ -569,7 +569,7 @@ class HeaderRepairStore:
         return header
 
     def has_invalid_sidecar(self, asset_id: int, source: Path) -> bool:
-        """已有损坏边车仍可重建；区别于没有产物的既有解码失败。"""
+        """An existing corrupted sidecar can still be rebuilt; distinct from an existing decode failure with no output."""
         name = self._name(asset_id, source)
         if not name:
             return False

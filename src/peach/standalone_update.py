@@ -74,7 +74,7 @@ def public() -> dict:
 
 
 def installation_pending() -> bool:
-    """当前独立包仍在安装确认期；兼容未保留任务预约的更新助手。"""
+    """The current standalone package is still in the install-confirmation period; compatible with update helpers that did not retain a task reservation."""
     if not distribution.standalone():
         return False
     data = read()
@@ -181,25 +181,25 @@ def prepare_tools(stage: Path, target: Path, transaction: Path, release: dict, d
 
 def checked_asset(digest: object, size: object, label: str) -> tuple[str, int]:
     if not isinstance(digest, str) or not digest.startswith("sha256:") or len(digest) != 71:
-        raise ValueError(f"{label}缺少 SHA-256 校验信息")
+        raise ValueError(f"{label} is missing SHA-256 verification info")
     if not isinstance(size, int) or not 0 < size <= MAX_ARCHIVE:
-        raise ValueError(f"{label}大小无效")
+        raise ValueError(f"{label} has an invalid size")
     return digest[7:], size
 
 
 def fetch_package(url: str, size: int, digest: str, transaction: Path, name: str, version: str, data: dict) -> Path:
-    """下载、校验程序包并解压到 `stage/Peach`（`apply` 只认这一处）；进度接在已下载的字节数后面。"""
+    """Download and verify the program package and extract it to `stage/Peach` (`apply` only recognizes this one place); progress continues after the number of bytes already downloaded."""
     archive, start = transaction / f"{name}.zip", data.get("downloaded", 0)
     download(url, archive, size, digest,
              lambda count: write(data, downloaded=start + count, progress=round((start + count) / data["total"] * 65, 1)))
-    write(data, state="verifying", progress=66, message="正在校验")
-    write(data, state="extracting", message="正在解压")
+    write(data, state="verifying", progress=66, message="Verifying")
+    write(data, state="extracting", message="Extracting")
     shutil.rmtree(transaction / "stage", ignore_errors=True)
     stage = extract(archive, transaction / "stage", lambda done, count: write(data, progress=67 + round(done / count * 8)))
     from .buildinfo import read_build_info
     info = read_build_info(stage / "_internal")
     if not info or info.version != version:
-        raise ValueError("包内版本与发布版本不符")
+        raise ValueError("The version inside the package does not match the release version")
     return stage
 
 
@@ -208,7 +208,7 @@ def prepare(data: dict, lock: FileLock) -> None:
         release = release_updates.check()
         if release["state"] != "available":
             raise ValueError(release["message"])
-        digest, total = checked_asset(release.get("asset_digest"), release.get("asset_size", 0), "更新包")
+        digest, total = checked_asset(release.get("asset_digest"), release.get("asset_size", 0), "update package")
         target = Path(sys.executable).resolve().parent
         if state_path().resolve().is_relative_to(target):
             raise ValueError("The data directory is inside the program directory and cannot be replaced automatically")
@@ -216,22 +216,22 @@ def prepare(data: dict, lock: FileLock) -> None:
         transaction.mkdir()
         version = release["latest_version"]
         write(data, transaction=str(transaction), target=str(target), version=version,
-              total=total, downloaded=0, message="正在下载", state="downloading")
+              total=total, downloaded=0, message="Downloading", state="downloading")
         stage = fetch_package(release["asset_url"], total, digest, transaction, "package", version, data)
         if release.get("package_kind") == "update":
-            write(data, state="preparing", message="正在复用和校验已安装工具")
+            write(data, state="preparing", message="Reusing and verifying installed tools")
             try:
                 prepare_tools(stage, target, transaction, release, data)
             except (ValueError, KeyError, TypeError, FileNotFoundError) as exc:
-                # 清单格式、工具集合或工具包与本版更新器对不上：完整包自带全部工具，不经清单。
+                # The manifest format, tool set or tool package does not match this version's updater: the full package carries all tools and bypasses the manifest.
                 try:
-                    full_digest, full_size = checked_asset(release.get("full_digest"), release.get("full_size", 0), "完整包")
+                    full_digest, full_size = checked_asset(release.get("full_digest"), release.get("full_size", 0), "full package")
                 except ValueError:
                     raise exc from None
                 write(data, state="downloading", total=data["downloaded"] + full_size,
-                      message=f"应用更新包无法使用（{exc}），改为下载完整包")
+                      message=f"The app update package cannot be used ({exc}), downloading the full package instead")
                 stage = fetch_package(release["full_url"], full_size, full_digest, transaction, "full", version, data)
-        write(data, state="preparing", progress=90, message="正在准备安装")
+        write(data, state="preparing", progress=90, message="Preparing to install")
         desktop_installer.carry_uninstaller(target, stage)
         # 助手从自己的目录运行，正式目录与暂存目录都不会被它的 DLL 句柄占用。
         helper = transaction / "helper"
@@ -255,20 +255,20 @@ def start() -> dict:
     if public().get("state") in ACTIVE | {"ready"}:
         lock.release()
         return public()
-    data = write({"id": uuid.uuid4().hex}, state="downloading", progress=0, message="正在连接发布源")
+    data = write({"id": uuid.uuid4().hex}, state="downloading", progress=0, message="Connecting to the release source")
     threading.Thread(target=prepare, args=(data, lock), daemon=True, name="PeachPackageUpdate").start()
     return public()
 
 
 def _update_writer(stage: Path) -> bool:
-    """读取端只替换兼容程序；待迁移结构必须先由写入端同步。"""
+    """A read node replaces only compatible programs; a structure pending migration must first be synced by the writer."""
     from .migrations import plan
     from .runtime_prepare import configured_ledger_writer
     config = settings_file.load_config()
     writer, reason = configured_ledger_writer(config)
     database = config.directory('database') / 'ledger.db'
     if not writer and database.is_file() and plan(database, stage / '_internal' / 'migrations')[1]:
-        raise ValueError(f'本机不能迁移账本：{reason}；请先在写入端迁移并同步')
+        raise ValueError(f'This machine cannot migrate the ledger: {reason}; migrate on the writer first and then sync')
     return writer
 
 
@@ -278,7 +278,7 @@ def request_restart() -> dict:
     with FileLock(str(state_path()) + ".lock", timeout=0):
         data = read()
         if data.get("state") != "ready":
-            raise ValueError("更新尚未准备完成")
+            raise ValueError("The update is not ready yet")
         writer = _update_writer(Path(data.get('stage', '')))
         db = settings_file.load_config().directory("database") / "ledger.db"
         token = update_tasks.reserve(db) if writer else None
@@ -332,11 +332,11 @@ def migrate_database(stage: Path, data: dict) -> Path | None:
     if not pending:
         return None
     if not _update_writer(stage):
-        raise ValueError('读取端不能迁移账本')
+        raise ValueError('A read node cannot migrate the ledger')
     backup = config.directory("state") / "update-backups" / data["id"] / "ledger.db"
     if not backup.is_file():
         sqlite_backup(database, backup)
-    write(data, database_backup=str(backup), state="installing", progress=10, message="正在更新本地数据库")
+    write(data, database_backup=str(backup), state="installing", progress=10, message="Updating the local database")
     environment = dict(os.environ, PYINSTALLER_RESET_ENVIRONMENT="1", PEACH_DATA_ROOT=str(config.data_root.resolve()))
     with (backup.parent / "migration.log").open("wb") as log:
         result = subprocess.run([str(stage / "Peach.exe"), "migrate", "upgrade", "--yes", "--db", str(database)],
@@ -360,7 +360,7 @@ def restore_database(data: dict) -> None:
 
 
 def preserve_local_state(data: dict, *, include_database: bool = True) -> None:
-    """安装前保存配置与可恢复任务状态；日志、凭据和更新预约独立保留。"""
+    """Save the configuration and recoverable task state before installing; logs, credentials and update reservations are kept separately."""
     from .migrations import sqlite_backup
     config = settings_file.load_config()
     root = config.directory('state') / 'update-backups' / data['id']
@@ -382,7 +382,7 @@ def preserve_local_state(data: dict, *, include_database: bool = True) -> None:
 
 
 def restore_local_state(data: dict) -> None:
-    """只恢复本事务显式保存的配置和任务路径。"""
+    """Restore only the configuration and task paths explicitly saved by this transaction."""
     config = settings_file.load_config()
     root = config.directory('state') / 'update-backups' / data['id']
     manifest = root / 'state.json'
@@ -394,7 +394,7 @@ def restore_local_state(data: dict) -> None:
     for name, path in paths.items():
         resolved = path.resolve()
         if name != 'config' and not resolved.is_relative_to(config.directory('state').resolve()):
-            raise ValueError('任务恢复路径越界')
+            raise ValueError('Task recovery path out of bounds')
         if path.is_dir():
             shutil.rmtree(path)
         else:
@@ -423,7 +423,7 @@ def _transaction_paths(manifest: Path):
 
 
 def _rollback_installation(data, target, transaction, *, installed, writer, token):
-    """停止本次新程序，恢复原程序和写入端的事务备份，再启动托盘。"""
+    """Stop this new program, restore the original program and the writer's transaction backup, then start the tray."""
     from .windows_restart import find_tray_windows, post_stop, start_tray
     if installed:
         for window in find_tray_windows(target / 'Peach.exe'):
@@ -482,7 +482,7 @@ def apply(manifest: Path, wait_pid: int) -> int:
         write(data, progress=50, message="Installing the new version")
         replace_with_retry(stage, target)
         installed = True
-        write(data, progress=80, message="正在启动新版本")
+        write(data, progress=80, message="Starting the new version")
         start_tray(target / "Peach.exe")
         deadline = time.monotonic() + 90
         specs = configured_service_specs(load_config())
@@ -498,7 +498,7 @@ def apply(manifest: Path, wait_pid: int) -> int:
                             desktop_installer.record_version(data["version"])
                         except OSError:
                             pass
-                    write(data, state="complete", progress=100, message=f"已更新至 {data['version']}")
+                    write(data, state="complete", progress=100, message=f"Updated to {data['version']}")
                     if token:
                         update_tasks.release(db, token)
                     return 0
@@ -512,7 +512,7 @@ def apply(manifest: Path, wait_pid: int) -> int:
             event('standalone-update-install', exc)
             try:
                 _rollback_installation(data, target, transaction, installed=installed, writer=writer, token=token)
-                message = f"更新失败，已恢复旧版本：{exc}"
+                message = f"Update failed; the old version was restored: {exc}"
             except Exception as rollback:
                 event('standalone-update-rollback', rollback)
                 message = f"Update failed; rollback did not complete: {rollback}"

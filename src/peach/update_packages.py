@@ -14,9 +14,9 @@ TOOL_PATHS = {
     "face-models": ("tools/face-models", {"face_detection_yunet_2023mar.onnx", "face_recognition_sface_2021dec.onnx",
                                           "LICENSE-yunet.txt", "LICENSE-sface.txt", "manifest.json"}),
 }
-#: 运行时自己能补齐的工具：旧版更新器不认得它、装好的新版里缺了它，由它自己的运行时下载
-#: （人脸模型见 `face_models`）。新版本往清单里加旧客户端不认得的工具，必须登记在这里，
-#: 否则 `scripts/update_compat.py` 拒绝发布（ADR-0120）。
+#: Tools the runtime can fill in itself: an old updater does not recognize them, and when one is missing from the installed new version it is downloaded by its own runtime
+#: (for face models see `face_models`). a new version that adds to the manifest a tool old clients do not recognize must register it here,
+#: otherwise `scripts/update_compat.py` refuses to publish (ADR-0120).
 SELF_PROVISIONED = frozenset({"face-models"})
 
 
@@ -46,16 +46,16 @@ def matches(root: Path, files: dict[str, str]) -> bool:
 
 
 def read_manifest(stage: Path, version: str) -> dict:
-    """读更新包的工具清单，只留本版认得、清单里也有的工具。
+    """Read the update package's tool manifest, keeping only tools this version recognizes and that are also in the manifest.
 
-    工具集合两个方向都可能变，哪一边都不拒：清单多出本版不认得的工具，是更新版本新增的
-    工具包，这一版不下载，装好后由那个工具自己的运行时补齐（`SELF_PROVISIONED`）；清单里
-    少了本版认得的工具，是更新版本不再需要它，不准备也不校验。
+    The tool set can change in both directions and neither side is rejected: a tool in the manifest that this version does not recognize is one newly added by the update version's
+    tool package; this version does not download it, and after installation that tool's own runtime fills it in (`SELF_PROVISIONED`); if the manifest
+    lacks a tool this version recognizes, the updated version no longer needs it, and it is neither prepared nor verified.
     """
     manifest = json.loads((stage / MANIFEST).read_text(encoding="utf-8"))
     if (not isinstance(manifest, dict) or manifest.get("format") != 1 or manifest.get("version") != version
             or not isinstance(manifest.get("tools"), dict)):
-        raise ValueError("更新包工具清单无效")
+        raise ValueError("Invalid update package tool manifest")
     manifest["tools"] = {tool: manifest["tools"][tool] for tool in TOOL_PATHS if tool in manifest["tools"]}
     all_names: set[str] = set()
     for tool, bundle in manifest["tools"].items():

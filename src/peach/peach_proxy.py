@@ -1,4 +1,4 @@
-"""外部请求共用的 Peach 连接策略与本机代理凭据。"""
+"""Peach connection policy and local proxy credentials shared by external requests."""
 from __future__ import annotations
 
 import json
@@ -34,12 +34,12 @@ def describe(root: Path) -> dict:
 
 
 def validate(root: Path, body: object) -> dict:
-    """校验连接方式与地址；凭据只留在返回给保存流程的值中。"""
+    """Validate the connection method and address; credentials remain only in the value returned to the save flow."""
     if not isinstance(body, dict):
-        raise ValueError("请选择 Peach 代理的连接方式")
+        raise ValueError("Please choose a connection method for the Peach proxy")
     mode = body.get("mode")
     if not isinstance(mode, str) or mode not in {"environment", "direct", "proxy"}:
-        raise ValueError("请选择 Peach 代理的连接方式")
+        raise ValueError("Please choose a connection method for the Peach proxy")
     address = body.get("proxy") or values(root).get("proxy", "")
     if not isinstance(address, str):
         raise ValueError("Proxy address must be text")
@@ -52,7 +52,7 @@ def validate(root: Path, body: object) -> dict:
         except ValueError:
             valid = False
         if not valid or any(char.isspace() for char in address):
-            raise ValueError("请填写带端口的 HTTP 或 SOCKS 代理地址")
+            raise ValueError("Please enter an HTTP or SOCKS proxy address with a port")
     return {"mode": mode, "proxy": address if mode == "proxy" else ""}
 
 
@@ -80,14 +80,14 @@ def client_options(root: Path | None = None) -> dict:
 
 
 def http_client(*, root: Path | None = None, **kwargs):
-    """外网 HTTPX 客户端；注入的传输独占请求，不额外挂载代理。"""
+    """External HTTPX client; an injected transport exclusively handles requests and no extra proxy is mounted."""
     import httpx
     options = {"trust_env": False} if kwargs.get("transport") is not None else client_options(root)
     return httpx.Client(**{**options, **kwargs})
 
 
 def curl_options(root: Path | None = None) -> dict:
-    """libcurl 的直连与自定义代理显式覆盖环境 NO_PROXY。"""
+    """libcurl direct and custom proxies explicitly override the environment NO_PROXY."""
     from curl_cffi import CurlOpt
     options = client_options(root)
     if not options.get("trust_env"):
@@ -96,7 +96,7 @@ def curl_options(root: Path | None = None) -> dict:
 
 
 def read_url(url: str, *, timeout: float = 60, headers=None, max_bytes: int | None = None) -> bytes:
-    """读取模型、清单等完整响应，沿用 Peach 的 HTTP 与 SOCKS 代理。"""
+    """Read complete responses such as models and manifests, following Peach's HTTP and SOCKS proxy."""
     import httpx
     from .http import _bounded_body
     try:
@@ -105,4 +105,4 @@ def read_url(url: str, *, timeout: float = 60, headers=None, max_bytes: int | No
             return response.read() if max_bytes is None else _bounded_body(response.iter_bytes(), max_bytes)
     except httpx.HTTPError as error:
         kind = f"HTTP {error.response.status_code}" if isinstance(error, httpx.HTTPStatusError) else type(error).__name__
-        raise OSError(f"外部请求未取得（{kind}）") from error
+        raise OSError(f"External request not obtained ({kind})") from error

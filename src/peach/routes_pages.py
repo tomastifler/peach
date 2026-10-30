@@ -57,19 +57,19 @@ ROBOTS_TXT = "User-agent: *\nDisallow: /\n"
 #: 回环地址的三种写法。既用来判提交端点的调用方，也用来判「只有这台电脑」那个监听选择。
 _LOOPBACK = frozenset({"127.0.0.1", "::1", "localhost"})
 
-#: 首启页共用的文件夹与媒体库图标。
+#: Folder and media library icons shared by the first-run page.
 _SETUP_SYMBOLS = re.compile(r'<symbol id="i-(?:' + '|'.join(sorted({"folder-search", *LIBRARY_ICONS}))
                            + r')"[^>]*>.*?</symbol>')
 
 #: 键 -> 页面上的题目与一句说明。顺序、默认值与校验仍然来自 `onboarding.questions()`，
 #: 这里只决定同一道题在浏览器里怎么称呼：命令行那份题面要把可选值写进去，页面用控件表达。
 _SETUP_COPY = {
-    "data_root": ("数据目录", "Peach 数据库、封面、预览图和缓存都放在这里，馆藏较大时会占用数十 GB。"
-                              "系统盘空间紧张时，请选择其他磁盘上的文件夹；之后也可在设置页迁移。"),
-    "media_dir": ("媒体目录", "选择存放视频和图片的现有文件夹，也可以使用外置硬盘。"),
-    "host": ("谁可以访问", ""),
-    "port": ("端口", "浏览器地址里冒号后面的数字，一般不用改。"),
-    "mdns_name": ("局域网访问地址", "选了「同一局域网的设备」之后，其他设备在浏览器里输入这个地址就能打开 Peach。"),
+    "data_root": ("Data directory", "Peach database, covers, previews and cache are all stored here, and a large library can take up tens of GB."
+                              "If system disk space is tight, choose a folder on another disk; you can also migrate later in settings."),
+    "media_dir": ("Media directory", "Choose an existing folder where videos and images are stored; an external drive also works."),
+    "host": ("Who can access", ""),
+    "port": ("Port", "The number after the colon in the browser address; usually no need to change it."),
+    "mdns_name": ("LAN access address", "After choosing 'Devices on the same local network', other devices enter this address in a browser to open Peach."),
 }
 #: 「谁可以访问」在页面上的顺序：局域网在左边，也是默认选项——Peach 的本意就是给
 #: 同一局域网里的设备看。命令行问答按 `HOST_OPTIONS` 的编号顺序念，两边取值一致。
@@ -177,18 +177,18 @@ def asset_response(request: Request, path: Path, media: str, *, immutable: bool 
     ETag 取 mtime_ns 加字节数，不读文件内容：这几个文件都由 Git 检出或 `frontend/`
     构建产生，改一次就换一次 mtime，不需要为了强校验去算全文哈希。
 
-    文本类资产在浏览器接受 gzip 时发压缩体，压缩结果按文件版本记住，见 `_gzipped()`。
-    压缩体与原文是两个表示，ETag 各不相同。
+    Text assets are sent gzip-compressed when the browser accepts gzip, and the compressed result is remembered per file version, see `_gzipped()`.
+    The compressed body and the original are two representations, ETag differ between them.
 
-    `immutable` 给名字里带内容哈希的主包 chunk（ADR-0118）：内容一变名字就变，浏览器一年内
-    不再回源。它们要会话才能取，所以只许浏览器自己缓存（`private`），不许共享缓存转给别人。
+    `immutable` is for main-bundle chunk (ADR-0118): their names carry a content hash, so when the content changes the name changes, and within a year the browser
+    does not go back to the origin. They need a session to fetch, so only the browser's own cache may keep them (`private`), and a shared cache must not pass them on to others.
     """
     stat = path.stat()
     compress = (media.startswith(_COMPRESSIBLE_MEDIA) and stat.st_size >= _GZIP_MINIMUM
                 and _accepts_gzip(request.headers.get("accept-encoding", "")))
     etag = f'"peach-{stat.st_mtime_ns:x}-{stat.st_size:x}{"-gz" if compress else ""}"'
-    # charset 只对文本类型成立。图标是字节流，声明里挂一个字符集，在全站的
-    # `X-Content-Type-Options: nosniff` 之下就是让浏览器照一个自相矛盾的类型解码。
+    # charset applies only to text types. An icon is a byte stream, and attaching a charset to its declaration, under the site-wide
+    # `X-Content-Type-Options: nosniff` makes the browser decode by a self-contradictory type.
     media_type = f"{media}; charset=utf-8" if media.startswith("text/") else media
     if request.headers.get("if-none-match") == etag:
         response: Response = Response(status_code=304)
@@ -206,19 +206,19 @@ def asset_response(request: Request, path: Path, media: str, *, immutable: bool 
     return response
 
 
-#: 值得压缩的页面资产类型；图标等位图本身已压缩。
+#: Page asset types worth compressing; bitmaps such as icons are already compressed.
 _COMPRESSIBLE_MEDIA = ("text/", "image/svg+xml")
-#: 小于它的文件压缩后省不下几个字节，与 `GZipMiddleware` 的默认门槛相同。
+#: Files smaller than this save only a few bytes after compression, the same as `GZipMiddleware` 's default threshold.
 _GZIP_MINIMUM = 500
-#: 路径 → (修改时间, 字节数, 压缩体)。主包 3.8 MB，每次冷请求现压要一百多毫秒；同一版本只压一次。
-#: 每个路径只留当前版本，换了版本就替换；路径数按最近使用限界，带哈希的分包每次构建都换名。
+#: path → (modification time, byte count, compressed body). The main bundle 3.8 MB, compressing on every cold request takes over a hundred milliseconds; the same version is compressed only once.
+#: Only the current version is kept per path and replaced when the version changes; the number of paths is bounded by recent use, and hashed split bundles change names on every build.
 _GZIPPED: OrderedDict[str, tuple[int, int, bytes]] = OrderedDict()
 _GZIPPED_PATHS = 64
 _GZIP_LOCK = threading.Lock()
 
 
 def _accepts_gzip(header: str) -> bool:
-    """`Accept-Encoding` 里有没有 gzip（或 `*`），且没有用 `q=0` 拒绝。"""
+    """Whether `Accept-Encoding` contains gzip (or `*`), and is not rejected with `q=0`."""
     for item in header.split(","):
         token, _, params = item.strip().partition(";")
         if token.strip().lower() not in ("gzip", "*"):
@@ -234,7 +234,7 @@ def _accepts_gzip(header: str) -> bool:
 
 
 def _gzipped(path: Path, stat: os.stat_result) -> bytes:
-    """这一版文件的 gzip 压缩体。压缩在锁外做：并发的首个请求各压一次，结果相同。"""
+    """The gzip body of this version of the file. Compression is done outside the lock: concurrent first requests each compress once, with identical results."""
     key = str(path)
     with _GZIP_LOCK:
         hit = _GZIPPED.get(key)
@@ -453,7 +453,7 @@ def setup_questions(request: Request):
             "default": "" if question.key == "media_dir" else question.default,
             # 星号与 `required` 跟着输入框走：两段式单选总有一项选中，不标。
             "required": question.key != "host",
-            # 目录和访问范围属于首次设置主流程，端口与局域网名称按需展开。
+            # Directory and access scope belong to the main first-run flow, while port and LAN name are expanded on demand.
             "advanced": question.key not in {"media_dir", "data_root", "host"},
             "input": view["input"], "prefix": view["prefix"], "suffix": view["suffix"],
         }
@@ -486,7 +486,7 @@ def _json_text(value: object) -> str:
 
 
 def _submitted_media_rows(rows: object) -> dict[str, list]:
-    """JSON 媒体行拆成与表单相同的逐列列表；身份字段按行原样带给配置校验。"""
+    """JSON media rows are split into the same per-column lists as the form; identity fields are passed to configuration validation as is per row."""
     rows = [row if isinstance(row, dict) else {} for row in rows] if isinstance(rows, list) else []
     return {
         "media_dir": [_json_text(row.get("path")) for row in rows],
@@ -711,10 +711,10 @@ _BUNDLE_NAMES = frozenset({"peach-app.js", "peach-app.css", "peach-pages.js", "p
 
 
 def _bundle_response(request: Request, name: str) -> Response:
-    """`web/dist/` 下的一份产物。名字不合法或文件不在都是 404，浏览器直接打开时由错误页说。
+    """`web/dist/` holds an artifact served here. An invalid name or a missing file both give a 404, and the error page explains when opened directly in a browser.
 
-    固定名的入口每次复验；带哈希的 chunk 内容不变，长期缓存。压缩协商若要按文件挑预压缩副本，
-    包在这里返回的响应外面即可，名字校验与缓存头不随之改变。
+    Fixed-name entries are re-validated every time; hashed chunks never change and are cached long-term. If compression negotiation needs to pick a precompressed copy per file,
+    just wrap the response returned here; name validation and cache headers do not change.
     """
     chunk = BUNDLE_CHUNK_NAME.fullmatch(name) is not None
     if name not in _BUNDLE_NAMES and not chunk:
@@ -741,9 +741,9 @@ def page_bundle(request: Request):
 @router.api_route("/dist/{name}", methods=["GET", "HEAD"])
 def app_bundle(request: Request, name: str,
                args: dict[str, str] = Depends(require_asset_auth)):
-    """`frontend/` 的主包入口使用固定文件名、会话认证与 ETag 复验，按页拆出的 chunk 带内容哈希、长期缓存。
+    """`frontend/` main-bundle entries use fixed file names, session authentication and ETag revalidation, while chunks split out by page carry a content hash and are cached long-term.
 
-    产物提交进 Git；只提供主包、主包 chunk 与页面包的 JS/CSS，文件名不接受路径分隔符或附带扩展名。
+    Artifacts are committed into Git; serves only the main bundle, main-bundle chunks and page bundles' JS/CSS, file names do not accept path separators or attached extensions.
     """
     return _bundle_response(request, name)
 
@@ -822,10 +822,10 @@ def peach_logo(request: Request):
 @router.api_route("/peach-logo-64.png", methods=["GET", "HEAD"])
 @router.api_route("/peach-logo-128.png", methods=["GET", "HEAD"])
 def peach_logo_small(request: Request):
-    """侧栏与登录卡那枚站标：页面按 `srcset` 挑 64 或 128 px，不为 24 px 的图标下 1024 px 的原图。
+    """Site logo on the sidebar and the login card: the page uses `srcset` to pick 64 or 128 px, no 1024 px original is downloaded for a 24 px icon.
 
-    和原图一样不设防：登录页在拿到会话之前就要画它。文件由
-    `scripts/generate_brand_assets.py` 从同一张原图缩出。
+    Like the original, it is not protected: the login page must draw it before obtaining a session. The files are produced by
+    `scripts/generate_brand_assets.py` downscaling the same original image.
     """
     name = request.url.path.rsplit("/", 1)[-1]
     return asset_response(request, PROJECT_ROOT / "resources" / name, "image/png")

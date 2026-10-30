@@ -1,4 +1,4 @@
-/* 每部视频共用一次读取、按身份串行提交；所有设置保存在字幕清单文件中。 */
+/* Each video shares one read and commits serially by identity; all settings are saved in the subtitle manifest file. */
 import { api } from '@peach/legacy/core';
 import type { CaptionStyle } from './subtitle-style';
 import type { VjsPlayer } from './types';
@@ -52,7 +52,7 @@ class PlayerMemory {
       return value;
     })().catch(error => {
       this.reading = undefined;
-      if (!this.cleanup.signal.aborted) { this.error = '播放记忆未读取，请重试'; this.changed() }
+      if (!this.cleanup.signal.aborted) { this.error = 'Playback memory not loaded; try again'; this.changed() }
       throw error;
     });
   }
@@ -66,12 +66,12 @@ class PlayerMemory {
           body: JSON.stringify(patch), keepalive: !patch.track });
         if (!response.ok) {
           const body = await response.json().catch(() => null);
-          throw new Error(body?.error || body?.detail || '播放记忆未保存，请重试');
+          throw new Error(body?.error || body?.detail || 'Playback memory not saved; try again');
         }
         this.unsaved = {}; this.error = '';
       } catch (error) {
         this.unsaved = patch;
-        this.error = error instanceof Error ? error.message : '播放记忆未保存，请重试';
+        this.error = error instanceof Error ? error.message : 'Playback memory not saved; try again';
         throw error;
       } finally { this.changed() }
     });
@@ -83,7 +83,7 @@ class PlayerMemory {
     try {
       if (Object.keys(this.unsaved).length) await this.save({ ...this.unsaved });
       else { this.reading = undefined; await this.load(); this.error = ''; this.changed() }
-    } catch { /* 原位保留原因与重试入口 */ }
+    } catch { /* Keep the reason and retry entry in place */ }
   }
 }
 
@@ -93,7 +93,7 @@ export function playerMemory(player: VjsPlayer) {
   return memory;
 }
 
-/** 倍速只在用户选择时写入；媒体换源后恢复同一部视频的设置。 */
+/** Playback speed is only written when the user picks it; after the media source changes, the same video's settings are restored. */
 export function mountPlaybackRate(player: VjsPlayer, video: HTMLVideoElement) {
   const memory = playerMemory(player);
   let rate = Number(player.playbackRate()) || 1, touched = false;

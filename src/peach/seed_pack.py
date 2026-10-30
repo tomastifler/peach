@@ -1,4 +1,4 @@
-"""随应用分发的实体事实种子包（ADR-0073、ADR-0075、ADR-0117）。
+"""Entity fact seed pack distributed with the app (ADR-0073, ADR-0075, ADR-0117).
 
 导出的是女优、厂牌与事务所名下**能在公开站点上重新查到**的文字事实：别名、站上编号、
 官网与社媒链接、女优资料表、所属事务所、label 归哪家片商。不导任何图像字节、本机路径、
@@ -412,7 +412,7 @@ def _land_one(connection, entity_id: int, item: dict, version: str, batch: str, 
 
 
 def _land_name(connection, entity_id: int, item: dict, batch: str) -> bool:
-    """唯一匹配人物的中文规范名；保留人工选择、非登记写法与身份冲突。"""
+    """The Chinese canonical name of a uniquely matched person; manual choices, non-registered spellings and identity conflicts are kept."""
     target = str(item["name"])
     if item["kind"] != "performer" or not re.fullmatch(r"[一-鿿·]+", target):
         return False
@@ -447,7 +447,7 @@ def written(report: dict) -> int:
 
 
 def planned_names(connection, source: str, batch: str = "") -> list[dict]:
-    """当前仍归指定种子批次拥有、且有原名快照的规范名。"""
+    """Canonical names still owned by the given seed batch that have an original-name snapshot."""
     if source != SOURCE:
         return []
     found = []
@@ -466,7 +466,7 @@ def planned_names(connection, source: str, batch: str = "") -> list[dict]:
 
 
 def revert_names(connection, names: list[dict]) -> int:
-    """按原名快照还原规范名和作品署名，保留后续人工选择。"""
+    """Restore canonical names and work credits from the original-name snapshot, keeping later manual choices."""
     changed = 0
     for item in names:
         entity_id, previous = item["entity_id"], item["previous_name"]
@@ -476,7 +476,7 @@ def revert_names(connection, names: list[dict]) -> int:
             continue
         taken = connection.execute("SELECT 1 FROM entity WHERE kind='performer' AND normalized_name=? AND id<>?", (normalize_entity_name(previous), entity_id)).fetchone()
         if taken:
-            raise ValueError("原规范名已被其他实体占用，未撤回中文名")
+            raise ValueError("The original canonical name is already taken by another entity; the Chinese name was not withdrawn")
         if item.get("previous_preference") is None:
             metadata.pop("name_preference", None)
         else:

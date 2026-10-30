@@ -1,13 +1,13 @@
-/* 设置偏好与 Peach 配置的五份服务端数据，各一个 Query 键。
+/* Five server-side datasets for settings preferences and Peach configuration, each with its own Query key.
  *
  * - `['settings']`：跟数据库走、所有访问端同一份的那几项（`/api/settings`，`src/peach/web_settings.py`）。
  *   面板每次打开都重取一次，取回来交给壳对账（`host.syncRemote`）：界面偏好的真相仍是壳里那一份
  *   `appSettings`，这个键只是数据库那边的快照。写入同样走这个端点，成功后回来的整份写回这个键。
  * - `['follow-schedule']`：这台机器上关注自动更新的档位与上次运行状态。
- * - `['feed-schedule']`：订阅源定时拉取的档位与上次运行状态，形状同上，只读。
- * - `['thumbnail-jobs']`：视频缩略图采集的档位与状态。档位跟着机器走，不存在浏览器里。
- * - `['media-processing']`：这台机器生成预览的开关与抽帧、转码的编解码方式。配置页「视频预览」与
- *   「视频播放」两张卡读写同一份。
+ * - `['feed-schedule']`: scheduled-fetch tiers and last run status of feeds, same shape as above, read-only.
+ * - `['thumbnail-jobs']`: tiers and state of video thumbnail collection. Tiers follow the machine and are not stored in the browser.
+ * - `['media-processing']`: whether this machine generates previews, plus the codecs for frame extraction and transcoding. The settings page's "Video previews" and
+ *    "Video playback" cards read and write the same one.
  *
  * 面板常驻不卸载，每次打开重取设置；Peach 配置在挂载时重取各自的数据。 */
 import { useMutation, type QueryClient } from '@tanstack/react-query';
@@ -27,7 +27,7 @@ export const THUMBNAIL_JOBS_KEY = ['thumbnail-jobs'] as const;
 export const MEDIA_PROCESSING_URL = '/api/media-processing';
 export const MEDIA_PROCESSING_KEY = ['media-processing'] as const;
 
-/** `/api/media-processing` 的整份；写入只送改了的那一项，回来的仍是整份。 */
+/** `/api/media-processing` whole payload; a write sends only the changed item, and what comes back is still the whole payload. */
 export interface MediaProcessingPolicy {
   metadata_only: boolean;
   preview_acceleration?: 'auto' | 'software';
@@ -47,7 +47,7 @@ export interface SyncedSettings {
   feedHideExcerpts?: boolean;
   /** 数据库里还没存过时是 null：这台设备本地那个数替所有访问端先定下来。 */
   searchHistoryLimit?: number | null;
-  /** 番号识别规则，一条一个正则；配置页「媒体库与入库」里编辑。 */
+  /** Code recognition rules, one regex per rule; edited on the settings page under "Library & import". */
   codePatterns?: string[];
 }
 
@@ -60,7 +60,7 @@ export interface FollowScheduleStatus {
   last_finished_at?: string | null;
   last_added?: number | null;
   next_run_at?: string | null;
-  /** 连续失败的轮数；从第二次起下一轮按倍数推后。 */
+  /** Number of consecutive failed rounds; from the second one the next round is pushed back by a multiplier. */
   consecutive_failures?: number;
 }
 
@@ -101,7 +101,7 @@ export function useSaveFollowSchedule() {
   });
 }
 
-/** 两个调度各自的「立即重跑」：服务端把下一轮提前到此刻，回来的状态已标成运行中。 */
+/** "Rerun now" for each of the two schedules: the server pulls the next round forward to now, and the returned state is already marked running. */
 export const SCHEDULE_RUNS = {
   follow: { url: `${FOLLOW_SCHEDULE_URL}/run`, key: FOLLOW_SCHEDULE_KEY },
   feed: { url: `${FEED_SCHEDULE_URL}/run`, key: FEED_SCHEDULE_KEY },
@@ -115,7 +115,7 @@ export function useRunSchedule(kind: keyof typeof SCHEDULE_RUNS) {
   });
 }
 
-/** 调度正在跑时三秒重取一次，跑完就停，失败原因随之出现或消失。 */
+/** While a schedule is running, refetch every three seconds; stop when it finishes, and the failure reason appears or disappears accordingly. */
 export const schedulePollInterval = (data: FollowScheduleStatus | undefined) => data?.running ? 3_000 : false;
 
 export function useSaveThumbnailMode() {

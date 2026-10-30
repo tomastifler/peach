@@ -192,8 +192,8 @@ function DownloadForm({ state, settle, receipt, pikpakAccount }: CardProps & { p
   };
 
   return (
-    <Section title="云下载" onSubmit={submit}>
-      {state.problems?.length ? <Stack><Note tone="error" title="云下载配置需要检查">{state.problems.join('\n')}</Note></Stack> : null}
+    <Section title="Cloud download" onSubmit={submit}>
+      {state.problems?.length ? <Stack><Note tone="error" title="Cloud download settings need checking">{state.problems.join('\n')}</Note></Stack> : null}
       <Stack>
         <Input label="CloudDrive2 address" placeholder="Leave blank to detect automatically" autoComplete="off" maxLength={200}
           value={config.clouddrive_address} isDisabled={!state.available}
@@ -202,27 +202,27 @@ function DownloadForm({ state, settle, receipt, pikpakAccount }: CardProps & { p
           placeholder={state.token_set ? 'Saved; leave blank to keep' : 'Generate in CloudDrive2 under Settings → API token'}
           hint="Requires offline task permission."
           value={token} isDisabled={!state.available} onChange={setToken} />
-        {has115 ? <Input label={<SourceLabel source="115" label="115 目标目录" />} placeholder="留空时根据媒体库目录自动填写" autoComplete="off" maxLength={300}
+        {has115 ? <Input label={<SourceLabel source="115" label="115 target folder" />} placeholder="Leave blank to fill in automatically from the library folder" autoComplete="off" maxLength={300}
           validationBehavior="aria" isInvalid={missing}
-          hint={missing ? (saveBlocked ? '先新建这个目录，或填写已有目录。' : '这个目录不存在。') : '应位于自动入库的云端路径前缀内。'}
+          hint={missing ? (saveBlocked ? 'Create this folder first, or enter an existing one.' : 'This folder does not exist.') : 'Must be inside the cloud path prefix used for automatic import.'}
           value={target('115')} isDisabled={!state.available} onChange={(value) => setTarget('115', value)} /> : null}
-        {hasPikPak ? <><Input label={<SourceLabel source="pikpak" label="PikPak 目标目录" />} placeholder="以 / 开头的网盘路径" autoComplete="off" maxLength={300}
-          hint="目录要已经存在。"
+        {hasPikPak ? <><Input label={<SourceLabel source="pikpak" label="PikPak target folder" />} placeholder="Cloud drive path starting with /" autoComplete="off" maxLength={300}
+          hint="The folder must already exist."
           value={target('pikpak')} isDisabled={!state.available} onChange={(value) => setTarget('pikpak', value)} />
         <div className="flex flex-col gap-1">
           <FieldLabel><SourceLabel source="pikpak" label="Media folder for the PikPak root" /></FieldLabel>
           {state.pikpak_roots.length ? (
-            <Select aria-label="PikPak 根目录对应的媒体目录" selectedKey={config.pikpak_root || null}
-              isDisabled={!state.available} placeholder="检查时根据媒体库目录选择"
+            <Select aria-label="Media folder for the PikPak root folder" selectedKey={config.pikpak_root || null}
+              isDisabled={!state.available} placeholder="Chosen from the library folder when checking"
               onSelectionChange={(key) => setConfig({ ...config, pikpak_root: key === null ? '' : String(key) })}>
               {state.pikpak_roots.map((root) => <SelectItem key={root} id={root}>{root}</SelectItem>)}
             </Select>
           ) : (
-            <Help>First add the PikPak mount folder under "Libraries and import".</Help>
+            <Help>First add the PikPak mount folder under "Library & import".</Help>
           )}
         </div></> : null}
-        <Input label="等待上限（小时）" type="number" inputMode="numeric" autoComplete="off"
-          hint={`超时标为停滞；可填 1–${state.max_wait_hours} 小时。`}
+        <Input label="Wait limit (hours)" type="number" inputMode="numeric" autoComplete="off"
+          hint={`Marked stalled on timeout; enter 1–${state.max_wait_hours} hours.`}
           value={hours} isDisabled={!state.available} onChange={setHours} />
       </Stack>
       {action.busy === 'auto' ? <Stack divided><LoadingDots label="Checking CloudDrive2" /></Stack> : null}
@@ -269,10 +269,10 @@ function CheckReport({ report, detected, suggested, create, creating }: {
   return (
     <Stack divided>
       {hasFacts ? <FactList>
-        {detected ? <Fact term="CloudDrive2 地址">{`探测到 ${detected}，保存配置后生效`}</Fact> : null}
+        {detected ? <Fact term="CloudDrive2 address">{`Detected ${detected}; takes effect after saving`}</Fact> : null}
         {folder?.exists ? (
-          <Fact term={<SourceLabel source="115" label="115 目标目录" />}>
-            {suggested.saved ? `已根据媒体库目录填入 ${folder.path}` : `根据媒体库目录填入 ${folder.path}，保存配置后生效`}
+          <Fact term={<SourceLabel source="115" label="115 target folder" />}>
+            {suggested.saved ? `Filled in from the library folder: ${folder.path}` : `Fill in from the library folder: ${folder.path}; takes effect after saving`}
           </Fact>
         ) : null}
         {folder && !folder.exists ? (
@@ -281,12 +281,12 @@ function CheckReport({ report, detected, suggested, create, creating }: {
             {create ? <Button variant="secondary" size="small" onClick={() => create(folder.path)} {...busyProps(creating)}>Create this folder</Button> : null}
           </Fact>
         ) : null}
-        {suggested.root ? <Fact term={<SourceLabel source="pikpak" label="PikPak 根目录" />}>{`根据媒体库目录填入 ${suggested.root}，保存配置后生效`}</Fact> : null}
+        {suggested.root ? <Fact term={<SourceLabel source="pikpak" label="PikPak root folder" />}>{`Fill in from the library folder: ${suggested.root}; takes effect after saving`}</Fact> : null}
         {report.permissions.length ? (
-          <Fact term="离线权限">
+          <Fact term="Offline permissions">
             {report.missing.length
-              ? report.missing.map(permission => <Chip key={permission} variant="caption" color="yellow">{`缺 ${permission}`}</Chip>)
-              : <Chip variant="caption" color="lime">齐全</Chip>}
+              ? report.missing.map(permission => <Chip key={permission} variant="caption" color="yellow">{`Missing ${permission}`}</Chip>)
+              : <Chip variant="caption" color="lime">Complete</Chip>}
           </Fact>
         ) : null}
         {report.folder ? (
@@ -395,14 +395,14 @@ function PikPakAccount({ state, settle, receipt, username, setUsername }: CardPr
     </>
   );
   const passwordLogin = (
-    <Button type="submit" variant="primary" disabled={!state.available || waiting} {...busyProps(action.busy === 'login')}>登录</Button>
+    <Button type="submit" variant="primary" disabled={!state.available || waiting} {...busyProps(action.busy === 'login')}>Log in</Button>
   );
   const outcomeFailed = browser.state === 'timeout' || browser.state === 'failed';
 
   return (
-    <Section title="PikPak 账号" icon={<PikPakIcon />} onSubmit={login}
+    <Section title="PikPak account" icon={<PikPakIcon />} onSubmit={login}
       aside={<StatusLabel tone={account.logged_in ? 'success' : waiting ? 'progress' : outcomeFailed ? 'error' : 'neutral'}>
-        {account.logged_in ? '已登录' : waiting ? '等待登录' : outcomeFailed ? '登录未完成' : '待登录'}</StatusLabel>}>
+        {account.logged_in ? 'Logged in' : waiting ? 'Waiting for login' : outcomeFailed ? 'Login not finished' : 'Not logged in'}</StatusLabel>}>
       {account.logged_in ? (
         <FactList>
           <Fact term="Account">{account.username || 'Signed in'}</Fact>
@@ -422,12 +422,12 @@ function PikPakAccount({ state, settle, receipt, username, setUsername }: CardPr
       <Footer status={!account.logged_in && waiting
         ? <LoadingDots label={browser.message || 'Waiting for you to sign in to PikPak in the browser window'} /> : null}>
         {account.logged_in ? (
-          <Button variant="secondary" onClick={logout} disabled={!state.available} {...busyProps(action.busy === 'logout')}>登出</Button>
+          <Button variant="secondary" onClick={logout} disabled={!state.available} {...busyProps(action.busy === 'logout')}>Log out</Button>
         ) : <>{!browser.available ? null : waiting ? (
-          <Button variant="secondary" type="button" onClick={cancelBrowser} {...busyProps(action.busy === 'cancel')}>取消</Button>
+          <Button variant="secondary" type="button" onClick={cancelBrowser} {...busyProps(action.busy === 'cancel')}>Cancel</Button>
         ) : (
           <Button variant="secondary" type="button" onClick={openBrowser} disabled={!state.available}
-            {...busyProps(action.busy === 'browser')}>用浏览器登录</Button>
+            {...busyProps(action.busy === 'browser')}>Log in with browser</Button>
         )}{passwordLogin}</>}
       </Footer>
     </Section>

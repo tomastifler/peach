@@ -1,4 +1,4 @@
-"""随应用提供的浏览器品牌标识与来源记录。"""
+"""Browser brand marks shipped with the app and their source records."""
 import json
 from functools import lru_cache
 

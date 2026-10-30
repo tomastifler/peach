@@ -51,7 +51,7 @@ class LibraryChannelTests(unittest.TestCase):
         self.service.landing.declared_roots["pikpak"] = ("P:\\",)
         result = self.catalog()
         self.assertEqual([row["key"] for row in result["providers"]], ["pikpak"])
-        self.assertIn("CloudDrive2 令牌无法读取", result["problems"][0])
+        self.assertIn("CloudDrive2 token cannot be read", result["problems"][0])
         self.assertNotIn("test-only-secret-detail", str(result))
         self.factory.assert_not_called()
 

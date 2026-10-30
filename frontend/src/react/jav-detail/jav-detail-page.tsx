@@ -80,8 +80,8 @@ function Work({ code, item, actions, readOnly, retry, retrying }: JavDetailProps
       <JavTitle item={item} />
       {Number(item.score) > 0 ? <SourceRating score={Number(item.score)} /> : null}
       <div className="mono" data-stage-meta="" data-reveal-line="">
-        <Spec glyph="calendar" label="发行日期" value={item.release_date} />
-        <Spec glyph="clock" label="时长" value={item.duration ? `${item.duration} 分钟` : undefined} />
+        <Spec glyph="calendar" label="Release date" value={item.release_date} />
+        <Spec glyph="clock" label="Duration" value={item.duration ? `${item.duration} min` : undefined} />
       </div>
       <JavIdentity item={item} navigate={actions.navigate} />
       <div data-jav-facts="">
@@ -92,13 +92,13 @@ function Work({ code, item, actions, readOnly, retry, retrying }: JavDetailProps
         <span data-detail-tag="" data-tag-cat={tag.category} key={tag.name}><button type="button" data-tag={tag.name}
           title={tagLabel(tag.name)} onClick={() => actions.openTag(tag.name)}>{tagLabel(tag.name)}</button></span>)}</div> : null}
       {item.summary ? <p data-jav-summary="" data-long-text="" lang={textLang(item.summary)}>{item.summary}</p> : null}
-      {item.message ? <Note tone="neutral" action={<Button variant="secondary" {...busyProps(retrying)} onClick={retry}>立即重试</Button>}>{item.message}</Note> : null}
+      {item.message ? <Note tone="neutral" action={<Button variant="secondary" {...busyProps(retrying)} onClick={retry}>Retry</Button>}>{item.message}</Note> : null}
       <div data-jav-actions="">
         {item.source_url ? <ButtonLink data-button-link="" variant="secondary" trailingIcon={RiExternalLinkLine}
-          href={item.source_url} target="_blank" rel="noopener noreferrer">作品来源</ButtonLink> : null}
-        <Button variant="secondary" disabled={readOnly} aria-pressed={!!wantId} {...busyProps(!!want.busy)} onClick={toggleWant}>{wantId ? '取消想要' : '想要'}</Button>
+          href={item.source_url} target="_blank" rel="noopener noreferrer">Work source</ButtonLink> : null}
+        <Button variant="secondary" disabled={readOnly} aria-pressed={!!wantId} {...busyProps(!!want.busy)} onClick={toggleWant}>{wantId ? 'Remove from wants' : 'Want'}</Button>
         <Button variant="primary" onClick={() => setDownload({ code: item.code, title: item.title, performers: item.performers,
-          studio: item.studio, release_date: item.release_date, origin: `jav:${item.code}` })}>查找资源</Button>
+          studio: item.studio, release_date: item.release_date, origin: `jav:${item.code}` })}>Find resources</Button>
       </div>
       {want.error ? <Note tone="error">{want.error}</Note> : null}
       <Reviews code={item.code} count={item.comments_count} released={item.release_date} />
@@ -118,12 +118,12 @@ function JavTitle({ item }: { item: JavDetail }) {
     data-expanded={expanded ? '' : undefined} data-foldable={foldable ? '' : undefined}
     onClick={() => { if (foldable && !String(getSelection() || '')) toggle() }}><b>{item.code}</b>{title ? <>{' '}<span lang={textLang(title)}>{title}</span></> : null}</span></h1>
     <span data-title-tools=""><button type="button" data-title-fold="" hidden={!foldable} aria-expanded={expanded}
-      aria-label={expanded ? '收起标题' : '展开标题'} title={expanded ? '收起标题' : '展开完整标题'} onClick={toggle}><CollapseChevron /></button></span>
+      aria-label={expanded ? 'Collapse title' : 'Expand title'} title={expanded ? 'Collapse title' : 'Expand full title'} onClick={toggle}><CollapseChevron /></button></span>
   </div>;
 }
 
 function SourceRating({ score, review = false }: { score: number; review?: boolean }) {
-  return <div data-item-rating="" data-jav-rating="" data-review-rating={review ? '' : undefined} role="img" aria-label={`${review ? '评论' : 'JavDB'}评分 ${score} / 5`}>
+  return <div data-item-rating="" data-jav-rating="" data-review-rating={review ? '' : undefined} role="img" aria-label={`${review ? 'Review' : 'JavDB'} rating ${score} / 5`}>
     <RatingStars value={score} />
     <span data-rating-value="">{score.toFixed(1)} / 5</span>
   </div>;
@@ -158,7 +158,7 @@ function PreviewVideo({ src }: { src: string }) {
     node.append(video);
     return mountPreviewPlayer(video, { src, type: /\.m3u8(?:\?|$)/i.test(src) ? 'application/x-mpegURL' : 'video/mp4' }, () => setFailed(true));
   }, [src, attempt]);
-  return <div ref={frame} data-jav-video="">{failed ? <Note tone="neutral" action={<Button variant="secondary" onClick={() => { setFailed(false); setAttempt(value => value + 1) }}>立即重试</Button>}>视频预览未取得</Note> : null}</div>;
+  return <div ref={frame} data-jav-video="">{failed ? <Note tone="neutral" action={<Button variant="secondary" onClick={() => { setFailed(false); setAttempt(value => value + 1) }}>Retry</Button>}>Video preview unavailable</Note> : null}</div>;
 }
 
 function Reviews({ code, count, released }: { code: string; count: number; released?: string }) {
@@ -197,8 +197,8 @@ function Reviews({ code, count, released }: { code: string; count: number; relea
       {items.map(item => <article key={item.id} data-jav-review=""><div data-jav-review-meta=""><b>{item.username}</b>
         {Number(item.score) > 0 ? <SourceRating score={Number(item.score)} review /> : null}
         <time dateTime={item.created_at} title={item.created_at}>{item.created_at.slice(0, 10)}</time></div><p data-long-text="" lang={textLang(item.content)}>{item.content}</p></article>)}
-      {failure ? <Note tone="neutral" action={<Button variant="secondary" {...busyProps(result.isFetching)} onClick={() => { refresh.current = true; void result.refetch() }}>立即重试</Button>}>{failure}</Note>
-        : !result.isPending && !items.length ? <Note tone="neutral">暂无评论</Note> : null}
+      {failure ? <Note tone="neutral" action={<Button variant="secondary" {...busyProps(result.isFetching)} onClick={() => { refresh.current = true; void result.refetch() }}>Retry</Button>}>{failure}</Note>
+        : !result.isPending && !items.length ? <Note tone="neutral">No reviews yet</Note> : null}
       {!failure && pages.length ? <Button variant="secondary" {...busyProps(result.isFetching)}
         onClick={() => { refresh.current = true; void result.refetch() }}>Refresh reviews</Button> : null}
       {result.hasNextPage ? <Button variant="secondary" {...busyProps(result.isFetchingNextPage)} onClick={() => { if (!result.isFetchingNextPage) void result.fetchNextPage() }}>More reviews</Button> : null}

@@ -1,4 +1,4 @@
-/* 缺图提示要等数据才知道出不出现。本机记住上次列表是否带这一行，等待态按它预留同样高度，数据到达时表格位置不变。 */
+/* Whether the missing-image notice appears is only known once data arrives. This machine remembers whether the last list had this row, and the waiting state reserves the same height, so the table does not move when data arrives. */
 const KEY = 'peach.catalog.completion-row';
 
 export function completionRowRemembered(): boolean {
@@ -6,8 +6,8 @@ export function completionRowRemembered(): boolean {
 }
 
 export function rememberCompletionRow(shown: boolean): void {
-  try { if (shown) localStorage.setItem(KEY, '1'); else localStorage.removeItem(KEY) } catch { /* 当前页面照常显示。 */ }
+  try { if (shown) localStorage.setItem(KEY, '1'); else localStorage.removeItem(KEY) } catch { /* The current page displays as usual. */ }
 }
 
-/** 预留行与提示条同高：一行正文加默认档按钮，上下各 8px 内边距。 */
+/** The reserved row matches the notice bar's height: one line of body text plus a default-size button, with 8px padding above and below. */
 export const COMPLETION_ROW_SKELETON_HTML = '<i data-completion-skeleton class="skeleton-sheen"></i>';

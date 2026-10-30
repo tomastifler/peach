@@ -1,4 +1,4 @@
-/* 独立页面以 BoardUI token 适配共用编辑工具条。 */
+/* Standalone pages adapt the shared editing toolbar through BoardUI tokens. */
 body.peach-react {
   --ink: var(--color-text-primary);
   --ink-2: var(--color-text-secondary);

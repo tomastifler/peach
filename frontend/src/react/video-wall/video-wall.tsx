@@ -52,7 +52,7 @@ const WallArtwork = memo(function WallArtwork({ item, image, big = false, ratio 
       if (img.complete && img.naturalWidth) coverAnchor(img, ratio);
     });
   }, [ratio, artwork.html]);
-  // 比例就是下面写进 `--card-ratio` 的那个数，直接交给取景，免得每格提交后各读一次计算样式。
+  // The ratio is the number written into `--card-ratio` below and is handed directly to the framing, so each cell does not read computed styles after every commit.
   return <span ref={pic} data-media-pic="" style={{ '--card-ratio':String(ratio) } as CSSProperties}>
     <ArtSlot artwork={artwork} relayout={node => node.querySelectorAll<HTMLImageElement>('img.cover').forEach(img => {
       if (img.complete && img.naturalWidth) coverAnchor(img, ratio);
@@ -310,7 +310,7 @@ export function VideoWall({ items, finite, hasMore, busy, loading = false, error
     </div>
     <button type="button" data-wall-focus-close="" aria-label="Collapse work" title="Collapse" onClick={() => close()}><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-x" /></svg></button>
     {error || (groupRef && groupQuery.error && !group) ? <div data-wall-play-error=""><Note tone="error">{error || requestErrorMessage(groupQuery.error)}</Note>
-      {groupQuery.error && !group ? <Button size="small" variant="ghost" onClick={() => void groupQuery.refetch()}>立即重试</Button> : null}</div> : null}
+      {groupQuery.error && !group ? <Button size="small" variant="ghost" onClick={() => void groupQuery.refetch()}>Retry</Button> : null}</div> : null}
     <WallControls item={current} playing={playing} frame={playerFrame} starting={starting} pendingGroup={!!groupRef && groupQuery.isPending}
       grouped={!!groupRef} queueOpen={queueOpen} queueReady={!!tracks.length && (!groupRef || !!group)}
       hasPrevious={trackIndex > 0} hasNext={trackIndex >= 0 && trackIndex < tracks.length - 1}
@@ -378,8 +378,8 @@ export function VideoWall({ items, finite, hasMore, busy, loading = false, error
           const landing = !entranceDone && !focused;
           const delay = landing ? Math.min(.34, (Math.max(0, tile.x + camera.view.camera.x / camera.view.camera.scale)
             + Math.max(0, tile.y + camera.view.camera.y / camera.view.camera.scale)) / 103.36 * .03) : 0;
-          /* 投影只在这一格自己的几何变了的那次提交里量：拖动、平移时整面墙每次重渲染都量一遍
-             全部磁贴和页面滚动位置，量的那一下正赶上刚写完的样式，逐次整树重算。 */
+          /* The projection is measured only in the commit where this cell's own geometry changed: otherwise, while dragging or panning, every re-render of the whole wall would measure
+             all tiles and the page scroll position, and each measurement lands right after styles were just written, causing a whole-tree recalculation each time. */
           return <motion.article key={tile.key} layout layoutDependency={`${rect.x}:${rect.y}:${rect.width}:${rect.height}`}
             data-wall-tile={tile.key} data-wall-id={item.id}
             data-wall-focus={focused ? '' : undefined} data-playing={focused && (playing || starting) ? '' : undefined}
@@ -417,7 +417,7 @@ export function VideoWall({ items, finite, hasMore, busy, loading = false, error
         })}
       </div>
     </div>
-    {!loading && queryError ? <div data-wall-error=""><Note tone="error">{queryError}</Note><Button size="small" variant="ghost" onClick={retry}>立即重试</Button></div> : null}
+    {!loading && queryError ? <div data-wall-error=""><Note tone="error">{queryError}</Note><Button size="small" variant="ghost" onClick={retry}>Retry</Button></div> : null}
     {!loading && !queryError && !items.length ? <div data-wall-empty="" onClick={async event => {
       const control = (event.target as Element).closest('[data-wall-load-more]');
       if (!control || busy || moreFlight.current) return;
@@ -426,9 +426,9 @@ export function VideoWall({ items, finite, hasMore, busy, loading = false, error
     }} dangerouslySetInnerHTML={{ __html:emptyHtml }} /> : null}
     {!finite && (hasMore || items.length > 0) ? <div data-wall-refresh=""><Shuffle busy={busy} onPress={() => void fresh()} /></div> : null}
     {hasMore && finite && items.length > 0 ? <div data-wall-footer=""><Button size="small" variant="secondary" {...busyProps(busy)} onClick={() => void more()}>
-      {busy ? <span dangerouslySetInnerHTML={{ __html:spinnerHtml() }} /> : null}载入更多</Button></div> : null}
-    {moreError ? <div data-wall-error=""><Note tone="error">{moreError}</Note><Button size="small" variant="ghost" {...busyProps(busy)} onClick={() => void more()}>立即重试</Button></div> : null}
-    <button type="button" data-wall-tools-button="" aria-label="播放墙工具" title="播放墙工具" aria-expanded={toolsOpen} onClick={() => setToolsOpen(!toolsOpen)}>
+      {busy ? <span dangerouslySetInnerHTML={{ __html:spinnerHtml() }} /> : null}Load more</Button></div> : null}
+    {moreError ? <div data-wall-error=""><Note tone="error">{moreError}</Note><Button size="small" variant="ghost" {...busyProps(busy)} onClick={() => void more()}>Retry</Button></div> : null}
+    <button type="button" data-wall-tools-button="" aria-label="Playback wall tools" title="Playback wall tools" aria-expanded={toolsOpen} onClick={() => setToolsOpen(!toolsOpen)}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-settings" /></svg>
     </button>
   </div>;

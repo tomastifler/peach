@@ -643,11 +643,11 @@ class FollowStore:
         stamp = reference.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ")
         sidecar = (json.dumps({
             "provider": fetch.provider, "ref": fetch.ref,
-            # 脱敏后的请求 URL：凭据永不进证据目录。
+            # Redacted request URL: credentials never enter the evidence directory.
             "request_url": fetch.request_url, "sha256": digest,
             "checked_at": _now_text(reference), "candidates": len(fetch.candidates),
         }, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
-        # 快照身份包含正文摘要与说明；相同正文可来自不同游标或候选筛选。
+        # Snapshot identity includes the body digest and notes; the same body can come from different cursors or candidate filters.
         snapshot_digest = hashlib.sha256(sidecar).hexdigest()
         path = directory / f"{stamp}-{snapshot_digest}.raw"
         try:
@@ -931,24 +931,24 @@ class FollowStore:
         return {"canonical": canonical_name, "alias": alias_name, "source": source}
 
     def rename_author_group(self, canonical_key: str, name: str) -> dict:
-        """人工修改整组统一名称，旧名称和平台别名仍属于同一组。"""
+        """Manually rename a whole group's unified name; old names and platform aliases still belong to the same group."""
         name = str(name).strip()
         next_key = normalized_author_name(name)
         if not next_key:
-            raise ValueError("统一名称不能为空")
+            raise ValueError("Unified name cannot be empty")
         connection = self._connect()
         current = connection.execute(
             "SELECT canonical_name FROM follow_author_alias WHERE canonical_key=? LIMIT 1",
             (canonical_key,),
         ).fetchone()
         if current is None:
-            raise ValueError("这个创作者别名组不存在，请刷新列表")
+            raise ValueError("This creator alias group does not exist; please refresh the list")
         occupied = connection.execute(
             "SELECT canonical_key FROM follow_author_alias WHERE alias_key=? OR canonical_key=?",
             (next_key, next_key),
         ).fetchall()
         if any(str(row["canonical_key"]) != canonical_key for row in occupied):
-            raise ValueError("这个名称已属于另一位创作者，请先确认是否需要合并")
+            raise ValueError("This name already belongs to another creator; please confirm whether a merge is needed")
         stamp = _now_text()
         connection.execute(
             "UPDATE follow_author_alias SET canonical_key=?,canonical_name=?,updated_at=? "

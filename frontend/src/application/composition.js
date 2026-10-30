@@ -38,12 +38,12 @@ const openOverlayTarget=target=>{
 installEntityShapeBootstrap();
 loadingState.entityShapesReady=loadEntityShapes();
 renderInitialSurfaceLoading();
-/* 首页标题随首屏骨架一起出现：等路由打开目录后再显示，会把骨架整页往下推一跳。其余状态页的标题仍由 `paintListTitle` 定。 */
+/* The home page title appears together with the first-paint skeleton: waiting to show it until the route has opened the catalog would push the whole skeleton down one jump. The titles of other state pages are still set by `paintListTitle`. */
 if(location.pathname==='/'){
   const query=new URLSearchParams(location.search);
   if(!query.has('state')&&query.get('jav')!=='1')$('#catalogPageHeading').hidden=false;
 }
-/* 新作那一行按本机记着的结论随首屏一起铺骨架，卡片与列表两种显示方式都一样。 */
+/* The new-works row is laid out in the first-paint skeleton per the conclusion remembered on this machine, the same for both the card and list display modes. */
 if(isFeedNewPath(decodeURIComponent(location.pathname)))prepareHomeFeed($('#feedNew'));
 mountSidebar();
 compositionState.shellActions = {
@@ -202,8 +202,8 @@ buildManageBar();
 Promise.all([loadSourceStatus(),loadSyncedSettings(),loadingState.entityShapesReady])
   .then(()=>{
     if(!effects.isActive)return;
-    /* 顶部两排与筛选栏的两个聚合自带骨架、取回后自己落位，页面打开不等它们：作品列表与它们同时去取。 */
-    if(loadingState.wantsDiscoveryBars())buildBars().catch(error=>console.error('首页横条装载失败',error));
+    /* The top two rows and the filter bar's two aggregates bring their own skeletons and settle themselves after fetching; page opening does not wait for them: the work list is fetched at the same time as they are. */
+    if(loadingState.wantsDiscoveryBars())buildBars().catch(error=>console.error('Failed to load the home page bars',error));
     syncNavigation();wireAllDrag();
     // 路由树里按匹配打开的页面等这一下才开始打开：壳的状态到这时才齐。
     compositionState.routing=true;writeShell({pageOpens:1});syncRouteChrome();

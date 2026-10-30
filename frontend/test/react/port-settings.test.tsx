@@ -15,7 +15,7 @@ it('保存端口保留已保存的媒体目录与来源映射', async () => {
   await settle();
   expect(sentBody(fetcher)).toEqual({ revision: 'rev-1', media_dirs: data.media_dirs,
     media_sources: data.media_sources, port: '9124', scan_now: false });
-  expect(receipt).toHaveBeenCalledWith('已保存配置');
+  expect(receipt).toHaveBeenCalledWith('Settings saved');
   expect(host.querySelector('a')?.getAttribute('href')).toBe('http://127.0.0.1:9124/settings/network');
 });
 
@@ -30,10 +30,10 @@ it('局域网地址和备用地址分别可复制，复制失败可以选中文�
   expect(inputs.map(input => input.value)).toEqual([
     'http://127.0.0.1:9123/', 'http://peach.local:9123/', 'http://192.0.2.10:9123/',
   ]);
-  const copyButtons = [...host.querySelectorAll<HTMLButtonElement>('button')].filter(button => button.textContent === '复制地址');
+  const copyButtons = [...host.querySelectorAll<HTMLButtonElement>('button')].filter(button => button.textContent === 'Copy address');
   await click(copyButtons[1]); await settle();
   expect(copy).toHaveBeenCalledWith('http://peach.local:9123/');
-  expect(host.textContent).toContain('复制失败，请选中地址复制。');
+  expect(host.textContent).toContain('Copy failed; select the address and copy it.');
 });
 
 it('本机模式隐藏手机地址并保存访问范围', async () => {
@@ -43,7 +43,7 @@ it('本机模式隐藏手机地址并保存访问范围', async () => {
     editable: true, host: '127.0.0.1', mdns_name: 'peach', scope: 'local',
     local_url: 'http://127.0.0.1:9123/', lan_url: '', ip_url: '',
   } }} receipt={vi.fn()} />);
-  expect(host.textContent).toContain('当前只允许这台电脑访问');
+  expect(host.textContent).toContain('Only this computer is allowed to access it right now');
   expect(host.querySelector('#configMdnsName')).toBeNull();
   await submit(host.querySelector('form')); await settle();
   expect(sentBody(fetcher).host).toBe('127.0.0.1');
@@ -72,7 +72,7 @@ it('从本机切换到局域网可以设置名称，保存时提交完整网络�
   await type(host.querySelector<HTMLInputElement>('#configMdnsName'), 'peach-phone');
   expect(host.textContent).toContain('http://');
   expect(host.textContent).toContain('.local');
-  expect(host.textContent).toContain('保存并重启后显示手机连接地址');
+  expect(host.textContent).toContain('The phone connection address appears after saving and restarting');
   await submit(host.querySelector('form')); await settle();
   expect(sentBody(fetcher)).toMatchObject({ host: '0.0.0.0', mdns_name: 'peach-phone', port: '9123' });
 });
@@ -84,5 +84,5 @@ it('服务管理的网络设置只显示地址', async () => {
   } }} receipt={vi.fn()} />);
   expect(host.querySelector('form')).toBeNull();
   expect(host.querySelector('#configPort')).toBeNull();
-  expect(host.textContent).toContain('访问范围、名称与端口由服务启动配置管理。');
+  expect(host.textContent).toContain('Access scope, name and port are managed by the service startup settings.');
 });

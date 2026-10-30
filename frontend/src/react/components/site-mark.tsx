@@ -4,7 +4,7 @@ import { siteMarkUrl } from '@peach/legacy/core';
 
 const MARK = 'size-(--icon-inline) shrink-0';
 
-/** 站标图片：行内档尺寸、方角，没登记或取不到时换成同尺寸的地球。采集来源与关注来源共用这一枚。 */
+/** Site mark image: inline-tier size, square corners; when not registered or unfetchable it is replaced by a globe of the same size. Collection sources and follow sources share this one. */
 export function MarkImage({ src }: { src: string }) {
   const [failed, setFailed] = useState('');
   if (!src || failed === src) return <RiGlobalLine aria-hidden className={MARK} />;

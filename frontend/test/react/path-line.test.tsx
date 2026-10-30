@@ -11,9 +11,9 @@ it('定位请求只递这条路径，成功回执一句', async () => {
   const fetcher = fetchMock(200, { ok: true, path: LOG });
   vi.stubGlobal('fetch', fetcher);
   const revealed = vi.fn();
-  const host = await mount(<PathLine path={LOG} prefix="完整记录：" onRevealed={revealed} />);
+  const host = await mount(<PathLine path={LOG} prefix="Full log: " onRevealed={revealed} />);
 
-  expect(host.textContent).toContain(`完整记录：${LOG}`);
+  expect(host.textContent).toContain(`Full log: ${LOG}`);
   await click(host.querySelector('button[aria-label="Show in file explorer"]'));
 
   expect(fetcher.mock.calls[0]?.[0]).toBe('/api/reveal');
@@ -48,7 +48,7 @@ it('服务端不认这条路径时照直说，不落进通用的权限说法', a
 
 it('路径和那颗键排在同一条中线上', async () => {
   // 键比这行小字高一截，顶对齐时它自己看着往上飘。
-  const host = await mount(<PathLine path={LOG} prefix="完整记录：" />);
+  const host = await mount(<PathLine path={LOG} prefix="Full log: " />);
 
   expect(host.querySelector('p')!.parentElement!.className).toContain('items-center');
 });

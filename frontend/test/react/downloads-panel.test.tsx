@@ -65,11 +65,11 @@ it('下载卡片的可见署名和读屏名称跟随语言，人物链接保留�
   } })] }));
   const host = await show();
   const link = host.querySelector('[data-media-avatar]');
-  expect(link?.getAttribute('aria-label')).toBe('打开女优页：宫泽宁音');
+  expect(link?.getAttribute('aria-label')).toBe('Open performer page: 宫泽宁音');
   expect(link?.getAttribute('href')).toBe('/performers/20');
   expect(host.textContent).toContain('宫泽宁音');
   await act(async () => setNameLanguage('ja'));
-  expect(link?.getAttribute('aria-label')).toBe('打开女优页：宮澤寧音');
+  expect(link?.getAttribute('aria-label')).toBe('Open performer page: 宮澤寧音');
   expect(host.textContent).toContain('宮澤寧音');
 });
 
@@ -85,7 +85,7 @@ it.each([
   serve(snapshot({ tasks: [task(patch)] }));
   const host = await show();
   expect(host.querySelector('strong')?.textContent).toBe(expected);
-  await click(buttonNamed('展开标题', host));
+  await click(buttonNamed('Expand title', host));
   expect(host.querySelector('[data-download-title-full]')?.textContent).toBe(expected);
 });
 
@@ -94,7 +94,7 @@ it('入库资料随轮询补上本机封面和女优头像，不发起来源取�
   const { calls } = serve(shown);
   const host = await show();
   expect(host.querySelector('[data-download-cover] img')).toBeNull();
-  expect(buttonNamed('取消', host)).not.toBeNull();
+  expect(buttonNamed('Cancel', host)).not.toBeNull();
   const refreshed = serve(snapshot({ tasks: [task({ state: 'ingested', cancellable: false, artwork: {
     has_cover: true, code: 'ABC-123', cover_key: 'ABC-123', cover_version: 'v2',
     performer_entities: [{ id: 20, name: '测试女优', has_image: true, image_version: 'a2' }],
@@ -105,7 +105,7 @@ it('入库资料随轮询补上本机封面和女优头像，不发起来源取�
     expect(host.querySelector('[data-download-cover] img')?.getAttribute('src')).toBe('/cover?code=ABC-123&thumb=2&v=v2');
   });
   expect(host.querySelector('[data-media-avatar] img')?.getAttribute('src')).toContain('/entity-image?');
-  expect(host.querySelector('[data-media-avatar]')?.getAttribute('aria-label')).toBe('打开女优页：测试女优');
+  expect(host.querySelector('[data-media-avatar]')?.getAttribute('aria-label')).toBe('Open performer page: 测试女优');
   expect([...calls, ...refreshed.calls].every(([url]) => url.startsWith('/api/downloads'))).toBe(true);
 });
 
@@ -126,19 +126,19 @@ it('远端在跑的任务给进度与取消键，取消发到取消接口', asyn
   const card = host.querySelector('[data-download-state=remote_running]')!;
   expect(card.querySelector('[role=progressbar]')?.getAttribute('aria-valuenow')).toBe('42');
   expect(card.textContent).toContain('远端下载中');
-  expect(buttonNamed('重新提交', card)).toBeNull();
+  expect(buttonNamed('Resubmit', card)).toBeNull();
   // 辅助的两个在前，改动任务的取消排在最后。
   expect([...card.querySelectorAll('[data-download-actions] button')].map((node) => node.textContent))
-    .toEqual(['展开标题', '复制磁力', '取消']);
-  await click(buttonNamed('取消', card));
+    .toEqual(['Expand title', 'Copy magnet', 'Cancel']);
+  await click(buttonNamed('Cancel', card));
   await settle();
   expect(posts()).toEqual([['/api/downloads/cancel', { id: 1 }]]);
 });
 
 it('失败的任务写中文原因，可以重新提交；被判违规的只剩复制磁力', async () => {
-  const failed = task({ id: 2, state: 'failed', state_label: '失败', failure: 'no_source', cancellable: false,
+  const failed = task({ id: 2, state: 'failed', state_label: 'Failed', failure: 'no_source', cancellable: false,
     resubmittable: true, failure_label: '没有可用的资源', failure_detail: '远端任务列表里找不到它' });
-  const blocked = task({ id: 3, state: 'failed', state_label: '失败', failure: 'rejected', cancellable: false,
+  const blocked = task({ id: 3, state: 'failed', state_label: 'Failed', failure: 'rejected', cancellable: false,
     blocked: true, failure_label: '被判违规', failure_detail: '50038' });
   const { posts } = serve(snapshot({ tasks: [failed, blocked] }),
     { '/api/downloads': { ok: true, outcome: 'submitted', task: failed } });
@@ -159,10 +159,10 @@ it('对账遇到暂时性故障退避重排时，底栏写出原因，卡片不�
   serve(snapshot({ tasks: [task({ failure_detail: '查询进度时连不上 CloudDrive2：timeout' })] }));
   const host = await show();
   const card = host.querySelector<HTMLElement>('[data-download-state=remote_running]')!;
-  expect(card.textContent).toContain('稍后自动重试 · 查询进度时连不上 CloudDrive2：timeout');
+  expect(card.textContent).toContain('Will retry automatically ·  查询进度时连不上 CloudDrive2：timeout');
   expect(card.className).not.toContain('border-border-error-default');
-  expect(buttonNamed('重新提交', card)).toBeNull();
-  expect(buttonNamed('取消', card)).not.toBeNull();
+  expect(buttonNamed('Resubmit', card)).toBeNull();
+  expect(buttonNamed('Cancel', card)).not.toBeNull();
 });
 
 it('只读端任务照常列出，但没有取消键', async () => {
@@ -174,7 +174,7 @@ it('只读端任务照常列出，但没有取消键', async () => {
 
 it('后处理失败可以单独重试，不会重新提交磁力', async () => {
   const failed = task({
-    state: 'ingested', state_label: '已入库', cancellable: false,
+    state: 'ingested', state_label: 'In library', cancellable: false,
     postprocess_state: 'failed', postprocess_label: '后处理失败',
     postprocess_detail: '资料采集失败', postprocess_retryable: true,
   });
@@ -183,7 +183,7 @@ it('后处理失败可以单独重试，不会重新提交磁力', async () => {
   });
   const host = await show();
   expect(host.textContent).toContain('资料采集失败');
-  await click(buttonNamed('重试入库后整理', host));
+  await click(buttonNamed('Retry post-import organizing', host));
   await settle();
   expect(posts()).toEqual([['/api/downloads/postprocess', { id: 1 }]]);
 });
@@ -219,15 +219,15 @@ it('加载更多接上较早任务，失败保留列表并允许重试，刷新�
     }) };
   }));
   const host = await show();
-  await click(buttonNamed('加载更多', host));
+  await click(buttonNamed('Load more', host));
   await vi.waitFor(() => expect(host.textContent).toContain('读取失败'));
   expect(host.querySelectorAll('[data-download-id]')).toHaveLength(2);
   fail = false;
-  await click(buttonNamed('加载更多', host));
+  await click(buttonNamed('Load more', host));
   await vi.waitFor(() => expect(host.querySelectorAll('[data-download-id]')).toHaveLength(3));
   await queryClient.invalidateQueries({ queryKey: ['downloads'] });
   await settle();
   expect([...host.querySelectorAll('[data-download-id]')].map((node) => node.getAttribute('data-download-id')))
     .toEqual(['3', '2', '1']);
-  expect(buttonNamed('加载更多', host)).toBeNull();
+  expect(buttonNamed('Load more', host)).toBeNull();
 });

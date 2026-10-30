@@ -46,13 +46,13 @@ def read_jpeg(source: Path, *, isolated=True) -> tuple[bytes, tuple[int, int]]:
 def _decode(source, *, report=None):
     try:
         if source.stat().st_size > MAX_BYTES:
-            raise ValueError('配套图片体积超出范围')
+            raise ValueError('Companion image size is out of range')
         with source.open('rb') as handle:
             raw = handle.read(MAX_BYTES + 1)
         from .processing_traffic import record_media_read
         (report or (lambda size: record_media_read(source, size)))(len(raw))
         if len(raw) > MAX_BYTES:
-            raise ValueError('配套图片体积超出范围')
+            raise ValueError('Companion image size is out of range')
         with Image.open(io.BytesIO(raw)) as image:
             image.load()
             output = io.BytesIO()

@@ -1,7 +1,7 @@
-"""外网连通的周期快照：探测按 Peach 代理设置出网，接口只读最近一次结论。
+"""Periodic snapshot of external connectivity: probes go out per the Peach proxy settings, and the endpoint only reads the latest conclusion.
 
-节律与复查沿用 `mount_reachability`：正常十分钟、异常一分钟，一次否定隔一秒复查后才确认。
-探测目标是操作系统自己的联网检测地址，国内外都能直连，响应正文固定，被认证页劫持时对不上。
+ Cadence and re-checks follow `mount_reachability`: ten minutes when normal, one minute when abnormal, and a single negative is confirmed only after a re-check one second later.
+ The probe targets are the operating system's own connectivity-check addresses, reachable directly both inside and outside China, with fixed response bodies that will not match when hijacked by a captive portal.
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from . import peach_proxy
 HEALTHY_INTERVAL = 600.0
 DEGRADED_INTERVAL = 60.0
 PROBE_TIMEOUT = 5.0
-#: (地址, 正文必须包含的字节)。任一个对上就算联网。
+#: (address, bytes the body must contain). any one matching counts as online.
 TARGETS = (
     ("http://www.msftconnecttest.com/connecttest.txt", b"Microsoft Connect Test"),
     ("http://captive.apple.com/hotspot-detect.html", b"Success"),
@@ -23,7 +23,7 @@ TARGETS = (
 
 
 def probe(timeout: float = PROBE_TIMEOUT) -> bool | None:
-    """联网回 True，连不上回 False；Peach 代理设置本身待选时回 None。"""
+    """Online returns True, unreachable returns False; Peach when the proxy setting itself is still to be chosen, returns None."""
     try:
         client = peach_proxy.http_client(timeout=timeout, follow_redirects=False)
     except ValueError:
@@ -40,7 +40,7 @@ def probe(timeout: float = PROBE_TIMEOUT) -> bool | None:
 
 
 class NetworkReachability:
-    """后台线程按节律探测；`refresh()` 让下一轮立即开始，用于代理设置刚保存时。"""
+    """A background thread probes at its cadence; `refresh()` makes the next round start immediately, used right after proxy settings are saved."""
 
     def __init__(self, *, check=probe, wall_clock=time.time, retry_delay=1.0):
         self.check, self.wall_clock, self.retry_delay = check, wall_clock, retry_delay
@@ -79,7 +79,7 @@ class NetworkReachability:
             if result is False and not self._stop.wait(self.retry_delay):
                 result = self.check()
         except Exception:
-            # 未知异常不能当作两次连不上的证据。
+            # An unknown exception must not count as evidence of two failed attempts.
             result = None
         state = {True: "online", False: "offline"}.get(result, "unknown")
         with self._lock:

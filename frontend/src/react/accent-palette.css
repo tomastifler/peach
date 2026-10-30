@@ -1,14 +1,14 @@
-/* 强调色的十一级色阶。机制照搬 BoardUI：主按钮、焦点环、链接、开关、选中态全都引用
-   `--color-accent-*`，换强调色就是把这十一个变量整组指到另一个色相，组件规则一个字不改。
-   上游把这一段写在 `@theme` 里（`frontend/src/react/boardui/styles/theme.css` 第 25–45 行），
-   默认指向 blue 那一组基元，运行时由它自己的 accent 模块整组改写。
-   Peach 这一份排在层叠层之外，所以无论 `/dist/peach-react.css` 里那份 `@layer theme` 怎么
-   写，页面上生效的都是这里；React 子树在 `.peach-react` 上重新声明的是语义 token，它们
-   本来就引用 `--color-accent-*`，值顺着根继承进去，两边因此不会各说各话。
-   色值取 Tailwind v4 色板原文（`tailwindcss/theme.css`），十二个色相绕色轮一圈、六列两行；
-   blue 的 400 用 BoardUI 自己那一枚 `#3392ff` 覆盖值，好让默认档的主按钮渐变一字不变。
-   每一条都带上 `[data-accent-ball=…]`：侧栏弹层里那十二枚圆球就是拿同一组变量画的，
-   球色和真换上去的颜色因此不可能走偏。 */
+/* The eleven-step accent color scale. The mechanism is copied from BoardUI: primary buttons, focus rings, links, switches and selected states all reference
+   `--color-accent-*`, so changing the accent color just points these eleven variables as a group at another hue, without changing a word of any component rule.
+   Upstream writes this section in `@theme` (`frontend/src/react/boardui/styles/theme.css`, lines 25-45),
+   defaulting to the blue group of primitives, and its own accent module rewrites the whole group at runtime.
+   Peach's copy sits outside the cascade layers, so whatever the `@layer theme` copy in `/dist/peach-react.css` says,
+   what takes effect on the page is this one; what the React subtree redeclares on `.peach-react` are semantic tokens, which
+   already reference `--color-accent-*`, and values inherit down from the root, so the two sides never disagree.
+   Color values are taken verbatim from the Tailwind v4 palette (`tailwindcss/theme.css`), with twelve hues going once around the color wheel in six columns and two rows;
+   blue's 400 is overridden with BoardUI's own `#3392ff`, so the default tier's primary button gradient stays exactly the same.
+   Every rule carries `[data-accent-ball=…]`: the twelve balls in the sidebar popover are drawn with the same set of variables,
+   so the ball color and the color actually applied cannot drift apart. */
 :root,:root[data-accent=blue],[data-accent-ball=blue]{--color-accent-50:oklch(97% 0.014 254.604);--color-accent-100:oklch(93.2% 0.032 255.585);--color-accent-200:oklch(88.2% 0.059 254.128);--color-accent-300:oklch(80.9% 0.105 251.813);--color-accent-400:#3392ff;--color-accent-500:oklch(62.3% 0.214 259.815);--color-accent-600:oklch(54.6% 0.245 262.881);--color-accent-700:oklch(48.8% 0.243 264.376);--color-accent-800:oklch(42.4% 0.199 265.638);--color-accent-900:oklch(37.9% 0.146 265.522);--color-accent-950:oklch(28.2% 0.091 267.935)}
 :root[data-accent=red],[data-accent-ball=red]{--color-accent-50:oklch(97.1% 0.013 17.38);--color-accent-100:oklch(93.6% 0.032 17.717);--color-accent-200:oklch(88.5% 0.062 18.334);--color-accent-300:oklch(80.8% 0.114 19.571);--color-accent-400:oklch(70.4% 0.191 22.216);--color-accent-500:oklch(63.7% 0.237 25.331);--color-accent-600:oklch(57.7% 0.245 27.325);--color-accent-700:oklch(50.5% 0.213 27.518);--color-accent-800:oklch(44.4% 0.177 26.899);--color-accent-900:oklch(39.6% 0.141 25.723);--color-accent-950:oklch(25.8% 0.092 26.042)}
 :root[data-accent=orange],[data-accent-ball=orange]{--color-accent-50:oklch(98% 0.016 73.684);--color-accent-100:oklch(95.4% 0.038 75.164);--color-accent-200:oklch(90.1% 0.076 70.697);--color-accent-300:oklch(83.7% 0.128 66.29);--color-accent-400:oklch(75% 0.183 55.934);--color-accent-500:oklch(70.5% 0.213 47.604);--color-accent-600:oklch(64.6% 0.222 41.116);--color-accent-700:oklch(55.3% 0.195 38.402);--color-accent-800:oklch(47% 0.157 37.304);--color-accent-900:oklch(40.8% 0.123 38.172);--color-accent-950:oklch(26.6% 0.079 36.259)}

@@ -129,7 +129,7 @@ class ProxyTests(_Server):
         with self.assertRaises(proxy.ProxyConflict):
             proxy.save(self.config, {**account, 'data': account['data']})
         self.fake.permissions.allow_modify_cloud_apis = False
-        with self.assertRaisesRegex(ValueError, '修改云盘'):
+        with self.assertRaisesRegex(ValueError, 'Modify cloud drive'):
             proxy.save(self.config, {**account, 'data': account['data']})
         self.assertNotIn('SetCloudAPIConfig', self.methods())
 

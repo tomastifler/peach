@@ -171,7 +171,7 @@ class MediaIdentityTests(unittest.TestCase):
         config = settings_file.upgrade_media_identity(self.config)
         rows = media_configuration.rows(config, windows=True)
         rows[0]["path"] = "F:\\移动收藏"
-        with self.assertRaisesRegex(ValueError, "重定位"):
+        with self.assertRaisesRegex(ValueError, "relocate"):
             media_identity.configure_sources(config, rows, windows=True)
         rows[0]["change_mode"] = "relocate"
         relocated = media_identity.configure_sources(config, rows, windows=True)
@@ -183,17 +183,17 @@ class MediaIdentityTests(unittest.TestCase):
         self.assertEqual(loaded.storage_roots, relocated.storage_roots)
         self.assertEqual(loaded.mounts, relocated.mounts)
         rows[0]["location"] = "115"
-        with self.assertRaisesRegex(ValueError, "来源"):
+        with self.assertRaisesRegex(ValueError, "source"):
             media_identity.configure_sources(config, rows, windows=True)
 
     def test_overlaps_and_duplicate_root_ids_are_rejected_across_libraries(self):
         config = settings_file.upgrade_media_identity(self.config)
         rows = media_configuration.rows(config, windows=True)
-        with self.assertRaisesRegex(ValueError, "不能登记多次"):
+        with self.assertRaisesRegex(ValueError, "cannot be registered more than once"):
             media_identity.configure_sources(config, [rows[0], rows[0]], windows=True)
         rows.append({"location": "local", "path": "d:/jav/子目录", "library": "独立"})
         self.assertTrue(media_configuration.validate(rows, windows=True)[2])
-        with self.assertRaisesRegex(ValueError, "包含"):
+        with self.assertRaisesRegex(ValueError, "contained by"):
             media_identity.configure_sources(config, rows, windows=True)
 
     def test_removal_keeps_remaining_root_identity(self):
@@ -218,5 +218,5 @@ class MediaIdentityTests(unittest.TestCase):
         config = settings_file.upgrade_media_identity(self.config)
         rows = media_configuration.rows(config, windows=True)
         rows[0].update(path='D:\\JAV\\moved', change_mode='relocate')
-        with self.assertRaisesRegex(ValueError, '重叠'):
+        with self.assertRaisesRegex(ValueError, 'overlaps'):
             media_identity.configure_sources(config, rows, windows=True)

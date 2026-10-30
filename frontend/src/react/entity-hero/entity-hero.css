@@ -153,7 +153,7 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-/* 菜单项的字形与名字同行。 */
+/* A menu item's glyph is in line with its name. */
 .peach-react [data-namepick-menu] svg { width: var(--icon-inline); height: var(--icon-inline); }
 
 /* 名字下面那一行。分类在最左侧，各项带图标；装不下就整项换行。 */

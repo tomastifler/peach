@@ -105,7 +105,7 @@ h2[data-page-title]{margin:0;font:var(--board-title);letter-spacing:0}
    整张卡压低 7px 并加高 7px，同一行里 Mix 卡的封面和下面的文字就比邻居矮一截；
    往上堆之后卡片盒和普通卡完全同高，下沿自然平齐。
    纸边与封面是同一种表面，圆角同一档：容器取封面那一档，纸边继承容器。 */
-/* 圆角只在最外面裁一次：`clip-path` 配一层满格的矩形蒙版，格子里的底色、封面、悬停层与模糊衬底
+/* Rounded corners are clipped only once at the outermost level: `clip-path` paired with a full-cell rectangular mask, so the cell's base color, cover, hover layer and blurred backing
    先合成一张再按 `--pic-radius` 切。格子本身不写 `border-radius`，`overflow` 就只是矩形裁切：按圆角
    裁的话每一层各切一次，抗锯齿那一圈里底下的黑会透上来，浅色封面四角就是一圈灰黑边。光有
    `clip-path` 不够，没有蒙版时 Chrome 照样逐层切。 */

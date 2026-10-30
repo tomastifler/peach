@@ -32,17 +32,17 @@ from .fsutil import atomic_write_text
 #: 计划 CSV 的列。`reason` 只在 `action=skip` 时有值。
 PLAN_FIELDS = ["asset_id", "location", "current_path", "target_path", "action", "reason"]
 
-#: 文件名与目录组合，以及使用示例字段时的完整路径。
+#: Combinations of file name and directory, and the full path when example fields are used.
 PRESETS: tuple[dict[str, str], ...] = (
-    {"label": "仅番号", "file": "{code}", "dir": "", "example": "ABC-123.mp4"},
-    {"label": "番号和标题", "file": "{code}[ {title}]", "dir": "", "example": "ABC-123 标题.mp4"},
-    {"label": "番号和画质", "file": "{code}[ {definition}]", "dir": "", "example": "ABC-123 1080p.mp4"},
-    {"label": "番号和出演者", "file": "{code}[ {actors}]", "dir": "", "example": "ABC-123 甲、乙.mp4"},
-    {"label": "按厂牌建文件夹", "file": "{code}[ {title}]", "dir": "{studio}", "example": "厂牌/ABC-123 标题.mp4"},
-    {"label": "按系列建文件夹", "file": "{code}[ {title}]", "dir": "{series}", "example": "系列/ABC-123 标题.mp4"},
-    {"label": "按出演者建文件夹", "file": "{code}[ {title}]", "dir": "{actors}", "example": "甲、乙/ABC-123 标题.mp4"},
-    {"label": "按发行年建文件夹", "file": "{code}[ {title}]", "dir": "{year}", "example": "2024/ABC-123 标题.mp4"},
-    {"label": "厂牌下按番号建文件夹", "file": "{code}[ {title}][ CD{cd}]", "dir": "{studio}/{code}", "example": "厂牌/ABC-123/ABC-123 标题 CD2.mp4"},
+    {"label": "Code only", "file": "{code}", "dir": "", "example": "ABC-123.mp4"},
+    {"label": "Code and title", "file": "{code}[ {title}]", "dir": "", "example": "ABC-123 Title.mp4"},
+    {"label": "Code and quality", "file": "{code}[ {definition}]", "dir": "", "example": "ABC-123 1080p.mp4"},
+    {"label": "Code and performers", "file": "{code}[ {actors}]", "dir": "", "example": "ABC-123 A, B.mp4"},
+    {"label": "Folder by studio", "file": "{code}[ {title}]", "dir": "{studio}", "example": "Studio/ABC-123 Title.mp4"},
+    {"label": "Folder by series", "file": "{code}[ {title}]", "dir": "{series}", "example": "Series/ABC-123 Title.mp4"},
+    {"label": "Folder by performer", "file": "{code}[ {title}]", "dir": "{actors}", "example": "A, B/ABC-123 Title.mp4"},
+    {"label": "Folder by release year", "file": "{code}[ {title}]", "dir": "{year}", "example": "2024/ABC-123 Title.mp4"},
+    {"label": "Code folder under studio", "file": "{code}[ {title}][ CD{cd}]", "dir": "{studio}/{code}", "example": "Studio/ABC-123/ABC-123 Title CD2.mp4"},
 )
 
 #: 跳过原因的固定写法。界面按这几个键分组计数，所以它们是契约的一部分。
@@ -188,14 +188,14 @@ def _extension(name: str) -> str:
 
 
 def scope_path(location: str, path: str = '', roots=None) -> str:
-    """将指定目录核对并转换为账本路径；空值表示整个来源。"""
+    """Check the specified directory and convert it to a ledger path; an empty value means the whole source."""
     if not isinstance(path, str):
-        raise OrganizeError('整理路径必须是目录路径')
+        raise OrganizeError('The organize path must be a directory path')
     text = path.strip()
     if not text:
         return ''
     if '..' in PureWindowsPath(text).parts or '\x00' in text:
-        raise OrganizeError('整理路径不能包含上级目录跳转或空字符')
+        raise OrganizeError('The organize path must not contain parent-directory jumps or null characters')
     declared = location_roots() if roots is None else roots
     if resolve_root(text, declared)[0] != location:
         local = Path(text)
@@ -207,10 +207,10 @@ def scope_path(location: str, path: str = '', roots=None) -> str:
                     break
     candidate = PureWindowsPath(text)
     if not candidate.is_absolute() or '..' in candidate.parts:
-        raise OrganizeError('整理路径须为所选来源内的绝对目录路径，不能包含上级目录跳转')
+        raise OrganizeError('The organize path must be an absolute directory path within the chosen source, with no parent-directory jumps')
     canonical = ntpath.normpath(text)
     if resolve_root(canonical, declared)[0] != location:
-        raise OrganizeError('整理路径不在所选来源内')
+        raise OrganizeError('The organize path is not within the chosen source')
     return canonical
 
 
@@ -218,7 +218,7 @@ def build_plan(connection: sqlite3.Connection, *, location: str,
                file_template: str = "", dir_template: str = "",
                roots=None, online: bool | None = None,
                asset_ids: Sequence[int] | None = None, path: str = '') -> dict:
-    """按目录范围与可选模板生成逐文件整理计划。
+    """Generate a per-file organize plan by directory scope and an optional template.
 
     返回 `{"rows": [...], "counts": {...}}`：`rows` 只含会变的行与被跳过的行，
     已经就是目标名字的行只进 `counts["unchanged"]`——几万行原样列出来，用户要找的
@@ -359,7 +359,7 @@ def _rename(source: str, target: str) -> None:
     remote_source, remote_target = resolve(source), resolve(target)
     if remote_source is not None or remote_target is not None:
         if remote_source is None or remote_target is None:
-            raise OSError('SMB 整理仅支持同一媒体根目录')
+            raise OSError('SMB organizing supports only the same media root')
         remote_target.parent.mkdir(parents=True, exist_ok=True)
         remote_source.rename(remote_target)
         return
@@ -443,7 +443,7 @@ def apply_plan(connection: sqlite3.Connection, rows: Sequence[dict], *,
             landed = (current is not None and current[0] == new_path
                       and _media_path(new_path).is_file() and not _media_path(old_path).exists())
             if current is None or current[1] is not None:
-                outcome = '资产已不在馆藏，未执行整理'
+                outcome = 'The asset is no longer in the library; organizing was not performed'
             else:
                 outcome = 'ok' if landed else _move_one(connection, int(row["asset_id"]), old_path, new_path)
             if outcome == "ok":

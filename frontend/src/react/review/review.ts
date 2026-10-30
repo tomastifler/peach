@@ -1,8 +1,8 @@
 /* 人工复核页的数据契约、分组分页纯函数与写操作。三条端点在 `frontend/src` 里都只在这里
  * 声明一次（`tests/test_frontend_build.py` 盯着）。
  *
- * `['review']` 是整条复核队列。接口一次给出全部分类的可复核行，不重复传候选 CSV 的
- *   JSON 字符串；各分类合在一个响应里，所以也只用一个 `queryKey`：分类切换是翻这一份的
+ * `['review']` is the whole review queue. The API returns the reviewable rows of all categories at once, without re-sending the candidate CSV's
+ *   JSON strings; all categories are combined in one response, so only one `queryKey` is used: switching category just pages through this one
  *   不同段落，不是另一份真相。判定写回来时只把那几行从缓存里摘掉（`dropReviewRows`），
  *   不为一次判定把整条队列重取一遍。
  *
@@ -142,10 +142,10 @@ export interface ReviewMirror {
 export const REVIEW_QUEUES = ['pending', 'later', 'ignored'] as const;
 export type ReviewQueue = typeof REVIEW_QUEUES[number];
 export const REVIEW_QUEUE_LABELS: Record<ReviewQueue, string> = {
-  pending: '待处理', later: '稍后处理', ignored: '已忽略',
+  pending: 'Pending', later: 'Handle later', ignored: 'Ignored',
 };
 export const REVIEW_DECISION_LABELS: Record<string, string> = {
-  approved: '已通过', rejected: '已忽略', skipped: '稍后处理',
+  approved: 'Approved', rejected: 'Ignored', skipped: 'Handle later',
 };
 export const reviewQueueOf = (value: unknown): ReviewQueue =>
   value === 'later' || value === 'ignored' ? value : 'pending';
@@ -179,7 +179,7 @@ export interface ReviewGroup { key: string; title: string; rows: ReviewRow[] }
 /** 这一批队列能按什么分组。按来源、按字段两档要队列里真有那一项才出现。 */
 export function reviewGroupingOptions(rows: ReviewRow[], metadata: boolean): [ReviewGrouping, string][] {
   const options: [ReviewGrouping, string][] = [
-    ['candidates', metadata ? '按来源数量' : '不分组'],
+    ['candidates', metadata ? 'By source count' : 'No grouping'],
   ];
   if (rows.some((row) => row.source || row.candidates?.some((candidate) => candidate.source))) {
     options.push(['source', 'By source']);
@@ -204,7 +204,7 @@ export function groupReviewRows(rows: ReviewRow[], by: ReviewGrouping): ReviewGr
       title = sources.join(' / ') || 'Unlabeled source';
     } else {
       key = row.candidates ? (row.candidates.length === 1 ? 'single' : 'multiple') : 'pending';
-      title = key === 'single' ? '单一来源' : key === 'multiple' ? '需选择来源' : '资料';
+      title = key === 'single' ? 'Single source' : key === 'multiple' ? 'Source choice needed' : 'Details';
     }
     if (!groups.has(key)) groups.set(key, { key, title, rows: [] });
     groups.get(key)!.rows.push(row);
@@ -322,7 +322,7 @@ export function decisionPayload(
 }
 
 export const decisionReceipt = (status: DecisionStatus): string => ({
-  approved: '已通过资料', rejected: '已忽略资料', skipped: '已移至稍后处理', restore: '已恢复待处理',
+  approved: 'Details approved', rejected: 'Details ignored', skipped: 'Moved to handle later', restore: 'Restored to pending',
 })[status];
 
 /* ── 取数与写操作 ── */
@@ -331,7 +331,7 @@ export async function fetchReview(signal?: AbortSignal): Promise<ReviewData> {
   const data = await apiGet<ReviewData>(REVIEW_URL, signal);
   for (const key of ['later', 'ignored'] as const) {
     if (!data.queues?.[key]?.sections || !data.queues[key].counts) {
-      throw new Error(`${REVIEW_QUEUE_LABELS[key]}状态未取得，请刷新或更新写入端`);
+      throw new Error(`${REVIEW_QUEUE_LABELS[key]} status unavailable; refresh or update the writer`);
     }
   }
   return data;
@@ -385,7 +385,7 @@ export function dropReviewRows(category: ReviewCategory, keys: string[]): void {
   settleReviewRows(category, keys, 'approved');
 }
 
-/** 一份响应内移动状态，三个队列的行与计数同时更新；失败的行保持原位。 */
+/** Moves status within one response, so the rows and counts of all three queues update together; failed rows stay in place. */
 export function settleReviewRows(category: ReviewCategory, keys: string[], status: DecisionStatus): void {
   const gone = new Set(keys);
   if (!gone.size) return;

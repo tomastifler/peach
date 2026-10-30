@@ -74,8 +74,8 @@ export function avatarFrame(img: HTMLImageElement): void {
    就整个被切掉，而大图容器比所有封面都竖、纵向锚点在那里根本不生效。 */
 export function coverAnchor(img: HTMLImageElement, ratio?: number): void {
   const r = img.naturalWidth / img.naturalHeight;
-  /* 容器比例在写任何样式之前读：先写再读，`getComputedStyle` 就得把刚弄脏的样式当场重算。
-     调用方手里已经有这个数（播放墙每格自己写 `--card-ratio`）就直接传进来，一次也不读。 */
+  /* Read the container ratio before writing any style: write first and then read, and `getComputedStyle` has to recompute the just-dirtied styles on the spot.
+     If the caller already has this number (each cell of the player wall writes its own `--card-ratio`), pass it in directly and do not read at all. */
   const car = r ? ratio ?? coverRatio(img) : 0;
   img.closest<HTMLElement>('.pic,[data-media-pic]')?.style.removeProperty('--cover-blur');
   if (!r) return;
@@ -151,12 +151,12 @@ function wideSleeve(img: HTMLImageElement): boolean {
     && ratio >= WIDE_SLEEVE_RATIO_MIN && ratio < WIDE_SLEEVE_RATIO_MAX;
 }
 
-/* 卡片先取封面的派生档（`/cover?thumb=2` 或 `thumb=1`，见 `cardCoverUrl`）：高清原件一张
-   解码 38 MB，一页几十张挤爆解码缓存，来回滚动时滚走的被清掉、滚回来现解，那一段是空白。
-   取景落定之后量这张图在屏幕上铺开多大：一个源像素要占不止一个设备像素，就是这一档不够
-   清楚，往上换一档——800 那档换 1600 那档，1600 那档换原件。换上的那张加载完会再量一次。
-   单列、大图这些真用得上像素的地方最后落到原件，多列时屏幕本来就放不下那么多像素。
-   `thumbSrc` 只记第一张派生档：模糊补底复用已经到手的那张小图。 */
+/* Cards first take the cover's derived tier (`/cover?thumb=2` or `thumb=1`, see `cardCoverUrl`): decoding one HD original
+   takes 38 MB, dozens per page overflow the decode cache, and when scrolling back and forth the ones scrolled away are evicted and decoded again on return, leaving a blank stretch.
+   After framing settles, measure how large the image spreads on screen: if one source pixel covers more than one device pixel, this tier is not
+   sharp enough, so go up a tier - the 800 tier goes to the 1600 tier, and the 1600 tier goes to the original. The swapped-in image is measured again once loaded.
+   Single-column and large layouts, where the pixels are really needed, end up at the original; with multiple columns the screen cannot hold that many pixels anyway.
+   `thumbSrc` only records the first derived tier: the blurred backdrop reuses the small image already at hand. */
 export function upgradeCover(img: HTMLImageElement): void {
   const tier = /[?&]thumb=([12])(?=&|$)/.exec(img.src)?.[1];
   if (!tier || !img.naturalWidth) return;
@@ -172,10 +172,10 @@ export function upgradeCover(img: HTMLImageElement): void {
 
 /* 容器比例只有 `.pic` 的 `--card-ratio` 知道：竖屏开关、JAV 大图和普通卡片各写一个
    值，在这里按 layout 重算迟早会和它分叉。自定义属性会继承，直接从图片上读；
-   `aspect-ratio` 允许 `16/9` 这种写法，所以两种形式都得认。
-   卡片框自己的行内样式写着这个值时直接读行内：框与图之间那一层不另设比例，读到的就是计算值，
-   而 `getComputedStyle` 赶上刚插进来的一批卡片会先把整棵样式树重算一遍。框上没写的（比例
-   写在更外层的网格上）才读计算样式。 */
+   `aspect-ratio` allows forms like `16/9`, so both forms must be recognized.
+   When the card frame's own inline style states this value, read the inline one: the layer between frame and image sets no ratio of its own, so what is read is the computed value,
+   and `getComputedStyle`, arriving just as a batch of cards is inserted, would first recompute the whole style tree. Only when the frame does not state it (the ratio
+   is written on a grid further out) is the computed style read. */
 export function coverRatio(img: HTMLImageElement): number {
   const inline = img.closest<HTMLElement>('.pic,[data-media-pic]')?.style.getPropertyValue('--card-ratio').trim();
   const parts = (inline || getComputedStyle(img).getPropertyValue('--card-ratio').trim()).split('/').map(Number);

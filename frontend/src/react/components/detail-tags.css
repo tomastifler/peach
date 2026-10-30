@@ -1,6 +1,6 @@
-/* ── 标签 ──
-   标签文字用于筛选，右侧修改名称或删除；筛选没有选中态，照孤立按钮
-   的写法抬填充。 */
+/* ── Tags ──
+   Tag text is used for filtering, with rename or delete on the right; filtering has no selected state, so the fill is raised as for an isolated button
+   would be. */
 .peach-react [data-detail-tags] [data-detail-tag] {
   display: inline-flex;
   align-items: center;
@@ -16,9 +16,9 @@
   border-color:color-mix(in srgb,var(--tag-color) 42%,var(--surface));
   background:color-mix(in srgb,var(--tag-color) 10%,var(--surface));
 }
-/* 外框连边线取行内档，与旁边的添加键同高；里面的按钮撑满框内。 */
+/* The outer frame joins its border at the inline tier, the same height as the add button beside it; the buttons inside fill the frame. */
 .peach-react [data-detail-tags] [data-detail-tag] button { border: 0; background: transparent; color: var(--ink-2); cursor: pointer; height: 100%; }
-/* 长标签单行省略：按钮高度随外框定死，折成两行时第二行会被切掉一半。全名在 title 上。 */
+/* Long tags are ellipsized on one line: the button height is fixed by the outer frame, and if wrapped to two lines the second line would be half cut off. The full name is on the title. */
 .peach-react [data-detail-tags] [data-detail-tag] [data-tag] { min-width: 0; padding: 3px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .peach-react [data-detail-tags] [data-detail-tag] :is([data-remove-tag],[data-edit-tag]) { flex:none; width: calc(var(--control-h-inline) - 2px); padding: 0; display: grid; place-items: center; color: var(--muted); }
 .peach-react [data-detail-tags] [data-detail-tag] [data-tag]:hover { background: var(--hover); color: var(--ink); }
@@ -42,7 +42,7 @@
 }
 .peach-react [data-detail-tags] [data-tag-plus]:hover { background: var(--hover); color: var(--ink); }
 
-/* 标签选择器锚定加号并进入顶层，可用空间内滚动；开合沿用全站菜单，窄屏为单列。 */
+/* The tag picker anchors to the plus button and enters the top layer, scrolling within the available space; opening and closing reuse the site-wide menu, and on narrow screens it is a single column. */
 .peach-react [data-detail-tags] [data-tag-picker] {
   position: fixed;
   z-index: 120;
@@ -79,7 +79,7 @@
   stroke-width: 2;
   color: var(--muted);
 }
-/* 内边距与占位字色用浏览器默认值：岛的 Preflight 把它们清成 0 与半透明 currentColor，`revert` 退回 UA 值。 */
+/* Padding and placeholder color use the browser defaults: the island's Preflight clears them to 0 and a translucent currentColor, and `revert` returns to the UA values. */
 .peach-react [data-detail-tags] [data-tag-search] input {
   min-width: 0;
   flex: 1;

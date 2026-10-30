@@ -2,7 +2,7 @@
  *
  * 注册表里没有空态条目。标题是真的标题元素，冒烟用例按它认页面主体：一片白和「画出来了、
  * 只是没有内容」在别的断言下长得一模一样。根上的 `data-empty-state` 是给冒烟与外观用例认的
- * 钩子，不参与样式。标准与紧凑两档共用图标、字体、背景和边框。 */
+ * hooks, and do not take part in styling. The standard and compact tiers share the icon, font, background and border. */
 import type { ComponentType, ReactNode } from 'react';
 import { Button } from '@/components/base/buttons/button';
 
@@ -13,7 +13,7 @@ const SIZE = {
   compact: 'min-h-60 px-4 py-6',
 } as const;
 
-/** 把空态的添加入口接到页面已有表单。 */
+/** Connect the empty state's add entry to the form already on the page. */
 export function EmptyFocusButton({ target, children }: { target: string; children: ReactNode }) {
   return <Button size="small" variant="secondary" onClick={() => document.querySelector<HTMLElement>(target)?.focus()}>{children}</Button>;
 }

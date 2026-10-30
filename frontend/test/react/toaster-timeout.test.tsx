@@ -10,10 +10,10 @@ beforeEach(() => { sonner.success.mockClear(); sonner.error.mockClear() });
 const durationOf = (call: unknown[] | undefined) => (call?.[1] as { duration?: number } | undefined)?.duration;
 
 it('时长给 0 或负数时按默认 6 秒消失，显式的 Infinity 才常驻', () => {
-  showToast('zero', { html: '已保存', alert: false, timeout: 0, action: null });
-  showToast('negative', { html: '已保存', alert: false, timeout: -1, action: null });
-  showToast('pinned', { html: '已保存', alert: false, timeout: Infinity, action: null });
-  showToast('short', { html: '已保存', alert: true, timeout: 4000, action: null });
+  showToast('zero', { html: 'Saved', alert: false, timeout: 0, action: null });
+  showToast('negative', { html: 'Saved', alert: false, timeout: -1, action: null });
+  showToast('pinned', { html: 'Saved', alert: false, timeout: Infinity, action: null });
+  showToast('short', { html: 'Saved', alert: true, timeout: 4000, action: null });
   expect(sonner.success.mock.calls.map(durationOf)).toEqual([6000, 6000, Infinity]);
   expect(durationOf(sonner.error.mock.calls[0])).toBe(4000);
 });

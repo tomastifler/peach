@@ -113,7 +113,7 @@ class SmbMediaTests(unittest.TestCase):
                 self.assertFalse(quarantined.exists())
                 with patch.object(organize, '_update_row', side_effect=sqlite3.OperationalError('fixture failure')):
                     result = organize._move_one(connection, 1, str(original), 'R:/Media/again.mp4')
-                self.assertIn('已改回原名', result)
+                self.assertIn('renamed back', result)
                 self.assertTrue(original.exists())
                 self.assertFalse((directory / 'again.mp4').exists())
 

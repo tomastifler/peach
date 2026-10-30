@@ -29,8 +29,8 @@ export function BrowserSources({ browsers, sources, range, children }:
   });
   return <section className={`${cardClass()} flex flex-col gap-4`} aria-label="Data sources">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <h3 className="text-title-2-medium text-text-primary">数据源</h3>
-      <Button variant="secondary" onClick={() => setAdding(true)} disabled={adding}>添加浏览器</Button>
+      <h3 className="text-title-2-medium text-text-primary">Data sources</h3>
+      <Button variant="secondary" onClick={() => setAdding(true)} disabled={adding}>Add browser</Button>
     </div>
     {change.error ? <Note tone="error">{errorMessage(change.error)}</Note> : null}
     {adding ? <form className="flex flex-col gap-3" onSubmit={event => {
@@ -40,8 +40,8 @@ export function BrowserSources({ browsers, sources, range, children }:
       <Input label="Profile folder or history file" value={path} onChange={setPath} maxLength={1024} isRequired isDisabled={change.isPending}
         hint="Choose browser data on the computer running Peach." />
       <div className="flex gap-2">
-        <Button variant="ghost" disabled={change.isPending} onClick={() => { setAdding(false); change.reset() }}>取消</Button>
-        <Button type="submit" variant="secondary" disabled={!name.trim() || !path.trim()} {...busyProps(change.isPending)}>添加</Button>
+        <Button variant="ghost" disabled={change.isPending} onClick={() => { setAdding(false); change.reset() }}>Cancel</Button>
+        <Button type="submit" variant="secondary" disabled={!name.trim() || !path.trim()} {...busyProps(change.isPending)}>Add</Button>
       </div>
     </form> : null}
     <div className="inline-grid w-full min-w-0 gap-2 sm:grid-cols-2">
@@ -69,9 +69,9 @@ export function BrowserSources({ browsers, sources, range, children }:
               onConfirm: () => change.mutateAsync({ operation: 'disable', id: browser.id }) });
           }} />
         <Button variant="secondary" size="small" iconOnly leadingIcon={RiDeleteBinLine} {...busyProps(change.isPending)}
-          aria-label={`删除 ${browser.name}`} onClick={() => {
-            void confirmModal({ title: `删除 ${browser.name}`, body: '移除该浏览器的读取配置和已导入历史、书签，浏览器原文件保留。可以通过添加浏览器重新接入。',
-              confirmLabel: '删除浏览器来源', danger: true, onConfirm: () => change.mutateAsync({ operation: 'delete_browser', id: browser.id }) });
+          aria-label={`Delete ${browser.name}`} onClick={() => {
+            void confirmModal({ title: `Delete ${browser.name}`, body: 'Removes this browser’s read settings and its imported history and bookmarks; the browser’s original files are kept. You can connect it again through Add browser.',
+              confirmLabel: 'Delete browser source', danger: true, onConfirm: () => change.mutateAsync({ operation: 'delete_browser', id: browser.id }) });
           }} />
         </span>
       </div>})}

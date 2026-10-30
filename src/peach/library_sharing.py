@@ -51,7 +51,7 @@ def _used(value, period):
 
 
 def useful_payload(payload):
-    """公共编号或任一偏好分组提供可分析内容。"""
+    """A public code or any preference group provides analyzable content."""
     return bool(payload["library"] or any(payload["preferences"].values()))
 
 
@@ -201,7 +201,7 @@ class Service:
         return True
 
     def _delivery(self, identity, result):
-        """仅更新当前投递的脱敏回执，不把 HTTP 接收解释为留存。"""
+        """Update only the redacted receipt of the current delivery; HTTP receipt is not interpreted as retention."""
         if result.get("status") not in {"accepted", "failed", "unknown", "blocked"}:
             return
         with _state_lock(self.config):

@@ -20,7 +20,7 @@ LOG_NAMES = ("tray.log", "tray-lifecycle.log", "tray-setup.err.log", "tray-setup
 STATE_NAMES = ('library-processing.json', 'runtime-prepare.json', 'standalone-update.json',
                'automatic-updates.json', 'windows-source-sync.json', 'cloudflare-tunnel.json',
                'remote-reporting-delivery.json', 'library-sharing-attempt.json', 'media-processing.json')
-#: 发现页封面逐番号处理结果的份数上限；每份只有几十字节，排查缺封面靠它们。
+#: Upper limit on the number of per-code cover processing results for the discovery page; each is only a few dozen bytes, and troubleshooting missing covers relies on them.
 COVER_ATTEMPT_LIMIT = 500
 TAIL_BYTES = 96 * 1024
 JSON_READ_BYTES = 16 * 1024 * 1024
@@ -30,7 +30,7 @@ SCRAPING_INLINE_LIMIT = 100 * 1024 * 1024
 
 
 def _access_log(line: str) -> str:
-    """访问日志只保留技术路由、HTTP 版本与状态码，查询串整体移除。"""
+    """Access logs keep only technical routes, HTTP version and status code, with the query string removed entirely."""
     match = ACCESS_REQUEST.fullmatch(line)
     if not match:
         return error_reporting.redact(line)
@@ -41,10 +41,10 @@ def _access_log(line: str) -> str:
 
 
 def _processing_value(value):
-    """处理证据保留资产编号和错误，媒体名称与路径留在本机。"""
+    """Processing evidence keeps asset IDs and errors, while media names and paths stay on this machine."""
     def hide_names(value):
         if isinstance(value, dict):
-            # 路径字段整值替换：文件名里的引号会截断文本脱敏的路径匹配。
+            # Path fields are replaced as a whole value: quotes in file names would truncate text-redaction path matching.
             return {key: '<media>' if key in ('title', 'current_asset_name')
                     else '<path>' if key == 'path' else hide_names(item)
                     for key, item in value.items()}
@@ -60,7 +60,7 @@ def _json_text(value):
 
 
 def _limited_value(value, depth=0, limit=20):
-    """集合保留前 20 项、文本保留 4000 字符，嵌套最多 8 层。"""
+    """Collections keep the first 20 items, text keeps 4000 characters, and nesting goes at most 8 levels."""
     if isinstance(value, (dict, list)) and depth >= 8:
         return '<depth-limit>'
     if isinstance(value, dict):
@@ -85,7 +85,7 @@ def _structured_json(stream):
         if len(content.encode('utf-8')) <= TAIL_BYTES:
             return content, {'status': 'included', 'truncated': False, 'projected': False}
         if isinstance(value, dict):
-            # 任务标识、状态、阶段、计数先于续跑索引；问题与步骤先于其他集合。
+            # Task ID, status, stage and counts come before the resume index; problems and steps come before other collections.
             primary = ('job_id', 'run_id', 'status', 'stage', 'requested_stage', 'checked', 'total',
                        'issue_count', 'current_action', 'error', 'started_at', 'last_progress_at', 'completed_at')
             fields = sorted(value, key=lambda key: (key not in primary,
@@ -239,11 +239,11 @@ def _archive_scraping(archive, config, entries, *, progress, cancelled, include_
                         with details.open(item) as source, archive.open('scraping/' + item.filename, 'w', force_zip64=True) as target:
                             while chunk := source.read(256 * 1024):
                                 if cancelled():
-                                    raise ExportCancelled('导出已取消')
+                                    raise ExportCancelled('Export cancelled')
                                 target.write(chunk)
-                index['detail'] = '详细刮削记录已包含在 scraping/ 目录'
+                index['detail'] = 'The detailed scraping records are already included in the scraping/ directory'
             else:
-                index['detail'] = '详细刮削记录超过自动合并上限，请按问题番号单独导出'
+                index['detail'] = 'The detailed scraping records exceed the automatic merge limit; please export them separately by problem code'
     index['export'] = state
     archive.writestr('scraping/summary.json', json.dumps(error_reporting.scrub(index), ensure_ascii=False, indent=2))
     entries.append({'name': 'summary.json', 'section': 'scraping', 'status': 'included'})
@@ -305,8 +305,8 @@ def bundle_to(destination, *, report: dict | None = None, config=None, browser: 
         for index, directory in enumerate(dict.fromkeys(directories)):
             if cancelled():
                 from .scraping_diagnostics import ExportCancelled
-                raise ExportCancelled('导出已取消')
-            progress(stage='整理诊断日志', done=index, total=len(directories))
+                raise ExportCancelled('Export cancelled')
+            progress(stage='Organizing diagnostic logs', done=index, total=len(directories))
             try:
                 candidates = _log_candidates(directory, entries)
                 _archive_files(archive, directory, candidates, f'logs/{index}', entries)

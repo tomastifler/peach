@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { nameRevision, subscribeNames } from '../core/entity-names';
 
-/** 名称偏好及资料投影更新时，只重画显示，不改查询缓存里的身份。 */
+/** When name preferences and detail projections update, only the display is redrawn; identities in the query cache are not changed. */
 export function useEntityNames(): number {
   return useSyncExternalStore(subscribeNames, nameRevision, nameRevision);
 }

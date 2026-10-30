@@ -87,7 +87,7 @@ class MediaSourceCostTests(unittest.TestCase):
         self.assertEqual(rows, [("O:\\Public\\film.mp4",)])
 
     def test_nested_roots_are_refused_before_the_file_is_written(self):
-        with self.assertRaisesRegex(settings_file.SettingsFileError, "互相包含"):
+        with self.assertRaisesRegex(settings_file.SettingsFileError, "contains/is contained by"):
             settings_file.write(self.config)
         self.assertFalse(self.config.path.exists())
 

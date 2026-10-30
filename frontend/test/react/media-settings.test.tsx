@@ -66,20 +66,20 @@ it('不能编辑时只说原因，不画表单', async () => {
   expect(host.querySelector('[role="note"]')?.textContent).toContain('请在运行 Peach 的电脑上打开配置');
 });
 
-describe('媒体目录', () => {
-  it('来源选择 SMB 共享时显示连接字段，切回本地磁盘时隐藏', async () => {
+describe('Media folders', () => {
+  it('来源选择 SMB 共享时显示连接字段，切回 Local disk 时隐藏', async () => {
     const host = await open({ media_sources: [{ location: 'local', root: 'D:\\Media', path: 'D:\\Media' }] });
-    const source = () => host.querySelector('[aria-label="媒体来源 1"]');
-    expect(host.querySelector('[aria-label="SMB 账号 1"]')).toBeNull();
-    await choose(source(), 'SMB 共享');
-    expect(source()?.textContent).toContain('SMB 共享');
+    const source = () => host.querySelector('[aria-label="Media source 1"]');
+    expect(host.querySelector('[aria-label="SMB username 1"]')).toBeNull();
+    await choose(source(), 'SMB share');
+    expect(source()?.textContent).toContain('SMB share');
     expect(paths(host)[0]?.value).toBe('smb://');
-    expect(host.querySelector('input[aria-label="SMB 密码 1"]')?.getAttribute('type')).toBe('password');
+    expect(host.querySelector('input[aria-label="SMB password 1"]')?.getAttribute('type')).toBe('password');
     await type(paths(host)[0], '');
-    expect(source()?.textContent).toContain('SMB 共享');
-    expect(host.querySelector('[aria-label="SMB 账号 1"]')).not.toBeNull();
-    await choose(source(), '本地磁盘');
-    expect(host.querySelector('[aria-label="SMB 账号 1"]')).toBeNull();
+    expect(source()?.textContent).toContain('SMB share');
+    expect(host.querySelector('[aria-label="SMB username 1"]')).not.toBeNull();
+    await choose(source(), 'Local disk');
+    expect(host.querySelector('[aria-label="SMB username 1"]')).toBeNull();
   });
 
   it('保存 SMB 来源保留目录身份，密码输入保持为空', async () => {
@@ -87,8 +87,8 @@ describe('媒体目录', () => {
     vi.stubGlobal('fetch', fetcher);
     const host = await open({ media_sources: [{ location: 'local', root: 'P:\\NAS', path: 'smb://nas/Movies',
       root_id: 'nas-root', library_id: 'nas-library', transport: 'smb', smb_username: 'reader', smb_password_saved: true }] });
-    expect(host.querySelector('[aria-label="媒体来源 1"]')?.textContent).toContain('SMB 共享');
-    expect(host.querySelector<HTMLInputElement>('[aria-label="SMB 密码 1"]')?.value).toBe('');
+    expect(host.querySelector('[aria-label="Media source 1"]')?.textContent).toContain('SMB share');
+    expect(host.querySelector<HTMLInputElement>('[aria-label="SMB password 1"]')?.value).toBe('');
     await submit(host.querySelector('form'));
     expect(sentBody(fetcher).media_sources[0]).toMatchObject({ root_id: 'nas-root', library_id: 'nas-library',
       transport: 'smb', path: 'smb://nas/Movies', smb_username: 'reader', smb_password: '' });
@@ -104,8 +104,8 @@ describe('媒体目录', () => {
     const blocks = [...host.querySelectorAll('[data-library-block]')];
     expect(blocks).toHaveLength(1);
     expect(rows(blocks[0]!)).toHaveLength(2);
-    await type(host.querySelector<HTMLInputElement>('[aria-label="JAV 名称"]'), '私人馆藏');
-    expect(host.querySelectorAll('input[aria-label$=" 名称"]')).toHaveLength(1);
+    await type(host.querySelector<HTMLInputElement>('[aria-label="JAV name"]'), '私人馆藏');
+    expect(host.querySelectorAll('input[aria-label$=" name"]')).toHaveLength(1);
     await submit(host.querySelector('form'));
     expect(sentBody(fetcher).media_sources).toMatchObject([
       { root_id: 'root-one', library_id: 'library-one', library: '私人馆藏' },
@@ -122,15 +122,15 @@ describe('媒体目录', () => {
       { location: 'local', root: 'E:\\JAV', path: 'E:\\JAV', root_id: 'root-two', library_id: 'library-one', library: 'JAV',
         cost: 'free', library_color: 'sky', library_policy: 'auto' },
     ] });
-    expect(host.querySelector('[data-library-color-trigger]')?.getAttribute('aria-label')).toBe('JAV 来源色：天蓝');
+    expect(host.querySelector('[data-library-color-trigger]')?.getAttribute('aria-label')).toBe('JAV source color: Sky blue');
     await click(host.querySelector('[data-library-color-trigger]'));
-    await click(document.querySelector('[data-library-colors] [aria-label="琥珀"]'));
-    const policy = host.querySelector('[aria-label="JAV 处理方式"]');
+    await click(document.querySelector('[data-library-colors] [aria-label="Amber"]'));
+    const policy = host.querySelector('[aria-label="JAV Processing mode"]');
     await click(policy?.matches('[aria-haspopup]') ? policy : policy?.querySelector('[aria-haspopup="listbox"]'));
-    await click([...document.querySelectorAll('[role="option"]')].find(node => node.textContent?.startsWith('自定义')));
-    const steps = host.querySelector('[aria-label="JAV 处理步骤"]');
+    await click([...document.querySelectorAll('[role="option"]')].find(node => node.textContent?.startsWith('Custom')));
+    const steps = host.querySelector('[aria-label="JAV processing steps"]');
     expect(steps?.querySelectorAll('input:checked')).toHaveLength(5);
-    await click([...steps!.querySelectorAll('label')].find(node => node.textContent?.includes('生成九宫格预览')));
+    await click([...steps!.querySelectorAll('label')].find(node => node.textContent?.includes('Generate contact sheet previews')));
     await submit(host.querySelector('form'));
     const expected = { library_id: 'library-one', library_color: 'amber', library_policy: 'custom',
       library_stages: 'probe,metadata,cover,people' };
@@ -144,13 +144,13 @@ describe('媒体目录', () => {
       { location: 'local', root: 'D:\\JAV', path: 'D:\\JAV', root_id: 'root-one', library_id: 'library-one', library: 'JAV', cost: 'free' },
     ] });
     await type(paths(host)[0], 'F:\\JAV');
-    await choose(host.querySelector('[aria-label="目录变更方式 1"]'), '重定位此目录，保留文件记录');
+    await choose(host.querySelector('[aria-label="Folder change method 1"]'), 'Relocate this folder, keeping file records');
     await submit(host.querySelector('form'));
     expect(sentBody(fetcher).media_sources[0]).toMatchObject({
       root_id: 'root-one', root: 'D:\\JAV', path: 'F:\\JAV', change_mode: 'relocate',
     });
   });
-  it.each([['guangya', '光鸭云盘'], ['onedrive', 'OneDrive'], ['mounted', '其他已挂载网盘']])(
+  it.each([['guangya', '光鸭云盘'], ['onedrive', 'OneDrive'], ['mounted', 'Other mounted cloud drives']])(
     '%s 来源回填名称、挂载帮助和现有图标，保存带上来源', async (location, label) => {
     const fetcher = fetchMock(200, { saved: true, url: '/', revision: 'rev-2' });
     vi.stubGlobal('fetch', fetcher);
@@ -200,14 +200,14 @@ describe('媒体目录', () => {
     const fetcher = fetchMock(200, { saved: true, url: '/', revision: 'rev-2' });
     vi.stubGlobal('fetch', fetcher);
     const host = await open({ windows: false, media_sources: [
-      { location: '115', root: 'B:\\', path: '/Volumes/115', online: false, library: '收藏', library_icon: 'heart' },
+      { location: '115', root: 'B:\\', path: '/Volumes/115', online: false, library: 'Favorite', library_icon: 'heart' },
       { location: 'pikpak', root: 'A:\\', path: '/Volumes/PikPak', online: true },
     ] });
     expect(paths(host).map((input) => input.value)).toEqual(['/Volumes/115', '/Volumes/PikPak']);
     await submit(host.querySelector('form'));
     await settle();
     expect(sentBody(fetcher).media_sources).toMatchObject([
-      { location: '115', root: 'B:\\', path: '/Volumes/115', library: '收藏', library_icon: 'heart', cost: 'free' },
+      { location: '115', root: 'B:\\', path: '/Volumes/115', library: 'Favorite', library_icon: 'heart', cost: 'free' },
       { location: 'pikpak', root: 'A:\\', path: '/Volumes/PikPak', library: '', library_icon: '', cost: 'metered' },
     ]);
   });
@@ -219,8 +219,8 @@ describe('媒体目录', () => {
       { location: 'onedrive', root: 'O:\\Movies', path: 'O:\\Movies', cost: 'metered' },
     ] });
     const policy = rows(host)[0]?.querySelector('[data-media-read-policy] [aria-haspopup="listbox"]');
-    expect(policy?.textContent).toContain('代理保护');
-    await choose(policy, '正常读取');
+    expect(policy?.textContent).toContain('Proxy protection');
+    await choose(policy, 'Normal reads');
     await submit(host.querySelector('form'));
     expect(sentBody(fetcher).media_sources).toMatchObject([
       { location: 'onedrive', root: 'O:\\Movies', path: 'O:\\Movies', library: '', library_icon: '', cost: 'free' },
@@ -235,10 +235,10 @@ describe('媒体目录', () => {
     ] });
     await choose(rows(host)[0]?.querySelector('[aria-haspopup="listbox"]'), 'CloudDrive · PikPak');
     const policy = rows(host)[0]?.querySelector('[data-media-read-policy] [aria-haspopup="listbox"]');
-    expect(policy?.textContent).toContain('Choose a read policy');
+    expect(policy?.textContent).toContain('Choose reading policy');
     await submit(host.querySelector('form'));
     expect(fetcher).not.toHaveBeenCalled();
-    expect(host.textContent).toContain('Choose a media read policy');
+    expect(host.textContent).toContain('Choose a media reading policy');
     await choose(policy, 'Normal reads');
     await submit(host.querySelector('form'));
     expect(sentBody(fetcher).media_sources[0]).toMatchObject({ location: 'pikpak', cost: 'free' });

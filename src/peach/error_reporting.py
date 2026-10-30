@@ -72,8 +72,8 @@ def log_directories() -> list[Path]:
 
 
 def _redact_key(key):
-    """字典键同样脱敏；`编号:路径` 形态保留编号前缀。键是标识而非正文，路径起头就整段替换，
-    文件名里的引号不会截断替换。"""
+    """Dictionary keys are redacted too; `number:path` forms keep the number prefix. A key is an identifier rather than body text, and a path start replaces the whole segment,
+    quotes inside file names do not truncate the replacement."""
     if not isinstance(key, str):
         return key
     prefix, colon, rest = key.partition(":")
@@ -91,7 +91,7 @@ def scrub(value):
         for key, item in value.items():
             name = _redact_key(key)
             if name != key:
-                # 多个路径键脱敏后可能同名，按出现顺序编号保持唯一。
+                # Multiple path keys may collide after redaction; number them in order of appearance to keep them unique.
                 base, count = name, 1
                 while name in result or name in value:
                     count += 1
@@ -106,7 +106,7 @@ def scrub(value):
 
 
 def timezone_facts(moment: datetime | None = None) -> dict:
-    """本机实际时区名称、偏移及本地时间；名称读取失败不阻止取证。"""
+    """The actual local time zone name, offset and local time; a failure to read the name does not block evidence gathering."""
     local = (moment or datetime.now().astimezone())
     offset = local.utcoffset()
     result = {'local_time': local.isoformat(), 'abbreviation': local.tzname(),
@@ -170,7 +170,7 @@ def event(stage: str, error: BaseException | None = None, *, local_fields: dict 
 
 
 def local_event(stage: str, error: BaseException | None = None, **fields) -> Path | None:
-    """只写本机脱敏日志，不调用远程上报。"""
+    """Write only to the local redacted log; do not call remote reporting."""
     record = {"at": datetime.now(timezone.utc).isoformat(), "stage": stage,
               **system_facts(), 'thread': threading.current_thread().name, **fields}
     if error is not None:

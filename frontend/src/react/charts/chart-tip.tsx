@@ -63,7 +63,7 @@ function TipContent({ active, payload, label, nameKey, valueKey, hideLabel, form
 }
 
 /** 接进 EvilCharts 图里的浮层。`nameKey` 是径向图那种一段一个名字的数据列；`valueKey` 是
- * 画图的列经过刻度换算时，浮层该读的原始数那一列（雷达图）；`format` 把数写成带单位的读数（字节）。 */
+ * When the plotted column goes through scale conversion, the column of raw numbers the popover should read (radar chart); `format` writes a number as a readout with a unit (bytes). */
 export function ChartTip(
   { nameKey, valueKey, hideLabel, format }:
   { nameKey?: string; valueKey?: string; hideLabel?: boolean; format?: (value: number) => string },

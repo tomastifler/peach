@@ -2,8 +2,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type AnimationEvent, type MouseEvent } from 'react';
 import { fitSkeleton, noteHtml } from '@peach/legacy/ui';
 
-/** 续页哨兵提前多远开始取下一段：一屏高（隐式根的百分比按视口算）。目录接一页是一次 150–250ms
- *  的请求加几百毫秒的渲染，只提前几百像素时，连续往下滚每一页都要在底部干等。 */
+/** How far ahead the continuation sentinel starts fetching the next segment: one screen height (the implicit root's percentage is computed against the viewport). A catalog page is a 150-250ms
+ *  request plus a few hundred milliseconds of rendering; if it starts only a few hundred pixels ahead, every page makes continuous scrolling wait idle at the bottom. */
 export const LOAD_MORE_MARGIN = '100% 0px';
 
 /** 骨架与它的退场。骨架那一层在数据到了之后原地变成淡出层：同一个元素、同一段 HTML，
@@ -45,6 +45,6 @@ export function RetryNote({ message, onRetry }: { message: string; onRetry: () =
   };
   return (
     <div data-media-error="" onClick={click}
-      dangerouslySetInnerHTML={{ __html: noteHtml(message, { variant: 'error', actionLabel: '立即重试' }) }} />
+      dangerouslySetInnerHTML={{ __html: noteHtml(message, { variant: 'error', actionLabel: 'Retry now' }) }} />
   );
 }

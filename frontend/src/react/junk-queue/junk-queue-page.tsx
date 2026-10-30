@@ -105,9 +105,9 @@ function JunkBody({ props, data, pending, error, retry }: {
     if (!items.length) {
       const dismissed = props.view === 'dismissed';
       return (
-        <EmptyState icon={CheckGlyph} title={dismissed ? '没有已排除的文件' : '没有待判断的垃圾文件'}
-          actions={dismissed ? <ButtonLink size="small" href="/junk-files">查看待判断</ButtonLink> : undefined}>
-          {dismissed ? '点“不是垃圾”的资源会保留在这里，可随时重新判断。' : '当前分类没有待检查文件。'}
+        <EmptyState icon={CheckGlyph} title={dismissed ? 'No dismissed files' : 'No junk files to review'}
+          actions={dismissed ? <ButtonLink size="small" href="/junk-files">View to review</ButtonLink> : undefined}>
+          {dismissed ? 'Items marked "Not junk" stay here and can be reviewed again at any time.' : 'No files to check in this category.'}
         </EmptyState>
       );
     }
@@ -137,7 +137,7 @@ function JunkBody({ props, data, pending, error, retry }: {
   );
 }
 
-/** 往下露下一段。数据已经整批在手上，不发请求：哨兵进入视口下方一屏内就露，点它也露，
+/** Reveals the next segment going down. The data is already all in hand, so no request is made: the sentinel reveals it once it comes within a screen below the viewport, and clicking it reveals too,
  *  判据同目录网格的续页。每露一段按新键重挂，还在视口里就接着露。 */
 function RevealMore({ onMore }: { onMore(): void }) {
   const node = useRef<HTMLDivElement | null>(null);

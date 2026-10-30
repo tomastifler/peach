@@ -33,7 +33,7 @@ _CACHE_READS = ContextVar('jav_public_cache_reads', default=None)
 
 
 def public_signature_parts(script: str) -> tuple[str, str] | None:
-    """从公开请求头的签名计算式读取常量，不执行来源脚本。"""
+    """Read constants from the signature formula in public request headers without executing the source script."""
     calls = set(re.findall(r'\bjdsignature\s*:\s*(' + _JS_IDENTIFIER + r')\s*\(\s*\)', script))
     if len(calls) != 1:
         return None
@@ -123,7 +123,7 @@ class PublicSourceUnavailable(ValueError):
 
 
 class PublicIdentityAmbiguous(PublicSourceUnavailable):
-    """同番号有多个来源身份，不能按番号绑定资料或媒体。"""
+    """One code has multiple source identities, so metadata or media cannot be bound by code."""
 
 
 class PublicBudgetExceeded(PublicSourceUnavailable):
@@ -240,7 +240,7 @@ class PublicAPI:
         parts = public_signature_parts(js)
         if parts is None:
             self.paused_until = self.clock() + 60
-            raise PublicSourceUnavailable("作品资料来源格式未识别")
+            raise PublicSourceUnavailable("Work metadata source format not recognized")
         self.signature_parts = parts
         self.signature_until = self.clock() + 24 * 3600
         return self.signature_parts
@@ -380,18 +380,18 @@ class PublicAPI:
                        and normalise_code_key(row.get("number")) == canonical]
             if not matches or any(not isinstance(row.get('id'), str)
                                   or not re.fullmatch(r'[A-Za-z0-9]+', row['id']) for row in matches):
-                raise PublicSourceUnavailable("未取得这个番号的作品资料")
+                raise PublicSourceUnavailable("No work metadata obtained for this code")
             return list(dict.fromkeys(row['id'] for row in matches))
 
         if source_id is None:
             identities = self._cached("movie-id:" + canonical, identify, refresh=refresh)
             if len(identities) != 1:
-                raise PublicIdentityAmbiguous("同番号对应多个作品，请核对来源身份：" + '、'.join(identities))
+                raise PublicIdentityAmbiguous("This code corresponds to multiple works; please check the source identity: " + ', '.join(identities))
             movie_id = identities[0]
         elif isinstance(source_id, str) and re.fullmatch(r'[A-Za-z0-9]+', source_id):
             movie_id = source_id
         else:
-            raise PublicSourceUnavailable("来源作品身份不匹配")
+            raise PublicSourceUnavailable("Source work identity mismatch")
 
         def fetch():
             movie = self._json("/v4/movies/" + movie_id).get("movie")
@@ -412,7 +412,7 @@ class PublicAPI:
             return
         key = 'movie-id:' + canonical
         with self.lock:
-            # 已观察到的唯一身份或歧义不被较旧的发现边车反向覆盖。
+            # A unique identity or ambiguity already observed is not overwritten by an older discovery sidecar.
             if self._cache_key(key) in self.cache:
                 return
             stored = self._store().load(identity_cache_key(key))
@@ -455,12 +455,12 @@ class PublicAPI:
         if (not isinstance(movie, dict) or not isinstance(movie.get('id'), str)
                 or not re.fullmatch(r'[A-Za-z0-9]+', movie['id'])
                 or normalise_code_key(movie.get('number')) != normalise_code_key(code)):
-            raise PublicSourceUnavailable('来源作品身份不匹配')
+            raise PublicSourceUnavailable('Source work identity mismatch')
         return movie
 
     def reviews(self, code: str, page: int, *, refresh=False, movie=None) -> list[dict]:
         if not 1 <= page <= MAX_REVIEW_PAGES:
-            raise ValueError("评论页码必须在 1 至 8 之间")
+            raise ValueError("Comment page number must be between 1 and 8")
         movie = self._bound_movie(code, movie)
         return self._cached(f"reviews:{movie['id']}:{page}", lambda:
                             self._rows(f"/v1/movies/{movie['id']}/reviews", "reviews", {"page": page}),
@@ -496,7 +496,7 @@ class PublicAPI:
             if source_id is None:
                 key += f':search-{RULE}'
             elif not isinstance(source_id, str) or not re.fullmatch(r'[A-Za-z0-9]+', source_id):
-                raise PublicSourceUnavailable('来源作品身份不匹配')
+                raise PublicSourceUnavailable('Source work identity mismatch')
             else:
                 key += ':' + source_id
         return self._cached(key, read, refresh=refresh)

@@ -1,5 +1,5 @@
-/* 「应用与维护」的后半段：存储空间、数据上传、运行信息、安装教程与卸载。少改的隐私开关和只读信息在后，
- * 卸载是不可逆动作，留在整组最后。 */
+/* The second half of "App & maintenance": storage space, data upload, runtime info, install guide and uninstall. Rarely changed privacy switches and read-only info come last,
+ * and uninstall is irreversible, so it stays at the very end of the group. */
 import { useState, type FormEvent } from 'react';
 import { confirmModal } from '@peach/legacy/ui';
 
@@ -28,7 +28,7 @@ export function MaintenanceSettings(
   return (
     <div {...groupRoot(panel)}>
       {data.storage ? <StorageSettings initial={data.storage} receipt={receipt} /> : null}
-      {data.remote_reporting || data.library_sharing ? <Section id="librarySharing" title="数据上传">
+      {data.remote_reporting || data.library_sharing ? <Section id="librarySharing" title="Data upload">
         {data.remote_reporting ? <RemoteReportingSettings initial={data.remote_reporting} receipt={receipt} /> : null}
         {data.library_sharing ? <div className="border-t border-separator-border">
           <LibrarySharingSettings initial={data.library_sharing} receipt={receipt} />
@@ -74,7 +74,7 @@ export function AutomaticUpdates({ initial, receipt }: { initial: AutomaticUpdat
       ? 'Confirm the restart and install here once the download finishes.'
       : undefined;
   return (
-    <Section id="automaticUpdates" title="自动更新" onSubmit={submit}>
+    <Section id="automaticUpdates" title="Automatic updates" onSubmit={submit}>
       <Rows>
         <SettingsRow label="Check for new versions automatically">
           <Switch aria-label="Check for new versions automatically" isSelected={mode !== 'off'} isDisabled={!initial.available}

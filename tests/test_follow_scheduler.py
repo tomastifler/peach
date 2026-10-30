@@ -148,7 +148,7 @@ class FollowUpdateSchedulerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 scheduler.run_now()
             scheduler._run()
-            self.assertEqual(scheduler.status()["last_error"], "1 个来源检查失败")
+            self.assertEqual(scheduler.status()["last_error"], "1 source checks failed")
             original = scheduler._run
 
             def tracked():

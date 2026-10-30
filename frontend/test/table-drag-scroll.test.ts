@@ -6,7 +6,7 @@ afterEach(() => { cleanups.splice(0).forEach(cleanup => cleanup()); document.bod
 
 function fixture() {
   const viewport = document.createElement('div');
-  viewport.innerHTML = '<table><tbody><tr><td>内容</td><td><button>操作</button><input type="checkbox"><a href="#">链接</a><label>选择</label><div class="react-aria-ColumnResizer"></div></td></tr></tbody></table>';
+  viewport.innerHTML = '<table><tbody><tr><td>内容</td><td><button>操作</button><input type="checkbox"><a href="#">链接</a><label>Select</label><div class="react-aria-ColumnResizer"></div></td></tr></tbody></table>';
   document.body.append(viewport);
   Object.defineProperties(viewport, { clientWidth: { get: () => 200 }, scrollWidth: { get: () => 900 } });
   const control = wireTableScroller(viewport);

@@ -1128,7 +1128,7 @@ class PeachTray:
             return None
         step = self.preparation.migrations.apply()
         self._migration_failed = step.failed
-        (LOGGER.error if step.failed else LOGGER.info)("迁移：%s", step.message)
+        (LOGGER.error if step.failed else LOGGER.info)("Migrations: %s", step.message)
         return step
 
     def _readiness(self) -> "runtime_prepare.Step | None":

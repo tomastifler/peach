@@ -97,7 +97,7 @@ describe('地址栏上的类型', () => {
     });
     const host = await open(props({ kind:'tags', view:'cloud' })); await settle();
     expect(host.querySelectorAll('[data-tag-chip]')).toHaveLength(100);
-    await click(buttonNamed('下一页', host)); await settle();
+    await click(buttonNamed('Next', host)); await settle();
     expect(host.querySelectorAll('[data-tag-chip]')).toHaveLength(100);
     expect(host.querySelector('[data-tag-chip][data-k="tag-0"]')).toBeNull();
     expect(host.querySelector('[data-tag-chip][data-k="tag-100"]')).not.toBeNull();
@@ -117,7 +117,7 @@ describe('地址栏上的类型', () => {
     const given = props({ kind: 'tags', scope: 'online', q: 'missing', category: 'artist', view: 'alphabet' });
     const host = await open(given);
     await settle();
-    await click(buttonNamed('清除筛选', host));
+    await click(buttonNamed('Clear filters', host));
     expect(given.route).toHaveBeenLastCalledWith(expect.objectContaining({
       kind: 'tags', scope: 'online', view: 'alphabet', q: '', category: 'all',
     }), { replace: false });
@@ -251,7 +251,7 @@ describe('名册', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 500, json: async () => ({ error: '读不出来' }) })));
     const host = await open(props());
     await settle();
-    expect(host.textContent).toContain("Couldn't load");
+    expect(host.textContent).toContain('Could not load');
     expect(host.querySelector('[data-index-count]')?.textContent ?? '').toBe('');
     expect(host.textContent).not.toContain('0 items');
   });
@@ -385,13 +385,13 @@ describe('过滤框', () => {
     await act(async () => { input.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true })) });
     await act(async () => { vi.advanceTimersByTime(300) });
     expect(given.route).toHaveBeenLastCalledWith(expect.objectContaining({ q: '中' }), { replace: true });
-    await type(input, '中文');
+    await type(input, 'Chinese');
     await act(async () => { input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) });
-    expect(given.route).toHaveBeenLastCalledWith(expect.objectContaining({ q: '中文' }), { replace: true });
+    expect(given.route).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'Chinese' }), { replace: true });
   });
 });
 
-describe('标签', () => {
+describe('Tags', () => {
   for (const scope of ['local', 'online'] as const) for (const view of ['alphabet', 'cloud'] as const) {
     it(`${scope} ${view} 浏览使用当前名称且仅管理模式提供编辑`, async () => {
       const row = { ...tag('眼镜', 'appearance'), entity_id: 4472, id: 'glasses', aliases: ['眼镜娘'], hidden: false };
@@ -402,14 +402,14 @@ describe('标签', () => {
       await settle();
       expect(host.querySelector('[data-alpha-tag], [data-tag-chip]')?.textContent).toContain('眼镜');
       expect(host.querySelector('[data-alpha-tag], [data-tag-chip]')?.textContent).not.toContain('眼镜娘');
-      expect(host.querySelector('[aria-label="收藏眼镜"]')).not.toBeNull();
-      expect(host.querySelector('[aria-label="编辑标签 眼镜"]')).toBeNull();
+      expect(host.querySelector('[aria-label="Favorite 眼镜"]')).not.toBeNull();
+      expect(host.querySelector('[aria-label="Edit tag 眼镜"]')).toBeNull();
       expect(host.querySelector('[data-tag-mode] use')?.getAttribute('href')).toBe('#i-pencil');
-      await click(host.querySelector('[aria-label="管理标签"]'));
+      await click(host.querySelector('[aria-label="Manage tags"]'));
       await settle();
-      expect(host.querySelector('[data-tag-manager] [aria-label="编辑标签 眼镜"]')).not.toBeNull();
-      await click(host.querySelector('[aria-label="返回标签浏览"]'));
-      expect(host.querySelector('[aria-label="编辑标签 眼镜"]')).toBeNull();
+      expect(host.querySelector('[data-tag-manager] [aria-label="Edit tag 眼镜"]')).not.toBeNull();
+      await click(host.querySelector('[aria-label="Back to tag browsing"]'));
+      expect(host.querySelector('[aria-label="Edit tag 眼镜"]')).toBeNull();
     });
   }
 

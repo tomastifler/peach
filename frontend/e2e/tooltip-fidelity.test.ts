@@ -68,7 +68,7 @@ describe('共享提示的文字与锚点', () => {
           const modal = document.createElement('dialog');
           modal.id = 'tip-modal';
           modal.style.cssText = 'width:300px;height:200px;padding:40px;transform:translateY(20px)';
-          modal.innerHTML = '<span id="tip-contents" title="筛选作品来源" style="display:contents"><button id="tip-icon" aria-label="来源" style="width:40px;height:40px"><svg width="20" height="20"><circle cx="10" cy="10" r="8"/></svg></button></span>';
+          modal.innerHTML = '<span id="tip-contents" title="筛选作品来源" style="display:contents"><button id="tip-icon" aria-label="Source" style="width:40px;height:40px"><svg width="20" height="20"><circle cx="10" cy="10" r="8"/></svg></button></span>';
           document.body.append(modal); modal.showModal();
         });
         await opened.page.locator('#tip-icon').focus();

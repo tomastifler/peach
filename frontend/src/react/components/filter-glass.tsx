@@ -3,7 +3,7 @@
  * 料（漂移的两团、斜光、内嵌边与落影）由 `web/board.css` 的 `[data-glass-pane]` 一处给，
  * 几何、饱和度与文字色在 `../styles.css` 的 `[data-filter-glass]`，高对比与减少透明度的回退
  * 也在那一条上。吸到顶栏下沿那一刻由 `use-stuck.ts` 标 `data-stuck`，影换成抬起来那一档。
- * 胶囊键取紧凑档（32px）、透明底、一圈 `--glass-low`，
+ * The pill button takes the compact tier (32px), a transparent background and a ring of `--glass-low`,
  * 悬停换成 `--glass-rim` 边加 `--glass-pick-fill` 底——玻璃上的键不是 BoardUI 那种实心按钮。 */
 import { useRef, type ReactNode, type RefObject } from 'react';
 import { cx } from '@/utils/cx';
@@ -18,7 +18,7 @@ import './filter-glass.css';
 const BusyIcon = ({ className }: { className?: string }) => <span aria-hidden className={className}
   dangerouslySetInnerHTML={{ __html: spinnerHtml('Processing') }} />;
 
-/** 筛选栏动作使用紧凑档（`size="small"`，32px）和蓝色动作表面。 */
+/** Filter bar actions use the compact tier (`size="small"`, 32px) and the blue action surface. */
 export function FilterIconButton({ label, icon, busy = false, busyStyle = 'spinner', onPress, ...props }:
   Omit<IconButtonProps, 'aria-label' | 'size' | 'onClick'> & { label: string; busy?: boolean; busyStyle?: 'spinner' | 'strand'; onPress(): void }) {
   return <IconButton {...props} data-filter-action="" size="small" icon={busy && busyStyle === 'spinner' ? BusyIcon : icon}

@@ -14,7 +14,7 @@ function selection(table: SelectableTable, page: boolean) {
   return { all: rows.length > 0 && count === rows.length, some: count > 0 && count < rows.length };
 }
 
-/** 部分选中才显示半选；再次点击全选框会取消对应范围。 */
+/** A half-selected state is only shown on partial selection; clicking the select-all box again clears the corresponding range. */
 export function TableSelectionHeader({ table, label, page = false, disabled = false }: {
   table: SelectableTable; label: string; page?: boolean; disabled?: boolean;
 }) {

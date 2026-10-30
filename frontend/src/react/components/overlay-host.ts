@@ -1,11 +1,11 @@
 /* 弹层该挂到哪个容器里。
  *
- * 默认那一个在 `body` 末尾（`providers.tsx` 的 `overlayContainer`），对整页 island 够用。
- * 详情浮窗不是：舞台用 `showModal()` 开一个原生 `<dialog>`，而顶层元素排在所有 z-index
- * 之上——弹层落在 `body` 上就被详情页整个盖住，再大的 z-index 也压不过顶层，而盖住的样子
- * 和「弹层没画出来」在屏幕上看不出区别。所以弹层挂进那个已打开的 dialog；找不到就还是 `body`。
- * 舞台在自己那一层统一给出这个容器（`stage.tsx` 的 `UNSAFE_PortalProvider`），详情里的
- * 弹层、下拉与气泡不必各自包一层。
+ * The default one is at the end of `body` (`overlayContainer` in `providers.tsx`), which is enough for full-page islands.
+ * The detail popup is not: the stage opens a native `<dialog>` with `showModal()`, and top-layer elements rank above every z-index
+ * - an overlay placed on `body` is completely covered by the detail page, no z-index can beat the top layer, and being covered looks
+ * on screen exactly like "the overlay was not drawn". So overlays are mounted into the already-open dialog; if none is found, `body` is used.
+ * The stage provides this container uniformly at its own level (`UNSAFE_PortalProvider` in `stage.tsx`), so overlays,
+ * dropdowns and popovers in the details need not each wrap their own layer.
  *
  * token、Preflight 与焦点规则都作用在 `.peach-react` 上，所以容器自己带这个类。
  * 每个 dialog 复用同一个容器，弹层关掉之后它留在那儿，下一次不必再建。
@@ -29,8 +29,8 @@ export function overlayHost(node: Element | null | undefined): HTMLElement {
 
 const LAYER = '[role="dialog"],[role="listbox"],[role="menu"]';
 
-/** 挂在 `modal` 里最上面那层弹层的对话框、列表或菜单；没有开着的层时为 `null`。
- *  容器里还有焦点范围的哨兵等非弹层节点，按从后往前取第一个是层或含层的子元素。 */
+/** The dialog, list or menu of the topmost overlay layer inside `modal`; `null` when no layer is open.
+ *  The container also holds non-overlay nodes such as focus-scope sentinels, so take the first one from the back that is a layer or contains one. */
 export function topOverlay(modal: HTMLElement): HTMLElement | null {
   const host = modal.querySelector(':scope > [data-react-overlays]');
   for (let node = host?.lastElementChild; node; node = node.previousElementSibling) {
@@ -40,10 +40,10 @@ export function topOverlay(modal: HTMLElement): HTMLElement | null {
   return null;
 }
 
-/** 全站 Toast 栈（`#toasts`）跟着模态 dialog 进出：传开着的 dialog 就挪进去，传 `null` 放回 `body`。
- *  栈留在 `body` 上时被顶层的详情浮窗整个盖住，回执发了也看不见；挪进 dialog 才在它之上，
- *  也不落进模态 dialog 之外那片 inert 区，「撤销」照样点得到。dialog 卸掉之前必须先放回，
- *  否则栈跟着 dialog 一起离开文档。 */
+/** The site-wide Toast stack (`#toasts`) follows modal dialogs in and out: pass the open dialog to move it inside, pass `null` to put it back in `body`.
+ *  When the stack stays on `body` it is completely covered by the top-layer detail popup, so a receipt is sent but cannot be seen; moved into the dialog it sits above it,
+ *  and does not land in the inert area outside the modal dialog, so "Undo" can still be clicked. Before the dialog is unmounted it must be put back,
+ *  otherwise the stack leaves the document along with the dialog. */
 export function adoptToasts(modal: HTMLDialogElement | null): void {
   const host = document.getElementById('toasts');
   const parent = modal?.open ? modal : document.body;

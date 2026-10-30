@@ -18,8 +18,8 @@ import { ExternalLink, FieldLabel, Help } from '../settings/section';
 import { busyProps, useAction } from '../settings/use-action';
 import { followFeedByName, lookupFeedActor, type FeedCandidate, type FeedLookup } from './follow-manage';
 
-const PLACEHOLDER = '输入女优名，到 JavDB 找她的演员页';
-const TITLE = '添加 JAV 订阅';
+const PLACEHOLDER = 'Enter a performer name to find her profile page on JavDB';
+const TITLE = 'Add JAV subscription';
 
 export interface AddFeedProps {
   readOnly: boolean;
@@ -122,7 +122,7 @@ export function AddFeed({ readOnly, toast, onAdded }: AddFeedProps) {
             <Help role="status">{picked.size ? where!.text : 'Select her performer card; if both the censored and uncensored entries are hers, select both.'}</Help>
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
-            <Button variant="secondary" size="small" onClick={close}>关闭</Button>
+            <Button variant="secondary" size="small" onClick={close}>Close</Button>
             {result.candidates.length ? (
               <Button variant="primary" size="small" disabled={readOnly || !picked.size || where!.blocked}
                 {...busyProps(action.busy === 'follow')} onClick={add}>{`Add subscription (${picked.size})`}</Button>

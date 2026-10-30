@@ -144,7 +144,7 @@ def _get_index(contract, args):
 
 
 def _get_stats(contract, _args):
-    # 账本那一段在 `q_stats` 里按版本缓存，存储卷每次现量。
+    # The ledger section is cached by version in `q_stats` and storage volumes are measured fresh each time.
     return q_stats(contract)
 
 
@@ -186,7 +186,7 @@ def _get_related(contract, args):
         f"related:{asset_id}:{limit}", lambda: q_related(contract, asset_id, limit))
 
 
-#: 按账本版本缓存的筛选项口径：状态页与取值有限的几组筛选。
+#: Filter-option criteria cached by ledger version: the status page and the few filters with finite values.
 FACET_STATES = frozenset({"", "fresh", "played", "flagged", "later"})
 FACET_ENUM_FILTERS = frozenset({"loc", "len", "orient", "region", "exclude_vertical", "thumb", "library"})
 
@@ -211,8 +211,8 @@ def _get_facets(contract, args):
         jav=jav, scope_kind=scope_kind, scope_name=scope_name, asset_id=asset_id,
         state=state, filters=filters or None,
     )
-    # 首页与侧栏几组枚举筛选（来源、时长、画幅、产地、媒体库）的组合有限，按账本版本缓存；
-    # 实体、详情、搜索词、标签与时长区间的键空间不封闭，照旧走 TTL 缓存。
+    # The combinations of the enumerated filters on the home page and sidebar (source, duration, aspect ratio, origin, media library) are finite, so they are cached by ledger version;
+    # The key space of entities, details, search terms, tags and duration ranges is open, and they still use the TTL cache.
     if (not (scope_kind or scope_name or asset_id is not None) and state in FACET_STATES
             and set(filters) <= FACET_ENUM_FILTERS):
         library = (repr(media_libraries.predicate(settings_file.active(), filters['library']))
@@ -337,7 +337,7 @@ def _post_empty_trash(contract, _body):
 
 
 def _post_face_models(contract, _body):
-    """活动中心「立即重试」：后台开一轮取人脸模型，进度与结果看 `/api/tasks`。"""
+    """Activity Center "Retry now": start a round in the background to fetch the face models, with progress and results viewed in `/api/tasks`."""
     from . import face_models
     return contract.face_models_job.start_result(face_models.download_all)
 
@@ -497,7 +497,7 @@ READ_ONLY_POST_ROUTES = frozenset({
     "/api/media-repair",
     # 整理的预览只出一份计划 CSV，不动文件也不改账本；执行与回滚不在这里。
     "/api/organize/preview",
-    # 人脸模型存在本机 tools 目录，取一次不碰账本。
+    # The face models live in the machine's tools directory, and fetching once does not touch the ledger.
     "/api/face-models",
 })
 # `/api/resource-sync/apply` 不在上面：它永久删除文件已不在盘上的账本行，走的是

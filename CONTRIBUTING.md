@@ -2,22 +2,22 @@
 
 Issues and pull requests are welcome. Maintainer-authored changes follow the same PR workflow. Small fixes (bugs, copy, documentation, tests) can go straight to a PR; complex bugs and large changes — new features, default behavior, connectors, contract or data-layer changes, anything an ADR covers — should have an issue first. Read [`AGENTS.md`](AGENTS.md) before opening a PR: it is the single entry point for development rules, and reviews follow it. Each platform has exactly one test entry point: `& .\scripts\test.ps1` on Windows and `./scripts/test.sh` on macOS/Linux. By submitting a contribution you agree to license it under AGPL-3.0-or-later. The rest of this document is in Chinese.
 
-Peach 是单人自托管应用，由一个人维护。欢迎提 Issue 和 PR。维护者自己的改动也遵循同一套流程，通过 PR 保留审阅与验证记录。
+Peach is a single-user self-hosted app, maintained by one person. Issues and PRs are welcome. The maintainer's own changes follow the same process, keeping review and verification records through PRs.
 
-- 小修（修缺陷、改文案、补文档、补测试）可以直接提 PR。
-- 复杂缺陷和大改动（新功能、新页面、新连接器、默认行为、接口约定或数据层、涉及 ADR 的方向）先有 issue，复用已有问题记录。
+- Small fixes (bug fixes, copy changes, docs, tests) can go straight to a PR.
+- Complex bugs and large changes (new features, new pages, new connectors, default behavior, interface contracts or the data layer, directions touching an ADR) start with an issue, reusing existing issue records.
 
 By submitting a contribution you agree to license it under AGPL-3.0-or-later.
 
 ## Opening an issue
 
-公开截图、录屏和附件使用不含露骨画面的演示资料，并遮盖隐私信息；不要上传影片、封面原图或数据库。公开内容与素材许可要求见[文档规范](docs/WRITING.md#公开与私有记录)。
+Public screenshots, screen recordings and attachments use demo material with no explicit imagery, with privacy information masked; do not upload videos, original cover images or databases. For the requirements on public content and material licenses, see the [documentation guide](docs/WRITING.md#public-and-private-records).
 
 Use demo data without sexually explicit imagery in public screenshots, recordings and attachments. Redact private information, and do not upload videos, original cover images or databases.
 
-- **报缺陷**：写清 Peach 版本或构建、系统版本及架构、安装方式、复现步骤、期望结果和实际结果，附上完整报错。无法稳定复现时说明发生条件，不要求自行判断根因。Python 版本仅用于源码部署，可选；`/healthz` 返回也可选，服务无法启动时写「无法访问」即可。贴日志或诊断报告前先遮盖本机路径、网络地址、账号及凭据。
-- **提需求**：写清问题和使用场景。开放需求见 [公开路线图](https://github.com/orgs/peach-mitao/projects/7)，设计边界见 [总体架构](docs/ARCHITECTURE.md#明确不做)。涉及多用户、云托管、微服务或 PostgreSQL 的提案，先讨论是否需要新增 ADR。
-- **安全问题**：不要开公开 issue，按 [`SECURITY.md`](SECURITY.md) 私下报告。
+- **Reporting a bug**: state the Peach version or build, OS version and architecture, installation method, reproduction steps, expected result and actual result, and attach the complete error. If it cannot be reproduced reliably, describe the conditions under which it occurs; you are not required to work out the root cause yourself. The Python version applies only to source deployments and is optional; the `/healthz` response is also optional, and if the service cannot start, write "unreachable". Mask local paths, network addresses, accounts and credentials before pasting logs or diagnostic reports.
+- **Requesting a feature**: state the problem and the usage scenario. For open requests see the [public roadmap](https://github.com/orgs/peach-mitao/projects/7), and for design boundaries the [overall architecture](docs/ARCHITECTURE.md#explicitly-not-doing). For proposals involving multi-user, cloud hosting, microservices or PostgreSQL, first discuss whether a new ADR is needed.
+- **Security issues**: do not open a public issue; report privately following [`SECURITY.md`](SECURITY.md).
 
 ## Issue handling rules
 
@@ -61,25 +61,25 @@ For GitHub's field and template mechanisms, see [Issue types](https://docs.githu
 
 Read [`AGENTS.md`](AGENTS.md) first; it is the single entry point for development rules, and PR review follows it. For branch, staging and commit details, see [`.claude/skills/peach-worktree/SKILL.md`](.claude/skills/peach-worktree/SKILL.md). The three rules most easily broken:
 
-1. 不用 `git add .`、`git add -A`、目录路径或通配符，只暂存这次改动的文件。
-2. 实现和它的测试放在同一个提交里。
-3. 一个 PR 对应可独立验收的目标。同一目标的实现、测试及必要的 CI、升级补修放在同一个 PR，按逻辑分提交并共享验证；无关需求独立评审，确需拆分时说明独立交付或隔离的理由。在「影响面」表里说明数据层、API、页面、契约、测试和文档的实际影响，不适用的写明原因。
+1. Do not use `git add .`, `git add -A`, directory paths or wildcards; stage only the files changed this time.
+2. Keep an implementation and its tests in the same commit.
+3. One PR corresponds to an independently acceptable goal. The implementation, tests and necessary CI and upgrade repairs for the same goal go in the same PR, split into commits logically and sharing verification; unrelated needs are reviewed independently, and when a split is truly needed, state the reason for independent delivery or isolation. In the "Impact" table, state the actual impact on the data layer, API, pages, contracts, tests and docs, and give the reason for any that do not apply.
 
-### 变更性质与行为边界
+### Nature of the Change and Behavior Boundaries
 
-修复说明具体触发、实际错误和既有预期的依据；新功能、主动调整默认行为或设计时说明使用场景、现有能力的不足与取舍，取得维护者对方向的确认。恢复已确认预期的修复按常规验证与集成流程处理。混合 PR 分别说明各部分，不能仅凭 `fix` 标题或测试通过判定为修复。
+A fix states the specific trigger, the actual error and the basis for the existing expectation; a new feature or a deliberate change to default behavior or design states the usage scenario, the shortfall of existing capabilities and the trade-offs, and obtains the maintainer's confirmation of the direction. A fix that restores a confirmed expectation follows the normal verification and integration flow. A mixed PR describes each part separately, and cannot be judged a fix merely from a `fix` title or passing tests.
 
-范围按实际资源和操作判断：同一作品不代表所有版本共享同一份图片；共享资源与独立资源分别验证。改变图片内容、数据归属或处理范围时说明对既有用户的影响，控制项按实际场景设计，不要求所有行为都新增开关。
+Scope is judged by the actual resources and operations: the same work does not mean all versions share one image; shared and independent resources are verified separately. When changing image content, data ownership or processing scope, state the impact on existing users; design controls for the actual scenario, and not every behavior needs a new switch.
 
-### AI 参与与提交责任
+### AI Involvement and Submitter Responsibility
 
-允许 AI 辅助方案、代码、测试、文档和 PR 文字。使用时简短说明参与范围，以及提交者实际检查的内容；不要求提供提示词或模型名称，提交里也不需要加 AI 署名。
+AI assistance with plans, code, tests, docs and PR text is allowed. When used, briefly state the scope of involvement and what the submitter actually checked; prompts or model names are not required, and no AI attribution is needed in commits.
 
-维护者采纳社区补丁时保留原作者为提交作者，用 `Source-PR`、`Original-Commit` 记录来源，不替贡献者补加 AI 署名。提交里的智能体署名表示维护侧智能体的改写或补充，只在它确实改动了代码时出现，不代表贡献者使用了 AI。署名门槛只检查维护者本机提交者自己的提交，见工作树交付约定。
+When the maintainer adopts a community patch, the original author is kept as the commit author, and `Source-PR` and `Original-Commit` record the source; no AI attribution is added on the contributor's behalf. An agent attribution in a commit means a rewrite or addition by the maintainer-side agent, appears only when it actually changed the code, and does not mean the contributor used AI. The attribution gate checks only the commits of the maintainer's own local committer, see the worktree delivery conventions.
 
-提交者对最终内容负责，能够解释设计与取舍，并核对代码、说明和验证结果。未运行的测试、跳过项、未取得的样本和待原环境验收的部分在「测试结果」中明确标注，不把推测写成已验证结论。维护者按影响和风险评审，授权与确认边界见 `AGENTS.md`。
+The submitter is responsible for the final content, can explain the design and trade-offs, and checks the code, descriptions and verification results. Tests not run, skipped items, samples not obtained and parts awaiting acceptance in the original environment are marked explicitly in "Test results", and speculation is not written up as verified conclusions. The maintainer reviews by impact and risk; for the authorization and confirmation boundaries see `AGENTS.md`.
 
-是否使用 AI 不凭文风、标签或提交通道推断；反馈按事实、上下文和可追查证据处理。报告者无需先使用 AI 排查，也无需自行确定根因。
+Whether AI was used is not inferred from writing style, labels or the submission channel; feedback is handled by facts, context and traceable evidence. Reporters need not use AI to investigate first, nor determine the root cause themselves.
 
 ## Testing
 

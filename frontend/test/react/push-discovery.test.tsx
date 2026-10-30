@@ -30,12 +30,12 @@ it.each(['https://192.0.2.10', 'http://192.0.2.10:38473'])(
   // 卡片自己就是 `secondary`，代码块用同一档等于没有块——底色要比它亮一级才看得出来。
   expect(host.querySelector('[data-code-block]')?.className).toContain('bg-background-tertiary-default');
   expect(host.querySelector('pre')?.textContent).toBe(toml);
-  expect(host.textContent).not.toContain('共享密钥');
-  expect(host.textContent).not.toContain('通知地址');
-  await click(buttonNamed('复制配置', host));
+  expect(host.textContent).not.toContain('shared key');
+  expect(host.textContent).not.toContain('Notification address');
+  await click(buttonNamed('Copy configuration', host));
   await settle();
   expect(writeText).toHaveBeenCalledWith(toml);
-  expect(receipt).toHaveBeenCalledWith('已复制 CloudDrive2 配置');
+  expect(receipt).toHaveBeenCalledWith('CloudDrive2 configuration copied');
 });
 
 it('配置块默认收起，横向滚动用全站的覆盖式滑块', async () => {
@@ -57,8 +57,8 @@ it('这台机器没有局域网地址时说明生成条件', async () => {
   const host = await mount(
     <PushDiscoveryForm initial={state({ origin: '', config_toml: '' })} receipt={vi.fn()} />);
   expect(host.querySelector('pre')).toBeNull();
-  expect(buttonNamed('复制配置', host)).toBeNull();
-  expect(host.textContent).toContain('要先有 CloudDrive2 能访问的局域网地址');
+  expect(buttonNamed('Copy configuration', host)).toBeNull();
+  expect(host.textContent).toContain('A local network address that CloudDrive2 can reach is needed');
 });
 
 it('配置块跟着已保存的开关走，拨一下不算数', async () => {
@@ -82,9 +82,9 @@ it('入库失败时给出服务端记下的原因与失败数，没有失败时�
   const queue = { ...state().queue, failed: 2, last_error: 'database is locked' };
   const failing = await mount(<PushDiscoveryForm initial={state({ queue })} receipt={vi.fn()} />);
   const alert = failing.querySelector('[role="alert"]');
-  expect(alert?.textContent).toContain('最近一次入库失败');
+  expect(alert?.textContent).toContain('Most recent import failed');
   expect(alert?.textContent).toContain('database is locked');
-  expect(failing.textContent).toContain('已入库 3 个文件，2 个入库失败');
+  expect(failing.textContent).toContain('Imported 3 files, 2 failed to import');
 
   const healthy = await mount(<PushDiscoveryForm initial={state()} receipt={vi.fn()} />);
   expect(healthy.querySelector('[role="alert"]')).toBeNull();

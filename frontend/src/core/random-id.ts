@@ -1,7 +1,7 @@
-/* 浏览器只在 HTTPS 与 localhost 页面提供 `crypto.randomUUID`；局域网按 HTTP 打开时它不存在。
- * `getRandomValues` 在任何页面都可用，用它按 RFC 9562 拼出同格式的 v4 UUID，服务端按 UUID 校验的身份照常通过。 */
+/* Browsers only provide `crypto.randomUUID` on HTTPS and localhost pages; it does not exist when a LAN is opened over HTTP.
+ * `getRandomValues` is available on any page, and with it a v4 UUID of the same format is assembled per RFC 9562, so identities the server validates as UUIDs pass as usual. */
 
-/** 随机 v4 UUID，HTTP 页面也可用。 */
+/** Random v4 UUID, usable on HTTP pages as well. */
 export function randomId(): string {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
   const bytes = crypto.getRandomValues(new Uint8Array(16));

@@ -46,13 +46,13 @@ export function CoverCrop({ code, coverUrl, box, onSaved }: CoverCropProps) {
   return (
     <>
       <button type="button" aria-haspopup="dialog" data-cover-crop
-        aria-label={`裁剪 ${code} 的封面`} title="裁剪封面：框出正封那一块"
+        aria-label={`Crop the cover of ${code}`} title="Crop cover: box the front cover area"
         onClick={() => setOpen(true)}
         className="flex size-7 cursor-pointer items-center justify-center rounded-lg text-foreground-icon-secondary outline-none transition-colors hover:bg-background-primary-hover hover:text-foreground-icon-primary focus-visible:ring-2 focus-visible:ring-border-focus-ring">
         <CropIcon className="size-3.75" />
       </button>
-      {/* 详情浮窗是顶层的原生 dialog，弹层由舞台统一挂进同一层（`stage.tsx`）。 */}
-      <ModalFrame isOpen={open} onOpenChange={setOpen} width="cover-crop" label="裁剪封面">
+      {/* The detail popup is a top-layer native dialog, and the overlay is mounted into the same layer uniformly by the stage (`stage.tsx`). */}
+      <ModalFrame isOpen={open} onOpenChange={setOpen} width="cover-crop" label="Crop cover">
         <CropBody code={code} coverUrl={coverUrl} box={box} onSaved={onSaved}
           close={() => setOpen(false)} />
       </ModalFrame>

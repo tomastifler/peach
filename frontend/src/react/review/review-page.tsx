@@ -4,7 +4,7 @@
  * 打开页面不会再触发一次写操作。
  *
  * 地址栏与组件状态的分界（ADR-0031「迁移桥接」）：
- * - `category` 与 `queue` 在地址栏上，分类和处理状态都能通过链接及刷新还原，
+ * - `category` and `queue` are in the address bar, so the category and status can be restored through links and refreshes,
  *   刷新也要还原——判到一半按了刷新却被扔回元数据字段，等于重新找位置。
  * - 分组、筛选、页码是组件状态。复核队列是消耗性的：判一条它就少一条，第 3 页指的是
  *   哪二十行随每一次判定而变，写进地址栏分享出去只会指向另一批东西。换分类、换分组、
@@ -44,9 +44,9 @@ function Pagination(
 ) {
   if (pages <= 1) return null;
   return (
-    <nav aria-label="复核分页" data-pagination-layout="" className="inline-grid w-full min-w-0 items-center gap-2">
+    <nav aria-label="Review pagination" data-pagination-layout="" className="inline-grid w-full min-w-0 items-center gap-2">
       <Button variant="secondary" size="small" disabled={page <= 1}
-        onClick={() => onPage(page - 1)}>上一页</Button>
+        onClick={() => onPage(page - 1)}>Previous page</Button>
       <ul className="flex min-w-0 flex-wrap items-center justify-center gap-1">
         {paginationRange(page, pages).map((item, at) => (
           <li key={item === DOTS ? `dots-${at}` : item}>
@@ -182,7 +182,7 @@ export function ReviewPage(props: ReviewProps) {
     mutationFn: ({ row, status, category: target }: { row: ReviewRow; status: DecisionStatus; category: ReviewCategory }) =>
       submitDecision(decisionPayload(target, currentReviewRow(target, row), status, choiceOf(row))),
     onSuccess: (result, { row, status, category: target }) => {
-      if (!result.ok) { fail(row.item_key, result.error || '服务端拒绝了这次判定'); return }
+      if (!result.ok) { fail(row.item_key, result.error || 'The server rejected this decision'); return }
       settleReviewRows(target, [row.item_key], status);
       forget([row.item_key]);
       toast(decisionReceipt(status));
@@ -203,7 +203,7 @@ export function ReviewPage(props: ReviewProps) {
         setFeedback(`Processing ${at} / ${rows.length}`);
         try {
           const result = await submitDecision(decisionPayload(target, currentReviewRow(target, row), status, choiceOf(row)));
-          if (!result.ok) throw new Error(result.error || '服务端未采用该项');
+          if (!result.ok) throw new Error(result.error || 'The server did not adopt this item');
           done.push(row.item_key);
         } catch (cause) {
           failures.push([row.item_key, errorMessage(cause)]);
@@ -216,9 +216,9 @@ export function ReviewPage(props: ReviewProps) {
       forget(done);
       failures.forEach(([key, message]) => fail(key, message));
       setFeedback('');
-      const action = { approved: '通过', rejected: '忽略', skipped: '移至稍后处理', restore: '恢复待处理' }[status];
-      toast(`已${action} ${done.length} 项`
-        + (failures.length ? `，${failures.length} 项未完成` : ''));
+      const action = { approved: 'Approved', rejected: 'Ignored', skipped: 'Moved to handle later', restore: 'Restored to pending' }[status];
+      toast(`${action} ${done.length} items`
+        + (failures.length ? `, ${failures.length} items not completed` : ''));
     },
     onError: (cause) => { setFeedback(errorMessage(cause)) },
   });
@@ -270,7 +270,7 @@ export function ReviewPage(props: ReviewProps) {
         <Note tone="warning" title="Browse-only on this device"
           extra={writerUrl
             ? <p className="text-body-2-regular">
-                <ExternalLink href={writerUrl}>前往写入端复核</ExternalLink>
+                <ExternalLink href={writerUrl}>Review on the writer</ExternalLink>
               </p>
             : undefined}>
           {mirror}
@@ -284,7 +284,7 @@ export function ReviewPage(props: ReviewProps) {
         if (isReviewCategory(next)) goCategory(next);
       }} className="flex flex-col gap-5 review-split:flex-row review-split:items-start review-split:gap-6">
         <div data-section-nav className="w-full min-w-0 review-split:sticky review-split:top-topbar review-split:w-review-tabs review-split:shrink-0">
-          <h2 id="reviewcategories">复核分类</h2>
+          <h2 id="reviewcategories">Review categories</h2>
           <PillAriaTabList scrollable={narrow} aria-labelledby="reviewcategories" data-section-items
             className="flex review-split:flex-col review-split:items-stretch">
             {REVIEW_CATEGORIES.map((key) => {
@@ -366,19 +366,19 @@ export function ReviewPage(props: ReviewProps) {
             </section>
           )) : review.isError && !review.data ? (
             /* 读不到队列和队列是空的不是一回事：说清楚是读取失败，给一颗重试键。 */
-            <Note tone="error" title="复核队列读取失败" action={
-              <Button variant="secondary" size="small" disabled={review.isFetching} onClick={() => void review.refetch()}>立即重试</Button>
+            <Note tone="error" title="Could not load the review queue" action={
+              <Button variant="secondary" size="small" disabled={review.isFetching} onClick={() => void review.refetch()}>Retry</Button>
             }>
               {errorMessage(review.error)}
             </Note>
           ) : (
-            <EmptyState icon={RiCheckboxCircleLine} title={`此分类没有${REVIEW_QUEUE_LABELS[queueView]}项目`}
+            <EmptyState icon={RiCheckboxCircleLine} title={`No ${REVIEW_QUEUE_LABELS[queueView]} items in this category`}
               actions={REVIEW_CATEGORIES.some(key => key !== category && Number(snapshot.counts[key] || 0) > 0)
                 ? <Button size="small" onClick={() => {
                     const next = REVIEW_CATEGORIES.find(key => key !== category && Number(snapshot.counts[key] || 0) > 0);
                     if (next) goCategory(next);
-                  }}>查看其他分类</Button> : undefined}>
-              {queueView === 'pending' ? '可切换分类查看其他待确认资料。' : `${REVIEW_QUEUE_LABELS[queueView]}的资料会保留在这里，可恢复到待处理。`}
+                  }}>View other categories</Button> : undefined}>
+              {queueView === 'pending' ? 'Switch category to see other details awaiting confirmation.' : `${REVIEW_QUEUE_LABELS[queueView]} details stay here and can be restored to pending.`}
             </EmptyState>
           )}
 

@@ -2891,7 +2891,7 @@ class LibraryWatchdogTests(unittest.TestCase):
         self.assertTrue(live['stalled'])
         dead = snapshot(config)
         self.assertEqual(dead['status'], 'failed')
-        self.assertIn('中断', dead['error'])
+        self.assertIn('interrupted', dead['error'])
         self.assertEqual(json.loads(path.read_text(encoding='utf-8'))['status'], 'failed')
         # 另一个读取者正好占着锁时读到的也是同一个结论，不会跳回「运行中」。
         with FileLock(str(path) + '.lock', timeout=0):
@@ -3204,9 +3204,9 @@ class LibraryWatchdogTests(unittest.TestCase):
             self.assertEqual(run.call_args.kwargs['stage'], 'all')
             w_library_processing(contract, {'incremental':True})
             self.assertTrue(run.call_args.kwargs['incremental'])
-            with self.assertRaisesRegex(ValueError, '开关值'):
+            with self.assertRaisesRegex(ValueError, 'switch value'):
                 w_library_processing(contract, {'incremental':'true'})
-            with self.assertRaisesRegex(ValueError, '只支持扫描或同步'):
+            with self.assertRaisesRegex(ValueError, 'supports only scan or sync'):
                 w_library_processing(contract, {'stage':'metadata','incremental':True})
             with self.assertRaises(ValueError):
                 w_library_processing(contract, {'stage': 'thumbnails'})

@@ -17,13 +17,13 @@ it('刮削导出按番号启动任务并保留服务端失败原因', async () =
   const host = await mount(<QueryClientProvider client={queryClient}><ScrapingExport /></QueryClientProvider>);
   const input = host.querySelector('input')!;
   await type(input, 'ABC-123, DEF-456');
-  await click(buttonNamed('导出刮削记录', host)!);
+  await click(buttonNamed('Export scraping records', host)!);
   await settle();
   const request = fetch.mock.calls.find(([, options]) => options?.method === 'POST')!;
   expect(request[0]).toBe('/api/diagnostics/exports');
   expect(JSON.parse(String(request[1]?.body))).toEqual({ kind: 'scraping', codes: 'ABC-123, DEF-456' });
   expect(host.textContent).toContain('请填写有效番号，单次最多 20 个');
-  expect(buttonNamed('导出刮削记录', host)?.getAttribute('aria-busy')).not.toBe('true');
+  expect(buttonNamed('Export scraping records', host)?.getAttribute('aria-busy')).not.toBe('true');
 });
 
 it('刮削记录显示后台进度并支持取消', async () => {
@@ -34,17 +34,17 @@ it('刮削记录显示后台进度并支持取消', async () => {
   const host = await mount(<QueryClientProvider client={queryClient}><ScrapingExport /></QueryClientProvider>);
   await settle();
   expect(host.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('2');
-  expect((buttonNamed('导出刮削记录', host) as HTMLButtonElement).disabled).toBe(true);
-  await click(buttonNamed('取消导出', host));
+  expect((buttonNamed('Export scraping records', host) as HTMLButtonElement).disabled).toBe(true);
+  await click(buttonNamed('Cancel export', host));
   await settle();
-  expect(host.textContent).toContain('导出已取消');
+  expect(host.textContent).toContain('Export cancelled');
   expect(host.querySelector('[role="progressbar"]')).toBeNull();
   expect(fetch).toHaveBeenCalledWith('/api/diagnostics/exports/export/cancel', expect.objectContaining({ method: 'POST' }));
 });
 const data = (): DiagnosticReport => ({ version: 'test', status: 'warning', checks: {
   media_mounts: { label: '媒体挂载', status: 'warning', reason: '来源不存在', action: '检查媒体目录', target: '/settings/library', details: {} },
   security: { label: '访问安全', status: 'warning', reason: '密码未开启', action: '开启密码', target: '/settings/library', details: {} },
-  data_root: { label: '数据目录', status: 'failed', reason: '没有权限', action: '调整权限', target: null, details: {} },
+  data_root: { label: 'Data folder', status: 'failed', reason: '没有权限', action: '调整权限', target: null, details: {} },
 }, library: { issue_at: null, groups: {
   duration: { label: '缺时长', count: 2, status: 'ok', truncated: false, items: [
     { id: 1, code: 'ABC-123', title: '作品甲', name: '甲.mp4', path: 'R:\\Media\\甲.mp4', location: 'local', duration: null, size: 1024 },
@@ -60,10 +60,10 @@ async function open(report = data()) {
 }
 it('诊断跳到具体配置分栏，系统权限项只显示动作', async () => {
   const { host } = await open();
-  expect(linkNamed('打开媒体库与入库', host)?.getAttribute('href')).toBe('/settings/library');
-  expect(linkNamed('打开网络与访问', host)?.getAttribute('href')).toBe('/settings/network');
-  expect(buttonNamed('打开媒体库与入库', host)).toBeNull();
-  const root = [...host.querySelectorAll('h3')].find(node => node.textContent === '数据目录')!.parentElement!.parentElement!;
+  expect(linkNamed('Open Library & import', host)?.getAttribute('href')).toBe('/settings/library');
+  expect(linkNamed('Open Network & access', host)?.getAttribute('href')).toBe('/settings/network');
+  expect(buttonNamed('Open Library & import', host)).toBeNull();
+  const root = [...host.querySelectorAll('h3')].find(node => node.textContent === 'Data folder')!.parentElement!.parentElement!;
   expect(root.textContent).toContain('调整权限');
   expect(root.querySelector('button, a')).toBeNull();
   expect(host.textContent).toContain('当前解析状态未取得');
@@ -79,7 +79,7 @@ it('展开作品表格并复制可识别信息；零结果有独立空态', asyn
   await settle();
   expect(clipboard.mock.calls[0][0]).toContain('作品甲\tABC-123\t甲.mp4\tLocal\tR:\\Media\\甲.mp4');
   expect(clipboard.mock.calls[0][0]).toContain('作品乙\t\t乙.mp4\tLocal\tR:\\Media\\乙.mp4');
-  expect(host.textContent).toContain('Unidentified');
+  expect(host.textContent).toContain('Not recognized');
   expect(props.receipt).toHaveBeenCalledWith('List copied');
   expect(host.querySelector('[data-empty-state]')?.textContent).toContain('List is empty');
 });
@@ -88,17 +88,17 @@ it('请求失败保留原因和重试入口', async () => {
   const props = { openItem: vi.fn(), receipt: vi.fn() };
   const host = await mount(<QueryClientProvider client={queryClient}><DiagnosticsPage {...props} /></QueryClientProvider>);
   await settle();
-  expect(host.textContent).toContain('Could not load diagnostics');
+  expect(host.textContent).toContain('Failed to load diagnostics');
   expect(host.textContent).toContain('请在运行 Peach 的电脑上打开系统诊断');
-  expect(buttonNamed('Check again', host)).not.toBeNull();
+  expect(buttonNamed('Recheck', host)).not.toBeNull();
 });
 it('异常检查位于首区，其他检查可展开且没有重复条目', async () => {
   const report = data();
   report.checks.database = { label: '数据库', status: 'ok', reason: '可读取', action: '', target: null, details: {} };
   const { host } = await open(report);
-  const priority = host.querySelector('section[aria-label="Needs attention · 3 items"]');
+  const priority = host.querySelector('section[aria-label="Needs attention · 3"]');
   expect(host.querySelector('section')).toBe(priority);
-  expect([...priority!.querySelectorAll('h3')].map(node => node.textContent)).toEqual(['媒体挂载', '访问安全', '数据目录']);
+  expect([...priority!.querySelectorAll('h3')].map(node => node.textContent)).toEqual(['媒体挂载', '访问安全', 'Data folder']);
   for (const check of Object.values(report.checks)) {
     expect([...host.querySelectorAll('h3,h4')].filter(node => node.textContent === check.label)).toHaveLength(1);
   }
@@ -114,10 +114,10 @@ it('恢复动作的名称与实际目标一致', async () => {
   report.checks.ffmpeg = { label: '媒体工具', status: 'warning', reason: '缺少 FFmpeg', action: '安装工具', target: '/settings/maintenance', details: {} };
   report.checks.tasks = { label: '后台任务', status: 'warning', reason: '有任务失败', action: '查看原因', target: '/tasks', details: {} };
   const { host } = await open(report);
-  expect(linkNamed('打开网络与访问', host)?.getAttribute('href')).toBe('/settings/network');
-  expect(linkNamed('打开应用与维护', host)?.getAttribute('href')).toBe('/settings/maintenance');
-  expect(linkNamed('查看任务', host)?.getAttribute('href')).toBe('/tasks');
-  expect(linkNamed('打开来源和凭证', host)?.getAttribute('href')).toBe('/sources');
+  expect(linkNamed('Open Network & access', host)?.getAttribute('href')).toBe('/settings/network');
+  expect(linkNamed('Open App & maintenance', host)?.getAttribute('href')).toBe('/settings/maintenance');
+  expect(linkNamed('View tasks', host)?.getAttribute('href')).toBe('/tasks');
+  expect(linkNamed('Open sources and credentials', host)?.getAttribute('href')).toBe('/sources');
 });
 
 it('诊断报告启动时附浏览器环境，产物使用直接下载链接', async () => {
@@ -136,5 +136,5 @@ it('诊断报告启动时附浏览器环境，产物使用直接下载链接', a
   const bytes = Uint8Array.from(atob(header), value => value.charCodeAt(0));
   expect(JSON.parse(new TextDecoder().decode(bytes)).native_codecs).toHaveProperty('h264');
   expect(create).not.toHaveBeenCalled();
-  expect(linkNamed('下载已生成的文件', host)?.getAttribute('href')).toBe('/api/diagnostics/exports/report/download');
+  expect(linkNamed('Download the generated file', host)?.getAttribute('href')).toBe('/api/diagnostics/exports/report/download');
 });

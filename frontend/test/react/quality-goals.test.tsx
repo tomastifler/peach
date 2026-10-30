@@ -150,7 +150,7 @@ it('搜索资源原地打开云下载弹层，带入番号与原版本目标；�
 
 it('一条目标都没有时给空态，不是一片白', async () => {
   const { host } = await open(payload([]));
-  expect(host.querySelector('h3')?.textContent).toBe('No HD targets marked');
+  expect(host.querySelector('h3')?.textContent).toBe('No HD upgrade targets marked');
   expect(host.querySelector('li[data-goal-id]')).toBeNull();
 });
 

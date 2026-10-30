@@ -1,5 +1,5 @@
 /* 滚动那一组：横排的滚轮转向、拖动与橡皮筋、横排自动滚动、选中底板的滑动、Geist Scroller，
-   以及自动接管滚动区的覆盖式滚动条。由共享源码直接引用，随 `peach-app.js` 发出；
+   and the overlay scrollbar that automatically takes over scroll areas. Referenced directly from shared source and shipped with `peach-app.js`;
    已绑定的横排、自动滚动的那几排与弹簧取值都是模块级状态，只有一份。 */
 import { esc } from '../core';
 
@@ -80,12 +80,12 @@ export function wireHorizontalScroller(el:any,{drag=false,fade=true,wheel=true,e
   let start:{x:number;left:number}|null=null,moved=0,heldUntil=0,target=0,kicked=false,glide=0,glideAt=0,pos=0,pending=0;
   /* 值没变就不写：自动滚动每一帧都触发一次 `scroll`，同值重写属性照样让样式重算一遍。 */
   const mark=(key:string,value:string)=>{if(el.dataset[key]!==value)el.dataset[key]=value};
-  /* `overflow-x` 只在尺寸观察器回调里重新读：那一刻样式和布局刚算完，读它不触发重算。
-     滚动、滚轮里每次现读，会把上一次写进 `data-overflow-*` 弄脏的整棵样式树当场重算一遍。 */
+  /* `overflow-x` is re-read only in the size observer callback: at that moment style and layout have just been computed, so reading it does not trigger a recalculation.
+     Reading it live on every scroll or wheel event would recalculate on the spot the whole style tree dirtied by the last write of `data-overflow-*`. */
   let overflowX='';
   const scrollable=()=>{if(!overflowX)overflowX=getComputedStyle(el).overflowX;return ['auto','scroll','hidden'].includes(overflowX)};
   const update=()=>{if(options.fade){const active=scrollable();mark('overflowLeft',String(active&&el.scrollLeft>1));mark('overflowRight',String(active&&el.scrollLeft+el.clientWidth<el.scrollWidth-1))}};
-  /* 滚动事件一帧可能来好几次，渐隐标记合到下一帧写一次。 */
+  /* Several scroll events may arrive in one frame, so the fade markers are merged and written once in the next frame. */
   let marking=0;
   const scheduleUpdate=()=>{if(!marking)marking=requestAnimationFrame(()=>{marking=0;update()})};
   const listen=(target:EventTarget,event:string,handler:(event:any)=>void,extra={})=>target.addEventListener(event,handler,{...extra,signal:abort.signal});
@@ -146,21 +146,21 @@ export function wireHorizontalScroller(el:any,{drag=false,fade=true,wheel=true,e
   listen(window,'blur',endDrag);
   listen(el,'keydown',()=>{moved=0});
   listen(el,'click',event=>{if(moved>6){event.stopPropagation();event.preventDefault();moved=0}},{capture:true});
-  /* 尺寸观察器第一次回调就在本帧布局之后，初次的渐隐标记也由它写：挂上的那一刻页面多半
-     刚插完一批节点，当场量会把整棵样式树提前重算一遍。内容增删时重挂观察器，新挂上的
-     子元素会再回调一次；只删不增的那种由下一帧补写。 */
+  /* The size observer's first callback comes right after this frame's layout, and the initial fade markers are written by it too: at the moment of attaching the page has most likely
+     just finished inserting a batch of nodes, and measuring on the spot would recalculate the whole style tree early. The observer is re-attached when content is added or removed, and newly attached
+     children call back once more; the delete-only case is filled in by the next frame. */
   const resize=new ResizeObserver(()=>{overflowX='';update()});
   const observe=()=>{resize.observe(el);for(const child of el.children)resize.observe(child)};
   const contents=new MutationObserver(()=>{resize.disconnect();observe();scheduleUpdate()});
   contents.observe(el,{childList:true,characterData:true,subtree:true});observe();
-  // 外面手动叫的重算（换了版式、改了内容）连 `overflow-x` 一起重读。
+  // A recalculation called manually from outside (layout changed, content changed) re-reads `overflow-x` as well.
   const control={options,update(){overflowX='';update()},destroy(){abort.abort();stopGlide();cancelAnimationFrame(marking);marking=0;resize.disconnect();contents.disconnect();horizontalControls.delete(el);delete el.dataset.scrollGesture;el.style.cursor='';if(!horizontalControls.size){horizontalCleanup?.disconnect();horizontalCleanup=null}}};
   horizontalControls.set(el,control);
   if(!horizontalCleanup){horizontalCleanup=new MutationObserver(()=>{for(const [node,item] of horizontalControls)if(!node.isConnected)item.destroy()});horizontalCleanup.observe(document.body,{childList:true,subtree:true})}
   return control;
 }
 
-/** 表格使用横向拖动；滚轮维持浏览器行为，控件与列宽手柄独立处理指针。 */
+/** Tables use horizontal dragging; the wheel keeps browser behavior, and controls and column-width handles handle the pointer independently. */
 export function wireTableScroller(el:HTMLElement|null):any{
   return wireHorizontalScroller(el,{drag:true,fade:false,wheel:false,elastic:false,
     dragIgnore:'a,button,input,select,textarea,label,[role="button"],[role="checkbox"],[role="slider"],.react-aria-ColumnResizer'});
@@ -187,9 +187,9 @@ export function wireAutoScroll(el:any):void{
   const abort=new AbortController();
   let pos=el.scrollLeft,dir=1,last=0,frame=0,hovered=false,focused=false,onscreen=true,holdUntil=0,max=-1,resync=false;
   const listen=(target:EventTarget,type:string,fn:()=>void)=>target.addEventListener(type,fn,{passive:true,signal:abort.signal});
-  /* 在不在屏幕上交给共用的交叉观察器，回调里叫醒；循环里只读自己记下的状态。每帧量
-     `getBoundingClientRect()` 会在上一帧写完 `scrollLeft` 之后把整棵样式树当场重算。
-     交叉观察器不看 `visibility`：播放墙盖住页面时这一排几何上仍在屏幕里，按页面标记停。 */
+  /* Whether it is on screen is delegated to the shared intersection observer, which wakes it in a callback; the loop reads only the state it recorded. Measuring
+     `getBoundingClientRect()` every frame would, after the previous frame wrote `scrollLeft`, recalculate the whole style tree on the spot.
+     The intersection observer does not look at `visibility`: when the playback wall covers the page this row is still geometrically on screen, so it stops by the page marker. */
   const covered=()=>(document.body.hasAttribute('data-detail-open')&&!el.closest('#stage'))
     ||(document.body.hasAttribute('data-wall-open')&&!el.closest('[data-video-wall]'));
   const running=()=>el.isConnected&&onscreen&&!hovered&&!focused&&!document.hidden&&!covered();
@@ -200,8 +200,8 @@ export function wireAutoScroll(el:any):void{
     frame=requestAnimationFrame(tick);
     const dt=last?Math.min(now-last,64):0;last=now;
     if(now<holdUntil)return;
-    /* 循环里只写不读：可滚距离等尺寸变了才重量，人动过之后才回读一次位置。每帧读一次
-       `scrollWidth`，赶上别处刚改过样式（换主题、悬停、滚页面）就是一次整树重算。 */
+    /* The loop only writes and does not read: the scrollable distance is re-measured only when sizes change, and the position is read back once after the user has moved it. Reading once per frame
+       `scrollWidth`would trigger a whole-tree recalculation whenever styles were just changed elsewhere (theme change, hover, page scroll). */
     if(max<0)max=el.scrollWidth-el.clientWidth;
     if(resync){resync=false;pos=el.scrollLeft}
     if(max<=1)return;
@@ -214,8 +214,8 @@ export function wireAutoScroll(el:any):void{
   // 重画换掉了这一排时，挂在 document 上的监听要在下一次叫醒时跟着撤掉。
   const wake=()=>{if(!el.isConnected)stop();else if(!frame&&running()){last=0;frame=requestAnimationFrame(tick)}};
   const hold=()=>{holdUntil=performance.now()+AUTO_SCROLL_RESUME};
-  /* 人能滚这一排的时候指针一定在上面或焦点在里面（滚轮、拖动、触摸、方向键），那时循环已经停了；
-     离开时记下要回读位置，下一帧从人停下的地方接着走。 */
+  /* When a person can scroll this row, the pointer is certainly over it or focus is inside it (wheel, drag, touch, arrow keys), and the loop has already stopped by then;
+     on leaving, note that the position must be read back, and the next frame continues from where the person stopped. */
   listen(el,'pointerenter',()=>{hovered=true});
   listen(el,'pointerleave',()=>{hovered=false;resync=true;hold();wake()});
   listen(el,'focusin',()=>{focused=true});
@@ -289,8 +289,8 @@ export function moveGlidePane(
   }
   pane.style.translate=settled;
 }
-/* 底板上跑的只有上面这两段，自己记着撤：`getAnimations()` 要先把整份样式算到最新才答得上来，
-   侧栏开合那一下正好整页样式都脏着，读一次就是一次整树重算。 */
+/* Only the two segments above run on the backplate, and it remembers to cancel them itself: `getAnimations()` must first bring all styles up to date before it can answer,
+   and at the moment the sidebar opens or closes the whole page's styles are dirty, so one read is one whole-tree recalculation. */
 const glides=new WeakMap<HTMLElement,Animation[]>();
 export function cancelGlide(pane:HTMLElement|null|undefined):void{
   if(!pane)return;
@@ -340,13 +340,13 @@ export function wireScrollers(root:ParentNode=document):void{
 const BOARD_EDGE_SCROLLERS='.reviewtabs,.ftablewrap,.ui-board-local-nav,[data-manage-menu],'
   +'.follow-workspace-switch,.fmanagenav';
 
-/** 按实际 overflow 接管滚动容器；横向手势导航保留现有渐隐反馈。 */
+/** Takes over scroll containers by actual overflow; horizontal gesture navigation keeps the existing fade feedback. */
 export function wireOverlayScrollbars(root:ParentNode=document,subtree=true):void{
   const nodes=[...(root instanceof HTMLElement?[root]:[]),...(subtree?root.querySelectorAll<HTMLElement>('*'):[])];
   nodes.filter(el=>el instanceof HTMLElement&&el.matches(BOARD_EDGE_SCROLLERS)).forEach(el=>wireHorizontalScroller(el));
   const gesture=(el:HTMLElement)=>el.hasAttribute('data-horizontal-scroll')
     ||(horizontalControls.has(el)&&horizontalControls.get(el).options.fade!==false);
-  // 样式读取与轨道挂载分两段，避免每插入一条轨道就重新计算后面所有节点的样式。
+  // Style reading and track mounting are split into two phases, avoiding recalculating the styles of all following nodes each time a track is inserted.
   const candidates=nodes.flatMap<{el:HTMLElement;axes:readonly ('x'|'y')[]}>(el=>{
     if(!(el instanceof HTMLElement)||el===document.body||el===document.documentElement
       ||el.closest('.ovtrack,.ui-ov-edges'))return [];
@@ -362,7 +362,7 @@ export function wireOverlayScrollbars(root:ParentNode=document,subtree=true):voi
   candidates.forEach(({el,axes})=>axes.length?attachOverlayScrollbar(el,{axes}):detachOverlayScrollbar(el));
 }
 
-/** 按新增子树及样式变化增量接管滚动区；响应式布局改变时刷新整棵树。 */
+/** Takes over scroll areas incrementally by added subtrees and style changes; refreshes the whole tree when the responsive layout changes. */
 export function observeScrollRegions(root:HTMLElement=document.body):()=>void{
   let frame=0;
   const pending=new Map<HTMLElement,boolean>();

@@ -1,4 +1,4 @@
-export const FOLLOW_MANAGE_NAV = [['list', '关注列表'], ['add', '添加关注'], ['tags', '标签管理']] as const;
+export const FOLLOW_MANAGE_NAV = [['list', 'Follow list'], ['add', 'Add follow'], ['tags', 'Tag management']] as const;
 export const FOLLOW_MANAGE_TABS = FOLLOW_MANAGE_NAV.map(([key]) => key);
 export type FollowManageTab = (typeof FOLLOW_MANAGE_TABS)[number];
 export interface FollowManageRoute { tab: FollowManageTab; page: number; sort: string; dir: string }

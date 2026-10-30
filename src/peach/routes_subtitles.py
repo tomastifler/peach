@@ -23,7 +23,7 @@ def _track(text: str):
 
 @router.post("/api/subtitles/convert")
 async def convert_subtitle(request: Request, name: str = ""):
-    """上传文件转换为播放器支持的 WebVTT。"""
+    """Convert an uploaded file to the player-supported WebVTT."""
     data = bytearray()
     async for chunk in request.stream():
         data.extend(chunk)
@@ -38,12 +38,12 @@ async def convert_subtitle(request: Request, name: str = ""):
 def _memory(request: Request, video: str) -> subtitle_memory.SubtitleMemory:
     state = request.app.state
     if not subtitle_memory.VIDEO_KEY.fullmatch(video):
-        raise HTTPException(400, "视频标识无效")
+        raise HTTPException(400, "Invalid video identifier")
     kind, identity, *_ = video.split(":")
     table = "asset" if kind == "item" else "follow_item"
     with state.database.read_connection() as connection:
         if not connection.execute(f"SELECT 1 FROM {table} WHERE id=?", (int(identity),)).fetchone():
-            raise HTTPException(404, "视频不存在")
+            raise HTTPException(404, "Video does not exist")
     return subtitle_memory.SubtitleMemory(state.web_contract.follow_state_root / "player-subtitles", video)
 
 
@@ -70,7 +70,7 @@ async def remember_subtitles(request: Request, video: str):
     async for chunk in request.stream():
         data.extend(chunk)
         if len(data) > subtitle_memory.MAX_BYTES * 2:
-            return JSONResponse({"error": "字幕内容过大"}, status_code=413)
+            return JSONResponse({"error": "Subtitle content too large"}, status_code=413)
     try:
         value = json.loads(data)
         saved = await run_in_threadpool(memory.patch, value)
@@ -83,7 +83,7 @@ async def remember_subtitles(request: Request, video: str):
 def remembered_subtitle_track(request: Request, filename: str, video: str):
     path = _memory(request, video).track_path(filename)
     if path is None:
-        raise HTTPException(404, "字幕不存在")
+        raise HTTPException(404, "Subtitle does not exist")
     return FileResponse(path, media_type="text/vtt", headers={"Cache-Control": "private, no-cache"})
 
 

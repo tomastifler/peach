@@ -1,4 +1,4 @@
-"""馆藏任务的逐目录流量读数、连接分账与预估。"""
+"""Per-directory traffic readings, connection accounting and estimates for library tasks."""
 from __future__ import annotations
 
 import math
@@ -40,7 +40,7 @@ def record_media_read(path, size):
 
 
 def media_statistics(path, stderr, *, kind=None, successful=False):
-    """FFmpeg 的输入读取量；挂载缓存和预读由挂载工具管理。"""
+    """FFmpeg input read volume; mount caches and read-ahead are managed by the mount tool."""
     meter = CURRENT.get()
     if meter is None:
         return
@@ -86,9 +86,9 @@ class ProcessingTraffic:
                     label=config.library_names.get(root) or root, root=root, location=location,
                     metered=connection == 'proxy', connection=connection, network=network,
                     used_bytes=0, remaining_min=0, remaining_max=0, unobserved=[])
-        for key, label, metered in [('metadata', '影片资料', True),
-                                     ('metadata-proxy', '影片资料', True),
-                                     ('metadata-direct', '影片资料', False)]:
+        for key, label, metered in [('metadata', 'Movie metadata', True),
+                                     ('metadata-proxy', 'Movie metadata', True),
+                                     ('metadata-direct', 'Movie metadata', False)]:
             self.rows[key] = dict(label=label, root='', location='metadata', metered=metered,
                 connection='proxy' if metered else 'direct',
                 network=True, used_bytes=0, remaining_min=0, remaining_max=0, unobserved=[])
@@ -141,7 +141,7 @@ class ProcessingTraffic:
         return max(candidates)[1] if candidates else None
 
     def refresh_plan(self, rows=None):
-        """账本统计不访问媒体目录；保护开启的目录不预估自动探测。"""
+        """Ledger statistics do not access media directories; directories with protection enabled get no automatic-probe estimate."""
         if rows is None:
             from .processing_traffic_plan import ledger_rows
             roots = tuple(root for values in self.config.locations.values() for root in values)
@@ -150,7 +150,7 @@ class ProcessingTraffic:
             self.plan.refresh(rows)
             for row in self.rows.values():
                 if row['root'] and row['network']:
-                    self._reason(row, '挂载缓存与预读未观测')
+                    self._reason(row, 'Mount cache and read-ahead not observed')
 
     def start_metadata(self, code):
         from .library_processing import _provider_code
@@ -211,9 +211,9 @@ class ProcessingTraffic:
         key = self._media_key(path)
         if key is not None:
             if self.rows[key]['network']:
-                self.mark(key, '挂载缓存与预读未观测')
+                self.mark(key, 'Mount cache and read-ahead not observed')
             if missing:
-                self.mark(key, '媒体读取量未取得')
+                self.mark(key, 'Media read volume not obtained')
             self.add(key, size)
 
     def snapshot(self, *, finished=False):

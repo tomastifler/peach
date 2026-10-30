@@ -48,7 +48,7 @@ export function setCollapseOpen(details: HTMLDetailsElement, body: HTMLElement, 
   transitionCollapse(body,expanded,()=>details.open,open=>{details.open=open});
 }
 
-/** 外置按钮控制的折叠正文与原生 details 共用高度过渡和反向点击保护。 */
+/** Collapsible bodies controlled by an external button share the height transition and reverse-click protection with native details. */
 export function setCollapseRegionOpen(body: HTMLElement, expanded: boolean): void {
   transitionCollapse(body,expanded,()=>!body.hidden,open=>{body.hidden=!open});
 }

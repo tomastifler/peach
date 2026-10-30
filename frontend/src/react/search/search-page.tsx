@@ -380,8 +380,8 @@ function Tabs({ tabs, kind, onPick, wire }: {
     </button>
   );
   return (
-    <PillTabList ref={row} data-search-tabs="" data-pill-nav="" role="tablist" aria-label="按种类看补全">
-      {tab('', '全部')}
+    <PillTabList ref={row} data-search-tabs="" data-pill-nav="" role="tablist" aria-label="Completions by type">
+      {tab('', 'All')}
       {tabs.map((t) => tab(t.kind, t.label, t.total))}
     </PillTabList>
   );
@@ -446,7 +446,7 @@ function Row({ entry, active, helpers, onPick, onPeek, onRemove }: {
     return (
       <div data-search-option="person" data-open-entity={opens} {...shared} onMouseDown={keep}>
         <Face item={item} kind={kind} />
-        <button type="button" data-search-person="" data-search-meta="" aria-label={`查看 ${entityDisplayName(kind, item.value)}`}>
+        <button type="button" data-search-person="" data-search-meta="" aria-label={`View ${entityDisplayName(kind, item.value)}`}>
           <span data-search-name=""><span>{entityDisplayName(kind, item.value)}</span>{matched}</span>
           <span data-search-sub="">{sub}</span>
         </button>

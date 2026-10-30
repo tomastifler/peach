@@ -21,26 +21,26 @@ describe('任务页云下载布局', () => {
     });
     try {
       const card = opened.page.locator('[data-run-id="4038"]');
-      await card.getByText('发现问题', { exact: true }).waitFor();
+      await card.getByText('Problems found', { exact: true }).waitFor();
       const disclosure = card.locator('summary').filter({ hasText: '问题详情 · 51 项' });
       assert.equal(await disclosure.getAttribute('aria-expanded'), 'false');
       assert.equal(await card.locator('[data-task-issues]').isVisible(), false);
       await disclosure.click();
-      const errors = card.getByRole('region', { name: '任务问题详情' });
+      const errors = card.getByRole('region', { name: 'Task issue details' });
       await errors.waitFor();
       const geometry = await errors.evaluate((node) => ({ height: node.getBoundingClientRect().height,
         scrollable: node.scrollHeight > node.clientHeight, overlay: node.getAttribute('data-overlay-scrollbar') }));
       assert.ok(geometry.height > 0 && geometry.height <= 320, JSON.stringify(geometry));
       assert.equal(geometry.scrollable, true);
       assert.equal(geometry.overlay, 'true');
-      await card.locator('summary').filter({ hasText: '技术详情' }).click();
+      await card.locator('summary').filter({ hasText: 'Technical details' }).click();
       const background = await card.locator('[data-code-block]').first().evaluate((node) => getComputedStyle(node).backgroundColor);
       assert.equal(await errors.evaluate((node) => getComputedStyle(node.parentElement!).backgroundColor), background);
       assert.match(await card.locator('[data-task-issues]').innerText(), /示例作者.*示例站点.*检查失败/s);
       assert.match(await card.locator('[data-task-issues]').innerText(), /HTTP 403：站点拒绝访问/);
       assert.equal(await card.getByText('示例作者 1 · 示例站点 · 检查失败', { exact: true })
         .evaluate((node) => getComputedStyle(node).fontWeight), '400');
-      const link = card.getByRole('link', { name: '查看关注来源', exact: true });
+      const link = card.getByRole('link', { name: 'View followed sources', exact: true });
       assert.equal(await link.getAttribute('href'), '/subscriptions');
       await link.click();
       await opened.page.waitForURL('**/subscriptions');
@@ -65,10 +65,10 @@ describe('任务页云下载布局', () => {
     try {
       const page = opened.page;
       const card = page.locator('[data-run-id="4037"]');
-      await card.getByText('发现问题', { exact: true }).waitFor();
-      assert.equal(await card.getByText('链接已失效 5', { exact: true }).count(), 1);
-      assert.equal(await card.getByText('链接访问失败 54', { exact: true }).count(), 1);
-      const resultLink = card.getByRole('link', { name: '查看有问题的链接' });
+      await card.getByText('Problems found', { exact: true }).waitFor();
+      assert.equal(await card.getByText('Links gone 5', { exact: true }).count(), 1);
+      assert.equal(await card.getByText('Links unreachable 54', { exact: true }).count(), 1);
+      const resultLink = card.getByRole('link', { name: 'View problem links' });
       assert.equal(await resultLink.getAttribute('href'), '/data-cleanup#link-manager');
       assert.equal(await resultLink.evaluate(link => getComputedStyle(link).textDecorationLine), 'none');
       await card.locator('summary').click();
@@ -98,14 +98,14 @@ describe('任务页云下载布局', () => {
       await page.route('**/entity-image?*', (route) => route.fulfill({ contentType: 'image/png', body: Buffer.from(PIXEL, 'base64') }));
       await page.route('**/api/downloads?*', (route) => route.fulfill({ json: {
         available: false, providers: [], tasks: [{ id: 1, title, code: 'ABC-123', provider: '115',
-          provider_label: '115', state: 'ingested', state_label: '已入库',
+          provider_label: '115', state: 'ingested', state_label: 'In library',
           postprocess_state: 'complete', postprocess_label: '整理完成', target: '/云下载',
           source_uri: '', submitted_at: '2026-10-01T00:00:00Z', asset_id: assetId,
           artwork: { id: 10, code: 'ABC-123', has_cover: true, cover_key: 'ABC-123',
             poster_box: { x0: 776, y0: 0, x1: 1480, y1: 1000, px: [1480, 1000], method: 'fold' },
             performer_entities: [{ id: 30, name: '测试女优', has_image: true }] } },
           { id: 2, title: '另一条下载任务', code: 'XYZ-456', provider: '115', provider_label: '115',
-            state: 'failed', state_label: '失败', target: '/云下载', source_uri: '', submitted_at: '2026-10-01T00:00:00Z' }],
+            state: 'failed', state_label: 'Failed', target: '/云下载', source_uri: '', submitted_at: '2026-10-01T00:00:00Z' }],
       } }));
     });
     try {
@@ -198,13 +198,13 @@ describe('任务页云下载布局', () => {
       assert.notEqual(geometry.backdrop, 'none', '正封比例留白使用同图补底');
       assert.ok(geometry.backdropFilter.includes('blur('), '补底复用首页模糊效果');
       assert.equal(geometry.avatarReady, true);
-      assert.equal(await firstCard.locator('[data-download-cover]').getByText('无封面').count(), 0);
+      assert.equal(await firstCard.locator('[data-download-cover]').getByText('No cover').count(), 0);
       assert.equal(geometry.providerTop, geometry.metadataTop, '来源文字与目录、时间没有对齐');
       await page.screenshot({ path: `../build/agent-verification/browser/activity-${viewport.name}.png`, fullPage: true });
-      await firstCard.getByRole('button', { name: '展开标题', exact: true }).click();
+      await firstCard.getByRole('button', { name: 'Expand title', exact: true }).click();
       assert.equal(await page.locator('[data-download-title-full]').textContent(), `ABC-123 · ${title.trim()}`);
       assert.equal(await firstCard.locator('[data-download-cover]').evaluate(cover => cover.getBoundingClientRect().height), geometry.coverHeight);
-      await firstCard.getByRole('button', { name: '收起标题', exact: true }).click();
+      await firstCard.getByRole('button', { name: 'Collapse title', exact: true }).click();
       assert.equal(await page.locator('[data-download-title-full]').count(), 0);
       for (const selector of ['[data-download-cover-link]', '[data-download-title-link]']) {
         await page.locator(selector).click();

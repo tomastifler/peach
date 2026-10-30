@@ -151,10 +151,10 @@ function PlaylistMenu({ name, onRename, onDelete }: { name: string; onRename(): 
         {/* 面板外宽 172px，同旧卡片菜单：外框再加 10px 内边距与 1px 描边。 */}
         <Dialog aria-label={`Playlist actions: ${name}`} className="flex w-37.5 flex-col gap-0.5 outline-none">
           <button type="button" className={MENU_ROW} onClick={() => run(onRename)}>
-            <PENCIL aria-hidden className="size-(--icon-inline) shrink-0" />编辑名称
+            <PENCIL aria-hidden className="size-(--icon-inline) shrink-0" />Edit name
           </button>
           <button type="button" className={MENU_ROW} onClick={() => run(onDelete)}>
-            <TRASH aria-hidden className="size-(--icon-inline) shrink-0" />删除播放列表
+            <TRASH aria-hidden className="size-(--icon-inline) shrink-0" />Delete playlist
           </button>
         </Dialog>
       </Popover>
@@ -226,9 +226,9 @@ export function PlaylistsPage({ openPlaylist, openEntity, canFlip, toast, revisi
           </div>
         )
         : (
-          <EmptyState icon={PLAYLIST} title="还没有播放列表"
-            actions={<EmptyFocusButton target='[data-playlist-create] input'>新建播放列表</EmptyFocusButton>}>
-            保存 Mix 或新建列表后，会在这里按自己的顺序继续播放。
+          <EmptyState icon={PLAYLIST} title="No playlists yet"
+            actions={<EmptyFocusButton target='[data-playlist-create] input'>New playlist</EmptyFocusButton>}>
+            After you save a Mix or create a list, it plays on from here in its own order.
           </EmptyState>
         )}
       </div>

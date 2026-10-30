@@ -2,73 +2,73 @@
 kind: howto
 ---
 
-# 管理标签
+# Managing Tags
 
-在标签页选择「本地」或「在线」，点击标题旁的铅笔图标进入管理模式；再次点击同一图标返回浏览。
+On the Tags page choose "Local" or "Online", and click the pencil icon next to the title to enter management mode; click the same icon again to return to browsing.
 
-两种模式共用页头搜索栏和标签筛选栏；管理模式可在筛选栏切换「使用中 / 已隐藏」，并按分类、标签云或字母表浏览。管理模式中的搜索支持名称和别名。
+Both modes share the page header search bar and the tag filter bar; in management mode the filter bar can switch between "In use / Hidden", and tags can be browsed by category, tag cloud or alphabet. Search in management mode supports names and aliases.
 
-本地与在线标签都可点击星形按钮收藏或取消收藏。「我的收藏」的标签分类包含两种收藏；在线标签标明词表，点击后打开关注页的对应标签筛选。在线收藏随改名和合并归类更新。
+Both local and online tags can be favorited or unfavorited with the star button. The tag categories of "My favorites" include both kinds of favorites; online tags show their vocabulary, and clicking one opens the corresponding tag filter on the Follow page. Online favorites update with renames and merge groupings.
 
-## 重命名
+## Renaming
 
-在管理模式点击标签内的铅笔图标，输入名称，点击「预览影响范围」。确认资源数量和名称后，点击「重命名标签」。浏览模式保留收藏按钮；编辑入口仅在管理模式显示。
+In management mode, click the pencil icon inside a tag, enter a name, and click "Preview impact". After confirming the resource count and the name, click "Rename tag". Browse mode keeps the favorite button; the edit entry shows only in management mode.
 
-标签 ID 保持稳定，旧名称保留为别名。作品标注、来源词映射、收藏名称及单条资源的隐藏选择同步迁移；后续采集识别旧名时归到这条标签。名称已属于另一条标签时，使用合并操作。
+The tag ID stays stable, and the old name is kept as an alias. Work annotations, source term mappings, favorite names and per-item hide choices migrate with it; when later collection recognizes the old name, it is filed under this tag. When the name already belongs to another tag, use the merge operation.
 
-## 合并
+## Merging
 
-在管理模式选中至少两个标签，点击「合并」，选择保留的标签。预览显示资源数量和重叠关联数量，确认后执行。
+In management mode, select at least two tags, click "Merge", and choose the tag to keep. The preview shows the resource count and the number of overlapping associations; execute after confirming.
 
-同一资源只显示一次标签，来源关系和旧名称随保留的标签保存；保留标签的全局隐藏状态作为合并结果。合并不能直接撤销，写入前自动创建 SQLite 备份。
+A resource shows a tag only once, source relationships and old names are saved with the kept tag, and the kept tag's global hidden state becomes the merge result. A merge cannot be undone directly, and a SQLite backup is created automatically before writing.
 
-「整理重复标签」仅在存在重复项时显示，范围限于登记的同义词、显示名称及字符宽度等确定规则。含义相近的标签由使用者选择是否合并。
+"Tidy duplicate tags" shows only when duplicates exist, and its scope is limited to deterministic rules such as registered synonyms, display names and character width. Tags with similar meanings are left for the user to decide whether to merge.
 
-## 隐藏和恢复
+## Hiding and Restoring
 
-选中标签后点击「隐藏」，预览范围并确认。隐藏选择覆盖已有资源和后续采集，来源证据继续保留。切到「已隐藏」，选中标签并点击「恢复」，可恢复浏览与筛选入口。单条资源上的隐藏选择独立保留。
+After selecting tags, click "Hide", preview the scope and confirm. The hide choice covers existing resources and later collection, and the source evidence is kept. Switch to "Hidden", select tags and click "Restore" to bring back the browse and filter entries. Hide choices on a single resource are kept independently.
 
-## 在线内容的手动标签
+## Manual Tags on Online Content
 
-标签浏览与标签管理默认每页显示 100 个标签，可切换为 50、100 或 200 个。分页只读取并显示当前页；管理中的选择跨页保留，搜索、分类、状态或视图变化时清空选择并回到首页。关注管理的标签页签提供独立搜索。
+Tag browsing and tag management show 100 tags per page by default, switchable to 50, 100 or 200. Paging reads and shows only the current page; selections in management persist across pages, and when the search, category, state or view changes the selection is cleared and you return to the first page. The tag tab of follow management provides its own search.
 
-本地与在线详情共用标签行。点击「添加标签」的加号，搜索已有标签或输入名称新建；标签右侧的铅笔用于修改名称，叉号从当前内容隐藏标签。名称修改会预览影响范围，确认后作用于同一标签的全部内容，旧名称保留为别名。
+Local and online details share the tag row. Click the plus of "Add tag", search existing tags or enter a name to create one; the pencil on the right of a tag renames it, and the cross hides the tag from the current content. A rename previews its impact, and after confirmation applies to all content of the same tag, with the old name kept as an alias.
 
-手动标签和单条隐藏选择按来源与内容编号保存在本机用户设置中，来源更新时保留，来源 metadata 保留原词。一个作品有多个版本时，卡片和筛选项显示各版本的手动标签；详情中的添加和删除作用于当前版本，操作成功后可撤销。
+Manual tags and single-item hide choices are saved in the local user settings by source and content number, retained when the source updates, while the source metadata keeps the original terms. When a work has several versions, the card and filter items show each version's manual tags; adding and deleting in the detail apply to the current version, and can be undone after success.
 
-## 按在线标签屏蔽内容
+## Blocking Content by Online Tag
 
-在「关注管理」的「标签管理」页签选择标签并点击「屏蔽内容」；标签页的在线管理模式也可使用。预览影响范围并确认后，带任一所选标签的内容及其其它版本会从关注列表、创作者在线作品和筛选项中隐藏；后续更新沿用这份选择。
+On the "Tag management" tab of "Follow management", select tags and click "Block content"; the online management mode of the Tags page can also be used. After previewing the impact and confirming, content carrying any of the selected tags, along with its other versions, is hidden from follow lists, creators' online works and filter items; later updates follow this choice.
 
-在管理模式切到「已屏蔽内容」，选择标签并点击「恢复内容」，可解除屏蔽。标签更名和别名沿用同一身份；合并后的标签保留任一成员的内容屏蔽选择。直接打开内容详情仍可查看和管理标签。
+In management mode switch to "Blocked content", select tags and click "Restore content" to lift the block. Tag renames and aliases keep the same identity; a merged tag keeps the content-block choice of any member. Opening a content detail directly still lets you view and manage tags.
 
-「隐藏标签」控制标签的显示和筛选入口；「屏蔽内容」控制作品是否出现在浏览列表。两种选择独立保存。
+"Hide tag" controls the tag's display and filter entries; "Block content" controls whether works appear in browse lists. The two choices are saved independently.
 
-## 接口与维护
+## Interface and Maintenance
 
-在线标签的改名、合并和隐藏保存在本机用户设置，来源记录继续保留原词。标签页、关注页卡片、详情和筛选共用这份归类；旧名称仍可用于筛选，后续来源更新沿用已有成员的归类。在线合并只接受相同来源类型的标签，目标标签的隐藏状态作为结果；不同类型保持独立。隐藏标签可在管理模式的「已隐藏」中恢复。
+Renames, merges and hides of online tags are saved in the local user settings, and source records keep the original terms. The Tags page, Follow page cards, details and filters share this grouping; old names can still be used for filtering, and later source updates follow the grouping of existing members. Online merging accepts only tags of the same source type, with the target tag's hidden state as the result; different types stay independent. Hidden tags can be restored under "Hidden" in management mode.
 
-`GET /api/tag-management` 返回标签 ID、名称、分类、别名、资源数量、隐藏状态和重复组。`POST /api/tag-management/preview` 只读预览；`POST /api/tag-management` 收到预览的 `token` 才执行写入。数据变化后计划失效，须重新预览。接口沿用登录验证和 ledger 写入角色门槛。
+`GET /api/tag-management` returns tag ID, name, category, aliases, resource count, hidden state and duplicate groups. `POST /api/tag-management/preview` is a read-only preview; `POST /api/tag-management` writes only when it receives the preview's `token`. The plan expires when data changes, and a new preview is required. The interface keeps the login verification and the ledger write role gate.
 
-`GET /api/tag-management` 不带 `limit` 时返回完整的 `items` 和 `duplicate_groups`；带 `limit` 时启用分页，支持以下参数：
+Without `limit`, `GET /api/tag-management` returns the complete `items` and `duplicate_groups`; with `limit` it enables paging and supports the following parameters:
 
-| 参数 | 含义 |
+| Parameter | Meaning |
 | --- | --- |
-| `scope` | `local` 或 `online`，默认 `local` |
-| `limit` / `offset` | 每页条数和起始位置；条数限制为 1 至 600，格式无效时使用 20；起始位置至少为 0，格式无效时使用 0 |
-| `q` | 搜索名称和别名，统一字符宽度、空白和大小写 |
-| `category` | 分类键；空值或 `all` 表示全部分类 |
-| `state` | `active`、`hidden` 或 `blocked`，默认 `active`；屏蔽状态优先于隐藏状态 |
-| `view` | `cloud` 按资源数量倒序，`alphabet` 按归一化名称排序；默认 `cloud`，同值时按名称和标签身份稳定排序 |
+| `scope` | `local` or `online`, default `local` |
+| `limit` / `offset` | Page size and starting position; the page size is limited to 1 to 600, with 20 used when the format is invalid; the start is at least 0, with 0 used when the format is invalid |
+| `q` | Search names and aliases, normalizing character width, whitespace and case |
+| `category` | Category key; empty or `all` means all categories |
+| `state` | `active`, `hidden` or `blocked`, default `active`; blocked state takes precedence over hidden state |
+| `view` | `cloud` sorts by resource count descending, `alphabet` by normalized name; default `cloud`, with ties sorted stably by name and tag identity |
 
-分页响应包含当前页 `items`、筛选后的 `total`、`has_more`、实际 `limit` 和 `offset`。`categories` 是当前搜索和状态下的分类计数，不随选中的分类缩小；`duplicate_groups` 保留本地完整重复组，在线为空列表。搜索、状态、分类和排序均先于分页，超出末页时 `items` 为空且保留 `total`。完整词表复用查询缓存，按本地与在线分别保存；账本版本变化或写入触发缓存失效后重新读取。
+The paged response contains the current page `items`, the filtered `total`, `has_more`, the actual `limit` and `offset`. `categories` is the category count under the current search and state, and does not shrink with the selected category; `duplicate_groups` keeps the full local duplicate groups, and is an empty list online. Search, state, category and sorting all come before paging, and past the last page `items` is empty and `total` is kept. The full vocabulary reuses the query cache, stored separately for local and online; it is read again after a ledger version change or a write invalidates the cache.
 
-浏览接口 `GET /api/index?kind=tags` 与 `GET /api/follow/tags?types=all` 返回 `total`，分别表示搜索及分类筛选后、搜索及来源类型筛选后的完整标签数。
+The browse endpoints `GET /api/index?kind=tags` and `GET /api/follow/tags?types=all` return `total`, the full tag count after search and category filtering, and after search and source-type filtering, respectively.
 
-写入会检查外键变化并拒绝本次操作新增的关联违规；已有的历史引用记录保持独立。
+Writes check foreign key changes and reject association violations newly introduced by this operation; existing historical reference records stay independent.
 
-在线词表的读取参数和操作请求使用 `scope=online`；在线标签 ID 是稳定的来源词键，本地标签 ID 是实体 ID。
+The read parameters and operation requests of the online vocabulary use `scope=online`; an online tag ID is a stable source-term key, and a local tag ID is an entity ID.
 
-在线管理支持 `block`／`unblock` 操作，返回的标签包含 `blocked` 状态。`POST /api/follow/tag` 接受 `id`、`operation=add|remove|restore` 和 `tag`，返回当前条目及其作品组；`remove` 保存单条隐藏选择，`restore` 用于撤销来源标签的隐藏。接口沿用登录、同源和 ledger 写入角色门槛。标签名为 1 至 80 个字符，不含逗号或控制字符；每条内容最多 100 个手动标签。普通内容响应包含 `custom_tags` 和 `blocked_tags`，来源 metadata 保持原词。
+Online management supports the `block` / `unblock` operations, and the returned tags carry a `blocked` state. `POST /api/follow/tag` accepts `id`, `operation=add|remove|restore` and `tag`, and returns the current item and its work group; `remove` saves a single-item hide choice, and `restore` undoes the hiding of a source tag. The interface keeps the login, same-origin and ledger write role gates. A tag name is 1 to 80 characters with no commas or control characters; each content item has at most 100 manual tags. Ordinary content responses include `custom_tags` and `blocked_tags`, and source metadata keeps the original terms.
 
-维护脚本 `scripts/repair_duplicate_tags.py` 默认生成复核 CSV；真实写入须同时提供 `--apply` 与 `--backup`。脚本与页面复用同一套判据和写入逻辑。备份与真实库操作约定见[运行与配置](OPERATIONS.md)。
+The maintenance script `scripts/repair_duplicate_tags.py` generates a review CSV by default; a real write requires both `--apply` and `--backup`. The script and the page reuse the same criteria and write logic. For backup and real-database operation conventions see [Operations and configuration](OPERATIONS.md).

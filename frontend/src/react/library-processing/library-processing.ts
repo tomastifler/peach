@@ -25,9 +25,9 @@ export interface LibraryProcessingIssue {
 /** 一趟扫描与采集的快照。字段以 `q_library_processing`（`src/peach/web_library_processing.py`）为准。 */
 export interface LibraryProcessingData {
   metadata_only?: boolean;
-  /** `idle` | `running` | `pausing` | `paused` | `stopping` | `cancelled` | `complete` | `failed`。 */
+  /** `idle` | `running` | `pausing` | `paused` | `stopping` | `cancelled` | `complete` | `failed`. */
   status: string;
-  /** 本轮各阶段已处理完但留有问题，或执行中断。 */
+  /** All stages of this run have finished but left issues, or execution was interrupted. */
   outcome?: 'complete' | 'partial' | 'interrupted' | 'cancelled';
   archived?: boolean;
   new_asset_count?: number;
@@ -68,7 +68,7 @@ export interface LibraryProcessingData {
   current_asset_name?: string;
   current_action?: string;
   current_started_at?: number;
-  /** 当前这一项正在等的外部来源；`network` 是它这次请求走的那条路。 */
+  /** The external source this item is currently waiting on; `network` is the route its request took this time. */
   current_source?: { key: string; label: string; network?: string };
   skip_requested?: boolean;
   last_progress_at?: number;
@@ -131,13 +131,13 @@ export type ProcessingControlCommand =
   | { action: 'set_speed'; speed_mode: ProcessingSpeed; job_id?: string }
   | { action: 'skip_current'; job_id: string; asset_id: number };
 
-/** 单部影片问外部来源超过这么久，就把跳过与改走代理摆出来。 */
+/** When a single video has been asking an external source for this long, offer skipping and switching to the proxy. */
 export const SLOW_ITEM_SECONDS = 120;
-const SLOW_ACTIONS: Record<string, string> = { fetching_cover: '封面', querying_metadata: '资料' };
+const SLOW_ACTIONS: Record<string, string> = { fetching_cover: 'cover', querying_metadata: 'details' };
 
 export interface SlowItem { what: string; source?: LibraryProcessingData['current_source'] }
 
-/** 跳过入口属于外部资料与封面采集，扫描和生成预览使用各自的任务控制。 */
+/** The skip entry belongs to external metadata and cover collection; scanning and preview generation use their own job controls. */
 export function slowItem(state?: LibraryProcessingData): SlowItem | null {
   if (state?.status !== 'running' || state.current_asset_id == null) return null;
   const what = SLOW_ACTIONS[state.current_action || ''];
@@ -146,8 +146,8 @@ export function slowItem(state?: LibraryProcessingData): SlowItem | null {
 }
 
 export function slowItemText({ what, source }: SlowItem): string {
-  const who = `${source?.label ? `${source.label} ` : '外部来源'}迟迟没有返回${what}`;
-  return `${who}。可以先跳过这部，任务结束后再重试。`;
+  const who = `${source?.label ? `${source.label} ` : 'The external source'} has been slow to return ${what}`;
+  return `${who}. You can skip this one for now and retry after the job ends.`;
 }
 
 /** 暂停中的任务仍占用同一份处理范围，可继续并持续读取状态。 */
@@ -157,16 +157,16 @@ export const processingActive = (state?: LibraryProcessingData) =>
 export const processingHasPartialResult = (state?: LibraryProcessingData) =>
   state?.status === 'failed' && state.outcome === 'partial';
 
-export const PARTIAL_RESULT_TEXT = '已入库的视频可在全部内容中浏览，未完成项可单独重试。';
+export const PARTIAL_RESULT_TEXT = 'Videos already in the library can be browsed under All content, and unfinished items can be retried separately.';
 export const ALL_CONTENT_URL = '/?loc=&thumb=0';
 
 /** 时间向分钟取整；区间两端始终使用同一单位。 */
 export function remainingTime(state: LibraryProcessingData): string {
   if (!processingActive(state)) return '';
-  if (state.status === 'stopping') return '正在停止，等待当前步骤退出；已取得的结果会保留';
-  if (state.status === 'paused') return '已暂停，继续后更新预估';
-  if (state.status === 'pausing') return '正在暂停，当前步骤结束后暂停';
-  if (state.stalled) return '等待当前文件响应，剩余时间待更新';
+  if (state.status === 'stopping') return 'Stopping; waiting for the current step to exit. Results already obtained are kept';
+  if (state.status === 'paused') return 'Paused; the estimate updates after resuming';
+  if (state.status === 'pausing') return 'Pausing; it will pause when the current step ends';
+  if (state.stalled) return 'Waiting for the current file to respond; remaining time to be updated';
   const low = state.eta_seconds_min, high = state.eta_seconds_max;
   if (low == null || high == null || !Number.isFinite(low) || !Number.isFinite(high) || low < 0 || high < low)
     return 'Estimating remaining time…';
@@ -208,14 +208,14 @@ export function pollInterval(
 }
 
 const ACTION_LABELS: Record<string, string> = {
-  scanning_files: '扫描文件',
-  reading_local: '检查配套文件',
-  reading_local_cover: '读取配套图片',
-  querying_metadata: '查询外部资料',
-  fetching_cover: '采集缺失封面',
-  skipped: '已跳过',
-  generating_preview: '生成视频预览',
-  writing_candidates: '保存待确认资料',
+  scanning_files: 'Scanning files',
+  reading_local: 'Checking companion files',
+  reading_local_cover: 'Reading companion images',
+  querying_metadata: 'Querying external metadata',
+  fetching_cover: 'Collecting missing covers',
+  skipped: 'Skipped',
+  generating_preview: 'Generating video previews',
+  writing_candidates: 'Saving details to confirm',
 };
 
 /* 来源说「没有」按类型报一个数，不进问题清单：馆藏里大量独立资源和创作者作品
@@ -301,7 +301,7 @@ export function announceCompletion(
     toast(`Video previews generated: ${state.previews || 0}`);
     return;
   }
-  toast(`扫描与资料采集已完成：识别 ${state.identified || 0} 个番号，`
-    + `取得 ${state.candidates || 0} 组作品资料，自动保存 ${state.auto_applied || 0} 条`
-    + (state.previews ? `，生成 ${state.previews} 部视频预览` : ''));
+  toast(`Scan and metadata collection finished: identified ${state.identified || 0} codes,`
+    + `obtained ${state.candidates || 0} sets of work details, auto-saved ${state.auto_applied || 0} `
+    + (state.previews ? `, generated ${state.previews} video previews` : ''));
 }

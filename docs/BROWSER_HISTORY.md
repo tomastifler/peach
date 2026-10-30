@@ -31,4 +31,4 @@ The browser database first gets a consistent snapshot through SQLite backup, the
 
 Temporary SQLite regression tests cover directory discovery, manual addition, stop and resume, incremental deduplication, optional columns, wrong formats, special path characters, and isolation of a single source failure. Acceptance records for real browser files are kept outside the repository; directory support does not mean every browser's current version has been verified on a real machine.
 
-数据源卡片按浏览器名称显示品牌图标，覆盖全部自动发现的浏览器及常见手动来源。图标随应用分发，来源和摘要记录在 `resources/browser-icons/manifest.json`，页面不向第三方请求图标。名称未匹配或图像加载失败时显示通用浏览器图标；图标覆盖不代表新增历史格式支持。
+Data source cards show a brand icon by browser name, covering every automatically discovered browser and the common manual sources. The icons ship with the app, and their sources and digests are recorded in `resources/browser-icons/manifest.json`; the page requests no icons from third parties. When a name does not match or an image fails to load, a generic browser icon is shown; icon coverage does not mean support for a new history format has been added.

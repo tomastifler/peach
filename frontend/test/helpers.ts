@@ -9,7 +9,7 @@ export function deferredFetch(body: unknown) {
     return new Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>((resolve, reject) => {
       settle = () => resolve({ ok: true, status: 200, json: async () => body });
       signal?.addEventListener('abort', () => {
-        reject(new DOMException('已中止', 'AbortError'));
+        reject(new DOMException('Aborted', 'AbortError'));
       });
     });
   });

@@ -119,8 +119,8 @@ def stamp(moment: datetime | None = None) -> str:
 def scan_code(text: str | None, *, product: bool = False) -> str | None:
     """从一段文本里找出番号：整段先试一次，不成再逐词元试。
 
-    番号判据复用 `catalog_rules`；明确商品身份使用保留尾字母的解析器，普通文件名
-    使用文本解析器。两条路径都按第一个可识别番号确定身份，不在标题后段另挑作品。
+    Code criteria reuse `catalog_rules`; explicit product identity uses the trailing-letter-preserving parser, ordinary file names
+    use the text parser. Both paths determine identity by the first recognizable code and do not pick another work from later in the title.
     """
     if not text:
         return None

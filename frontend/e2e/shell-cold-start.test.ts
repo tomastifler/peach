@@ -32,7 +32,7 @@ describe('外壳首帧', () => {
             inTop: !!document.querySelector('.top>#filterBtn') };
         });
         const waiting = await read();
-        assert.equal(await page.locator('#brandHome h1').textContent(), '全部媒体库');
+        assert.equal(await page.locator('#brandHome h1').textContent(), 'All libraries');
         assert.equal(await page.locator('#brandHome img').count(), 0);
         assert.equal(await page.locator('.top>#brandHome').count(), 0);
         assert.equal(waiting.expanded, String(!viewport.mobile && sidebar === 'open'));

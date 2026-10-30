@@ -3,7 +3,7 @@
  *
  * 写：壳在决定打开详情的那一刻调 `holdOverlayBackground` 记下背景，push 详情地址时用 `overlayState` 带上；
  * 队列地址要等取完数才 push，背景仍是决定那一刻的，不是 push 那一刻的地址。详情之间换条沿用上一条的
- * 背景、不嵌套；只存路径、查询串与锚点，不存 DOM、对象或条目 `key`（刷新后对不上任何活条目）。
+ * background, not nested; only the path, query string and anchor are stored, not DOM, objects or the entry `key` (after a refresh it matches no live entry).
  *
  * 读：后退前进落到详情条目上时，路由树的覆盖元素（`react/router/pages/overlay.tsx`）调 `adoptOverlayState`
  * 接上这一条记的背景，壳打开详情的那一处再用 `takeOverlayReturn` 取来处，关掉回到那一页。冷启动（刷新、
@@ -117,7 +117,7 @@ export function adoptOverlayState(state: unknown): void {
   pendingReturn = background.pathname + background.search + (background.hash || '');
 }
 
-/** 打开详情时取后退前进接上的来处（路径、查询串与锚点），取一次就清；没有就是 null，壳用自己的缺省。 */
+/** When opening details, take the origin that back/forward connects to (path, query string and anchor), cleared after one read; if there is none it is null, and the shell uses its own default. */
 export function takeOverlayReturn(): string | null {
   const path = pendingReturn;
   pendingReturn = null;

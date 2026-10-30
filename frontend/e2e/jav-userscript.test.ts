@@ -134,11 +134,11 @@ async function unpairedStorage(page: Page) {
 }
 async function fillSettings(page: Page, base: string, token: string) {
   const dialog = settingsDialog(page);
-  await dialog.getByLabel('Peach 地址', { exact: true }).fill(base);
-  await dialog.getByLabel('专用令牌', { exact: true }).fill(token);
-  await dialog.getByRole('button', { name: '保存设置', exact: true }).click();
+  await dialog.getByLabel('Peach address', { exact: true }).fill(base);
+  await dialog.getByLabel('Dedicated token', { exact: true }).fill(token);
+  await dialog.getByRole('button', { name: 'Save settings', exact: true }).click();
 }
-async function ready(page: Page, name = '加入 Peach 馆藏') {
+async function ready(page: Page, name = 'Add to Peach library') {
   await page.waitForFunction(({ root, label }) => {
     const button = document.querySelector(root)?.shadowRoot?.querySelector('[data-action="add"]');
     return button?.textContent === label && button.getAttribute('aria-busy') === 'false';
@@ -163,7 +163,7 @@ async function selectCode(page: Page) {
     const selection = window.getSelection()!;
     selection.removeAllRanges();
     selection.addRange(range);
-    window.javMock.menus['开启']!();
+    window.javMock.menus['Enable']!();
   });
 }
 
@@ -207,14 +207,14 @@ describe('JAV 用户脚本', () => {
       const submitted = await page.evaluate(() => JSON.parse(window.javMock.calls[1]!.data!));
       assert.deepEqual(submitted, { code: 'SSIS-057', source_url: 'https://javdb.com/v/ABP123' });
       await reply(page, 1, body('owned'));
-      await ready(page, '已有该影片');
+      await ready(page, 'Already have this video');
       assert.deepEqual(opened.problems, []);
     } finally { await opened.close(); }
   });
 
   for (const site of MANIFEST.sites.filter(site => site.mode === 'automatic')) {
     for (const domain of site.domains) {
-      it(`${site.label} 自动识别 ${domain} 的明确作品身份`, async () => {
+      it(`${site.label} Auto-detect ${domain} 的明确作品身份`, async () => {
         const fixture = AUTOMATIC[site.id];
         assert.ok(fixture, `${site.id} 需要作品详情夹具`);
         const code = fixture.code || 'SSIS-057';
@@ -234,7 +234,7 @@ describe('JAV 用户脚本', () => {
           const submitted = await page.evaluate(() => JSON.parse(window.javMock.calls[1]!.data!));
           assert.deepEqual(submitted, { code, source_url: `https://${domain}${fixture.source || fixture.path}` });
           await reply(page, 1, body('owned', code));
-          await ready(page, '已有该影片');
+          await ready(page, 'Already have this video');
           assert.deepEqual(opened.problems, []);
         } finally { await opened.close(); }
       });
@@ -262,7 +262,7 @@ describe('JAV 用户脚本', () => {
           assert.deepEqual(submitted, { code: 'SSIS-057', source_url: site.id === 'dmm'
             ? `https://${domain}/av/content/?id=opaque_cid` : `https://${domain}/products/opaque` });
           await reply(page, 1, body('owned'));
-          await ready(page, '已有该影片');
+          await ready(page, 'Already have this video');
           assert.deepEqual(opened.problems, []);
         } finally { await opened.close(); }
       });
@@ -277,7 +277,7 @@ describe('JAV 用户脚本', () => {
     page.on('dialog', dialog => { alerts++; void dialog.dismiss(); });
     try {
       await selectCode(page);
-      await page.locator('#peach-jav-batch').getByRole('button', { name: '返回 Peach 主界面', exact: true }).click();
+      await page.locator('#peach-jav-batch').getByRole('button', { name: 'Back to Peach main interface', exact: true }).click();
       await page.locator('#peach-jav-batch').waitFor({ state: 'detached' });
       for (const value of ['SSIS-057 作品标题', 'SSIS-057 ABW-123', 'H264', 'X1234', 'SSIS-057'.repeat(30)]) {
         await page.locator('#selected-code').evaluate((element, value) => { element.textContent = value; }, value);
@@ -304,7 +304,7 @@ describe('JAV 用户脚本', () => {
         await pending(page, 2);
         assert.equal(JSON.parse(await page.evaluate(() => window.javMock.calls[1]!.data!)).code, raw.toLowerCase());
         await reply(page, 1, body('owned', raw.toLowerCase()));
-        await ready(page, '已有该影片');
+        await ready(page, 'Already have this video');
       } finally { await opened.close(); }
     });
   }
@@ -388,7 +388,7 @@ describe('JAV 用户脚本', () => {
       await fillSettings(page, BASE, TOKEN);
       await ready(page);
       assert.equal(await page.evaluate(() => window.javMock.calls.length), 1);
-      await page.locator(ROOT).getByRole('button', { name: '展开 Peach 面板', exact: true }).click();
+      await page.locator(ROOT).getByRole('button', { name: 'Expand Peach panel', exact: true }).click();
       await ready(page);
       assert.equal(await page.evaluate(() => window.javMock.calls.length), 2);
       await page.evaluate(() => { window.javMock.automatic = false; });
@@ -427,7 +427,7 @@ describe('JAV 用户脚本', () => {
       await page.clock.fastForward(2100);
       await pending(page, 6);
       await reply(page, 5, body('ingested'));
-      await ready(page, '已有该影片');
+      await ready(page, 'Already have this video');
       assert.equal(await button(page).isDisabled(), true);
       assert.deepEqual(opened.problems, []);
     } finally { await opened.close(); }
@@ -467,7 +467,7 @@ describe('JAV 用户脚本', () => {
         const submitted = await page.evaluate(() => JSON.parse(window.javMock.calls[1]!.data!));
         assert.equal(submitted.code, example.extracted);
         await reply(page, 1, body('owned', example.canonical));
-        await ready(page, '已有该影片');
+        await ready(page, 'Already have this video');
         assert.equal(await button(page).isDisabled(), true);
         assert.deepEqual(opened.problems, []);
       } finally { await opened.close(); }
@@ -564,23 +564,23 @@ describe('JAV 用户脚本', () => {
       await button(page).click();
       await pending(page, 2);
       await page.evaluate(() => window.javMock.pending[1]!.ontimeout());
-      await ready(page, '查询 Peach 状态');
+      await ready(page, 'Check Peach status');
       await page.clock.fastForward(30_000);
       assert.equal(await page.evaluate(() => window.javMock.calls.length), 2);
       assert.equal(await page.evaluate(() => window.javMock.reports.length), 1);
       await button(page).click();
       await pending(page, 3);
       await page.evaluate(() => window.javMock.pending[2]!.onerror());
-      await ready(page, '查询 Peach 状态');
+      await ready(page, 'Check Peach status');
       await button(page).click();
       await pending(page, 4);
       await reply(page, 3, body('failed'));
-      await ready(page, '重试加入 Peach 馆藏');
+      await ready(page, 'Retry adding to Peach library');
       await button(page).click();
       await pending(page, 5);
       assert.deepEqual(await page.evaluate(() => window.javMock.calls.map(call => call.method)), ['GET', 'POST', 'GET', 'GET', 'POST']);
       await reply(page, 4, body('no_match'));
-      await ready(page, '重试加入 Peach 馆藏');
+      await ready(page, 'Retry adding to Peach library');
       assert.deepEqual(opened.problems, []);
     } finally { await opened.close(); }
   });
@@ -594,13 +594,13 @@ describe('JAV 用户脚本', () => {
       await button(page).click();
       await pending(page, 2);
       await reply(page, 1, body('owned', 'ABW-123'));
-      await ready(page, '查询 Peach 状态');
-      assert.match(await page.locator(ROOT).getByRole('status', { name: 'Peach 任务状态', exact: true }).innerText(), /状态无效/);
+      await ready(page, 'Check Peach status');
+      assert.match(await page.locator(ROOT).getByRole('status', { name: 'Peach job status', exact: true }).innerText(), /状态无效/);
       await button(page).click();
       await pending(page, 3);
       await page.evaluate(() => window.javMock.reply(2, {}, 401));
-      await ready(page, '查询 Peach 状态');
-      assert.match(await page.locator(ROOT).getByRole('status', { name: 'Peach 任务状态', exact: true }).innerText(), /令牌无效/);
+      await ready(page, 'Check Peach status');
+      assert.match(await page.locator(ROOT).getByRole('status', { name: 'Peach job status', exact: true }).innerText(), /Invalid token/);
     } finally { await opened.close(); }
   });
 
@@ -662,7 +662,7 @@ describe('JAV 用户脚本', () => {
       // 跳过一小时期限：到点的那次等待结束后再查一次，随后停止并允许手动查询。
       await opened.page.clock.fastForward(60 * 60_000);
       await pending(opened.page, 33);
-      await ready(opened.page, '查询 Peach 状态');
+      await ready(opened.page, 'Check Peach status');
       const calls = await opened.page.evaluate(() => window.javMock.calls);
       assert.ok(calls.every(call => call.method === 'GET'));
       await opened.page.clock.fastForward(60_000);
@@ -670,7 +670,7 @@ describe('JAV 用户脚本', () => {
     } finally { await opened.close(); }
     const owned = await open(browser, { initial: 'owned' });
     try {
-      await ready(owned.page, '已有该影片');
+      await ready(owned.page, 'Already have this video');
       assert.equal(await button(owned.page).isDisabled(), true);
     } finally { await owned.close(); }
   });

@@ -1,4 +1,4 @@
-"""浏览器与用户脚本的本机版本快照；读取不触发外部更新检查。"""
+"""Local version snapshot of browsers and userscripts; reading does not trigger an external update check."""
 from __future__ import annotations
 
 import hashlib

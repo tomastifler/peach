@@ -111,7 +111,7 @@ const LAZY_QUERIES: [QueryKey, (context: { signal: AbortSignal }) => Promise<unk
  *  不重取已缓存的键，不在这里推一把，读数就停在上一次进来时的样子。第一次进来时它们还
  *  没有缓存，由各自的 `useQuery` 挂载时取。
  *
- *  锚点定位要等读数、链接管理与孤儿记录就绪，让滚动使用内容落地后的坐标。 */
+ *  Anchor positioning waits for the readouts, link management and orphan records to be ready, so scrolling uses the coordinates after the content has landed. */
 export async function prefetchDataCleanup(signal: AbortSignal): Promise<void> {
   const anchored = !!location.hash;
   const lazy = LAZY_QUERIES.map(([queryKey, queryFn]) => {

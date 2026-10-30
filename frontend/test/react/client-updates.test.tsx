@@ -6,7 +6,7 @@ import { buttonNamed, click, linkNamed, mountRoot, pending, settle } from './ren
 
 const current: ClientUpdates = {
   runtime: { version: '0.9.0', build_id: 'build-a' },
-  release: { current_version: '0.9.0', latest_version: '0.9.0', channel: '测试版', installation: '独立测试包',
+  release: { current_version: '0.9.0', latest_version: '0.9.0', channel: '测试版', installation: 'Standalone test build',
     state: 'current', message: '已是最新测试版。', release_url: 'https://example.test/releases' },
   update_job: { state: 'idle', progress: 0 },
   userscript: { version: '0.8.0', minimum_version: '0.7.0', install_url: '/peach.user.js' },
@@ -29,7 +29,7 @@ async function render(initial = current, firstError = false, state: DocumentVisi
   vi.useFakeTimers();
   visible(state);
   const fetcher = vi.fn(async (_path: string, _init?: RequestInit) => response(initial));
-  if (firstError) fetcher.mockRejectedValueOnce(new Error('连接失败'));
+  if (firstError) fetcher.mockRejectedValueOnce(new Error('Connection failed'));
   vi.stubGlobal('fetch', fetcher);
   const slot = document.createElement('div');
   slot.setAttribute('data-network-banner', '');
@@ -75,10 +75,10 @@ it('首次读取只保存运行基线，发行版可更新时提供现有设置�
   const reload = vi.spyOn(window.location, 'reload').mockImplementation(() => {});
   const { slot, fetcher, navigate } = await render(available());
   expect(slot.querySelector('[data-client-update]')?.getAttribute('data-client-update')).toBe('available');
-  expect(slot.textContent).toContain('有可用更新。');
+  expect(slot.textContent).toContain('An update is available.');
   expect(slot.textContent).toContain('Peach 0.10.0');
-  expect(linkNamed('查看更新', slot)?.getAttribute('href')).toBe(RELEASE_UPDATES_PATH);
-  await click(linkNamed('查看更新', slot));
+  expect(linkNamed('View update', slot)?.getAttribute('href')).toBe(RELEASE_UPDATES_PATH);
+  await click(linkNamed('View update', slot));
   expect(navigate).toHaveBeenCalledWith(RELEASE_UPDATES_PATH);
   expect(fetcher.mock.calls.map(([path]) => path)).toEqual(['/api/client-updates']);
   expect(reload).not.toHaveBeenCalled();
@@ -95,30 +95,30 @@ it.each([
   await tick();
   expect(slot.querySelector('[data-client-update="refresh"]')).not.toBeNull();
   expect(reload).not.toHaveBeenCalled();
-  await click(buttonNamed('刷新页面', slot));
+  await click(buttonNamed('Refresh page', slot));
   expect(reload).toHaveBeenCalledTimes(1);
 });
 
 it('稍后隐藏相同更新，发行版本和准备状态变化时重新提示', async () => {
   const { slot, fetcher } = await render(available());
-  await click(buttonNamed('稍后', slot));
+  await click(buttonNamed('Later', slot));
   await tick();
   expect(slot.childElementCount).toBe(0);
   fetcher.mockResolvedValue(response(available('0.11.0')));
   await tick();
   expect(slot.textContent).toContain('Peach 0.11.0');
-  await click(buttonNamed('稍后', slot));
+  await click(buttonNamed('Later', slot));
   fetcher.mockResolvedValue(response({ ...available('0.11.0'), update_job: { state: 'ready', progress: 100, version: '0.11.0' } }));
   await tick();
   expect(slot.querySelector('[data-client-update="ready"]')).not.toBeNull();
-  expect(slot.textContent).toContain('可重启安装');
+  expect(slot.textContent).toContain('restart to install it');
 });
 
 it('刷新提示稍后保持关闭，新运行标记重新提示', async () => {
   const { slot, fetcher } = await render();
   fetcher.mockResolvedValue(response({ ...current, runtime: { ...current.runtime, build_id: 'build-b' } }));
   await tick();
-  await click(buttonNamed('稍后', slot));
+  await click(buttonNamed('Later', slot));
   await tick();
   expect(slot.childElementCount).toBe(0);
   fetcher.mockResolvedValue(response({ ...current, runtime: { ...current.runtime, build_id: 'build-c' } }));
@@ -128,9 +128,9 @@ it('刷新提示稍后保持关闭，新运行标记重新提示', async () => {
 
 it('后台失败保持安静并保留已取得的更新提示', async () => {
   const { slot, fetcher } = await render(available());
-  fetcher.mockRejectedValue(new Error('连接失败'));
+  fetcher.mockRejectedValue(new Error('Connection failed'));
   await tick();
-  expect(slot.textContent).toContain('有可用更新');
+  expect(slot.textContent).toContain('An update is available');
   expect(slot.querySelector('[role="alert"]')).toBeNull();
   expect(slot.textContent).not.toContain('已是最新');
 });
@@ -193,8 +193,8 @@ it('隐藏中止在途请求，恢复后忽略迟到快照并立即读取当前�
 it('准备更新中的稍后选择贯穿下载、校验和解压，准备好时重新提示', async () => {
   const preparing = { ...available(), update_job: { state: 'downloading', progress: 10, version: '0.10.0' } };
   const { slot, fetcher } = await render(preparing);
-  expect(linkNamed('查看进度', slot)).not.toBeNull();
-  await click(buttonNamed('稍后', slot));
+  expect(linkNamed('View progress', slot)).not.toBeNull();
+  await click(buttonNamed('Later', slot));
   for (const state of ['verifying', 'extracting']) {
     fetcher.mockResolvedValue(response({ ...preparing, update_job: { ...preparing.update_job, state } }));
     await tick();
@@ -202,5 +202,5 @@ it('准备更新中的稍后选择贯穿下载、校验和解压，准备好时�
   }
   fetcher.mockResolvedValue(response({ ...preparing, update_job: { ...preparing.update_job, state: 'ready' } }));
   await tick();
-  expect(slot.textContent).toContain('可重启安装');
+  expect(slot.textContent).toContain('restart to install it');
 });

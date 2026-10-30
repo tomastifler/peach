@@ -86,7 +86,7 @@ class Question:
 @dataclass(frozen=True)
 class Answers:
     data_root: Path
-    #: 已解析的绝对路径，互不重复也互不包含；网页明确选择稍后添加时为空。
+    #: Resolved absolute paths, mutually distinct and non-overlapping; empty when the web page explicitly chose to add later.
     media_dirs: tuple[Path, ...]
     host: str
     port: int

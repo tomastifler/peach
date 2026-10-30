@@ -137,7 +137,7 @@
 }
 .peach-react [data-item-detail] [data-detail-title][data-expanded] { display: block; -webkit-line-clamp: unset; line-clamp: unset; }
 .peach-react [data-item-detail] [data-detail-title][data-foldable] { cursor: pointer; }
-/* 展开、取景与两枚文件键：行内档的纯图标方键。图标必须显式写 stroke/fill，Lucide 是描边路径，
+/* Expand, framing and two file keys: icon-only square keys for the inline tier. Icons must set stroke/fill explicitly, since Lucide uses stroked paths,
    缺了就被按默认 fill:black 画成黑块。在线条目没有那两枚文件键，标题又没溢出时这一排里一枚
    可见的键都没有，整行连边距一起收掉。 */
 .peach-react [data-item-detail] [data-title-tools] { display: flex; align-items: center; gap: 6px; margin: 6px 0 0; flex-wrap: nowrap; }

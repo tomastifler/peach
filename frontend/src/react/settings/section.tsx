@@ -44,7 +44,7 @@ export function Section({ title, icon, id, aside, onSubmit, children }: SectionP
     : <section id={id} aria-label={title} className="flex w-full flex-col gap-2 wrap-anywhere">{body}</section>;
 }
 
-/** 设置行组：内部由行画线，相邻行组由共享样式补齐边界。 */
+/** Setting row group: rows draw their own dividers inside, and adjacent groups get their borders completed by shared styles. */
 export function Rows({ children }: { children: ReactNode }) {
   return <div className="ui-settings-rows flex flex-col empty:hidden">{children}</div>;
 }
@@ -57,8 +57,8 @@ export function Stack({ divided = false, children }: { divided?: boolean; childr
     : <div className="flex flex-col gap-4 py-4 pr-3 empty:hidden">{children}</div>;
 }
 
-/** 分区首次取数：画 `configuration-skeleton.ts` 里这个分区的那一份骨架，与整页骨架里这一块是同一段
- *  结构，整页骨架交给 React 时位置不动。挂载时取一次，读回之前不随渲染重算。状态名只给辅助技术。 */
+/** First data load of a section: draws the section's own copy of the skeleton in `configuration-skeleton.ts`, which is the same segment of structure as this block in the full-page skeleton,
+ *  so nothing moves when the full-page skeleton is handed over to React. Taken once on mount and not recomputed on render before the data comes back. The status name is for assistive technology only. */
 export function SectionSkeleton({ label, html }: { label: string; html: () => string }) {
   const [markup] = useState(html);
   return <div className="contents" data-skeleton="" aria-busy="true" aria-label={label} dangerouslySetInnerHTML={{ __html: markup }} />;
@@ -104,11 +104,11 @@ export function ExternalLink({ href, children, leadingIcon }: {
   );
 }
 
-/** 后台任务的进度在任务中心看：说明句后面跟这一颗，点了站内跳过去。 */
+/** Background job progress is viewed in the task center: this link follows the description line and jumps within the site when clicked. */
 export function TaskCenterLink() {
   return (
     <LinkButton href="/tasks" size="small" trailingIcon={RiArrowRightLine} className="self-start">
-      在任务中心查看进度
+      View progress in the task center
     </LinkButton>
   );
 }

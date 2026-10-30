@@ -108,7 +108,7 @@ const playlists = {
   }],
 };
 
-/** 本地取数替身：关注列表、凭据与播放列表各回一份，记下每一次请求。 */
+/** 本地取数替身：Follow list、凭据与播放列表各回一份，记下每一次请求。 */
 function serve() {
   const fetched = vi.fn((input: string) => {
     const path = new URL(String(input), 'http://peach.test').pathname;

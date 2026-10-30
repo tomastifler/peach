@@ -2,7 +2,7 @@
 .peach-react [data-catalog-table] .bui-table td { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .peach-react [data-catalog-rating] { display: flex; flex-direction: column; align-items: stretch; gap: 8px; white-space: normal; }
 .peach-react [data-catalog-rating] [data-rating-stars] { align-self: flex-start; }
-/* 名称格：缩略图、头像、标题与署名横排；头像和署名与卡片同一套，点得开人物与厂牌页。 */
+/* Name cell: thumbnail, avatar, title and byline laid out horizontally; avatar and byline use the same scheme as cards, and the person and studio pages can be opened. */
 .peach-react [data-catalog-table] [data-list-identity] { position: relative; display: flex; align-items: center; gap: 12px; min-width: 0; padding: 12px 0; }
 .peach-react [data-catalog-table] [data-list-open] { display: flex; flex: none; margin-right: 4px; padding: 0; border: 0; background: none; cursor: pointer; }
 .peach-react [data-catalog-table] [data-list-identity] > [data-media-avatar] { margin-top: 0; }
@@ -13,30 +13,30 @@
 .peach-react [data-catalog-table] [data-list-picture] :is(img,video) { width: 100%; height: 100%; }
 .peach-react [data-catalog-table] [data-list-picture] :is(img:not([data-jav-image]),video) { object-fit: cover; }
 .peach-react [data-catalog-table] [data-list-text] { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; }
-/* 标题最多两行再截断：行高按缩略图定，两行标题加一行署名放得下，作品列窄时少截一半。 */
+/* Titles are truncated after at most two lines: row height is set by the thumbnail, two title lines plus one byline line fit, and the work column is narrow so less is cut by half. */
 .peach-react [data-catalog-table] [data-list-name] { display: -webkit-box; min-width: 0; overflow: hidden; white-space: normal; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.4; }
 .peach-react [data-catalog-table] [data-list-identity]:has([data-list-open]:hover, [data-list-name]:hover) [data-list-name] { text-decoration: underline; }
 .peach-react [data-catalog-table] [data-list-byline] { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; white-space: nowrap; color: var(--muted); font-size: var(--fs-sm); }
 .peach-react [data-catalog-table] [data-list-byline] > * { flex: none; }
 .peach-react [data-catalog-table] [data-list-byline] > [data-media-who] { flex: 0 1 auto; min-width: 0; }
 .peach-react [data-catalog-table] [data-list-byline] [data-media-who] svg { flex: none; width: var(--icon-inline); height: var(--icon-inline); fill: none; stroke: currentColor; stroke-width: 2; }
-/* 列表行的来源：署名前是媒体库图标加名称；用户给这个媒体库选了来源色时整行铺淡色。
- * 个人状态图标缩小后贴在预览图左下角。 */
+/* List row source: before the byline is the library icon plus name; when the user chose a source color for this library, the whole row is tinted lightly.
+ * The personal status icon is shrunk and sits at the bottom-left of the preview image. */
 .peach-react [data-catalog-table] [data-list-library] { display: inline-flex; align-items: center; gap: 4px; color: var(--ink-2); }
 .peach-react [data-catalog-table] [data-catalog-row][data-library] > td { background: color-mix(in oklab, var(--library-color) 9%, transparent); }
 [data-theme="dark"] .peach-react [data-catalog-table] [data-catalog-row][data-library] > td { background: color-mix(in oklab, var(--library-color) 13%, transparent); }
 .peach-react [data-catalog-table] [data-list-picture] [data-media-status] { left: 4px; bottom: 4px; gap: 4px; }
 .peach-react [data-catalog-table] [data-list-picture] [data-media-status] > span { width: 20px; height: 20px; }
 .peach-react [data-catalog-table] [data-list-picture] [data-media-status] svg { width: 11px; height: 11px; }
-/* 标签列：最多两行，放不下的收进行尾，不撑高整行。行里的标签取行内档，与同行评分、详情层标签同高；
- * 两行上限按这一档算，13px 是行间 5px 加上下各 4px 的焦点环余量。 */
+/* Tags column: at most two lines, anything that does not fit goes to the end of the row, so it does not make the whole row taller. Tags in a row use the inline tier, the same height as the rating in the row and the detail layer's tags;
+ * the two-line cap is computed from this tier, and 13px is the 5px between rows plus the 4px top and bottom of focus-ring allowance. */
 .peach-react [data-catalog-table] [data-list-tags] { height: auto; max-height: calc(var(--control-h-inline) * 2 + 13px); white-space: normal; }
 .peach-react [data-catalog-table] [data-list-tags] [data-media-tag] { box-sizing: border-box; height: var(--control-h-inline); padding-block: 0; line-height: calc(var(--control-h-inline) - 2px); }
-/* 列表骨架：壳的首屏与列表岛等数据时同一份格子，尺寸照真实行（缩略图 112×63、头像 38、标题署名两行）。 */
+/* List skeleton: the shell's first paint and the list island waiting for data share the same cells, with sizes matching real rows (thumbnail 112×63, avatar 38, title and byline two lines). */
 .peach-react [data-list-skeleton] { display: flex; flex-direction: column; gap: 16px; }
 .peach-react [data-list-skeleton-tools] { display: flex; justify-content: flex-end; }
 .peach-react [data-list-skeleton-tools] > i { display: block; width: 312px; max-width: 100%; height: 36px; border-radius: var(--control-radius); }
-/* 缺图提示行的预留：一行正文加默认档按钮，上下各 8px，与提示条同高。 */
+/* Reserved space for the missing-image hint row: one line of body text plus a default-tier button, 8px top and bottom, the same height as the hint bar. */
 .peach-react [data-completion-skeleton] { display: block; height: calc(var(--control-h) + 16px); border-radius: var(--radius-2lg, 10px); }
 .peach-react [data-list-skeleton-name] { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
 .peach-react [data-list-skeleton-name] > i { flex: none; width: 112px; height: 63px; margin-right: 4px; border-radius: var(--control-radius); }
@@ -45,7 +45,7 @@
 .peach-react [data-list-skeleton-name] > span > i { display: block; width: 72%; height: 14px; border-radius: 6px; }
 .peach-react [data-list-skeleton-name] > span > i + i { width: 44%; height: 12px; }
 .peach-react [data-list-skeleton-bar] { display: block; width: min(72%, 96px); height: 14px; border-radius: 6px; }
-/* 列表骨架挂在卡片网格容器里时占满整行；不按网格的类名写，免得和旧样式表同名。 */
+/* When the list skeleton is mounted inside the card grid container it fills the whole row; it is not written by the grid's class names, to avoid colliding with the old style sheet's same names. */
 [data-skeleton="catalog/list"] { grid-column: 1 / -1; }
 @media(max-width:760px) {
   .peach-react [data-catalog-table] .bui-table :is(th,td):first-child { padding-inline: 8px; }

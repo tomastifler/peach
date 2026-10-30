@@ -1,6 +1,6 @@
 .peach-react [data-jav-detail] [data-jav-art] { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 0; min-height: 260px; }
 .peach-react [data-jav-picture] { display: block; width: 100%; height: auto; max-height: calc(76vh - 112px); object-fit: contain; min-height: 0; }
-/* 来源图片读取中藏着但留在原位；大图与缩略图条都给 img 写了 display，这里压回去。 */
+/* The source image stays hidden but in place while loading; both the large image and the thumbnail strip set display on img, so override it here. */
 .peach-react img[data-source-picture][hidden] { display: none !important; }
 .peach-react [data-jav-picture-wait] { display: grid; place-items: center; width: 100%; min-width: 0; min-height: 300px; padding: 24px; }
 .peach-react [data-jav-picture-wait] > :is([role="note"], [role="alert"]) { width: 100%; max-width: 32rem; }

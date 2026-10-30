@@ -104,7 +104,7 @@ async def _wait_for_disconnect(receive: Receive) -> None:
 
 
 async def _wait_for_tasks(*tasks) -> None:
-    """清理期间保留外层取消，等子任务结束后再向上交还。"""
+    """Keep the outer cancellation during cleanup, and hand it back upward after the child tasks end."""
     finished = asyncio.gather(*tasks, return_exceptions=True)
     cancelled = False
     while not finished.done():
@@ -123,7 +123,7 @@ async def _cancel_and_wait(*tasks) -> None:
 
 
 async def run_until_disconnect[T](operation: Awaitable[T], receive: Receive) -> T:
-    """等待请求的工作结果；客户端断开时取消工作，并等待其清理完成。"""
+    """Wait for the work result of a request; cancel the work when the client disconnects, and wait for its cleanup to finish."""
     work = asyncio.ensure_future(operation)
     watch = asyncio.ensure_future(_wait_for_disconnect(receive))
     try:

@@ -1,6 +1,6 @@
-/* 媒体库列表的页内共享：壳的媒体库切换器每次加载都取一次 `/api/libraries`，取到后交到这里，
- * 卡片的来源色与列表行的媒体库名直接读这一份，不再各自请求。来源色以服务端配置为准
- * （`media.library_catalog`，ADR-0116）；本机只缓存上一次的颜色，让首屏卡片不等接口就有色。 */
+/* Page-wide sharing of the library list: the shell's library switcher fetches `/api/libraries` once per load and hands it over here,
+ * so card source colors and list-row library names read this copy directly instead of each making its own request. Source colors follow the server configuration
+ * (`media.library_catalog`, ADR-0116); this machine only caches the last colors, so first-paint cards have color without waiting for the API. */
 
 export interface LibraryRow {
   id: string; name: string; icon?: string; color?: string; policy?: string;
@@ -11,7 +11,7 @@ const CACHE_KEY = 'peach.library-colors.v1';
 let rows: readonly LibraryRow[] | null = null;
 const listeners = new Set<(rows: readonly LibraryRow[]) => void>();
 
-/** 上一次服务端给的颜色 `{library_id: 强调色键}`，只作首屏用。 */
+/** The colors the server last gave, `{library_id: accent key}`, used only for first paint. */
 export function cachedLibraryColors(): Record<string, string> {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
@@ -25,7 +25,7 @@ export function publishLibraries(next: readonly LibraryRow[]): void {
   rows = next;
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(Object.fromEntries(next.filter(row => row.color).map(row => [row.id, row.color]))));
-  } catch { /* 存不下时下次首屏等接口再上色。 */ }
+  } catch { /* If it cannot be stored, next time the first paint waits for the API before coloring. */ }
   listeners.forEach(listener => listener(next));
 }
 

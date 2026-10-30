@@ -31,7 +31,7 @@ LOGGER = logging.getLogger(__name__)
 
 #: 写账本的后继共用的通道名。它不是任务种类，是「这条路上一次只许过一个」。
 LEDGER_LANE = "ledger"
-#: 后继让路以后，通道隔多久看一眼路让回来没有。
+#: After a successor yields, how often the channel checks whether the way has been given back.
 DEFER_POLL_SECONDS = 1.0
 
 
@@ -103,8 +103,8 @@ class FollowupType:
     `run(contract, key, handle)` 返回一份摘要字典，异常一律算这一条失败——后继失败
     不回滚也不改判父任务（ADR-0040 第四条），所以这里不往上抛。
 
-    `jumps_queue` 的后继在自己的通道里先于别的种类领取（ADR-0114）：给人刚做完的那件事
-    收尾的后继，人在等它；补资料、补头像这类后台存量不急。
+    `jumps_queue` successors are claimed ahead of other kinds in their own channel (ADR-0114): for what a person has just done
+    finishing successors, which a person is waiting on; background backlog like metadata backfill and avatar backfill is not urgent.
     """
 
     task_key: str
@@ -140,7 +140,7 @@ def lanes() -> dict[str, tuple[str, ...]]:
 
 
 def _ahead(keys) -> tuple[str, ...]:
-    """这几类里插队先领的那些（`FollowupType.jumps_queue`）。"""
+    """Those among these kinds that jump the queue and are claimed first (`FollowupType.jumps_queue`)."""
     return tuple(key for key in keys if key in REGISTRY and REGISTRY[key].jumps_queue)
 
 
@@ -217,7 +217,7 @@ class FollowupRunner:
                 deferred = self._execute(run)
                 done += 1
                 if deferred is not None:
-                    # 让路的那条已回到队列，同步排空时没人会把路让回来，留给后台通道。
+                    # The yielding one has returned to the queue; when draining synchronously nobody will give the way back, so it is left to the background channel.
                     break
         return done
 
@@ -240,12 +240,12 @@ class FollowupRunner:
             finally:
                 with self._lock:
                     self._active.pop(thread, None)
-            # 让路的那条已回到队列：路让回来之前再领，领到的还是它。
+            # The yielding one has returned to the queue: claiming again before the way is given back would just get it.
             while deferred is not None and not self._stopping and not deferred.ready():
                 time.sleep(DEFER_POLL_SECONDS)
 
     def _execute(self, run):
-        """跑一条后继；它给别的任务让路时返回那个 `JobDeferred`，否则返回 None。"""
+        """Run one successor; when it yields to another task, return `JobDeferred`, otherwise return None."""
         from .jobs import JobDeferred, JobPaused
         followup_type = REGISTRY.get(run.task_key)
         handle = TaskRunHandle(self.store, run.id)
@@ -260,7 +260,7 @@ class FollowupRunner:
             self.store.suspend(run.id, label=str(error), paused_for_update=False)
             return error
         except JobPaused as error:
-            self.store.suspend(run.id, label=str(error) or '等待安装完成后继续')
+            self.store.suspend(run.id, label=str(error) or 'Waiting for installation to finish before continuing')
             self._paused_for_update = True
             return
         except Exception as error:  # 后继失败只是它自己失败，父任务的结论不动。

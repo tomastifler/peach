@@ -127,10 +127,10 @@ def stock(connection: sqlite3.Connection, logo_root, attempts, *, limit: int,
 
 
 def run(contract, key: str, handle) -> dict:
-    """跑一条补厂牌后继，再把厂牌当时的指纹记进 `Attempts`，存量补派按它判。
+    """Run one studio-backfill successor, then record the studio's fingerprint at that time into `Attempts`, backlog re-dispatch decides by it.
 
-    人像闸取不到模型的那一次不记：结论取决于那天有没有网，记下来就要等到这家多一部
-    作品或多一条链接才会再试，活动中心「立即重试」取回模型之后也补不回来。
+    An attempt where the portrait gate could not get the model is not recorded: the conclusion depends on whether there was a network that day, and once recorded it would wait until this studio gets one more
+    work or one more link before it is tried again, and even after "Retry now" in the Activity Center fetches the model it could not be backfilled.
     """
     summary = _run(contract, key, handle)
     if summary.get("face_match_unavailable"):

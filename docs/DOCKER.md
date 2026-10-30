@@ -1,14 +1,14 @@
 # Docker deployment
 
-Peach 的 Docker 镜像用于单人 VPS 与 NAS，通过浏览器管理，镜像仓库为 [longmeidao/peach](https://hub.docker.com/r/longmeidao/peach)。每次发布推送版本号标签，并把 `edge` 更新为同一镜像；版本号标签对应发布提交。当前镜像目标为 `linux/amd64`；ARM NAS 尚未验收。2026-10-15 在 WSL 的独立 Docker Engine 中，用正式锁定依赖通过空数据卷初始化、非 root、鉴权、配置保存、合成视频扫描、HTTP Range、配置重载与重启持久化验收。
+Peach's Docker image is for a single-user VPS or NAS, managed through the browser, and the image repository is [longmeidao/peach](https://hub.docker.com/r/longmeidao/peach). Every release pushes a version tag and updates `edge` to the same image; the version tag corresponds to the release commit. The current image target is `linux/amd64`; ARM NAS has not been accepted yet. On 2026-10-15, in a standalone Docker Engine on WSL, the official locked dependencies passed acceptance for empty-volume initialization, non-root, authentication, configuration saving, synthetic video scanning, HTTP Range, configuration reload and restart persistence.
 
 Docker does not use the desktop tray. When adding a media directory in the web configuration, enter only the actual directory inside the container, such as `/media`; Peach saves the required path configuration automatically. The entry points for the Windows installer, macOS source run and Docker are described in the [README](../README.en.md#download-and-use).
 
 ## Data and media
 
-NAS 的 SMB 共享也可作为[SMB 媒体来源](SMB.md)直接连接，按账号权限读写，无需挂入媒体目录；Peach 数据卷仍单独保留。
+A NAS's SMB share can also be connected directly as an [SMB media source](SMB.md), read and written with the account's permissions, without being mounted into the media directory; the Peach data volume is still kept separately.
 
-`/data` 保存配置、SQLite 数据库、凭据和图片缓存，必须使用数据卷保存，重建容器时保留该卷。媒体目录单独挂到 `/media`；默认只读，扫描和播放不需要媒体写权限。整理、移动与删除需要使用者明确提供可写挂载。
+`/data` holds the configuration, SQLite database, credentials and image cache, must be stored on a data volume, and that volume is kept when the container is rebuilt. The media directory is mounted separately at `/media`; it is read-only by default, and scanning and playback need no media write permission. Organizing, moving and deleting require the user to explicitly provide a writable mount.
 
 CloudDrive2 and Peach run separately. If the NAS already has CloudDrive2, reuse it; on a fresh machine, install it and bind your cloud drive following the [official CloudDrive2 Docker guide](https://www.clouddrive2.com/docker.html). For the Peach container to read cloud-drive directories that CloudDrive2 mounts later, the Linux host must support FUSE, and CloudDrive2's mount directory must be configured so that mount changes can be shared; `rslave` in Compose lets those changes propagate into the Peach container. This mechanism does not apply to Docker Desktop; see the [Docker bind propagation documentation](https://docs.docker.com/engine/storage/bind-mounts/#configure-bind-propagation). The Peach container does not need FUSE or privileged mode. Directory permissions must allow reads by the container user, UID 1000.
 
@@ -16,24 +16,24 @@ For cloud download or push discovery, set the CloudDrive2 API address in the Pea
 
 The `compose.yaml` at the repository root uses `PEACH_MEDIA_ROOT` to specify the existing media root on the host; inside the container it is always `/media`. Finish the CloudDrive2 mount first, then start Peach. The named volume `peach-data` holds `/data`; do not run any operation that deletes this volume. To bind an existing data directory, make a full backup first and make sure UID 1000 can write to it; do not let another Peach write to this Peach database at the same time.
 
-### 迁移数据目录
+### Migrating the Data Directory
 
-`/data` 的位置由宿主机上的挂载决定，容器里改不了，所以配置页「存储空间」不提供「更改位置」，改为列出下面几步。在宿主机上执行：
+The location of `/data` is decided by the mount on the host and cannot be changed inside the container, so the configuration page's "Storage" does not offer "Change location" and instead lists the steps below. Run them on the host:
 
-1. 查出数据卷的名字，以 `_peach-data` 结尾：`docker volume ls`。
-2. 在 `compose.yaml` 所在目录停止 Peach：`docker compose down`。
-3. 把数据卷复制到新文件夹，新文件夹要让 UID 1000 可写：`docker run --rm -v <数据卷名>:/from -v <新文件夹>:/to alpine cp -a /from/. /to/`。
-4. 把 `compose.yaml` 里的 `peach-data:/data` 改成 `<新文件夹>:/data`，再启动：`docker compose up -d`。
+1. Find the name of the data volume, which ends with `_peach-data`: `docker volume ls`.
+2. In the directory containing `compose.yaml`, stop Peach: `docker compose down`.
+3. Copy the data volume to a new folder, which must be writable by UID 1000: `docker run --rm -v <volume name>:/from -v <new folder>:/to alpine cp -a /from/. /to/`.
+4. Change `peach-data:/data` in `compose.yaml` to `<new folder>:/data`, then start: `docker compose up -d`.
 
-确认新位置一切正常之前，不要删除旧数据卷。
+Do not delete the old data volume until you have confirmed everything works at the new location.
 
-## 首次运行与访问
+## First Run and Access
 
-### 飞牛、其他 NAS 与局域网访问
+### Feiniu fnOS, Other NAS and LAN Access
 
-浏览器在另一台电脑上时，访问地址使用 NAS 的局域网 IP。Compose 默认的 `127.0.0.1` 只允许宿主机访问；容器显示运行成功不代表局域网端口已开放。
+When the browser is on another computer, the access address uses the NAS's LAN IP. Compose's default `127.0.0.1` allows access from the host only; a container shown as running does not mean the LAN port is open.
 
-在 `compose.yaml` 同目录创建 `.env`，将下面的示例 IP 和目录换成 NAS 的实际值。`PEACH_PORT` 是浏览器使用的宿主机端口，可自行选择：
+Create `.env` in the same directory as `compose.yaml`, and replace the example IP and directory below with the NAS's actual values. `PEACH_PORT` is the host port the browser uses, and you can choose it freely:
 
 ```dotenv
 PEACH_BIND=192.0.2.10
@@ -41,13 +41,13 @@ PEACH_PORT=8900
 PEACH_MEDIA_ROOT=/srv/videos
 ```
 
-`192.0.2.10` 是文档示例地址，不能直接用于部署。NAS 管理界面支持 Compose 环境变量时，也可在那里填写这三个值。应用配置并重新创建容器后，打开 `http://<NAS 局域网 IP>:<PEACH_PORT>`。不要在另一台电脑上用 `127.0.0.1` 访问 NAS。
+`192.0.2.10` is a documentation example address and cannot be used directly for deployment. When the NAS management UI supports Compose environment variables, you can also fill in these three values there. After the app applies the configuration and recreates the container, open `http://<NAS LAN IP>:<PEACH_PORT>`. Do not use `127.0.0.1` on another computer to access the NAS.
 
-登录口令由 Peach 随机生成，没有通用初始密码。在 NAS 的容器管理界面打开 Peach 容器终端，运行 `peach token` 查看；通过宿主机 Compose 终端时运行 `docker compose exec peach peach token`。登录后设置访问密码。
+The login token is generated randomly by Peach, and there is no universal initial password. Open the Peach container terminal in the NAS's container management UI and run `peach token` to view it; through the host's Compose terminal, run `docker compose exec peach peach token`. Set an access password after logging in.
 
-### 初始化与管理
+### Initialization and Management
 
-使用 Compose 启动后，Peach 会为全新数据卷创建配置、数据库和随机登录口令。已有配置保持原值；如果已有数据库但缺少配置文件，服务拒绝启动，需要恢复配置文件。初始化日志只显示口令文件位置。
+After starting with Compose, Peach creates the configuration, database and a random login token for a brand-new data volume. An existing configuration keeps its values; if a database exists but the configuration file is missing, the service refuses to start and the configuration file must be restored. The initialization log shows only the token file location.
 
 Run `peach token` in the container terminal to get the login token, then log in from the browser and set an access password. The configuration page requires login, and the connection must come from the container itself or a private network; management requests carrying proxy forwarding headers are rejected. After saving through the configuration page, the service reloads the configuration automatically; if scanning is checked, metadata processing starts.
 
@@ -69,9 +69,9 @@ The default template contains only initial values, not the media directories and
 
 The following is for reference when editing the configuration by hand or mapping existing media directories between multiple Peach instances. Saving from the web page handles `[media.locations]` and `[media.mounts]`: the former holds the path prefixes in the database, and the latter holds the directories from which files are actually read. The Peach database stores video paths in Windows format on every system; Linux does not need to create the same drive letter or directory.
 
-全新配置不预设媒体目录。盘符不决定来源，115 与 PikPak 均可选择任意已挂载目录；容器内填写实际路径即可。文档中的盘符只是数据库路径示例。
+A brand-new configuration presets no media directory. Drive letters do not decide sources, and both 115 and PikPak can select any mounted directory; just enter the actual path inside the container. Drive letters in the docs are only examples of database paths.
 
-以下三个路径各有用途。假设宿主机媒体目录为 `/srv/videos`，Compose 将它挂到容器 `/media`：
+The following three paths each have a purpose. Suppose the host media directory is `/srv/videos`, which Compose mounts at the container's `/media`:
 
 | Location | Example | Purpose |
 | --- | --- | --- |
@@ -101,9 +101,9 @@ The service in the container always listens on `0.0.0.0:8900`; the host access a
 
 On the first re-encode, Linux probes which hardware encoders are actually available; whole-file MP4 and HLS segments share the probe result. AMD / Intel use VAAPI; when an NVIDIA device is present, NVENC is probed. A backend whose probe fails is not tried again within the current service process and is probed again after the service restarts. Container remuxing (stream copy) needs no hardware probe.
 
-镜像自带 OpenCV（`vision` 依赖组）和头像取景与比对用的人脸模型（YuNet 为 MIT，SFace 为 Apache-2.0，许可证在同一目录），位于 `/app/tools/face-models`，由 `PEACH_FACE_MODELS` 指向，容器不联网也能用。构建镜像时按固定地址下载并校验 SHA-256。
+The image bundles OpenCV (the `vision` dependency group) and the face models for avatar framing and matching (YuNet is MIT, SFace is Apache-2.0, with licenses in the same directory), located in `/app/tools/face-models` and pointed to by `PEACH_FACE_MODELS`, usable without the container going online. The image build downloads them from fixed addresses and verifies SHA-256.
 
-镜像包含 Debian FFmpeg、Mesa VAAPI 驱动与 `vainfo`。AMD 宿主机需加载 `amdgpu` 和对应固件，并提供 `/dev/dri/renderD*`。Intel 需在自定义镜像内安装适配设备的 VAAPI 驱动；Mesa 驱动不代表已覆盖全部 Intel GPU。将下面的条目合入 Compose 的 `services.peach`，设备路径按宿主机调整：
+The image includes Debian FFmpeg, Mesa VAAPI drivers and `vainfo`. An AMD host must load `amdgpu` and the matching firmware and provide `/dev/dri/renderD*`. Intel needs a VAAPI driver for the device installed in a custom image; the Mesa driver does not mean all Intel GPUs are covered. Merge the entries below into Compose's `services.peach`, adjusting the device path to the host:
 
 ```yaml
     devices:
@@ -128,33 +128,33 @@ When CPU usage is high, first check the log lines "转码硬件后端" (transcod
 
 `ffmpeg -hwaccels` lists the hardware acceleration methods supported by the build, and `ffmpeg -h decoder=h264` and similar commands list the hardware devices supported by the corresponding decoder. VAAPI decoding is enabled through the hardware acceleration interface of the ordinary decoder, so the absence of a decoder named `vaapi` in `ffmpeg -decoders` does not mean VAAPI decoding is unsupported. For the meaning of the parameters see the [official FFmpeg documentation](https://ffmpeg.org/ffmpeg.html#Advanced-Video-options). The actual decoding, GPU usage and playback behavior on the target GPU must be verified on the deployment machine.
 
-## amane 刮削站点
+## amane Scraping Sites
 
-镜像随附按 `tools/amane-bridge/uv.lock` 构建的 amane `0.20.0` 独立环境，位于 `/app/amane-runtime`，通过 `PEACH_AMANE_RUNTIME` 定位。全新 `/data` 卷可直接调用刮削站点，无需在首次运行时安装依赖。桥通过独立子进程调用，站点请求仍使用所选连接方式。
+The image bundles a standalone amane `0.20.0` environment built from `tools/amane-bridge/uv.lock`, located at `/app/amane-runtime` and found through `PEACH_AMANE_RUNTIME`. A brand-new `/data` volume can call the scraping sites directly, with no need to install dependencies on first run. The bridge is called through a separate subprocess, and site requests still use the selected connection method.
 
-运行环境与镜像一起更新，`manifest.json` 记录固定 revision、版本和解释器相对路径。镜像构建阶段与最终运行阶段都会执行 `bridge.py --self-check`，离线载入运行时与全部 Peach 开放站点类。此检查不发站点请求；来源网络是否可达需在部署环境验证。环境损坏时重新拉取并创建对应镜像，保留 `/data` 卷。
+The runtime environment is updated together with the image, and `manifest.json` records the pinned revision, version and the interpreter's relative path. Both the image build stage and the final runtime stage run `bridge.py --self-check`, loading the runtime and all Peach-enabled site classes offline. This check sends no site requests; whether the source network is reachable must be verified in the deployment environment. When the environment is damaged, pull again and recreate the corresponding image, keeping the `/data` volume.
 
-`/app/amane-runtime` 同时包含 GPL-3.0 许可证、来源说明和 `amane-corresponding-source.zip`；归档包含固定 revision 的完整 amane 源码、Peach 桥、锁文件、构建入口，以及 zhconv 和 certifi 的固定源码。依赖许可证保留在独立环境内。
+`/app/amane-runtime` also contains the GPL-3.0 license, source notes and `amane-corresponding-source.zip`; the archive contains the complete amane source at the pinned revision, the Peach bridge, the lock files, the build entry point, and the pinned sources of zhconv and certifi. Dependency licenses are kept inside the standalone environment.
 
-## 导出诊断报告
+## Exporting a Diagnostic Report
 
-Docker 部署使用网页「Peach 配置 → 系统诊断 → 下载诊断报告」，无需桌面托盘。已登录的私有网络客户端可以下载；通过反向代理或公网访问时，改用容器内导出。
+Docker deployments use the web page "Peach Settings → System Diagnostics → Download diagnostic report", with no desktop tray needed. Logged-in private-network clients can download it; when accessing through a reverse proxy or the public internet, use the in-container export instead.
 
-网页不可用时，在 Compose 文件所在目录执行下面的命令，在正在运行的 `peach` 服务容器中生成脱敏 ZIP。目标文件已存在会拒绝覆盖；再次导出时同时更换两条命令中的文件名。
+When the web page is unavailable, run the commands below in the directory containing the Compose file to generate a sanitized ZIP in the running `peach` service container. An existing target file is refused rather than overwritten; when exporting again, change the file name in both commands.
 
 ```text
 docker compose exec peach python -m peach.support_bundle /tmp/peach-support.zip
 ```
 
-将 ZIP 复制到当前目录：
+Copy the ZIP to the current directory:
 
 ```text
 docker compose cp peach:/tmp/peach-support.zip ./peach-support.zip
 ```
 
-报告包含版本、运行日志和任务状态，不包含数据库、媒体或配置原文。发送前检查内容，脱敏范围见 [日志与诊断](DIAGNOSTICS.md)。容器不连接宿主机桌面托盘；管理与诊断入口均在网页和 CLI 中提供。
+The report contains the version, run logs and task status, and not the database, media or configuration originals. Check the content before sending; for the sanitization scope see [Logs and diagnostics](DIAGNOSTICS.md). The container does not connect to the host's desktop tray; the management and diagnostic entries are provided in the web page and the CLI.
 
-## 更新与范围
+## Updates and Scope
 
 Keep `/data` when updating the image and recreating the container. When the database has pending migrations, back it up first and follow the migration procedure in [Operation and configuration](OPERATIONS.md); the Docker entrypoint does not migrate an existing database automatically. The health check uses `/healthz?ready=1`.
 
@@ -162,8 +162,8 @@ A Linux container does not read the browsing history on the user's computer and 
 
 ## Image publishing
 
-构建使用官方 Python `3.14.8-slim-trixie` 与 uv `0.13.1`，应用依赖与 amane 独立依赖分别由各自的 `uv.lock` 锁定。应用以非 editable 包安装，包含 Web 与迁移资源。镜像以 UID/GID 1000 运行，内置 FFmpeg、FFprobe、OpenSSL 和 amane 独立环境。uv 与 Git 只用于构建阶段。构建上下文只允许代码与资源，不包含工作树、媒体、真实 Peach 数据库或凭据。
+The build uses the official Python `3.14.8-slim-trixie` and uv `0.13.1`, and the app dependencies and the amane standalone dependencies are locked by their own `uv.lock`. The app is installed as a non-editable package, including web and migration resources. The image runs as UID/GID 1000 and has FFmpeg, FFprobe, OpenSSL and the amane standalone environment built in. uv and Git are used only in the build stage. The build context allows only code and resources, and contains no worktrees, media, real Peach databases or credentials.
 
-GitHub Actions 的 `Docker` 工作流先构建并运行临时卷验收，通过后发布。仓库变量 `DOCKERHUB_USERNAME` 和机密 `DOCKERHUB_TOKEN` 用于 Docker Hub 发布；机密只保存在 GitHub，不进入项目文件。未配置发布身份时仍执行构建验收。ARM 镜像需通过同等运行验收后再加入发布。
+The `Docker` workflow in GitHub Actions first builds and runs the temporary-volume acceptance, and publishes after it passes. The repository variable `DOCKERHUB_USERNAME` and secret `DOCKERHUB_TOKEN` are used for Docker Hub publishing; the secret is stored only in GitHub and never enters project files. When no publishing identity is configured, the build acceptance still runs. ARM images are added to publishing only after passing the same runtime acceptance.
 
-Docker Hub 页面以英文为主，概览正文取自 [docs/dockerhub/README.md](dockerhub/README.md)，链接回 GitHub 的源码、本文和中文 README。简介填写 `Local-first video metadata scraper and media manager. Self-hosted web UI for VPS and NAS.`。发布流水线只推送镜像，概览与简介需要在 Docker Hub 仓库设置中手动更新；镜像、端口、目录或 Compose 示例变化时同批修改该文件。
+The Docker Hub page is mainly in English, and the overview body is taken from [docs/dockerhub/README.md](dockerhub/README.md), linking back to GitHub for the source, this document and the Chinese README. Fill in the short description as `Local-first video metadata scraper and media manager. Self-hosted web UI for VPS and NAS.`. The release pipeline only pushes images, and the overview and description must be updated manually in the Docker Hub repository settings; when the image, ports, directories or Compose example change, edit that file in the same batch.

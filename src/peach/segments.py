@@ -282,8 +282,8 @@ class HlsSegmentService:
                   transcode: bool, codec: str = ""):
         """依次尝试的命令，每项是 (名字, 接收临时文件路径的构造函数)。
 
-        封装复制只有一种。重编码与整片转码共享可用硬件后端，最后回退 libx264；Windows 上
-        libx264 前先试一次 D3D11VA 解码。
+        There is only one kind of container copy. Re-encoding and whole-film transcoding share the available hardware backends, with the last fallback being libx264; Windows
+        libx264: D3D11VA decoding is tried once first.
 
         NVDEC 解得出来的编码才走 CUDA 解码，`codec` 空或不在名单里就从软件解码起。
         判据要在开跑前定，因为坏结果不会自报：实测 `MIAD573_02.wmv`（vc1、1080p）经

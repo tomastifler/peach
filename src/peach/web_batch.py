@@ -1,10 +1,10 @@
-"""垃圾复核展示、批量决定、物理清除与回收站。
+"""Junk review display, batch decisions, physical purge and recycle bin.
 
-`junk` 提供各流程共用的证据与隔离规则；本模块将评分转成页面数据，并执行用户的
-批量决定。自动隔离只进入回收站，永久删除需要独立的确认与取证流程。
+`junk` provides the evidence and quarantine rules shared by all flows; this module turns scores into page data and carries out the user's
+ batch decisions. Automatic quarantine only goes to the recycle bin; permanent deletion needs a separate confirmation and evidence flow.
 
-物理删除要清的引用表只写在 `personal_records.ASSET_REFERENCE_TABLES` 一处。本地文件先隔离，
-账本失败时可以恢复；rclone FUSE 挂载直接删除，账本失败时保留回收站行供重试。
+ The reference tables to be cleared on physical deletion are listed in `personal_records.ASSET_REFERENCE_TABLES` only. Local files are quarantined first,
+ and can be restored if the ledger fails; rclone FUSE mounts are deleted directly, and if the ledger fails the recycle-bin row is kept for retry.
 """
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ from .junk import (
     promo_residue as promo_residue,
 )
 
-# Linux 容器可从 mountinfo 识别媒体实际所在的 FUSE 文件系统。
+# Linux containers can identify the FUSE filesystem the media actually lives on from mountinfo.
 MOUNTINFO_PATH = Path("/proc/self/mountinfo")
 
 #: 批量操作在活动页上的名字。表里存 `operation`，人看的是这一列。
@@ -130,7 +130,7 @@ def q_ads(contract: WebContract, limit=200, offset=0, kind="", status="pending")
 
 
 def _scored_junk(contract: WebContract) -> tuple[list[dict], frozenset[int]]:
-    """领域评分加上页面需要的成本与缩略图状态，路径留在服务内部。"""
+    """Domain scores plus the cost and thumbnail state the page needs, with paths kept inside the service."""
     out, dismissed = junk.scored_candidates(contract)
     for item in out:
         item["cost"] = cost_for(item['location'], item.get('path'))
@@ -159,12 +159,12 @@ def _restore_staged_media(staged):
 
 
 def _mountinfo_field(value: str) -> str:
-    """解码 mountinfo 中空白字符和反斜杠的八进制转义。"""
+    """Decode octal escapes of whitespace and backslashes in mountinfo."""
     return re.sub(r"\\([0-7]{3})", lambda match: chr(int(match.group(1), 8)), value)
 
 
 def _is_rclone_mount(path: Path) -> bool:
-    """按最深挂载点与覆盖关系识别 rclone 文件系统；不确定时保留隔离流程。"""
+    """Identify rclone filesystems by the deepest mount point and coverage; when uncertain, keep the quarantine flow."""
     from .smb_media import SmbResource
     if isinstance(path, SmbResource):
         return False
@@ -341,27 +341,27 @@ def _finish_purge(outcome):
 
 
 def _purge_media_path(row, online_roots: dict[str, tuple[Path, ...]]) -> Path:
-    """核对永久删除目标的路径映射和来源可读性，失败时拒绝删除。"""
+    """Check the path mapping and source readability of the permanent-delete target, and refuse deletion on failure."""
     media = row["path"]
     from .smb_media import resolve
     if remote := resolve(media):
         return remote
     translated = translate_ledger_path(media)
     if is_unmapped(translated):
-        raise OSError("媒体路径未映射到可访问的挂载目录")
+        raise OSError("The media path is not mapped to an accessible mount directory")
     if PureWindowsPath(str(media)).drive:
         location = row["location"] if "location" in row.keys() else None
         if not any(within_root(translated, root) and root_online(root)
                    for root in online_roots.get(location, ())):
-            raise OSError("媒体来源未挂载或不可读取")
+            raise OSError("The media source is not mounted or not readable")
     return translated
 
 
 def purge_assets(connection, rows, *, missing_only: bool = False):
-    """删除媒体和账本行，调用方提交后清理隔离文件。
+    """Delete media and ledger rows; the caller cleans up quarantined files after committing.
 
-    本地文件同目录隔离，账本事务失败时恢复。rclone FUSE 直接删除，避免远端改名
-    触发复制；账本事务失败时保留记录供重试，已经删除的远端媒体无法恢复。
+    Local files are quarantined in the same directory and restored if the ledger transaction fails. rclone FUSE mounts are deleted directly, to avoid remote renames
+    triggering copies; if the ledger transaction fails the record is kept for retry, and remote media already deleted cannot be restored.
 
     ``missing_only`` 删的只是账本行：文件还在（或答不上在不在）的行进 ``blocked``。
     """
@@ -391,7 +391,7 @@ def purge_assets(connection, rows, *, missing_only: bool = False):
                 continue
         if media and missing_only:
             if media_stat is not None:
-                blocked.append({"id": row["id"], "path": media, "reason": "文件仍在盘上"})
+                blocked.append({"id": row["id"], "path": media, "reason": "The file is still on disk"})
                 continue
         elif media:
             original = translated

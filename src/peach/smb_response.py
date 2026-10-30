@@ -1,4 +1,4 @@
-"""受 Peach 鉴权与播放会话管理的 SMB 字节范围响应。"""
+"""SMB byte-range responses managed by Peach authentication and playback sessions."""
 from __future__ import annotations
 
 import asyncio
@@ -66,7 +66,7 @@ class SmbResponse(Response):
                 while remaining > 0:
                     block = await asyncio.to_thread(handle.read, min(1 << 20, remaining))
                     if not block:
-                        raise OSError('SMB 文件在读取期间发生变化')
+                        raise OSError('SMB file changed during reading')
                     remaining -= len(block)
                     yield block
             await StreamingResponse(body(), status_code=status, headers=headers,
@@ -75,5 +75,5 @@ class SmbResponse(Response):
             if transport is not None:
                 transport.close()
             if handle is not None:
-                # 所属连接已断开，句柄清理不再发网络请求；避免断连取消抢在关闭之前生效。
+                # The owning connection is already disconnected, so handle cleanup sends no more network requests; this keeps a disconnect cancellation from taking effect before the close.
                 handle.close()

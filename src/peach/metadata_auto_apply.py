@@ -726,7 +726,7 @@ def _auto_apply_rule(candidate: dict, agreed: int) -> str:
 
 
 def _original_title_candidate(field: str, candidate: dict, code: str = '') -> bool:
-    """r18 拉丁字母标题须能在快照的原文侧精确复核，适用于持久候选重放。"""
+    """r18 Latin-letter titles must be exactly re-verifiable on the original-text side of the snapshot; applies to persistent candidate replay."""
     if field not in {'title', 'original_title'} or candidate.get('source') != 'r18dev':
         return True
     value = ' '.join(str(candidate.get('value') or '').split())
@@ -1220,7 +1220,7 @@ def _landing_scope(connection, group: dict, candidate: dict,
     共用这一份：范围、并发凭据和番号身份不能只在其中一条路上核。
     """
     if not candidate_text_is_valid(candidate):
-        raise ValueError('来源文字含无法解码的字符，请重新采集资料')
+        raise ValueError('Source text contains undecodable characters; please re-collect the metadata')
     code = str(group.get("code") or "").strip()
     query = str(group.get("query") or code).strip()
     if group.get('asset_path'):
@@ -1295,7 +1295,7 @@ def _apply_metadata_candidate(
 
     if field in {"title", "original_title"}:
         if not _original_title_candidate(field, candidate, code):
-            raise ValueError('r18 标题原文证据未取得，请重新采集资料')
+            raise ValueError('r18 title original-text evidence not obtained; please re-collect the metadata')
         raw_value = str(candidate.get("value") or "")
         value = " ".join(raw_value.split())
         if (not value or len(value) > 1000

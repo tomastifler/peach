@@ -36,12 +36,12 @@ import {
 import { SourceIcon } from './source-view';
 
 const MENU_ROW = cx(MENU_ITEM, MENU_ITEM_INTERACTIVE, 'text-body-2-medium');
-const PLACEHOLDER = '粘贴来源链接，或输入创作者名、id…';
-const TITLE = '添加创作者关注';
+const PLACEHOLDER = 'Paste a source link, or enter a creator name or id…';
+const TITLE = 'Add creator follow';
 // 索引下载的提醒只在真按名字查时出现；常驻成一句说明就是噪音。
-const BY_NAME_HINT = '查找中（首次按名字查要下载创作者索引，可能几十秒）';
-const BY_LINK_HINT = '识别中';
-const NO_CANDIDATE = '站内没有查到来源';
+const BY_NAME_HINT = 'Searching (the first lookup by name has to download the creator index, which may take tens of seconds)';
+const BY_LINK_HINT = 'Identifying';
+const NO_CANDIDATE = 'No source found on the site';
 
 export interface AddSourceProps {
   data: FollowData;
@@ -50,7 +50,7 @@ export interface AddSourceProps {
   toast(message: string): void;
 }
 
-/** 凭据配在「来源与订阅」设置里；候选行的凭据链接指到那里。 */
+/** Credentials are configured under "Sources & subscriptions" settings; the credential link on a candidate row points there. */
 const CREDENTIALS_PATH = '/settings/subscriptions';
 
 /** 候选的身份是它的地址：同一次查找里同一个地址只会出现一次。 */
@@ -133,15 +133,15 @@ function SourceFilter(
     if (on) next.delete(provider); else next.add(provider);
     onHidden(next);
   };
-  return <SelectionPopover label="来源筛选" triggerLabel={label} leadingIcon={RiFilter3Line}
-    empty="暂无可用来源"
+  return <SelectionPopover label="Source filter" triggerLabel={label} leadingIcon={RiFilter3Line}
+    empty="No sources available"
     items={rows.map(row => ({ id: row.provider_label, selected: !hidden.has(row.provider_label),
       label: <span className="flex min-w-0 items-center gap-1.5"><SourceIcon provider={row.provider} />{row.provider_label}</span> }))}
     onChange={toggle}
     actions={[
-      { label: '全选', disabled: !rows.length, onPress: () => onHidden(new Set()) },
-      { label: '全不选', disabled: !rows.length, onPress: () => onHidden(new Set(rows.map(row => row.provider_label))) },
-      { label: '凭据设置', href: CREDENTIALS_PATH },
+      { label: 'Select all', disabled: !rows.length, onPress: () => onHidden(new Set()) },
+      { label: 'Select none', disabled: !rows.length, onPress: () => onHidden(new Set(rows.map(row => row.provider_label))) },
+      { label: 'Credential settings', href: CREDENTIALS_PATH },
     ]} />;
 }
 
@@ -369,10 +369,10 @@ export function AddSource({ data, credentials, readOnly, toast }: AddSourceProps
           ))}
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="secondary" size="small"
-              onClick={() => dismiss()}>关闭</Button>
+              onClick={() => dismiss()}>Close</Button>
             <Button variant="primary" size="small" disabled={readOnly || !picked.length}
               {...busyProps(register.isPending)}
-              onClick={() => register.mutate(picked)}>{`添加选中（${picked.length}）`}</Button>
+              onClick={() => register.mutate(picked)}>{`Add selected (${picked.length})`}</Button>
             {register.isPending ? (
               <span role="status" className="text-body-2-regular text-text-secondary">
                 {`Adding… ${added}/${picked.length}`}

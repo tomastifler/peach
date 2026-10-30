@@ -19,8 +19,8 @@ from .reporting_identity import event_metadata, machine_facts
 from .diagnostic_exceptions import media_details
 
 FIELDS = {
-    "usage": "Peach 版本、分发方式（Windows／macOS 应用、Docker、wheel 或源码）、操作系统类型与版本、CPU 架构与核数、内存档位、Python 版本、运行环境与公开构建编号；每天最多一次，不含安装标识。",
-    "errors": "Peach 版本、分发方式、运行环境与公开构建编号、系统类型、Python 版本、CPU 架构、故障环节、异常链、Peach 与白名单框架的代码文件名/函数名/行号、结构化错误码、媒体工具故障类别、浏览器白名单异常类型与正式脚本构建映射、HTTP 方法/路由模板/关联错误编号、同类故障次数与统计日期；首次立即上传，重复次数每小时或退出时合并，每天最多 20 批。",
+    "usage": "Peach version and distribution method (Windows/macOS app, Docker, wheel or source), operating system type and version, CPU architecture and core count, memory tier, Python version, runtime environment and public build number; at most once a day, with no installation identifier.",
+    "errors": "Peach version, distribution method, runtime environment and public build number, system type, Python version, CPU architecture, failure stage, exception chain, Peach and allowlisted frames' code file names/function names/line numbers, structured error codes, media tool failure categories, browser allowlisted exception types and the official script build mapping, HTTP method/route template/correlated error ID, count of similar failures and statistics date; the first is uploaded immediately, repeat counts are merged hourly or on exit, at most 20 batches a day.",
 }
 NOTICE = "Sent to Sentry. Raw error text, full logs, diagnostic ZIPs, media names, paths, URLs, watch history and credentials are not reported. The receiving service sees the connecting IP; turning this off stops new sends, but information already sent cannot be withdrawn."
 _lock = threading.RLock()
@@ -368,7 +368,7 @@ def _http_details(stage, fields):
 
 
 def _technical_projection(stage, error, fields):
-    """投影各入口的故障证据，排除缺少定位信息与已知媒体输入条件的记录。"""
+    """Project failure evidence from each entry point, excluding records that lack location information and known media input conditions."""
     media_stage = _media_failure(stage, error)
     if error is None and stage != "browser" and not media_stage:
         return
@@ -399,7 +399,7 @@ def _technical_projection(stage, error, fields):
 
 
 def capture(stage, error=None, **fields):
-    """只投影代码位置和错误类别，不发送异常文本或日志文本。"""
+    """Project only the code location and error category, without sending exception text or log text."""
     if not _actionable(stage, error, fields):
         return
     capture_key = (os.getpid(), id(error.__traceback__)) if error is not None else None

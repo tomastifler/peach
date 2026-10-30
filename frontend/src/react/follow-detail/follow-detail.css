@@ -204,5 +204,5 @@
 /* 写失败的那一句。侧栏是纵向 flex：按内容高，不把整栏剩余高度都算给它（标签会被推到栏底）。 */
 .peach-react [data-follow-detail] [data-follow-state] { flex: none; font-size: var(--fs-xs); color: var(--drop); }
 
-/* 详情标签沿用本地标签行；在线侧栏在操作区之后留出间距。 */
+/* Detail tags reuse the local tag row; the online sidebar leaves spacing after the actions area. */
 .peach-react [data-follow-detail-tags] { margin-top:16px; }

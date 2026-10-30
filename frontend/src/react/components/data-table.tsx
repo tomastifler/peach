@@ -55,7 +55,7 @@ export function DataTable<T extends RowData>({ label, items, columns, rowId, row
   title = label, titleId, description, footerActions, panel = true, unit = 'records' }: DataTableProps<T>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const preferenceColumns = useMemo(() => [
-    { id: 'select', label: '选择', width: 48, min: 48, max: 48, required: true },
+    { id: 'select', label: 'Select', width: 48, min: 48, max: 48, required: true },
     ...columns.map((column, index) => ({ ...column, width: column.width ?? (index === 0 ? 320 : 160),
       min: column.min ?? (index === 0 ? 320 : 96), flex: column.flex ?? index === 0, required: index === 0 })),
   ], [columns]);
@@ -69,7 +69,7 @@ export function DataTable<T extends RowData>({ label, items, columns, rowId, row
     const helper = createColumnHelper<typeof features, T>();
     return helper.columns([
       helper.display({ id: 'select', header: ({ table }) => (
-        <TableSelectionHeader table={table} label={`全选${label}`} />
+        <TableSelectionHeader table={table} label={`Select all ${label}`} />
       ), cell: ({ row }) => (
         <Checkbox slot={null} aria-label={`Select ${rowLabel(row.original)}`} isSelected={row.getIsSelected()}
           onChange={(on) => row.toggleSelected(on)} />
@@ -102,7 +102,7 @@ export function DataTable<T extends RowData>({ label, items, columns, rowId, row
     <div data-data-table-panel={panel || undefined} className={panel
       ? cardClass({ padding: 'none', bordered: 'line', className: 'flex flex-col gap-4 px-6 py-5 max-sm:px-4' })
       : 'flex min-w-0 flex-col gap-4'}>
-      <div data-responsive-toolbar="" role="toolbar" aria-label={`${label}工具栏`}>
+      <div data-responsive-toolbar="" role="toolbar" aria-label={`${label} toolbar`}>
         <div data-toolbar-heading="">
         <h3 id={titleId} className="text-title-2-medium text-text-primary">{title}</h3>
         <span className="text-body-2-regular tabular-nums text-text-secondary">
@@ -133,7 +133,7 @@ export function DataTable<T extends RowData>({ label, items, columns, rowId, row
                 </span><TableColumnResizer preferences={preferences} id={header.id} /></>}
               </TableColumn>
             ))}
-            <TableColumn id="remaining-space" aria-label="行空白区域" data-table-space="" width={preferences.spaceWidth} minWidth={0} />
+            <TableColumn id="remaining-space" aria-label="Row spacer" data-table-space="" width={preferences.spaceWidth} minWidth={0} />
           </TableHeader>
           <TableBody renderEmptyState={() => 'No records'}>
             {table.getRowModel().rows.map((row) => (

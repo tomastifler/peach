@@ -68,7 +68,7 @@ def plan(db_path: Path, directory: Path) -> tuple[list[Migration], list[Migratio
         connection.close()
     unknown = set(done) - {migration.version for migration in all_migrations}
     if unknown:
-        raise RuntimeError('数据库包含当前程序不支持的迁移，请使用匹配版本或升级前备份')
+        raise RuntimeError('The database contains a migration this program does not support; please use a matching version or a backup from before the upgrade')
     for migration in all_migrations:
         if migration.version in done and done[migration.version] != migration.checksum:
             raise RuntimeError(f"checksum of applied migration {migration.version} has changed")

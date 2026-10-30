@@ -47,7 +47,7 @@ it('发现封面优先本机缓存，远程封面经 Peach 代理并保留原地
   expect(image.dataset.javCover).toBe('/cover-image?code=ABC-001');
   expect(local.innerHTML).not.toContain('dmm.co.jp');
   expect(advanceImageFallback(image)).toBe('drop');
-  expect(local.querySelector('span.media-nopic')?.textContent).toBe('封面未取得');
+  expect(local.querySelector('span.media-nopic')?.textContent).toBe('Cover unavailable');
   expect(discoveryArtwork({ ...item, has_cover: false, code: '' }, 'small', 'cover')).toBe('');
 });
 it('JAV 分区从深链恢复，未知分区落在馆藏', () => {

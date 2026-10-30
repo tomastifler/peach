@@ -89,7 +89,7 @@ class CompositeAliasSplitTests(unittest.TestCase):
         # `Kou Akemi` 已经自己占了一条实体：那意味着可能要合并，不是拆别名顺手能定的。
         row = self._rows()["Ako Momona (Kou Akemi, Mari Koizumi)"]
         self.assertEqual(row["verdict"], "review")
-        self.assertIn("撞 entity 14", str(row["note"]))
+        self.assertIn("collides with entity 14", str(row["note"]))
 
     def test_applying_replaces_the_packed_row_with_one_row_per_name(self):
         moved = apply_rows(self.con, collect(self.con))
@@ -189,7 +189,7 @@ class ReviewedNameCleanupTests(unittest.TestCase):
             self._row("strip", 20, "幼月月@一日目(土)東オ54a", "みどりふう")])
         self.assertEqual(done["strip"], 0)
         self.assertEqual(len(done["blocked"]), 1)
-        self.assertIn("撞 entity 23", done["blocked"][0])
+        self.assertIn("collides with entity 23", done["blocked"][0])
         self.assertEqual(
             self.con.execute("SELECT canonical_name FROM entity WHERE id=20").fetchone()[0],
             "幼月月@一日目(土)東オ54a")

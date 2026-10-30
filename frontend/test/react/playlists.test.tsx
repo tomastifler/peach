@@ -124,7 +124,7 @@ describe('首屏', () => {
   });
 });
 
-describe('卡片', () => {
+describe('Cards', () => {
   it('名称只有空白时标题与读屏名写「未命名播放列表」', async () => {
     const host = await open([row(1, { name: '   ' })]);
     expect(card(host, 1).textContent).toContain('Untitled playlist');
@@ -175,7 +175,7 @@ describe('卡片', () => {
   });
 });
 
-describe('新建', () => {
+describe('New', () => {
   it('只带名称新建一份空列表，成功后清空输入框、重读列表，撤销删掉刚建的那份', async () => {
     const server = serve({ 'POST /api/playlist': (body) => ((body as { action: string }).action === 'create'
       ? written(9, '新列表') : { body: { ok: true, deleted: 9 } }) });

@@ -1399,7 +1399,7 @@ class FastApiContractTests(unittest.IsolatedAsyncioTestCase):
         record = next(row for row in records if row["stage"] == "http-request")
         self.assertEqual((record["method"], record["route"], record["status_code"]),
                          ("POST", "api/scraping/cover", 400))
-        self.assertEqual(record["exception"][0]["message"], "馆藏未找到这个番号")
+        self.assertEqual(record["exception"][0]["message"], "This code was not found in the library")
 
     async def test_recycle_bin_route_and_batch_delete_are_reachable(self):
         legacy = await self.client.get("/trash?t=secret")
@@ -3076,7 +3076,7 @@ class FastApiContractTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(local_playback, 'open_media') as launch:
             options = await self.client.get('/api/local-players', headers=headers)
             self.assertEqual(options.json(), {'players': [
-                {'id': 'default', 'label': '系统默认播放器'}, {'id': 'vlc', 'label': 'VLC'}]})
+                {'id': 'default', 'label': 'System default player'}, {'id': 'vlc', 'label': 'VLC'}]})
             result = await self.client.post('/api/local-playback?id=1&player=vlc', json={}, headers=headers)
             self.assertEqual(result.status_code, 200, result.text)
             self.assertEqual(launch.call_args.args[1], 'vlc')

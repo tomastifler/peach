@@ -283,7 +283,7 @@ class BrowserTests(unittest.TestCase):
         self.assertEqual(self.add(switch=True).json()["state"], "queued")
         self.service.process_one()
         exhausted = self.status().json()
-        self.assertEqual((exhausted["state"], exhausted["message"]), ("no_match", "没有其他可用磁力，可在 Peach 手动选择资源"))
+        self.assertEqual((exhausted["state"], exhausted["message"]), ("no_match", "No other usable magnet; you can choose a resource manually in Peach"))
 
     def test_tasks_the_cloud_never_listed_count_as_cloud_problems_including_legacy_rows(self):
         self.add()
@@ -329,18 +329,18 @@ class BrowserTests(unittest.TestCase):
         self.add()
         self.service.process_one()
         task = self.downloads.store.get(self.status().json()["task_id"])
-        for state, progress, label in ((dl.REMOTE_RUNNING, .425, "网盘下载中"),
-                                       (dl.REMOTE_RUNNING, None, "网盘下载中"),
-                                       (dl.REMOTE_DONE, 1.0, "网盘下载完成"),
-                                       (dl.LANDED, 1.0, "文件已可访问"),
-                                       (dl.INGESTED, 1.0, "已入库")):
+        for state, progress, label in ((dl.REMOTE_RUNNING, .425, "Cloud download in progress"),
+                                       (dl.REMOTE_RUNNING, None, "Cloud download in progress"),
+                                       (dl.REMOTE_DONE, 1.0, "Cloud download complete"),
+                                       (dl.LANDED, 1.0, "File accessible"),
+                                       (dl.INGESTED, 1.0, "Imported to library")):
             task.state, task.progress = state, progress
             task.postprocess_state = dl.POSTPROCESS_RUNNING
             self.downloads.store.save(task)
             status = self.status().json()
             detail = status["download"]
             self.assertEqual((detail["state"], detail["progress"], detail["label"]), (state, progress, label))
-            self.assertEqual(detail["postprocess_label"], "整理中")
+            self.assertEqual(detail["postprocess_label"], "Organizing")
             self.assertEqual(detail["phase"], "organize" if state == dl.INGESTED else "ingest"
                              if state in {dl.REMOTE_DONE, dl.LANDED} else "download")
             self.assertEqual(set(detail), {"state", "label", "phase", "progress", "postprocess_state", "postprocess_label", "updated_at"})
@@ -571,7 +571,7 @@ class BrowserTests(unittest.TestCase):
         task = self.downloads.store.get(self.status().json()["task_id"])
         self.assertEqual((task.provider, task.target), (key, "/duck/收藏"))
         self.assertEqual(self.downloads.snapshot()["tasks"][0]["provider_label"], "收藏 · 光鸭云盘")
-        with self.assertRaisesRegex(ValueError, "所选媒体库"):
+        with self.assertRaisesRegex(ValueError, "chosen media library"):
             self.downloads.submit(source=MAGNET, provider=key, target="/other")
 
     def test_empty_or_removed_library_channel_does_not_choose_a_fixed_provider(self):

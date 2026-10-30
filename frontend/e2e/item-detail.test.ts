@@ -679,8 +679,8 @@ describe('作品详情岛', () => {
   for (const [kind, path, next, wanted] of [
     ['Mix', `/assets/${ITEM.plain}?mix=${ITEM.plain}`, 14, `/assets/14?mix=${ITEM.plain}`],
     ['分卷', `/assets/22?parts=${ITEM.part}`, 23, `/assets/23?parts=${ITEM.part}`],
-    ['版本', `/assets/${ITEM.edition}?editions=${ITEM.edition}`, 32, `/assets/32?editions=${ITEM.edition}`],
-    ['播放列表', `/assets/11?playlist=${PLAYLIST.id}`, 15, `/assets/15?playlist=${PLAYLIST.id}`],
+    ['Version', `/assets/${ITEM.edition}?editions=${ITEM.edition}`, 32, `/assets/32?editions=${ITEM.edition}`],
+    ['Playlists', `/assets/11?playlist=${PLAYLIST.id}`, 15, `/assets/15?playlist=${PLAYLIST.id}`],
   ] as const) {
     it(`${kind}队列：深链停在给的那一条，点另一条原地换过去且不重取队列`, { timeout: 60_000 }, async () => {
       const opened = await openItemPage(browser, path, DESKTOP);
@@ -698,7 +698,7 @@ describe('作品详情岛', () => {
         for (const url of ['/api/parts', '/api/editions', '/api/related']) {
           assert.equal(opened.stub.reads.get(url) || 0, reads.get(url) || 0, `同一个${kind}队列里换一条又取了 ${url}`);
         }
-        if (kind === '播放列表') {
+        if (kind === 'Playlists') {
           assert.deepEqual(opened.stub.writes.filter((write) => write.body.action === 'progress').map((write) => write.body.asset_id),
             [11, next], '播放列表没有记下续播位置');
         }
@@ -709,7 +709,7 @@ describe('作品详情岛', () => {
     });
   }
 
-  it('播放列表：拖动换顺序、移出一条，两者都能撤销', { timeout: 60_000 }, async () => {
+  it('Playlists：拖动换顺序、移出一条，两者都能撤销', { timeout: 60_000 }, async () => {
     const opened = await openItemPage(browser, `/assets/11?playlist=${PLAYLIST.id}`, DESKTOP);
     try {
       const page = opened.page;

@@ -9,7 +9,7 @@ const SCRIPT = readFileSync(new URL('../../web/integrations/peach-jav.user.js', 
 const RELEASE = JSON.parse(readFileSync(new URL('../../web/integrations/jav-userscript-release.json', import.meta.url), 'utf8'));
 const USERSCRIPT = { version: RELEASE.version, minimum_version: RELEASE.bridge_min_version, install_url: RELEASE.install_url };
 
-describe('浏览器添加 JAV 设置', () => {
+describe('Add JAV from browser 设置', () => {
   let browser: Browser;
   before(async () => { browser = await launch(); });
   after(async () => { await browser?.close(); });
@@ -44,9 +44,9 @@ describe('浏览器添加 JAV 设置', () => {
         assert.ok(installBox && channelBox && Math.abs(installBox.x - channelBox.x) <= 1,
           JSON.stringify({ installBox, channelBox }));
         assert.equal(await channel.locator('img').count(), 1);
-        const status = region.locator('[data-userscript-status]').getByText('未启用', { exact: true }).or(
-          region.locator('[data-userscript-status]').getByText('已启用', { exact: true }));
-        assert.equal(await status.innerText(), '未启用');
+        const status = region.locator('[data-userscript-status]').getByText('Not enabled', { exact: true }).or(
+          region.locator('[data-userscript-status]').getByText('Enabled', { exact: true }));
+        assert.equal(await status.innerText(), 'Not enabled');
         const statusColor = () => status.evaluate(node => getComputedStyle(node).color);
         const disabledColor = await statusColor();
         const themeColor = (token: string) => page.evaluate(token => {
@@ -72,10 +72,10 @@ describe('浏览器添加 JAV 设置', () => {
         await region.getByRole('button', { name: 'Enable and generate token', exact: true }).click();
         const token = region.getByLabel('Browser add dedicated token', { exact: true });
         await token.waitFor();
-        assert.equal(await status.innerText(), '已启用');
+        assert.equal(await status.innerText(), 'Enabled');
         assert.notEqual(await statusColor(), disabledColor);
         assert.equal(await statusColor(), await themeColor('--color-status-lime-text'));
-        const channelLabelBox = await region.getByText('浏览器添加的下载渠道', { exact: true }).boundingBox();
+        const channelLabelBox = await region.getByText('Download channel for browser add', { exact: true }).boundingBox();
         const channelFieldBox = await channel.boundingBox();
         assert.ok(channelLabelBox && channelFieldBox);
         const channelGap = channelFieldBox.y - channelLabelBox.y - channelLabelBox.height;
@@ -100,20 +100,20 @@ describe('浏览器添加 JAV 设置', () => {
           Object.defineProperty(navigator, 'clipboard', { configurable: true,
             value: { writeText: async (value: string) => { copied.push(value); } } });
         });
-        await region.getByRole('button', { name: '复制配对信息', exact: true }).click();
+        await region.getByRole('button', { name: 'Copy pairing info', exact: true }).click();
         const copied = await page.evaluate(() => (window as Window & { pairingClipboard: string[] }).pairingClipboard);
         assert.equal(copied.length, 1);
         assert.deepEqual(JSON.parse(copied[0]!), { peach_pairing: 1, base: new URL(page.url()).origin, token: 'test-issued-token-1' });
-        assert.equal(await region.getByRole('link', { name: '安装 Peach 用户脚本' }).getAttribute('href'),
+        assert.equal(await region.getByRole('link', { name: '安装 Peach userscript' }).getAttribute('href'),
           USERSCRIPT.install_url);
-        assert.equal(await region.getByLabel('Peach 地址', { exact: true }).inputValue(), new URL(page.url()).origin);
-        await region.getByRole('button', { name: '更新渠道与令牌', exact: true }).click();
+        assert.equal(await region.getByLabel('Peach address', { exact: true }).inputValue(), new URL(page.url()).origin);
+        await region.getByRole('button', { name: 'Update channel and token', exact: true }).click();
         await page.waitForFunction(() => document.querySelector<HTMLInputElement>(
           'input[type="password"][value="test-issued-token-2"]') !== null);
         await region.getByRole('button', { name: 'Turn off browser add', exact: true }).click();
         await token.waitFor({ state: 'detached' });
-        assert.equal(await region.getByRole('button', { name: '复制配对信息', exact: true }).count(), 0);
-        assert.equal(await status.innerText(), '未启用');
+        assert.equal(await region.getByRole('button', { name: 'Copy pairing info', exact: true }).count(), 0);
+        assert.equal(await status.innerText(), 'Not enabled');
         assert.equal(await statusColor(), disabledColor);
         assert.deepEqual(posted.map(body => body.action), ['enable', 'rotate', 'disable']);
         assert.ok(posted.every(body => body.provider === '115'));
@@ -126,7 +126,7 @@ describe('浏览器添加 JAV 设置', () => {
   }
 
   it('桥接页延迟加载仍能检测脚本，未知来源消息不改变检测结果', async () => {
-    const opened = await visit(browser, '/settings/library?section=' + encodeURIComponent('下载渠道'), VIEWPORTS[0]!);
+    const opened = await visit(browser, '/settings/library?section=' + encodeURIComponent('Download channels'), VIEWPORTS[0]!);
     const { page } = opened;
     try {
       await page.route('**/api/configuration/jav-browser', route => route.fulfill({ json: {
@@ -141,21 +141,21 @@ describe('浏览器添加 JAV 设置', () => {
             + SCRIPT.replaceAll('</script', '<\\/script') + '</script>' : '') });
       });
       await page.reload();
-      const region = page.getByRole('region', { name: '浏览器添加 JAV', exact: true });
+      const region = page.getByRole('region', { name: 'Add JAV from browser', exact: true });
       const connection = region.locator('[data-userscript-status] [data-connection-tone]');
-      await connection.getByText('已连接', { exact: true }).waitFor();
+      await connection.getByText('Connected', { exact: true }).waitFor();
       assert.equal(await connection.getAttribute('data-connection-tone'), 'success');
       await region.getByText(`用户脚本 v${RELEASE.version}`, { exact: true }).waitFor();
-      assert.equal(await region.getByRole('link', { name: '安装 Peach 用户脚本' }).count(), 0);
+      assert.equal(await region.getByRole('link', { name: '安装 Peach userscript' }).count(), 0);
       assert.equal(await region.getByLabel('浏览器添加专用令牌', { exact: true }).count(), 0);
       installed = false;
-      await region.getByRole('button', { name: '重新检测', exact: true }).click();
-      await connection.getByText('未检测到', { exact: true }).waitFor();
+      await region.getByRole('button', { name: 'Re-detect', exact: true }).click();
+      await connection.getByText('Not detected', { exact: true }).waitFor();
       assert.equal(await connection.getAttribute('data-connection-tone'), 'neutral');
       await page.evaluate(() => window.postMessage({ type: 'peach-userscript:ready', protocol: 1,
         version: '9.0.0', paired: true, nonce: crypto.randomUUID() }, location.origin));
-      assert.equal(await connection.getByText('未检测到', { exact: true }).count(), 1);
-      assert.equal(await region.getByRole('link', { name: '安装 Peach 用户脚本' }).count(), 1);
+      assert.equal(await connection.getByText('Not detected', { exact: true }).count(), 1);
+      assert.equal(await region.getByRole('link', { name: '安装 Peach userscript' }).count(), 1);
       assert.ok((await region.innerText()).includes('允许用户脚本'));
       assert.equal(await region.getByRole('link', { name: 'Tampermonkey 权限设置说明' }).getAttribute('href'),
         'https://www.tampermonkey.net/faq.php#Q209');

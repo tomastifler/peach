@@ -12,7 +12,7 @@
  * 当主体：管理页的 `[data-manage-title]` 由外壳先写好，内容区失败时它照样在。
  *
  * 分区 tab（`.ui-board-local-nav`）只显示当前那一格，其余面板不参与布局；每一格都切过去
- * 再测一遍，否则配置页「网络与访问」这类不在首屏的分区永远不会被量到。 */
+ * 再测一遍，否则配置页「Network & access」这类不在首屏的分区永远不会被量到。 */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 
@@ -42,7 +42,7 @@ const indexEntries = (page: Page): Locator =>
 const tasksBody = (page: Page): Locator[] => [
   heading(page, '#main', '任务中心'),
   page.locator('#stats .peach-react'),
-  heading(page, '#stats .peach-react [data-empty-state]', '还没有任务记录')
+  heading(page, '#stats .peach-react [data-empty-state]', 'No task records yet')
     .or(page.locator('#stats .peach-react [data-run-id]:visible')).first(),
 ];
 
@@ -57,14 +57,14 @@ const ROUTES: readonly Route[] = [
   { path: '/jav?tab=wants', body: page => [heading(page, '#stats', 'JAV'), page.getByRole('tab', { name: 'Wants', exact: true, selected: true }), page.getByText('No works on the want list yet', { exact: true })] },
   { path: '/', body: (page) => [page.locator('#grid [data-media-card]').first()] },
   { path: '/wall', body: (page) => [page.locator('[data-wall-tile]').first(), page.getByRole('button', { name: '退出播放墙' })] },
-  { path: '/performers', body: (page) => [heading(page, '#index', '艺人'), indexEntries(page)] },
-  { path: '/creators', body: (page) => [heading(page, '#index', '卖家'), indexEntries(page)] },
-  { path: '/creators/', body: (page) => [heading(page, '#index', '卖家'), indexEntries(page)] },
-  { path: '/performers?category=animation', body: (page) => [heading(page, '#index', '艺人'), indexEntries(page)] },
-  { path: '/studios', body: (page) => [heading(page, '#index', '厂牌'), indexEntries(page)] },
-  { path: '/agencies', body: (page) => [heading(page, '#index', '事务所'), indexEntries(page)] },
-  { path: '/series', body: (page) => [heading(page, '#index', '系列'), indexEntries(page)] },
-  { path: '/tags', body: (page) => [heading(page, '#index', '标签'), indexEntries(page)] },
+  { path: '/performers', body: (page) => [heading(page, '#index', 'Performers'), indexEntries(page)] },
+  { path: '/creators', body: (page) => [heading(page, '#index', 'Creators'), indexEntries(page)] },
+  { path: '/creators/', body: (page) => [heading(page, '#index', 'Creators'), indexEntries(page)] },
+  { path: '/performers?category=animation', body: (page) => [heading(page, '#index', 'Performers'), indexEntries(page)] },
+  { path: '/studios', body: (page) => [heading(page, '#index', 'Studios'), indexEntries(page)] },
+  { path: '/agencies', body: (page) => [heading(page, '#index', 'Agencies'), indexEntries(page)] },
+  { path: '/series', body: (page) => [heading(page, '#index', 'Series'), indexEntries(page)] },
+  { path: '/tags', body: (page) => [heading(page, '#index', 'Tags'), indexEntries(page)] },
   {
     path: '/playlists',
     body: (page) => [heading(page, '#stats', 'Playlists'), heading(page, '#stats', 'No playlists yet')],
@@ -74,7 +74,7 @@ const ROUTES: readonly Route[] = [
     body: (page) => [heading(page, '#stats', 'Follow'), heading(page, '#stats', 'You are not following any source yet')],
   },
   {
-    // 骨架里也有「关注列表」那一排分段，可整块带 `aria-hidden`；按角色找得到页签的只有真页面。
+    // 骨架里也有「Follow list」那一排分段，可整块带 `aria-hidden`；按角色找得到页签的只有真页面。
     path: '/subscriptions',
     body: (page) => [heading(page, '#main', 'Manage follows'),
       page.locator('#stats').getByRole('tab', { name: 'Add follow', exact: true })],
@@ -82,13 +82,13 @@ const ROUTES: readonly Route[] = [
   {
     // 订阅管理链接进入统一关注列表。
     path: '/subscriptions?tab=feeds',
-    body: (page) => [page.locator('#stats').getByRole('tab', { name: '关注列表', exact: true, selected: true }),
+    body: (page) => [page.locator('#stats').getByRole('tab', { name: 'Follow list', exact: true, selected: true }),
       page.locator('#stats').getByRole('button', { name: '立即拉取', exact: true })],
   },
   {
     path: '/subscriptions?tab=add',
-    body: (page) => [page.locator('#stats').getByRole('region', { name: '添加创作者关注', exact: true }),
-      page.locator('#stats').getByRole('region', { name: '添加 JAV 订阅', exact: true })],
+    body: (page) => [page.locator('#stats').getByRole('region', { name: 'Add creator follow', exact: true }),
+      page.locator('#stats').getByRole('region', { name: 'Add JAV subscription', exact: true })],
   },
   {
     // 骨架里那条指标带也写着「馆藏视频」，认不出画完没有；只有真页面把四张读数卡做成页签。
@@ -142,8 +142,8 @@ const ROUTES: readonly Route[] = [
   // 名字对不上任何一家时要换成空态；骨架一直留着，读起来就是还在取。
   { path: '/agencies/不存在的事务所', body: (page) => [heading(page, '#index', 'Entry not found')] },
   { path: '/settings/library', body: configurationBody },
-  { path: '/diagnostics', body: page => [page.getByRole('tab', { name: '系统诊断', selected: true }), page.locator('#stats section[aria-label="库健康"]')] },
-  { path: '/settings/diagnostics', body: page => [page.getByRole('tab', { name: '系统诊断', selected: true }), page.locator('#stats section[aria-label="库健康"]')] },
+  { path: '/diagnostics', body: page => [page.getByRole('tab', { name: 'System diagnostics', selected: true }), page.locator('#stats section[aria-label="库健康"]')] },
+  { path: '/settings/diagnostics', body: page => [page.getByRole('tab', { name: 'System diagnostics', selected: true }), page.locator('#stats section[aria-label="库健康"]')] },
   { path: '/tasks', body: tasksBody },
   ...['', '/appearance', '/playback', '/jav', '/search', '/content'].map(section => ({ path: '/settings' + section,
     body: (page: Page) => [page.getByRole('dialog', { name: /Appearance & navigation|Browsing & playback|JAV & new releases|Search & recommendations|Content display/ })] })),
@@ -202,7 +202,7 @@ describe('路由冒烟', () => {
           // 设置浮层的那一排 tab 常驻 DOM、关着时不可见；只点页面上看得见的那一排。
           const tabs = opened.page.locator('.ui-board-local-nav [role="tab"]:visible');
           const count = await tabs.count();
-          // 选择器一旦对不上，循环一格都不跑也照样绿；配置页至少有媒体、网络与访问、维护三格。
+          // 选择器一旦对不上，循环一格都不跑也照样绿；配置页至少有媒体、Network & access、维护三格。
           if (route.path === '/settings/library') assert.ok(count >= 3, `配置页只看到 ${count} 个分区 tab`);
           for (let index = 0; index < count; index += 1) {
             const tab = tabs.nth(index);

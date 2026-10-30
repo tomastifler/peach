@@ -209,7 +209,7 @@ class Mp4HeaderRepairTests(unittest.TestCase):
     def test_tail_layout_requires_one_media_box_and_bounded_metadata(self):
         source = self.root / 'tail.mp4'
         source.write_bytes(tail_mp4() + b'\x00\x00\x00\x0cmdatDATA')
-        with self.assertRaisesRegex(RepairUnavailable, '各有一个'):
+        with self.assertRaisesRegex(RepairUnavailable, 'exactly one moov'):
             self.repair(source)
         source.write_bytes(tail_mp4())
         with patch.object(mp4repair, 'HEADER_LIMIT', 24):
@@ -219,7 +219,7 @@ class Mp4HeaderRepairTests(unittest.TestCase):
     def test_ambiguous_tail_edit_start_keeps_the_transcode_fallback(self):
         source = self.root / 'tail.mp4'
         source.write_bytes(tail_mp4(edit_list=(5200, 800)))
-        with self.assertRaisesRegex(RepairUnavailable, '预卷与裁剪'):
+        with self.assertRaisesRegex(RepairUnavailable, 'pre-roll from trimming'):
             self.repair(source)
         for start in (0, 400):
             with self.subTest(start=start):

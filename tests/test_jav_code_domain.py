@@ -483,7 +483,7 @@ class TitledFilenameTests(unittest.TestCase):
         self.assertEqual(release_code_from_filename("片名 CAWD-987.mp4", patterns=loose), "CAWD-987")
 
     def test_a_broken_user_rule_says_which_one(self):
-        with self.assertRaisesRegex(ValueError, "第 2 条"):
+        with self.assertRaisesRegex(ValueError, "Rule 2"):
             compile_code_patterns([r"(\w+-\d+)", "(unclosed"])
         self.assertEqual(compile_code_patterns(None), ())
         self.assertEqual(compile_code_patterns(["", "  "]), ())

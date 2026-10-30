@@ -28,16 +28,16 @@ INPUT_FORMATS = frozenset({"JPEG", "PNG", "WEBP", "AVIF", "GIF", "BMP", "DIB", "
 
 
 class AvatarImageError(ValueError):
-    """头像输入无法识别、解码或转换。"""
+    """Avatar input cannot be recognized, decoded or converted."""
 
 
 def prepare_avatar(data: bytes) -> bytes:
-    """完整读取第一帧并转正，输出浏览器可预览的静态 JPEG 或 PNG。"""
+    """Fully read the first frame and orient it upright, outputting a static JPEG or PNG."""
     try:
         with Image.open(io.BytesIO(data)) as image:
             image_format = (image.format or "").upper()
             if image_format not in INPUT_FORMATS:
-                raise AvatarImageError(f"暂不支持 {image_format or '这种'} 图片格式，请换用 JPEG、PNG、WebP 或 AVIF 图片")
+                raise AvatarImageError(f"Image format {image_format or 'unknown'} is not supported; please use JPEG, PNG, WebP or AVIF images")
             image.verify()
         with Image.open(io.BytesIO(data)) as image:
             image.seek(0)
@@ -54,11 +54,11 @@ def prepare_avatar(data: bytes) -> bytes:
     except AvatarImageError:
         raise
     except Image.DecompressionBombError as error:
-        raise AvatarImageError("图片像素尺寸过大，请缩小后重新选择") from error
+        raise AvatarImageError("Image pixel dimensions are too large; please shrink it and choose again") from error
     except UnidentifiedImageError as error:
-        raise AvatarImageError("无法识别图片内容，文件可能损坏或格式未支持，请重新导出图片") from error
+        raise AvatarImageError("Cannot recognize the image content; the file may be corrupted or its format unsupported. Please re-export the image") from error
     except (OSError, SyntaxError, ValueError, EOFError, struct.error) as error:
-        raise AvatarImageError("图片数据不完整或无法解码，请重新下载或导出图片") from error
+        raise AvatarImageError("Image data is incomplete or cannot be decoded; please download or export the image again") from error
 
 
 @dataclass(frozen=True)
@@ -89,7 +89,7 @@ class AvatarProvenance:
 
 
 def inspect_avatar(data: bytes) -> InspectedAvatar | None:
-    """完整解码可保存的头像，按字节确定格式和尺寸。"""
+    """Fully decode an avatar that can be saved, determining format and size from the bytes."""
     try:
         with Image.open(io.BytesIO(data)) as image:
             width, height = image.size

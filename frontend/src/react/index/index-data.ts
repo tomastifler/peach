@@ -1,8 +1,8 @@
-/* 索引页的数据契约：艺人、创作者、厂牌、事务所、系列名册与标签词表。
+/* Index page data contract: performer, creator, studio, agency and series rosters and the tag vocabulary.
  *
  * 本地那一档读 `/api/index?kind=`（`src/peach/web_entity.py` 的 `q_index`），在线那一档读
  * 关注来源上的两份词表（`../follow/online-vocab.ts`）。四种形状一样：`items` 加 `has_more`，
- * `limit`／`offset` 翻页；标签按页替换，人物名册按「载入更多」追加。
+ * `limit`/`offset` pagination; tags are replaced per page, and the people roster is appended with "Load more".
  *
  * 索引页自己不调 `/api/items`：点一个标签或按所选标签显示结果，是回目录按它筛选，那一次
  * 取数归遗留壳的目录网格。 */
@@ -28,7 +28,7 @@ export const INDEX_URL = '/api/index';
 
 /** 页头标题与名册口径。 */
 export const INDEX_TITLES: Record<IndexKind, string> = {
-  performers: '艺人', creators: '卖家', studios: '厂牌', agencies: '事务所', series: '系列', tags: '标签',
+  performers: 'Performers', creators: 'Creators', studios: 'Studios', agencies: 'Agencies', series: 'Series', tags: 'Tags',
 };
 
 /** 索引格对应的实体类型，资料页与取图链都按它分。 */
@@ -51,7 +51,7 @@ export const ONLINE_TAG_CATEGORIES: readonly (readonly [string, string])[] = [
 /** 本地艺人名册的身份分类；卖家名册不分类。词表与壳的骨架共用一份。 */
 export { IDENTITY_CATEGORIES };
 
-/** 名册批次与标签默认页大小。 */
+/** Roster batch and default tag page size. */
 export const PAGE_SIZE = { people: 120, tags: TAG_PAGE_SIZE } as const;
 
 export const isPeople = (kind: IndexKind): kind is Exclude<IndexKind, 'tags'> => kind !== 'tags';

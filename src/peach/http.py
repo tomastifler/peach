@@ -199,7 +199,7 @@ class HttpxTransport:
     def client(self):
         with self._client_lock:
             if self._closed and self._client is None:
-                raise RuntimeError("HTTP 客户端已关闭")
+                raise RuntimeError("HTTP client is closed")
             if self._client is None:
                 self._client = httpx.Client(
                     **peach_proxy.client_options(),
@@ -308,7 +308,7 @@ class CurlCffiTransport:
     def session(self):
         with self._session_lock:
             if self._closed and self._session is None:
-                raise RuntimeError("浏览器指纹客户端已关闭")
+                raise RuntimeError("Browser-fingerprint client is closed")
             if self._session is None:
                 self._session = curl_requests.Session(impersonate=self._impersonate,
                                                       **peach_proxy.curl_options())
@@ -321,7 +321,7 @@ class CurlCffiTransport:
         max_bytes: int,
     ) -> HttpResponse:
         from .processing_traffic import unobserved
-        unobserved('浏览器指纹传输流量未观测')
+        unobserved('Browser-fingerprint transport traffic not observed')
         chunks: list[bytes] = []
         total = 0
         try:

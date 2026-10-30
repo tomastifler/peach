@@ -9,7 +9,7 @@ type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'error';
 
 /** 没有密码、保存失败、数据库缺表这类是当前状态，不和字段说明共用灰色小字。
  *
- *  `action` 是这条提示要人当场做的那件事，正文与动作放得下就并排；below 布局独占下一行。
+ *  `action` is the thing this notice wants the person to do on the spot; if body and action fit, they sit side by side; the below layout takes the next row on its own.
  *  `extra` 收结论以外的东西（折叠起来的问题清单）：它们讲的是
  *  同一件事，摆到 Note 外面就成了一句话加一块不知道属于谁的内容。
  *  正文是段落，塞不进这些块级内容。 */

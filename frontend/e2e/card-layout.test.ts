@@ -107,7 +107,7 @@ describe('混排作品的画面框',()=>{
    })));
    assert.ok(rows.every(row=>row.why>=row.byline));assert.ok(Math.abs(rows[0].height-rows[1].height)<1);
    const url=page.url();await page.locator('[data-media-next-reason]').first().click();
-   const popup=page.getByRole('dialog',{name:'推荐理由',exact:true});await popup.waitFor();
+   const popup=page.getByRole('dialog',{name:'Recommendation reason',exact:true});await popup.waitFor();
    assert.equal((await popup.innerText()).trim(),reason);assert.equal(page.url(),url);
    assert.ok(await popup.evaluate(node=>{
     const box=node.getBoundingClientRect(),hit=document.elementFromPoint(box.left+box.width/2,box.top+box.height/2);

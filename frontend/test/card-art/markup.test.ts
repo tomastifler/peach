@@ -30,11 +30,11 @@ describe('西方官方封面', () => {
 it('创作者名片官方头像使用本机代理和归档回退，实体图优先', () => {
   const ref = { id: 7, has_image: false, source_avatar_url: '/follow-avatar?service=fanbox&id=123',
     source_avatar_fallbacks: ['/follow-avatar?provider=kemono&ref=fanbox%2F123'] };
-  const image = parse(avatarInner('创作者', ref, null, 'creator'))!;
+  const image = parse(avatarInner('Creator', ref, null, 'creator'))!;
   expect(image.getAttribute('src')).toBe(ref.source_avatar_url);
   expect(image.dataset.fallbacks).toBe(ref.source_avatar_fallbacks[0]);
   expect(image.dataset.drop).toBe('self');
-  expect(parse(avatarInner('创作者', { ...ref, has_image: true }, null, 'creator'))?.getAttribute('src'))
+  expect(parse(avatarInner('Creator', { ...ref, has_image: true }, null, 'creator'))?.getAttribute('src'))
     .toBe('/entity-image?kind=creator&id=7&thumb=1');
 });
 
@@ -397,7 +397,7 @@ describe('卡片署名的身份推导', () => {
   });
 
   it('详情队列的创作者头像使用 creator 实体引用', () => {
-    const html = queueAvatarHtml({ creator: '创作者', entity_refs: { creator: [{ id: 8, has_image: true }] } });
+    const html = queueAvatarHtml({ creator: 'Creator', entity_refs: { creator: [{ id: 8, has_image: true }] } });
     expect(parse(html)!.getAttribute('src')).toBe('/entity-image?kind=creator&id=8&thumb=1');
   });
 });

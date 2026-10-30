@@ -26,7 +26,7 @@ it('同任务恢复或总数变化时拒绝混合导出',async()=>{
       total:201,rows:Array.from({length:calls===1?200:1},()=>({asset_id:1,message:'问题'}))})};
   }));
   await expect(exportProcessingIssues({status:'failed',job_id:'one'},new AbortController().signal))
-    .rejects.toThrow('问题记录已变化');
+    .rejects.toThrow('The issue records have changed');
 });
 
 it('分页取消或缺行时不返回半份内容',async()=>{
@@ -39,5 +39,5 @@ it('分页取消或缺行时不返回半份内容',async()=>{
   vi.stubGlobal('fetch',vi.fn(async()=>({ok:true,json:async()=>({job_id:'one',revision:'fixed',offset:0,total:2,
     rows:[{asset_id:1,message:'问题'}]})})));
   await expect(exportProcessingIssues({status:'failed',job_id:'one'},new AbortController().signal))
-    .rejects.toThrow('不完整');
+    .rejects.toThrow('The issue records are incomplete');
 });

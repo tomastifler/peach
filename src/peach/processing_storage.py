@@ -1,4 +1,4 @@
-"""采集资料与本地预览产物的额外磁盘占用预估。"""
+"""Estimate of extra disk usage for collected metadata and local preview artifacts."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,7 +9,7 @@ from .processing_traffic_plan import MIB, typical_size
 
 
 def volume_space(path):
-    """按实际所在文件系统分账；未创建的目录沿父目录取可用空间。"""
+    """Accounted per actual filesystem; for a directory not yet created, take the free space from the parent directory."""
     target = Path(path).resolve()
     while not target.exists() and target != target.parent:
         target = target.parent
@@ -31,7 +31,7 @@ class ProcessingStorage:
         self.nfo = typical_size(self.sources, '*.nfo', 32 * 1024)
 
     def snapshot(self, plan, rows, *, finished=False):
-        """只按待执行工作计新增产物，已完成和命中缓存的部分不重复累加。"""
+        """Count new artifacts only for work still to be done; parts already completed or cache hits are not accumulated again."""
         covers, documents = set(), 0
         for token, profile in plan.profiles.items():
             if token not in plan.units:
@@ -55,15 +55,15 @@ class ProcessingStorage:
                 previews.add(path)
         generated = len(covers) * (self.cover + 64 * 1024) + len(previews) * (self.snapshot_bytes + 256 * 1024)
         source_bytes = documents * self.document + len(local_documents) * self.nfo
-        # 采集流水线逐个生成九宫格，临时目录保留当前影片的九张 480px 帧。
+        # The collection pipeline generates contact sheets one by one, and the temp directory keeps nine 480px frames for the current movie.
         temporary = 9 * 128 * 1024 if previews else 0
         if finished:
             generated = source_bytes = temporary = 0
         volumes = {}
         for path, label, retained, transient in (
-                (self.generated, '预览与封面', generated, 0),
-                (self.sources, '影片资料', source_bytes, 0),
-                (self.temporary, '临时文件', 0, temporary)):
+                (self.generated, 'Previews and covers', generated, 0),
+                (self.sources, 'Movie metadata', source_bytes, 0),
+                (self.temporary, 'Temporary files', 0, temporary)):
             key, free, mount = volume_space(path)
             volume = volumes.setdefault(key, dict(path=mount, labels=[], free_bytes=free,
                 estimated_bytes=0, temporary_bytes=0, reserve_bytes=1024 * MIB))

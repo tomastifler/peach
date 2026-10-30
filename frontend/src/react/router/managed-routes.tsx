@@ -83,8 +83,8 @@ type ResidentRouteTable = { [Name in ResidentName]: ManagedRoute<ResidentOpenPro
 export type RoutedPath =
   ManagedPath | BrowseRoutePath | IndexRoutePath | EntityRoutePath | CatalogPagePath | SurfaceName | ResidentName;
 
-/* 低频页的代码不在入口里（ADR-0118）：首屏取数与 chunk 并行装载，两样都落地才画页。数据先回来时等代码，
- * 代码先到时等数据；任何一样失败照旧交给 `openManagedRoute`，中止就是用户已经走开。 */
+/* Low-frequency page code is not in the entry bundle (ADR-0118): first-screen data fetching and the chunk load in parallel, and the page is drawn only when both have landed. If data arrives first it waits for the code,
+ * and if the code arrives first it waits for the data; if either fails it is handed to `openManagedRoute` as before, and an abort means the user has already moved on. */
 async function withPage(chunk: RouteChunk<unknown>, data: Promise<void>): Promise<void> {
   const [code, first] = await Promise.allSettled([chunk.preload(), data]);
   if (first.status === 'rejected') throw first.reason;
@@ -125,7 +125,7 @@ const configurationRoute = (path: ConfigurationPath): ManagedRoute<ManagedOpenPr
   page: (open, actions) => {
     const { ConfigurationPage, DiagnosticsPage } = configurationPage.get();
     return <ConfigurationPage receipt={message => actions.receipt(message)}
-      reopenTutorial={actions.reopenTutorial} section={path === '/settings/diagnostics' ? '系统诊断' : open.section ?? ''}
+      reopenTutorial={actions.reopenTutorial} section={path === '/settings/diagnostics' ? 'System diagnostics' : open.section ?? ''}
       diagnostics={<DiagnosticsPage openItem={actions.openItem} receipt={message => actions.receipt(message)} />} />;
   },
 });

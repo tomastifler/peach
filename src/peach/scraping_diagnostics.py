@@ -1,4 +1,4 @@
-"""从本机采集证据生成有界、只读的刮削诊断产物。"""
+"""Generate bounded, read-only scraping diagnostic artifacts from local collection evidence."""
 from __future__ import annotations
 
 import csv
@@ -21,7 +21,7 @@ SUMMARY_LIMIT = 50
 CODE_LIMIT = 20
 FILE_LIMIT = 1024 * 1024
 EXPORT_LIMIT = 128 * 1024 * 1024
-# 每组主键以 SQLite 参数传入，保留在标准 32766 参数上限以内。
+# Each group of primary keys is passed as SQLite parameters, kept within the standard 32766 parameter limit.
 ROW_LIMIT = 30_000
 SNAPSHOT_FIELDS = frozenset({
     'id', 'content_id', 'title', 'original_title', 'release_date', 'release', 'date',
@@ -36,18 +36,18 @@ CANDIDATE_FIELDS = frozenset({
 
 
 class EvidenceTooLarge(ValueError):
-    """来源文件超过详细导出的单文件上限。"""
+    """The source file exceeds the per-file limit of the detailed export."""
 
 
 class ExportCancelled(RuntimeError):
-    """用户取消本次诊断导出。"""
+    """The user cancelled this diagnostic export."""
 
 
 def selected_codes(value: str) -> list[str]:
-    """导出选择只接受作品编号，不能作为文件路径使用。"""
+    """The export selection accepts only work codes and cannot be used as a file path."""
     codes = list(dict.fromkeys(part.upper() for part in re.split(r'[\s,，、;；]+', value.strip()) if part))
     if len(codes) > CODE_LIMIT or any(not re.fullmatch(r'[A-Z0-9][A-Z0-9_-]{1,63}', code) for code in codes):
-        raise ValueError(f'请填写有效番号，单次最多 {CODE_LIMIT} 个')
+        raise ValueError(f'Please enter a valid code, at most {CODE_LIMIT} per request')
     return codes
 
 
@@ -70,19 +70,19 @@ def _recent_snapshots(root: Path, limit: int):
 
 def _read_json(path: Path, root: Path):
     if not _inside(path, root):
-        raise ValueError('证据文件不在采集目录内')
+        raise ValueError('The evidence file is not inside the collection directory')
     with path.open('rb') as stream:
         raw = stream.read(FILE_LIMIT + 1)
     if len(raw) > FILE_LIMIT:
-        raise EvidenceTooLarge('证据文件超过单文件上限')
+        raise EvidenceTooLarge('The evidence file exceeds the per-file limit')
     payload = json.loads(raw)
     if not isinstance(payload, dict):
-        raise ValueError('证据文件不是资料对象')
+        raise ValueError('The evidence file is not a metadata object')
     return payload
 
 
 def _snapshot_identity(path: Path):
-    # 文件名由 library_processing._evidence_path 写入：<番号>-<来源>.json。
+    # The file name is written by library_processing._evidence_path: <code>-<source>.json.
     from .metadata_policy import SOURCE_SPECS
     for source in sorted(SOURCE_SPECS, key=len, reverse=True):
         suffix = '-' + source
@@ -95,7 +95,7 @@ def _snapshot_identity(path: Path):
 
 
 def summary(config) -> dict:
-    """普通诊断只附近期来源索引，字段取值留给主动导出的详细包。"""
+    """Ordinary diagnostics attach only the recent source index, leaving field values to the detailed bundle exported on request."""
     root = config.directory('sources') / 'library-metadata'
     records = []
     for modified, _name, path in _recent_snapshots(root, SUMMARY_LIMIT + 1):
@@ -113,7 +113,7 @@ def summary(config) -> dict:
     return {'schema': 1, 'kind': 'recent-source-index', 'limit': SUMMARY_LIMIT,
             'status': 'available' if records else 'unavailable',
             'truncated': len(records) > SUMMARY_LIMIT, 'records': records[:SUMMARY_LIMIT],
-            'detail': '完整字段与归属证据请单独导出刮削记录'}
+            'detail': 'Export the scraping record separately for complete fields and ownership evidence'}
 
 
 class _Export:
@@ -126,7 +126,7 @@ class _Export:
 
     def check(self):
         if self.cancelled():
-            raise ExportCancelled('导出已取消')
+            raise ExportCancelled('Export cancelled')
 
     def add(self, name: str, payload):
         self.check()
@@ -149,7 +149,7 @@ class _Export:
                     target.write(chunk)
         self.used += size
         self.entries.append({'name': name, 'status': 'included', 'bytes': size})
-        self.progress(stage='整理刮削证据', files=len(self.entries), content_bytes=self.used)
+        self.progress(stage='Organizing scraping evidence', files=len(self.entries), content_bytes=self.used)
         return True
 
     def unavailable(self, section, error, **facts):
@@ -209,7 +209,7 @@ def _ledger(config, codes, export):
                                               (*sorted(entity_ids), ROW_LIMIT + 1)).fetchall()
                 export.add(f'ledger/{name}.json', {'truncated': len(evidence) > ROW_LIMIT,
                                                   'records': [dict(row) for row in evidence[:ROW_LIMIT]]})
-        # 字段决定的主键带字段名，按选中资产解析，不按文本子串匹配。
+        # A primary key determined by a field carries the field name, and is parsed against the selected assets rather than matched by text substring.
         decisions = connection.execute(
             "SELECT item_key,status,updated_at FROM review_decision WHERE category='metadata_fields' "
             f"AND CAST(substr(item_key,7,instr(substr(item_key,7),':')-1) AS INTEGER) IN ({assets}) "
@@ -237,7 +237,7 @@ def _candidates(config, codes, asset_ids, export):
                     scanned += 1
                     if scanned % 100 == 0:
                         export.check()
-                        export.progress(stage='读取字段候选', rows=scanned, done=0, total=0)
+                        export.progress(stage='Reading field candidates', rows=scanned, done=0, total=0)
                     if scanned > 100_000 or len(records) > ROW_LIMIT:
                         break
                     if row.get('code', '').upper() not in codes and row.get('asset_id') not in asset_keys:
@@ -249,7 +249,7 @@ def _candidates(config, codes, asset_ids, export):
                                                            'status', 'fetched_at', 'policy_version')}
                     choices = json.loads(row.get('candidates_json') or '[]')
                     if not isinstance(choices, list):
-                        raise ValueError('候选不是数组')
+                        raise ValueError('Candidates are not an array')
                     record['candidates'] = [
                         {**{key: value for key, value in choice.items() if key in CANDIDATE_FIELDS},
                          **({'snapshot': _snapshot_ref(choice['raw_snapshot'])} if choice.get('raw_snapshot') else {})}
@@ -311,7 +311,7 @@ def _issues(config, asset_ids, export):
 
 def bundle_to(config, destination, *, codes: str = '', include_all: bool = False,
               progress=lambda **values: None, cancelled=lambda: False):
-    """导出选定番号或近期作品的现存资料，不重新抓取或修改账本。"""
+    """Export the existing metadata of selected codes or recent works, without re-scraping or modifying the ledger."""
     selected = selected_codes(codes)
     root = config.directory('sources') / 'library-metadata'
     inventory_limit = ROW_LIMIT if include_all else SUMMARY_LIMIT
@@ -340,7 +340,7 @@ def bundle_to(config, destination, *, codes: str = '', include_all: bool = False
             snapshots.update(str(path) for path in root.glob('*.json') if _snapshot_identity(path)[0] in selected)
         for index, value in enumerate(sorted(snapshots)):
             export.check()
-            progress(stage='整理来源快照', done=index, total=len(snapshots))
+            progress(stage='Organizing source snapshots', done=index, total=len(snapshots))
             if index >= ROW_LIMIT:
                 export.entries.append({'name': 'snapshots', 'status': 'count_limit'})
                 break
@@ -348,9 +348,9 @@ def bundle_to(config, destination, *, codes: str = '', include_all: bool = False
             try:
                 if path.suffix.lower() == '.nfo':
                     if not _inside(path, root):
-                        raise ValueError('本地 NFO 证据无法读取')
+                        raise ValueError('Local NFO evidence cannot be read')
                     if path.stat().st_size > FILE_LIMIT:
-                        raise EvidenceTooLarge('本地 NFO 证据超过单文件上限')
+                        raise EvidenceTooLarge('Local NFO evidence exceeds the per-file limit')
                     from .library_nfo import read_nfo
                     payload, _raw = read_nfo(path)
                     source = 'local_nfo'
@@ -368,10 +368,10 @@ def bundle_to(config, destination, *, codes: str = '', include_all: bool = False
             'codes': selected, 'selection': 'codes' if codes.strip() else 'available' if include_all else 'recent',
             'limits': {'codes': ROW_LIMIT if include_all else CODE_LIMIT, 'rows': ROW_LIMIT,
                        'file_bytes': FILE_LIMIT, 'content_bytes': EXPORT_LIMIT},
-            'evidence_scope': '现存来源快照、字段候选和当前归属；空记录表示未取得，历史快照可能被后续采集覆盖',
+            'evidence_scope': 'Existing source snapshots, field candidates and current attribution; an empty record means not obtained, and historical snapshots may be overwritten by later collection',
             'entries': list(export.entries)})
         export.check()
-    progress(stage='刮削记录已生成', done=len(snapshots), total=len(snapshots))
+    progress(stage='Scraping records generated', done=len(snapshots), total=len(snapshots))
 
 
 def bundle_bytes(config, *, codes: str = '', include_all: bool = False) -> bytes:

@@ -131,20 +131,20 @@ class DataStorageTests(unittest.TestCase):
     def test_target_must_be_a_separate_empty_folder(self):
         config = self.config()
         cases = {
-            str(self.data): "相同或互相包含",
-            str(self.data / "inner"): "相同或互相包含",
-            str(self.program / "data"): "程序目录",
-            str(Path(self.base.anchor)): "磁盘根目录",
+            str(self.data): "same as, or contain",
+            str(self.data / "inner"): "same as, or contain",
+            str(self.program / "data"): "program directory",
+            str(Path(self.base.anchor)): "disk root",
             "relative\\path": "",
         }
         for raw, reason in cases.items():
             with self.subTest(raw=raw), self.assertRaisesRegex(ValueError, reason):
                 data_storage.check_target(config, raw, program=self.program)
         busy = write(self.base / "busy" / "file.txt").parent
-        with self.assertRaisesRegex(ValueError, "空文件夹"):
+        with self.assertRaisesRegex(ValueError, "empty folder"):
             data_storage.check_target(config, str(busy), program=self.program)
         media = replace(config, locations={"local": (str(self.base / "media"),)})
-        with self.assertRaisesRegex(ValueError, "媒体目录"):
+        with self.assertRaisesRegex(ValueError, "media directory"):
             data_storage.check_target(media, str(self.base / "media" / "peach"), program=self.program)
         vacated = write(self.base / "vacated" / "state" / settings_file.DATA_ROOT_LOCATION).parents[1]
         self.assertEqual(data_storage.check_target(config, str(vacated), program=self.program), vacated)
@@ -202,7 +202,7 @@ class DataStorageTests(unittest.TestCase):
             (destination / "generated" / "covers" / "ABC-001.jpg").unlink()
 
         with patch.object(data_storage, "_same_volume", return_value=False), \
-                self.assertRaisesRegex(RuntimeError, "复制结果不完整"):
+                self.assertRaisesRegex(RuntimeError, "Incomplete copy"):
             data_storage.relocate(self.config(), target, bootstrap=self.base / "default", copy=lossy)
 
         self.assertFalse(target.exists())
@@ -215,7 +215,7 @@ class DataStorageTests(unittest.TestCase):
         copy = Mock()
         with patch.object(data_storage, "_same_volume", return_value=False), \
                 patch.object(data_storage.shutil, "disk_usage", return_value=SimpleNamespace(free=10)), \
-                self.assertRaisesRegex(ValueError, "剩余"):
+                self.assertRaisesRegex(ValueError, "Free space"):
             data_storage.relocate(self.config(), target, bootstrap=self.base / "default", copy=copy)
         copy.assert_not_called()
         self.assertFalse(target.exists())
@@ -291,7 +291,7 @@ class DataStorageTests(unittest.TestCase):
         self.assertEqual(started[0][settings_file.DATA_ROOT_ENV], str(self.data))
         result = data_storage.read_result(self.config())
         self.assertEqual(result["state"], "error")
-        self.assertIn("仍在原位置", result["message"])
+        self.assertIn("remains at the original location", result["message"])
         self.assertFalse(request.exists())
 
     def test_request_needs_a_measurement_and_room_on_the_target_disk(self):
@@ -299,13 +299,13 @@ class DataStorageTests(unittest.TestCase):
         target = self.base / "new" / "peach-data"
         with patch.object(data_storage, "availability", return_value=(True, "")), \
                 patch("peach.standalone_update.public", return_value={"state": "idle"}):
-            with self.assertRaisesRegex(ValueError, "请先统计"):
+            with self.assertRaisesRegex(ValueError, "measure disk usage first"):
                 data_storage.request(config, str(target))
             (self.data / "state").mkdir(exist_ok=True)
             (self.data / "state" / data_storage.USAGE_NAME).write_text(json.dumps(
                 {"root": str(self.data), "total_bytes": 1 << 50}), encoding="utf-8")
             with patch.object(data_storage, "_same_volume", return_value=False), \
-                    self.assertRaisesRegex(ValueError, "剩余"):
+                    self.assertRaisesRegex(ValueError, "Free space"):
                 data_storage.request(config, str(target))
             receipt = data_storage.request(config, str(target))
         self.assertTrue(receipt["accepted"])
@@ -334,9 +334,9 @@ class DataStorageTests(unittest.TestCase):
     def test_containers_get_host_side_steps_instead_of_a_relocation(self):
         (available, message), steps = self.availability_with(PEACH_DISTRIBUTION="docker", PEACH_HEADLESS_MANAGED="1")
         self.assertFalse(available)
-        self.assertIn("宿主机", message)
+        self.assertIn("host", message)
         self.assertEqual([step["command"] for step in steps][1:2], ["docker compose down"])
-        self.assertIn("<新文件夹>:/data", steps[-1]["text"])
+        self.assertIn("<new folder>:/data", steps[-1]["text"])
 
     def test_relocation_never_redirects_another_live_data_directory(self):
         make_ledger(self.data / "database" / "ledger.db")
@@ -447,7 +447,7 @@ class DataStorageTests(unittest.TestCase):
                                          headers={"origin": "https://other.invalid"}).status_code, 403)
             refused = client.post("/api/configuration/storage/relocate", json={"target": str(self.data / "inner")})
             self.assertEqual(refused.status_code, 400)
-            self.assertIn("互相包含", refused.json()["detail"]["errors"]["target"])
+            self.assertIn("contain or be contained by", refused.json()["detail"]["errors"]["target"])
 
     def test_jobs_measure_in_the_background_and_report_cleaning(self):
         config = self.config()
@@ -462,13 +462,13 @@ class DataStorageTests(unittest.TestCase):
 
         with patch.object(data_storage, "measure", side_effect=slow):
             jobs.start(config, "logs")
-            with self.assertRaisesRegex(RuntimeError, "正在统计或清理"):
+            with self.assertRaisesRegex(RuntimeError, "Measuring or cleaning in progress"):
                 jobs.start(config, "measure")
             release.set()
             jobs.join(10)
         state = jobs.snapshot()
         self.assertEqual(state["state"], "idle")
-        self.assertIn("释放 2 KB", state["message"])
+        self.assertIn("freed 2 KB", state["message"])
         self.assertIsNotNone(data_storage.read_usage(config))
 
     def test_jobs_clean_several_categories_in_one_pass_and_estimate_from_the_last_count(self):
@@ -489,9 +489,9 @@ class DataStorageTests(unittest.TestCase):
         self.assertEqual(started["expected_files"], counted)
         measured.assert_called_once()
         message = jobs.snapshot()["message"]
-        self.assertIn("播放缓存、日志", message)
-        self.assertIn("释放 3 KB", message)
-        with self.assertRaisesRegex(ValueError, "不能在这里清理"):
+        self.assertIn("Playback cache, Logs", message)
+        self.assertIn("freed 3 KB", message)
+        with self.assertRaisesRegex(ValueError, "cannot be cleaned here"):
             jobs.start(config, ["logs", "downloads"])
 
 

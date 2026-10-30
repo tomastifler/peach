@@ -26,7 +26,7 @@
   .peach-react [data-follow-title] { font: var(--board-figure); }
 }
 .peach-react [data-follow-head-actions] { display: inline-flex; flex: none; align-items: center; gap: 8px; }
-/* 「管理关注」「抓更早的一页」同遗留层 `.fbtn`：左边留 12px，图标与文字同行、随字号缩放，与文字隔 4px（文字自带的内边距）。 */
+/* "Manage follows" and "Fetch an earlier page" match the legacy layer's `.fbtn`: 12px on the left, icon in line with text and scaling with font size, 4px away from the text (the text's own padding). */
 .peach-react button:is([data-follow-manage], [data-follow-older]):has(> svg) { gap: 0; padding-left: 12px; }
 .peach-react button:is([data-follow-manage], [data-follow-older]) > svg { width: var(--icon-inline); height: var(--icon-inline); }
 
@@ -197,7 +197,7 @@
   font-family: "Cascadia Mono", Consolas, ui-monospace, "Microsoft YaHei UI", "PingFang SC", monospace;
   font-size: 11px;
 }
-/* 「仅显示图片」：一枚紧凑档的方键，按下时垫一块滑动玻璃那种料。 */
+/* "Images only": a compact-tier square button, with a sliding-glass material underneath when pressed. */
 .peach-react button[data-follow-images-only] {
   position: relative;
   display: grid;
@@ -251,7 +251,7 @@
 }
 .peach-react [data-follow-page-action] { display: inline-flex; align-items: center; gap: 12px; }
 .peach-react [data-follow-pagination] [data-entity-more] { gap: 4px; min-width: 0; margin: 0; }
-/* 忙态里转圈与「抓取中」隔开 4px，同遗留层 `.fbtn` 的间距。 */
+/* In the busy state the spinner is 4px from "Fetching", the same spacing as the legacy layer's `.fbtn`. */
 .peach-react :is([data-follow-older], [data-follow-recheck]) > span { gap: 4px; }
 /* 任务在跑时两枚键只标 `aria-busy`，重复点击由 `start` 拦住：「检查更新」保持主键那块蓝，
    「抓更早的一页」铺遗留层次级键的忙态面（`--ground` 底、`--line` 边、`--muted` 字、不带影），悬停也不变。 */
@@ -326,7 +326,7 @@ body[data-density="dense"]:not([data-surface="/trash"]) .peach-react [data-follo
   min-height: calc(var(--card-meta-block) + 16px);
   contain-intrinsic-block-size: auto var(--card-meta-block);
 }
-/* 窄屏关注卡按实际内容定高，紧凑视图的长标题保留两行。 */
+/* On narrow screens, follow cards take their height from the actual content, and long titles in the compact view keep two lines. */
 @media (max-width: 760px) {
   body .peach-react [data-follow-list] [data-follow-item] [data-media-meta] {
     min-height: 0; content-visibility: visible; contain-intrinsic-block-size: none;
@@ -437,7 +437,7 @@ body[data-density="dense"]:not([data-surface="/trash"]) .peach-react [data-follo
   pointer-events: none;
   transition: opacity .15s ease;
 }
-/* 卡片悬浮动作取紧凑档，与首页卡片上的稍后看、未入库卡的动作键同高。 */
+/* Card hover actions take the compact tier, the same height as Watch later on home cards and the action button on not-in-library cards. */
 .peach-react [data-follow-actions] button {
   display: grid;
   place-items: center;

@@ -57,7 +57,7 @@ def q_organize(contract, _args=None) -> dict:
 
 
 def q_organize_example(_contract, args=None) -> dict:
-    """以示例字段预览模板，保持账本与文件系统只读。"""
+    """Preview a template with example fields, keeping the ledger and filesystem read-only."""
     args = args or {}
     return example_path(str(args.get("file_template") or ""), str(args.get("dir_template") or ""))
 
@@ -93,7 +93,7 @@ def _run_write(contract, job_id: str, work) -> dict:
         try:
             before, _ = verify_after_write(connection)
             if before != 'ok':
-                raise RuntimeError(f'写入前 ledger 校验失败：integrity={before}')
+                raise RuntimeError(f'Ledger check before writing failed: integrity={before}')
             baseline = {tuple(row) for row in connection.execute('PRAGMA foreign_key_check')}
             result = work(connection)
             integrity, _ = verify_after_write(connection)
@@ -103,12 +103,12 @@ def _run_write(contract, job_id: str, work) -> dict:
     contract.cache_bust()
     if integrity != "ok" or introduced:
         raise RuntimeError(
-            f"写入后 ledger 校验失败：integrity={integrity} new_foreign_keys={len(introduced)}")
+            f"Ledger check after writing failed: integrity={integrity} new_foreign_keys={len(introduced)}")
     return {**result, "backup": str(backup), 'existing_foreign_keys': len(baseline)}
 
 
 def w_organize_apply(contract, body) -> dict:
-    """按确认过的范围与可选模板执行整理，计划由服务端核对。"""
+    """Execute organizing by a confirmed scope and an optional template, with the plan verified by the server."""
     if body.get("confirm") is not True:
         raise ValueError("Organizing needs confirmation")
     location, file_template, dir_template = _templates(contract, body)
@@ -139,7 +139,7 @@ def w_organize_apply(contract, body) -> dict:
                    completed_at=time.time())
 
     started = job.start(work, restart=True,
-                     initial={"stage": "正在核对计划", "location": location, 'path': path_scope},
+                     initial={"stage": "Verifying the plan", "location": location, 'path': path_scope},
                      recovery={'confirm': True, 'location': location, 'file_template': file_template,
                                'dir_template': dir_template, 'path': path_scope, 'action': 'apply'})
     return {key: value for key, value in started.items() if key not in ('plan', 'batch_stamp')}

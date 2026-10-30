@@ -1,4 +1,4 @@
-"""标签身份、兼容投影和用户管理决定；调用方负责事务与备份。"""
+"""Tag identity, compatibility projection and user management decisions; the caller handles transactions and backups."""
 from __future__ import annotations
 
 import hashlib
@@ -13,7 +13,7 @@ _OFFICIAL_TAG_SOURCES = tuple(f'javinizer:{name}:tag' for name, spec in SOURCE_S
 
 
 def rewrite_tag_projection(connection, old: str, new: str, *, asset_id: int | None = None) -> None:
-    """规范标签跟随实体名称，来源原词保存在关系证据中。"""
+    """Canonical tags follow entity names, and the source's original words are kept in the relationship evidence."""
     if old == new:
         return
     scope = ' AND asset_id=?' if asset_id is not None else ''
@@ -73,40 +73,40 @@ def duplicate_groups(rows: list[dict]) -> list[list[int]]:
 def _ids(body: dict) -> list[int]:
     values = body.get('ids')
     if not isinstance(values, list) or not values or len(values) > 2000 or any(type(value) is not int or value <= 0 for value in values):
-        raise ValueError('请选择有效的标签，单次最多 2000 个')
+        raise ValueError('Please choose valid tags, at most 2000 at a time')
     return sorted(set(values))
 
 
 def _validate_rename(rows, ids, name):
-    """改名须对应一个有效名称，并避开其他实体及其别名。"""
+    """A rename must correspond to one valid name and avoid other entities and their aliases."""
     if len(ids) != 1 or not name or len(name) > 80 or name.startswith('演员:'):
-        raise ValueError('标签名须为 1 至 80 个字符')
+        raise ValueError('Tag name must be 1 to 80 characters')
     key = normalize_entity_name(canonical_tag_name(name))
     for row in rows:
         if row['entity_id'] != ids[0] and key in {normalize_entity_name(canonical_tag_name(word)) for word in [row['k'], *row['aliases']]}:
-            raise ValueError(f'「{name}」已属于标签「{row["k"]}」，请使用合并标签')
+            raise ValueError(f'"{name}" already belongs to tag "{row["k"]}"; please use merge tags')
 
 
 def preview(connection, body: dict) -> dict:
     operation = body.get('operation')
     if operation not in {'rename', 'merge', 'hide', 'restore', 'repair'}:
-        raise ValueError('未知的标签操作')
+        raise ValueError('Unknown tag operation')
     rows = tag_rows(connection)
     groups = duplicate_groups(rows)
     ids = sorted({value for group in groups for value in group}) if operation == 'repair' else _ids(body)
     selected = [row for row in rows if row['entity_id'] in ids]
     if len(selected) != len(ids):
-        raise ValueError('标签已变化，请刷新后重试')
+        raise ValueError('Tags have changed; please refresh and retry')
     name = clean_tag_name(str(body.get('name', '')))
     target = body.get('target_id')
     if operation == 'rename':
         _validate_rename(rows, ids, name)
     if operation == 'merge' and (len(ids) < 2 or type(target) is not int or target not in ids):
-        raise ValueError('请选择至少两个标签，并从中选择保留的标签')
+        raise ValueError('Please choose at least two tags, and choose which one to keep')
     marks = ','.join('?' for _ in ids) or 'NULL'
     assets = [row[0] for row in connection.execute(
         f'SELECT DISTINCT asset_id FROM asset_entity WHERE entity_id IN ({marks}) ORDER BY asset_id', ids)]
-    # 名称、来源、偏好与映射任一变化都会使待执行计划失效。
+    # A change to any of name, source, preference or mapping invalidates the pending plan.
     evidence = [list(row) for row in connection.execute(
         f'SELECT * FROM asset_entity WHERE entity_id IN ({marks}) ORDER BY asset_id,entity_id,role,source', ids)]
     names = sorted({name for row in selected for name in [row['k'], *row['aliases']]})
@@ -135,7 +135,7 @@ def _merge(connection, source: dict, target: dict, stamp: str) -> None:
 def apply_plan(connection, body: dict) -> dict:
     plan = preview(connection, body)
     if body.get('token') != plan['token']:
-        raise ValueError('标签已变化，请重新预览操作范围')
+        raise ValueError('Tags have changed; please preview the operation scope again')
     foreign_keys_before = set(map(tuple, connection.execute('PRAGMA foreign_key_check')))
     stamp = datetime.now(timezone.utc).isoformat()
     operation = plan['operation']
@@ -163,5 +163,5 @@ def apply_plan(connection, body: dict) -> dict:
             connection.execute("UPDATE entity SET metadata_json=json_set(metadata_json,'$.user_tag_hidden',?),updated_at=? WHERE id=?",
                                (int(operation == 'hide'), stamp, row['entity_id']))
     if set(map(tuple, connection.execute('PRAGMA foreign_key_check'))) - foreign_keys_before:
-        raise ValueError('标签操作未通过外键检查')
+        raise ValueError('The tag operation did not pass the foreign key check')
     return {'ok': True, 'operation': operation, 'tags': len(rows), 'assets': plan['assets']}

@@ -69,7 +69,7 @@ describe('卡片密度与顶栏大小图键', () => {
     expect([document.documentElement.style.getPropertyValue('--tile'), document.body.dataset.density,
       button.getAttribute('aria-pressed'), button.getAttribute('title'), button.getAttribute('aria-label'),
       button.querySelector('[data-icon-swap]')?.getAttribute('data-icon-state')])
-      .toEqual(['336px', 'big', 'false', 'Current: Large', 'Switch to small thumbnails', 'a']);
+      .toEqual(['336px', 'big', 'false', 'Current: Large', 'Switch to small', 'a']);
     toggleDensity();
     expect([currentDensity(), localStorage.getItem('density'), document.documentElement.style.getPropertyValue('--tile'),
       document.body.dataset.density, button.getAttribute('aria-pressed'), button.getAttribute('title')])
@@ -81,11 +81,11 @@ describe('卡片密度与顶栏大小图键', () => {
     const button = document.querySelector('#density')!;
     expect([button.getAttribute('aria-pressed'), button.getAttribute('title'), button.getAttribute('aria-label'),
       button.querySelector('[data-icon-swap]')?.getAttribute('data-icon-state')])
-      .toEqual(['true', 'Current: Small', 'Switch to large thumbnails', 'b']);
+      .toEqual(['true', 'Current: Small', 'Switch to large', 'b']);
   });
 });
 
-describe('主题', () => {
+describe('Theme', () => {
   let systemDark = false;
   beforeEach(() => {
     /* 模块只建一次媒体查询、之后每次读 `matches`：桩也得是活的。 */

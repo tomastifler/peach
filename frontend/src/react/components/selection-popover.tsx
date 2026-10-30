@@ -7,9 +7,9 @@ import { cx } from '@/utils/cx';
 import { MenuDialog } from './menu-dialog';
 import { SelectionActions, type SelectionAction } from './selection-actions';
 
-/** 多选弹层的选项靠近触发器，操作区随实际展开方向放在远端。 */
+/** The options of the multi-select popover sit close to the trigger, and the action area is placed at the far end following the actual expansion direction. */
 export function SelectionPopover({ label, triggerLabel, leadingIcon, items, onChange, actions,
-  actionLayout = 'inline', empty = '暂无可选项' }: {
+  actionLayout = 'inline', empty = 'No options available' }: {
   label: string;
   triggerLabel: string;
   leadingIcon?: ButtonProps['leadingIcon'];

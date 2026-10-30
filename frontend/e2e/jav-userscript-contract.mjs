@@ -45,7 +45,7 @@ try {
           const root = document.getElementById('peach-jav-action')?.shadowRoot;
           return root?.querySelector('.bar strong')?.textContent === expected
             && root.querySelector('[data-action="add"]')?.getAttribute('aria-busy') === 'false'
-            && root.querySelector('p')?.textContent === '可以加入 Peach 馆藏';
+            && root.querySelector('p')?.textContent === 'Can be added to Peach library';
         }, code, { timeout: 15000 });
         assert.equal(requests.length, 1);
         assert.deepEqual(problems, []);

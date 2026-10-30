@@ -57,18 +57,18 @@ describe('普通 HTTP 的配置与播放', () => {
           })), { secure: false, uuid: 'undefined', random: 'function' });
           phase = `等待 ${path} 配置主体`;
           await expectBody(page, path, configurationBody(page));
-          await page.getByRole('tab', { name: '来源与订阅', exact: true }).click();
-          const section = page.getByRole('form', { name: '资源搜索', exact: true });
+          await page.getByRole('tab', { name: 'Sources & subscriptions', exact: true }).click();
+          const section = page.getByRole('form', { name: 'Resource search', exact: true });
           phase = `编辑 ${path} 索引器`;
-          await section.getByRole('button', { name: '添加索引器', exact: true }).click();
-          await section.getByRole('button', { name: '添加索引器', exact: true }).click();
-          await section.getByRole('textbox', { name: /名称/ }).nth(1).fill('HTTP 测试');
-          await section.getByRole('textbox', { name: /Torznab 地址/ }).nth(1).fill('https://indexer.example/api');
+          await section.getByRole('button', { name: 'Add indexer', exact: true }).click();
+          await section.getByRole('button', { name: 'Add indexer', exact: true }).click();
+          await section.getByRole('textbox', { name: /Name/ }).nth(1).fill('HTTP 测试');
+          await section.getByRole('textbox', { name: /Torznab address/ }).nth(1).fill('https://indexer.example/api');
           await section.getByRole('button', { name: '移除索引器 1', exact: true }).click();
           phase = `保存 ${path} 索引器`;
           const saved = page.waitForResponse(response => response.url() === `${origin}/api/configuration/indexers`
             && response.request().method() === 'POST');
-          await section.getByRole('button', { name: '保存配置', exact: true }).click();
+          await section.getByRole('button', { name: 'Save settings', exact: true }).click();
           assert.equal((await saved).status(), 200);
           assert.equal(writes.at(-1)!.indexers.length, 1);
           assert.equal(writes.at(-1)!.indexers[0]!.name, 'HTTP 测试');

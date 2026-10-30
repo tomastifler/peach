@@ -6,15 +6,15 @@ from collections import Counter, defaultdict
 from functools import lru_cache
 from urllib.parse import parse_qs, unquote, urlparse
 
-#: 一条浏览记录要经 `host`、`account_key`、`identity_key`、`mixed_adult` 与
-#: `_url_candidates` 几道判据，每道都要解析同一条网址；逐条处理时只有最近几条会被
-#: 再问到，小容量就够，几十万条历史也不会把整份网址留在内存里。
+#: One browsing record goes through `host`, `account_key`, `identity_key`, `mixed_adult` and
+#: `_url_candidates` several criteria, each of which must parse the same URL; when processing record by record only the latest few are
+#: queried again, so a small capacity is enough, and even hundreds of thousands of history entries will not keep all the URLs in memory.
 URL_CACHE_SIZE = 512
 
 
 @lru_cache(maxsize=URL_CACHE_SIZE)
 def parse_url(url: str):
-    """`urlparse` 的结果是不可变的命名元组，可以在各判据之间共用。"""
+    """`urlparse` results are immutable named tuples and can be shared across criteria."""
     return urlparse(url)
 
 ADULT_DOMAINS = {

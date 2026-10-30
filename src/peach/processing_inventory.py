@@ -1,4 +1,4 @@
-"""首次目录的只读预检；每次查询推进一批，关闭弹窗后不再继续。"""
+"""Read-only pre-check of the first directory; each query advances a batch, and it does not continue after the dialog is closed."""
 from __future__ import annotations
 
 import threading
@@ -113,7 +113,7 @@ def preview(config, db_path, stage, asset_ids, token=None, *, incremental=False)
         if token:
             session = _SESSIONS.get(token)
             if session is None or session.identity != _identity(config, db_path, stage, asset_ids, incremental):
-                raise ValueError('目录预检已结束，请重新打开同步弹窗')
+                raise ValueError('The directory pre-check has ended; please reopen the sync dialog')
         else:
             session = InventoryPreview(config, db_path, stage, asset_ids, incremental)
             token = uuid4().hex

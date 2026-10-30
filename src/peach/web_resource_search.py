@@ -18,8 +18,8 @@ def q_resource_search(contract, args) -> dict:
     with contract.database.read_connection() as connection:
         blocked = [row[0] for row in connection.execute(
             "SELECT info_hash FROM download_task WHERE blocked_at IS NOT NULL")]
-    # 浏览器添加换磁力时传入已失败的 infohash：它们和违规拦截一样不再作为候选，
-    # 而且不能在 manko.fun 那一步短路——被跳过的往往正是那条高清结果，短路会让其他来源一条都不查。
+    # When the browser add switches magnets, it passes in the failed infohash: they, like policy blocks, are no longer candidates,
+    # and must not short-circuit at the manko.fun step - the skipped one is often exactly that HD result, and short-circuiting would make no other source get queried at all.
     skip = [str(value) for value in args.get("skip") or () if isinstance(args.get("skip"), (list, tuple))]
     excluded = set(blocked) | set(skip)
     code = str(args.get("code") or "")

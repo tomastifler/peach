@@ -3,7 +3,7 @@ import { after, before, describe, it } from 'node:test';
 import type { Browser, Page } from 'playwright-core';
 import { configurationBody, expectBody, launch, layout, settle, visit, VIEWPORTS } from './harness.ts';
 
-const measure = (page: Page, names = ['媒体库与目录']) => page.locator('.ui-configpage').evaluate((root, names) => {
+const measure = (page: Page, names = ['Libraries and folders']) => page.locator('.ui-configpage').evaluate((root, names) => {
   const rect = (el: Element) => {
     const r = el.getBoundingClientRect();
     return { x: r.x, y: r.y, width: r.width, height: r.height };
@@ -126,7 +126,7 @@ describe('配置页等待态', () => {
     let mount = () => {};
     try {
       const { page } = opened;
-      const names = ['来源凭据', '关注采集', '资源搜索', '作品资料站点'];
+      const names = ['Source credentials', 'Follow collection', 'Resource search', 'Title info sites'];
       /* 骨架淡出时新旧两份 `.ui-configpage` 可能同时在：取最后挂上的那一份。 */
       const sections = () => page.locator('.ui-configpage').last().evaluate((root, names) => names.map((name) => {
         const section = root.querySelector(`[aria-label="${name}"]`);
@@ -134,7 +134,7 @@ describe('配置页等待态', () => {
         const r = section.getBoundingClientRect();
         return { name, y: r.y, height: r.height, sites: section.querySelectorAll('b').length };
       }), names);
-      const done = () => page.waitForFunction(() => document.querySelector('.ui-configpage section[aria-label="来源凭据"]')
+      const done = () => page.waitForFunction(() => document.querySelector('.ui-configpage section[aria-label="Source credentials"]')
         && !document.querySelector('.ui-configpage [data-skeleton]'), null, { timeout: 30_000 });
       await done();
       await settle(page);
@@ -150,7 +150,7 @@ describe('配置页等待态', () => {
       await page.locator('[data-skeleton="board/settings/subscriptions"]').waitFor();
       const pageSkeleton = await sections();
       mount();
-      await page.getByLabel('正在读取来源凭据', { exact: true }).waitFor();
+      await page.getByLabel('Loading source credentials', { exact: true }).waitFor();
       const sectionSkeleton = await sections();
       release();
       await done();

@@ -1,7 +1,7 @@
-// CloudDrive2 gRPC 接口的子集：云下载与网盘代理配置。
+// CloudDrive2 gRPC API subset: cloud download and cloud drive proxy configuration.
 //
 // 字段号、类型与名字逐个照抄官方 https://www.clouddrive2.com/api/clouddrive.proto
-// （option version = "1.1.2"）。未声明字段由 protobuf 保留，读改写配置时一并回传。
+// (option version = "1.1.2"). Undeclared fields are preserved by protobuf and sent back together when a configuration is read-modified-written.
 // 服务端多给的那些照常读得进来。改动后重新生成 `downloads_clouddrive_pb2.py`：
 //
 //   uvx --from grpcio-tools==1.84.0 python -m grpc_tools.protoc -Isrc/peach

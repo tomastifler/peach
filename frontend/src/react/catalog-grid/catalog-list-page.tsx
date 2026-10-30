@@ -99,14 +99,14 @@ export function CatalogListPage(props: CatalogGridProps) {
   const columns = useMemo(() => {
     const helper = createColumnHelper<typeof features, MediaItem>();
     return helper.columns([
-      helper.display({ id: 'select', header: ({ table }) => <TableSelectionHeader table={table} label="全选本页作品" disabled={result.isPlaceholderData} />,
-      cell: ({ row }) => <Checkbox slot={null} aria-label={`选择 ${props.helpers.displayName(row.original, row.original.name || '')}`}
+      helper.display({ id: 'select', header: ({ table }) => <TableSelectionHeader table={table} label="Select all works on this page" disabled={result.isPlaceholderData} />,
+      cell: ({ row }) => <Checkbox slot={null} aria-label={`Select ${props.helpers.displayName(row.original, row.original.name || '')}`}
         isDisabled={result.isPlaceholderData}
         isSelected={row.getIsSelected()} onChange={on => row.toggleSelected(on)} /> }),
-      helper.accessor(item => item.name || '', { id: 'name', header: '作品', enableSorting: true,
+      helper.accessor(item => item.name || '', { id: 'name', header: 'Name', enableSorting: true,
         cell: ({ row }) => <ListIdentity item={row.original} props={props} disabled={result.isPlaceholderData} /> }),
-      /* 标签与卡片同一套：关注条目的标签不可点，其余点一下按这个标签筛选。 */
-      helper.display({ id: 'tags', header: '标签', cell: ({ row }) => {
+      /* Tags use the same scheme as cards: tags on followed entries are not clickable; for the others, clicking filters by that tag. */
+      helper.display({ id: 'tags', header: 'Tags', cell: ({ row }) => {
         const item = row.original;
         const tags = item.follow_tags || item.tags || [];
         return tags.length
@@ -119,26 +119,26 @@ export function CatalogListPage(props: CatalogGridProps) {
           </div>
           : '—';
       } }),
-      helper.display({ id: 'code', header: '番号', cell: ({ row }) => row.original.code || '—' }),
-      helper.accessor(item => item.duration, { id: 'dur', header: '时长', enableSorting: true,
+      helper.display({ id: 'code', header: 'Product code', cell: ({ row }) => row.original.code || '—' }),
+      helper.accessor(item => item.duration, { id: 'dur', header: 'Duration', enableSorting: true,
         cell: ({ row }) => fmtDur(row.original.duration) || '—' }),
-      helper.display({ id: 'resolution', header: '分辨率', cell: ({ row }) => {
+      helper.display({ id: 'resolution', header: 'Resolution', cell: ({ row }) => {
         const { width, height } = row.original;
         return width && height ? `${width} × ${height}` : '—';
       } }),
-      helper.accessor(item => item.size, { id: 'size', header: '体积', enableSorting: true,
+      helper.accessor(item => item.size, { id: 'size', header: 'Size', enableSorting: true,
         cell: ({ row }) => row.original.size == null ? '—' : fmtSize(row.original.size) }),
-      helper.accessor(item => item.rating, { id: 'rating', header: '评分', enableSorting: true,
+      helper.accessor(item => item.rating, { id: 'rating', header: 'Rating', enableSorting: true,
         cell: ({ row }) => <CatalogRating item={row.original} actions={props.actions} /> }),
-      helper.accessor(item => item.play_count, { id: 'plays', header: '观看次数', enableSorting: true,
+      helper.accessor(item => item.play_count, { id: 'plays', header: 'Play count', enableSorting: true,
         cell: ({ row }) => Number(row.original.play_count || 0).toLocaleString() }),
-      helper.accessor(item => item.o_count, { id: 'o', header: '高潮计数', enableSorting: true,
+      helper.accessor(item => item.o_count, { id: 'o', header: 'O count', enableSorting: true,
         cell: ({ row }) => Number(row.original.o_count || 0).toLocaleString() }),
-      helper.accessor(item => item.last_played, { id: 'played', header: '观看时间', enableSorting: true,
+      helper.accessor(item => item.last_played, { id: 'played', header: 'Watched', enableSorting: true,
         cell: ({ row }) => catalogTableDate(row.original.last_played) }),
-      helper.accessor(item => item.first_seen, { id: 'new', header: '入库时间', enableSorting: true,
+      helper.accessor(item => item.first_seen, { id: 'new', header: 'Added', enableSorting: true,
         cell: ({ row }) => catalogTableDate(row.original.first_seen) }),
-      helper.accessor(item => item.release_date, { id: 'release', header: '发行时间', enableSorting: true,
+      helper.accessor(item => item.release_date, { id: 'release', header: 'Released', enableSorting: true,
         cell: ({ row }) => row.original.release_date || '—' }),
     ]);
   }, [props.helpers, props.actions, props.layout, props.selectMode, result.isPlaceholderData]);
@@ -162,10 +162,10 @@ export function CatalogListPage(props: CatalogGridProps) {
     },
   });
   return <div data-catalog-view-mode="list" data-catalog-table="" aria-busy={result.isFetching || undefined} className="flex min-w-0 flex-col gap-4">
-    <div className="flex flex-wrap justify-end gap-2" role="toolbar" aria-label="作品列表工具栏">
+    <div className="flex flex-wrap justify-end gap-2" role="toolbar" aria-label="Work list toolbar">
       <div data-toolbar-actions="">
       <TableColumnControls preferences={preferences} />
-      <DataTableSort label="作品列表" options={sortOptions} sorting={sorting}
+      <DataTableSort label="Work list" options={sortOptions} sorting={sorting}
         onChange={next => table.setSorting(next)} />
       </div>
     </div>
@@ -174,7 +174,7 @@ export function CatalogListPage(props: CatalogGridProps) {
       : <LibraryCompletionPrompt className="" assetIds={missing} />}
     {result.isError ? <RetryNote message={requestErrorMessage(result.error)} onRetry={() => void result.refetch()} /> : null}
     <DataTableFrame follow preferences={preferences} onRowClick={props.selectMode ? id => { if (!result.isPlaceholderData) props.actions.toggleSelection(Number(id), false) } : undefined}>
-      <Table aria-label="作品列表" size="sm"
+      <Table aria-label="Work list" size="sm"
         sortDescriptor={sort ? { column: sort.id, direction: sort.desc ? 'descending' : 'ascending' } : undefined}
         onSortChange={next => table.setSorting([{ id: String(next.column), desc: next.direction === 'descending' }])}>
         <TableHeader>{table.getHeaderGroups()[0]!.headers.map(header =>
@@ -188,10 +188,10 @@ export function CatalogListPage(props: CatalogGridProps) {
             <TableColumnResizer preferences={preferences} id={header.id} />
             </>}
           </TableColumn>)}
-          <TableColumn id="remaining-space" aria-label="行空白区域" data-table-space="" width={preferences.spaceWidth} minWidth={0} />
+          <TableColumn id="remaining-space" aria-label="Row spacer" data-table-space="" width={preferences.spaceWidth} minWidth={0} />
         </TableHeader>
-        <TableBody renderEmptyState={() => result.isError ? '作品列表未取得' : '没有符合的作品'}>
-          {/* 等数据时在真实表格里画骨架行，格子内容与壳的首屏骨架同一份，接管时不换结构。 */}
+        <TableBody renderEmptyState={() => result.isError ? 'Work list unavailable' : 'No matching works'}>
+          {/* While waiting for data, draw skeleton rows in the real table, with cell contents identical to the shell's first-paint skeleton, so the structure does not change on handover. */}
           {result.isPending ? Array.from({ length: 6 }, (_, index) => <TableRow key={`skeleton-${index}`} id={`skeleton-${index}`}
             data-list-skeleton-row="" aria-hidden="true">
             {table.getHeaderGroups()[0]!.headers.map(header => <TableCell key={header.id}>
@@ -214,19 +214,19 @@ export function CatalogListPage(props: CatalogGridProps) {
 
 function ListIdentity({ item, props, disabled }: { item: MediaItem; props: CatalogGridProps; disabled: boolean }) {
   const artwork = cardArtwork(item, 'small', false, props.layout.javImage);
-  /* 与卡片同一判据：按画幅筛时组里只剩这一卷或这一个版本，就按单个文件写。 */
+  /* Same criterion as cards: when filtering by aspect ratio leaves only this one volume or one edition in the group, write it as a single file. */
   const parts = Number(item.part_group?.count) > 1 ? item.part_group || null : null;
   const editions = Number(item.edition_group?.count) > 1 ? item.edition_group || null : null;
   const rawName = parts?.title || item.name || '';
-  const name = props.helpers.displayName(item, rawName).trim() || '未命名作品';
-  const titleHtml = props.helpers.titleHtml(item, rawName).trim() || '未命名作品';
+  const name = props.helpers.displayName(item, rawName).trim() || 'Untitled work';
+  const titleHtml = props.helpers.titleHtml(item, rawName).trim() || 'Untitled work';
   useEntityNames();
   const { avatar, who } = identityParts(item);
   const watched = !parts && Number(item.play_seconds) > 0 && Number(item.duration) > 0
     ? Math.min(Number(item.play_seconds) / Number(item.duration), 1) : 0;
   const tints = useLibraryTints({ names: true });
   const tint = item.library_id ? tints.get(item.library_id) : undefined;
-  const flaggedBy = [Number(item.liked) > 0 ? '喜欢' : '', Number(item.o_count) > 0 ? '有高潮记录' : ''].filter(Boolean);
+  const flaggedBy = [Number(item.liked) > 0 ? 'Liked' : '', Number(item.o_count) > 0 ? 'Has O records' : ''].filter(Boolean);
   const glyph = (name: string) => <svg viewBox="0 0 24 24" aria-hidden="true"><use href={`#i-${name}`} /></svg>;
   const open = (event: MouseEvent<HTMLElement>) => {
     if (props.selectMode) {
@@ -235,7 +235,7 @@ function ListIdentity({ item, props, disabled }: { item: MediaItem; props: Catal
     const opener = props.filters?.state === 'trash' ? props.actions.openResource : props.actions.open;
     opener(item, event.currentTarget);
   };
-  /* 头像与署名和卡片同一套：点头像或人名打开人物、厂牌页，没有署名的那批打开「未归属」。 */
+  /* Avatar and byline use the same scheme as cards: clicking an avatar or name opens the person or studio page, and the batch with no byline opens "Unassigned". */
   const openOwner = (event: MouseEvent<HTMLElement>) => {
     if (props.selectMode) return;
     const target = event.target as HTMLElement;
@@ -246,29 +246,29 @@ function ListIdentity({ item, props, disabled }: { item: MediaItem; props: Catal
   return <div data-list-identity="" onClick={openOwner}>
     <button type="button" data-list-open="" disabled={disabled} tabIndex={-1} aria-hidden="true" onClick={open}>
       <span data-list-picture="">{artwork.html
-        ? <ArtSlot artwork={artwork} relayout={root => relayoutCovers(root, 'small')} /> : <span>无预览</span>}
-        {parts && !editions ? <span data-media-group="">{`${Number(parts.count).toLocaleString()} 卷`}</span> : null}
-        {editions ? <span data-media-group="" title={editions.editions.join(' · ')}>{`${Number(editions.count).toLocaleString()} 个版本`}</span> : null}
+        ? <ArtSlot artwork={artwork} relayout={root => relayoutCovers(root, 'small')} /> : <span>No preview</span>}
+        {parts && !editions ? <span data-media-group="">{`${Number(parts.count).toLocaleString()} vols`}</span> : null}
+        {editions ? <span data-media-group="" title={editions.editions.join(' · ')}>{`${Number(editions.count).toLocaleString()} editions`}</span> : null}
         {watched > 0
-          ? <span data-media-progress="" role="progressbar" aria-label="观看进度" aria-valuemin={0} aria-valuemax={100}
+          ? <span data-media-progress="" role="progressbar" aria-label="Watch progress" aria-valuemin={0} aria-valuemax={100}
             aria-valuenow={Math.round(watched * 100)}>
             <i style={{ '--media-fill': `${(watched * 100).toFixed(1)}%` } as CSSProperties} />
           </span>
           : null}
         {item.watch_later || flaggedBy.length
           ? <span data-media-status="">
-            {item.watch_later ? <span data-status="later" title="稍后看" aria-label="稍后看">{glyph('bookmark')}</span> : null}
-            {flaggedBy.length ? <span data-status="flagged" title={`已标记：${flaggedBy.join('、')}`}
-              aria-label={`已标记：${flaggedBy.join('、')}`}>{glyph('heart')}</span> : null}
+            {item.watch_later ? <span data-status="later" title="Watch later" aria-label="Watch later">{glyph('bookmark')}</span> : null}
+            {flaggedBy.length ? <span data-status="flagged" title={`Flagged: ${flaggedBy.join(', ')}`}
+              aria-label={`Flagged: ${flaggedBy.join(', ')}`}>{glyph('heart')}</span> : null}
           </span>
           : null}</span>
     </button>
     {avatar}
     <span data-list-text="">
-      <button type="button" data-list-name="" disabled={disabled} title={name} aria-label={`打开 ${name}`} onClick={open}
+      <button type="button" data-list-name="" disabled={disabled} title={name} aria-label={`Open ${name}`} onClick={open}
         dangerouslySetInnerHTML={{ __html: titleHtml }} />
       <span data-list-byline="">
-        {tint?.name ? <span data-list-library="" title={`媒体库：${tint.name}`}>
+        {tint?.name ? <span data-list-library="" title={`Library: ${tint.name}`}>
           <SourceMark mark={tint.icon} />{tint.name}
         </span> : null}
         {who}

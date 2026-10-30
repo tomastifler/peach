@@ -1,4 +1,4 @@
-"""派生文件的规则与来源签名；原图、媒体和人工选择不参与清退。"""
+"""Rules and source signatures for derived files; original images, media and manual selections are not subject to purging."""
 import json
 from pathlib import Path
 
@@ -7,7 +7,7 @@ from .upgrade_rules import PREVIEWS
 
 
 def fingerprint(source) -> dict:
-    """记录源身份和文件代际，不读取原图或媒体正文。"""
+    """Records source identity and file generation without reading the original image or media body."""
     info = source.stat()
     local = isinstance(source, Path)
     return {'kind': 'file' if local else 'resource',
@@ -48,7 +48,7 @@ def current(path: Path, rule: str = PREVIEWS, *, source=None, source_required: b
 
 
 def remember(path: Path, rule: str = PREVIEWS, *, source=None, source_fingerprint=None) -> bool:
-    """来源代际仍匹配生成前的记录才登记，不将旧图认作新源产物。"""
+    """Register only if the source generation still matches the pre-generation record, so an old image is not mistaken for a new source's output."""
     if source is None:
         atomic_write_text(Path(str(path) + '.rule'), rule)
         return True

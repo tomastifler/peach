@@ -28,15 +28,15 @@ LOGGER = logging.getLogger(__name__)
 CREDENTIAL = "jav-browser"
 ACTIVE = {"queued", "searching"}
 MESSAGES = {
-    "idle": "可以加入 Peach 馆藏", "queued": "等待搜索磁力", "searching": "正在搜索磁力",
-    "submitted": "云下载进行中", "ingested": "已加入 Peach 馆藏", "owned": "馆藏已有该番号影片",
-    "failed": "添加失败，可重试", "no_match": "未找到可自动下载的磁力，可重试",
+    "idle": "Can be added to the Peach library", "queued": "Waiting to search magnets", "searching": "Searching magnets",
+    "submitted": "Cloud download in progress", "ingested": "Added to the Peach library", "owned": "The library already has this code's movie",
+    "failed": "Add failed; can retry", "no_match": "No magnet found for automatic download; can retry",
 }
-#: 下载失败按原因分给用户脚本：磁力本身的问题换一个磁力，网盘一侧的问题修好后重试同一个磁力。
+#: Download failures are split by cause for the userscript: for a problem with the magnet itself, switch to another magnet; for a problem on the cloud drive side, retry the same magnet after it is fixed.
 MAGNET_FAILURES = frozenset({"rejected", "invalid_link", "no_source", "mismatch"})
 CLOUD_FAILURES = frozenset({"config", "quota", "network", "not_landed", "duplicate", "not_accepted", "removed"})
-NO_OTHER_MAGNET = "没有其他可用磁力，可在 Peach 手动选择资源"
-#: 细分之前「列表里找不到」统一记为 no_source 的原文；这些旧任务从没被网盘列出过，按网盘问题处理。
+NO_OTHER_MAGNET = "No other usable magnet; you can choose a resource manually in Peach"
+#: Before the split, "not found in the list" was uniformly recorded as no_source, the original text; these old tasks were never listed by the cloud drive and are treated as cloud drive problems.
 LEGACY_MISSING = "远端任务列表里找不到这个任务"
 
 
@@ -57,7 +57,7 @@ def source_sites() -> list[dict]:
         if site.get("identity") is not None and (site["identity"] != "peach" or site["mode"] != "automatic"
                 or not isinstance(site.get("detail_pattern"), str) or not site["detail_pattern"].startswith("^")
                 or len(site.get("query_keys", ())) > 1):
-            raise ValueError("发行商品号识别配置无效")
+            raise ValueError("Invalid release product-code recognition configuration")
         for host in site["domains"]:
             if not isinstance(host, str) or not re.fullmatch(r"[a-z0-9-]+(?:\.[a-z0-9-]+)+", host) or host in domains:
                 raise ValueError("The JAV site list contains an invalid domain")
@@ -98,7 +98,7 @@ def source_page(value: object) -> str:
 
 
 def identify_source(value: object, hint: str = "") -> str:
-    """从已登记发行平台的详情地址提取商品号，复用编目规则确认番号。"""
+    """Extract the product code from the detail URL of a registered release platform, and confirm the code using the catalog rules."""
     source = source_page(value)
     url = urlsplit(source)
     site = source_site(url.hostname or "")
@@ -109,15 +109,15 @@ def identify_source(value: object, hint: str = "") -> str:
             product = (match.group(1) if match.lastindex else "") or next(
                 (dict(parse_qsl(url.query)).get(key, "") for key in site.get("query_keys", ())), "")
     if not product:
-        raise ValueError("未识别到作品番号，请选中页面的完整番号后加入 Peach")
+        raise ValueError("No work code recognized; please select the full code on the page and add it to Peach")
     code = code_key(code_from_cid(product) if site["id"] == "dmm" else product)
     if hint and not same_release_code(code, code_key(hint)):
-        raise ValueError("页面番号与商品号不一致，请核对作品详情")
+        raise ValueError("The page code and the product code do not match; please check the work details")
     return code
 
 
 def _download_candidate(items, code, skip=frozenset()):
-    """搜索结果里第一个番号相符的正片磁力；`skip` 是换磁力时排除的 infohash。"""
+    """The first main-feature magnet in the search results whose code matches; `skip` is the infohash excluded when switching magnets infohash."""
     for item in items:
         name = str(item.get("name") or "")
         matches = (same_release_code(scan_code(name), code)
@@ -203,7 +203,7 @@ class JavBrowser:
                 self.credentials.clear(CREDENTIAL)
                 for code, row in self.rows.items():
                     if row["state"] in ACTIVE and code not in self._submitting:
-                        row.update(state="failed", message="浏览器添加已关闭")
+                        row.update(state="failed", message="Browser add is closed")
                 self._save()
             else:
                 token = secrets.token_urlsafe(32)
@@ -262,7 +262,7 @@ class JavBrowser:
                 row.update(state=state, message=task.failure_detail or MESSAGES[state])
                 if state == "failed":
                     detail["failure"] = task.failure or ""
-                    # 旧任务把「列表里找不到」记成 no_source；从没被网盘列出过的按网盘问题处理。
+                    # Old tasks recorded "not found in the list" as no_source; those never listed by the cloud drive are treated as cloud drive problems.
                     legacy_unseen = (task.failure == "no_source" and never_seen(task)
                                      and (task.failure_detail or "").startswith(LEGACY_MISSING))
                     detail["cause"] = ("magnet" if task.blocked_at
@@ -288,7 +288,7 @@ class JavBrowser:
         code = code_key(body.get("code"))
         if body.get("manual") is True:
             if body.get("source_url") not in (None, ""):
-                raise ValueError("手动添加不接受来源网页地址")
+                raise ValueError("Manual add does not accept source page URLs")
             page = ""
         else:
             page = source_page(body.get("source_url"))
@@ -300,8 +300,8 @@ class JavBrowser:
             if status["state"] in ACTIVE | {"owned", "submitted", "ingested"}:
                 return status
             if body.get("switch") not in (None, False, True):
-                raise ValueError("换磁力参数无效")
-            # 换磁力：把上一次提交的磁力记入跳过名单，重新搜索时取下一个。
+                raise ValueError("Invalid switch-magnet parameters")
+            # Switch magnet: record the previously submitted magnet in the skip list and take the next one on re-search.
             previous = self.rows.get(code, {})
             skip = list(previous.get("skip", ()))
             if body.get("switch") is True and previous.get("task_id"):
@@ -352,7 +352,7 @@ class JavBrowser:
                 elif candidate is None:
                     failed = result.get("state") in {"error", "unavailable"} or bool(result.get("error"))
                     row.update(state="failed" if failed else "no_match", message=(
-                        "资源搜索暂不可用，请在 Peach 检查来源后重试" if failed
+                        "Resource search is temporarily unavailable; please check the sources in Peach and retry" if failed
                         else NO_OTHER_MAGNET if row.get("skip") else MESSAGES["no_match"]))
                 else:
                     self._submitting.add(code)

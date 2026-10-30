@@ -1,4 +1,4 @@
-"""在线标签的本机名称、归类与隐藏决定；来源 metadata 保持原词。"""
+"""Local names, groupings and hide decisions for online tags; source metadata keeps the original words."""
 from __future__ import annotations
 
 import hashlib
@@ -37,7 +37,7 @@ class OnlineTagPolicy:
         return self.item_tags.get(self.item_key(item), [])
 
     def with_custom_tags(self, item):
-        """在读取副本中叠加用户标签，来源 metadata 保持独立。"""
+        """Overlay user tags on the read copy, with source metadata kept independent."""
         custom = self.custom_tags(item)
         hidden = self.item_hidden_tags.get(self.item_key(item), [])
         if not custom and not hidden:
@@ -83,37 +83,37 @@ class OnlineTagPolicy:
 
 
 def _validate_rename(connection, rows, ids, name):
-    """在线名称须可用于筛选，并避开可见词表与已保存的归类。"""
+    """Online names must be usable for filtering and avoid the visible word list and saved groupings."""
     if len(ids) != 1 or not 0 < len(name) <= 80 or any(ord(char) < 32 for char in name) or ',' in name:
-        raise ValueError('标签名须为 1 至 80 个字符，不含逗号或控制字符')
+        raise ValueError('Tag name must be 1 to 80 characters, with no commas or control characters')
     for row in rows:
         if row['id'] != ids[0] and tag_key(name) in {tag_key(word) for word in [row['k'], *row['aliases']]}:
-            raise ValueError(f'「{name}」已属于标签「{row["k"]}」，请使用合并标签')
+            raise ValueError(f'"{name}" already belongs to tag "{row["k"]}"; please use merge tags')
     for group_id, group in OnlineTagPolicy(connection).groups.items():
         if group_id != ids[0] and tag_key(name) in {tag_key(word) for word in [group['name'], *group['aliases'], *group['members']]}:
-            raise ValueError(f'「{name}」已属于标签「{group["name"]}」，请使用合并标签')
+            raise ValueError(f'"{name}" already belongs to tag "{group["name"]}"; please use merge tags')
 
 
 def preview(connection, body, rows):
     operation = body.get('operation')
     if operation not in {'rename', 'merge', 'hide', 'restore', 'block', 'unblock'}:
-        raise ValueError('未知的在线标签操作')
+        raise ValueError('Unknown online tag operation')
     ids = body.get('ids')
     if not isinstance(ids, list) or not 0 < len(ids) <= 2000 or any(not isinstance(value, str) or not value for value in ids):
-        raise ValueError('请选择有效的在线标签，单次最多 2000 个')
+        raise ValueError('Please choose valid online tags, at most 2000 at a time')
     ids = sorted(set(ids))
     selected = [row for row in rows if row['id'] in ids]
     if len(selected) != len(ids):
-        raise ValueError('标签已变化，请刷新后重试')
+        raise ValueError('Tags have changed; please refresh and retry')
     name = unicodedata.normalize('NFKC', str(body.get('name', ''))).strip()
     target = body.get('target_id')
     if operation == 'rename':
         _validate_rename(connection, rows, ids, name)
     if operation == 'merge':
         if len(ids) < 2 or target not in ids:
-            raise ValueError('请选择至少两个标签，并从中选择保留的标签')
+            raise ValueError('Please choose at least two tags, and choose which one to keep')
         if len({row['cat'] for row in selected}) > 1:
-            raise ValueError('请选择相同来源类型的标签合并')
+            raise ValueError('Please choose tags of the same source type to merge')
     releases = {key for row in selected for key in row['_releases']}
     state = read_settings(connection).get(SETTINGS_KEY, {})
     token = hashlib.sha256(json.dumps([operation, ids, name, target, selected, state], sort_keys=True, ensure_ascii=False).encode()).hexdigest()
@@ -125,7 +125,7 @@ def preview(connection, body, rows):
 def apply_plan(connection, body, rows):
     plan = preview(connection, body, rows)
     if plan['token'] != body.get('token'):
-        raise ValueError('标签已变化，请重新预览操作范围')
+        raise ValueError('Tags have changed; please preview the operation scope again')
     settings = read_settings(connection)
     groups = settings.setdefault(SETTINGS_KEY, {})
     rows = {row['id']: row for row in plan['tags']}
@@ -158,17 +158,17 @@ def _save_settings(connection, settings):
     changed = connection.execute('UPDATE profile SET settings_json=?,updated_at=? WHERE id=?',
         (json.dumps(settings, ensure_ascii=False), datetime.now(timezone.utc).isoformat(), DEFAULT_PROFILE_ID)).rowcount
     if not changed:
-        raise ValueError('当前用户设置不存在')
+        raise ValueError('Current user settings do not exist')
 
 
 def write_item_tag(connection, item, body):
-    """保存在线条目的手动标签与单条隐藏决定，保留来源证据。"""
+    """Save manual tags and per-item hide decisions for online entries, keeping source evidence."""
     operation = body.get('operation')
     name = unicodedata.normalize('NFKC', str(body.get('tag') or '')).strip()
     if operation not in {'add', 'remove', 'restore'}:
-        raise ValueError('未知的手动标签操作')
+        raise ValueError('Unknown manual tag operation')
     if not 0 < len(name) <= 80 or ',' in name or any(ord(char) < 32 for char in name):
-        raise ValueError('标签名须为 1 至 80 个字符，不含逗号或控制字符')
+        raise ValueError('Tag name must be 1 to 80 characters, with no commas or control characters')
     settings = read_settings(connection)
     policy = OnlineTagPolicy(connection)
     canonical = policy.query_name(name)
@@ -180,7 +180,7 @@ def write_item_tag(connection, item, body):
     tags = [tag for tag in tags if policy.identity(tag)[0] != key]
     if operation == 'add':
         if len(tags) >= 100:
-            raise ValueError('每条内容最多添加 100 个手动标签')
+            raise ValueError('At most 100 manual tags per item')
         tags.append(canonical)
     elif operation == 'remove':
         hidden.append(canonical)

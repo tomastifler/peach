@@ -190,7 +190,7 @@ describe('底栏与排序', () => {
     expect(nextSort('hot', 'new', 'desc')).toEqual({ sort: 'hot', dir: 'desc' });
     expect(nextSort('new', 'new', 'desc')).toEqual({ sort: 'new', dir: 'asc' });
     expect(sortAriaLabel('new', '更新时间', 'new', 'desc')).toBe('Sort by 更新时间 (oldest first)');
-    expect(sortAriaLabel('dur', '时长', 'new', 'desc')).toBe('Sort by 时长 (long to short)');
+    expect(sortAriaLabel('dur', 'Duration', 'new', 'desc')).toBe('Sort by Duration (long to short)');
   });
 
   it('组合条按维度撤条件，同一个字符串在两个维度里各算各的', () => {
@@ -350,18 +350,18 @@ describe('页面', () => {
     expect(given.actions.loaded).toHaveBeenCalled();
   });
 
-  it('列表取不到时页头照画：标题与「管理关注」都在，失败原因下面给重试', async () => {
+  it('列表取不到时页头照画：标题与「Manage follows」都在，失败原因下面给重试', async () => {
     const fetcher = vi.fn(async (url: string) => (url.startsWith('/api/follow?')
       ? { ok: false, status: 500, json: async () => ({ error: '服务端出错' }) }
       : { ok: true, status: 200, json: async () => ({ providers: [] }) }));
     vi.stubGlobal('fetch', fetcher);
     const given = props();
     const host = await open(given);
-    expect(host.querySelector('[data-follow-title]')?.textContent).toBe('关注');
+    expect(host.querySelector('[data-follow-title]')?.textContent).toBe('Follow');
     const manage = host.querySelector('[data-follow-manage]');
     expect(manage?.tagName).toBe('A');
     expect(manage?.getAttribute('href')).toBe('/subscriptions');
-    expect(host.querySelector('[data-media-error] [data-note-action]')?.textContent).toBe('立即重试');
+    expect(host.querySelector('[data-media-error] [data-note-action]')?.textContent).toBe('Retry now');
   });
 
   it('有来源、一条更新都还没有：没设筛选时说还没有更新，设了筛选才叫人换筛选', async () => {
@@ -374,8 +374,8 @@ describe('页面', () => {
     const given = props({ view: view({ status: 'saved' }), revision: 2 });
     const filtered = await open(given);
     const empty = filtered.querySelector('[data-follow-empty]');
-    expect(empty?.querySelector('h3')?.textContent).toBe('当前筛选下没有更新');
-    expect(empty?.querySelector('button')?.textContent).toBe('清除筛选');
+    expect(empty?.querySelector('h3')?.textContent).toBe('No updates under the current filters');
+    expect(empty?.querySelector('button')?.textContent).toBe('Clear filters');
     await click(empty?.querySelector('button') ?? null);
     expect(given.actions.route).toHaveBeenLastCalledWith(view());
   });
@@ -390,7 +390,7 @@ describe('页面', () => {
     expect(host.querySelector('input[type="search"]')).toBeNull();
   });
 
-  it(`摆满 ${FOLLOW_AUTO_LOAD_LIMIT} 组以后「加载更多」要点一下才接下一页`, async () => {
+  it(`摆满 ${FOLLOW_AUTO_LOAD_LIMIT} 组以后「Load more」要点一下才接下一页`, async () => {
     const groups = Array.from({ length: FOLLOW_AUTO_LOAD_LIMIT }, (_, index) => group(item(index + 1)));
     const page = feed(groups, { has_more: true });
     const fetcher = serve(page);
@@ -411,7 +411,7 @@ describe('页面', () => {
   it('没有关注任何来源时指到添加关注', async () => {
     serve(feed([], { sources: [], facets: {} }));
     const host = await open(props());
-    expect(host.textContent).toContain('You are not following any source yet');
+    expect(host.textContent).toContain('Not following any sources yet');
     expect(host.querySelector('a[href="/subscriptions?tab=add"]')).not.toBeNull();
   });
 

@@ -99,12 +99,12 @@ def w_library_shortcuts(contract, body):
         if action == "favorite":
             item = favorite_entry(c, body)
             if item is None or not isinstance(body.get("on"), bool):
-                raise ValueError("收藏对象不存在或状态不正确")
+                raise ValueError("The favorite target does not exist or is in the wrong state")
             if item.get('scope') == 'online' and body['on']:
                 from .web_follow import online_tag_inventory
                 tag = next((row for row in online_tag_inventory(c) if row['id'] == item['tag_id']), None)
                 if tag is None:
-                    raise ValueError('在线标签不存在，请刷新后重试')
+                    raise ValueError('The online tag does not exist; please refresh and retry')
                 item['name'] = tag['k']
             data["favorites"] = [row for row in data["favorites"] if row["key"] != item["key"]]
             if body["on"]:

@@ -19,8 +19,8 @@ ROOT_DECLARATION = "R:\\media"
 DECLARED = {"local": (ROOT_DECLARATION,)}
 
 VALUES = {
-    "code": "ABC-123", "title": "标题", "studio": "厂牌", "series": "系列",
-    "year": "2024", "actors": "甲、乙", "cd": "2", "mosaic": "无码",
+    "code": "ABC-123", "title": "Title", "studio": "Studio", "series": "Series",
+    "year": "2024", "actors": "A, B", "cd": "2", "mosaic": "Uncensored",
     "definition": "1080p",
 }
 
@@ -29,15 +29,15 @@ class TemplateRenderTests(unittest.TestCase):
     CASES = [
         # (模板, 取值覆盖, 期望)
         ("{code}", {}, "ABC-123"),
-        ("{code}[ {title}]", {}, "ABC-123 标题"),
+        ("{code}[ {title}]", {}, "ABC-123 Title"),
         ("{number}", {}, "ABC-123"),
-        ("{number} {title}", {}, "ABC-123 标题"),
+        ("{number} {title}", {}, "ABC-123 Title"),
         ("{number}[ {title}]", {"title": ""}, "ABC-123"),
-        ("{number}[ {title}]", {}, "ABC-123 标题"),
+        ("{number}[ {title}]", {}, "ABC-123 Title"),
         ("{number}[ CD{cd}]", {"cd": ""}, "ABC-123"),
         ("{number}[ CD{cd}]", {}, "ABC-123 CD2"),
         ("[{mosaic} ]{number}", {"mosaic": ""}, "ABC-123"),
-        ("[{studio} ][{series} ]{number}", {"series": ""}, "厂牌 ABC-123"),
+        ("[{studio} ][{series} ]{number}", {"series": ""}, "Studio ABC-123"),
         ("{number} [{definition}]", {}, "ABC-123 1080p"),
         # 方括号是分组记号，不进结果；一个占位符都没有的分组就是一段普通字面量。
         ("{number} [完整版]", {}, "ABC-123 完整版"),
@@ -45,7 +45,7 @@ class TemplateRenderTests(unittest.TestCase):
         ("{number} {{x}}", {}, "ABC-123 {x}"),
         ("{number} [[x]]", {}, "ABC-123 [x]"),
         # 出演者与年份是最常见的两组可选信息。
-        ("{number}[ ({year})][ {actors}]", {"year": ""}, "ABC-123 甲、乙"),
+        ("{number}[ ({year})][ {actors}]", {"year": ""}, "ABC-123 A, B"),
     ]
 
     def test_render_table(self):
@@ -66,7 +66,7 @@ class TemplateRenderTests(unittest.TestCase):
 
     def test_directory_template_keeps_layers(self):
         text, _missing = render("{studio}/{number}", VALUES, directory=True)
-        self.assertEqual(text, "厂牌/ABC-123")
+        self.assertEqual(text, "Studio/ABC-123")
 
     def test_presets_render_the_displayed_example_path(self):
         for preset in organize.PRESETS:
@@ -211,7 +211,7 @@ class PlanTests(unittest.TestCase):
 
     def test_scope_rejects_relative_outside_and_parent_paths(self):
         for path in ('合集', r'S:\media', r'R:\media2', r'R:\media\..\other'):
-            with self.subTest(path=path), self.assertRaisesRegex(organize.OrganizeError, '整理路径'):
+            with self.subTest(path=path), self.assertRaisesRegex(organize.OrganizeError, 'organize path'):
                 _plan(self.db_path, file_template='{number}', path=path)
 
     def test_directory_template_uses_scope_as_base_and_checks_outside_scope_collisions(self):
@@ -549,9 +549,9 @@ class EndpointTests(unittest.TestCase):
         self.assertEqual(start.call_args.kwargs['recovery']['path'], request['path'])
         self.assertEqual(start.call_args.kwargs['initial']['path'], request['path'])
         for body in ({**request, 'path': r'S:\outside'}, {**request, 'path': ['R:\\media']}):
-            with self.subTest(body=body), self.assertRaisesRegex(organize.OrganizeError, '整理路径'):
+            with self.subTest(body=body), self.assertRaisesRegex(organize.OrganizeError, 'organize path'):
                 w_organize_preview(self.contract, body)
-            with self.subTest(body=body), self.assertRaisesRegex(organize.OrganizeError, '整理路径'):
+            with self.subTest(body=body), self.assertRaisesRegex(organize.OrganizeError, 'organize path'):
                 w_organize_apply(self.contract, {**body, 'confirm': True})
 
     def test_apply_on_a_source_without_verified_rename_is_refused(self):
@@ -596,11 +596,11 @@ class EndpointTests(unittest.TestCase):
 
         output = dispatch_api_get(None, "/api/organize/example", {
             "file_template": "自定义_{code}[_{definition}]", "dir_template": "{year}/{studio}"})
-        self.assertEqual(output, {"ok": True, "example": "2024/厂牌/自定义_ABC-123_1080p.mp4"})
+        self.assertEqual(output, {"ok": True, "example": "2024/Studio/自定义_ABC-123_1080p.mp4"})
         invalid = dispatch_api_get(None, "/api/organize/example", {"file_template": "{code"})
         self.assertFalse(invalid["ok"])
         self.assertEqual(invalid["field"], "file")
-        self.assertIn("没有配对", invalid["error"])
+        self.assertIn("has no matching", invalid["error"])
 
 
 if __name__ == "__main__":

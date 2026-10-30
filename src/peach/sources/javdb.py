@@ -1,11 +1,11 @@
 """javdb 的作品页。
 
-搜索页 `/search?q=<番号>&f=all` 的结果卡片带番号，只在对应唯一来源 ID 时进详情页；详情页
+ Search page `/search?q=<code>&f=all` result cards carry the code, and the detail page is entered only when it maps to a unique source ID; the detail page
 `?locale=zh` 下面板字段是 `番號`、`日期`、`片商`、`發行`、`系列`、`導演`、`演員`，
 演员里女优带 `actor-female`，类别保留链接里的原词。它按出口 IP 计配额，限速与封禁的处理在 `scraping_access`
 和调用方的主机间隔里，这里只管取页与解析。几家的值常有出入：ABW-358 在 javdb 上发行日期是
 MGS 的 5/23、标题带 MGS 附注、演员里有男优，各字段按 Peach 的来源策略结算。
-有隐藏 `origin-title` 时用作原标题，`current-title` 单独保存为显示标题；两者不互相改写。
+ When there is a hidden `origin-title` it is used as the original title, `current-title` is saved separately as the display title; the two never overwrite each other.
 
 一部分页面要登录才给，回的是登入页而不是 401/403（`peach.javdb.LOGIN`），搜索页与详情页都要认。
 """
@@ -128,9 +128,9 @@ class JavDBSource(SiteSource):
         paths = list(dict.fromkeys(path for path, shown in _BOX.findall(search.text)
                                   if same_release_code(code, clean(shown))))
         if not paths:
-            raise SourceFailure(FailureReason.NOT_FOUND, "javdb 没有这个番号")
+            raise SourceFailure(FailureReason.NOT_FOUND, "javdb does not have this code")
         if len(paths) > 1:
-            raise SourceFailure(FailureReason.PARSE_ERROR, "javdb 同番号对应多个作品，请核对来源身份：" + '、'.join(paths),
+            raise SourceFailure(FailureReason.PARSE_ERROR, "javdb this code maps to multiple works; please check the source identity: " + ', '.join(paths),
                                 detail='identity_ambiguous')
         path = paths[0]
         detail = self._page(self.config.base_url + path + "?locale=zh", session=session)

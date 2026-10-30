@@ -204,7 +204,7 @@ class PosixShapeTests(_ScanCase):
         self.assertIsInstance(issues[0], scan.ScanPathConflict)
         self.assertEqual(issues[0].paths, paths)
         self.assertEqual(issues[0].asset_ids, (1, 2))
-        self.assertIn('路径重复待复核 1 组', output)
+        self.assertIn('duplicate paths pending review 1', output)
         with closing(sqlite3.connect(self.db)) as connection:
             self.assertEqual(list(connection.execute(
                 'SELECT id,path,size,rating,play_count,disposal FROM asset WHERE id<=2 ORDER BY id')), before)

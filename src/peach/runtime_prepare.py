@@ -189,7 +189,7 @@ def ledger_writer(*, replication_enabled: bool, db: Path, shared_db: Path,
 
 
 def configured_ledger_writer(config) -> tuple[bool, str]:
-    """按当前配置定位本机与共享账本，并只读核对写入角色。"""
+    """Locate the local and shared ledgers by the current configuration, and check the writer role read-only."""
     database = config.directory('database') / 'ledger.db'
     shared = config.shared_root / 'database' / 'ledger.db'
     return ledger_writer(replication_enabled=bool(config.replication.enabled), db=database,

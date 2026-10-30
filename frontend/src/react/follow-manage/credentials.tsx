@@ -26,8 +26,8 @@ import {
 import { SourceIcon } from './source-view';
 import { RiKey2Line } from '@remixicon/react';
 
-const CLEAR_BODY = '将清除这个来源在本机和共享副本中的登录凭据。';
-const WORLD_READABLE = '其他系统用户可以读取此凭据文件。请在运行 Peach 的 Mac 或 Linux 电脑上，将文件权限设为仅当前用户可读写（0600）。';
+const CLEAR_BODY = 'This clears the login credentials for this source on this machine and in the shared copy.';
+const WORLD_READABLE = 'Other system users can read this credentials file. On the Mac or Linux computer running Peach, set the file permissions so only the current user can read and write it (0600).';
 
 /** 一个字段此刻的样子：共享回填的、本机存过的，还是从来没填过。 */
 function fieldHint(row: CredentialRow, name: string): string {
@@ -95,11 +95,11 @@ function CredentialForm({ row, readOnly, toast }:
             })}>Clear</Button>
         ) : null}
         <Button variant="primary" disabled={readOnly} {...busyProps(write.isPending)}
-          onClick={save}>保存配置</Button>
+          onClick={save}>Save settings</Button>
       </div>
       {problem ? <ErrorText>{problem}</ErrorText> : null}
       {(row.shared_fields || []).length
-        ? <Help>{`${row.shared_fields!.join('、')} 使用共享副本中的登录信息，本机没有单独保存。清除时，本机和共享副本中的登录信息都会删除。`}</Help>
+        ? <Help>{`${row.shared_fields!.join(', ')} use the login information in the shared copy; it is not saved separately on this machine. Clearing removes the login information from both this machine and the shared copy.`}</Help>
         : null}
       {row.path
         ? <Disclosure summary="Credentials file"><PathLine path={row.path} className="font-mono text-caption-1-regular text-text-tertiary" onRevealed={toast} /></Disclosure>
@@ -117,8 +117,8 @@ function CredentialSection({ row, readOnly, toast }:
       </span>
       <b className="min-w-0 text-body-medium wrap-anywhere text-text-primary">{row.provider_label}</b>
       <StateChip row={row} />
-      {/* 每个缺的字段一枚标签：缺两项就是两枚，填上一项消掉一枚。 */}
-      {row.missing.map(field => <Chip key={field} variant="caption" color="rose">{`缺 ${field}`}</Chip>)}
+      {/* One chip per missing field: two missing means two chips, and filling one removes one. */}
+      {row.missing.map(field => <Chip key={field} variant="caption" color="rose">{`Missing ${field}`}</Chip>)}
     </span>
   );
   if (row.requirement === 'none' || row.requirement === 'blocked') {
@@ -147,10 +147,10 @@ export function Credentials(
 ) {
   const rows = data.providers || [];
   const pending = rows.filter((row) => row.requirement === 'required' && !credentialDone(row));
-  /* 记下哪些来源已配好：配置页骨架据此画每行的徽章位与展开态（站点清单本身是静态登记）。 */
+  /* Records which sources are configured: the settings page skeleton uses it to draw each row's badge slot and expanded state (the site list itself is a static registry). */
   useEffect(() => { rememberShape('credentials', { done: rows.filter(credentialDone).map(row => row.provider) }) }, [data]);
   if (!rows.length) {
-    return <EmptyState size="compact" icon={RiKey2Line} title="没有可配置的来源">已接入的站点及其凭据状态会显示在这里。</EmptyState>;
+    return <EmptyState size="compact" icon={RiKey2Line} title="No sources to configure">Connected sites and their credential status appear here.</EmptyState>;
   }
   const pendingLabel = pending.length ? <span className="text-body-2-regular text-text-error-primary">{`${pending.length} to configure`}</span> : null;
   const groups = <>{[
@@ -167,7 +167,7 @@ export function Credentials(
           </div>
         </section>
       ))}</>;
-  return embedded ? <Section title="来源凭据" aside={pendingLabel || undefined}>
+  return embedded ? <Section title="Source credentials" aside={pendingLabel || undefined}>
     <Stack><div className="flex flex-col gap-4">{groups}</div></Stack>
   </Section> :
     <div className={cardClass({ padding: 'none', className: 'flex flex-col gap-4 px-6 py-5 max-sm:px-4' })}>

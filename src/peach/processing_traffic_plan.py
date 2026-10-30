@@ -1,4 +1,4 @@
-"""从本地账本、资料缓存与下载预算规划待执行的流量。"""
+"""Plan the traffic still to be executed from the local ledger, metadata cache and download budget."""
 from __future__ import annotations
 
 from itertools import islice
@@ -37,7 +37,7 @@ def ledger_rows(db_path, asset_ids=None, *, library_roots=()):
 
 
 def typical_size(directory, pattern, fallback):
-    """只在本机缓存抽取至多 256 个文件大小，不访问媒体挂载。"""
+    """Extract at most 256 file sizes from the local cache only, without accessing media mounts."""
     sizes = []
     for path in islice(directory.glob(pattern), 256):
         try:
@@ -131,7 +131,7 @@ class TrafficPlan:
                 counts['titles'].add(code)
             path = str(row['path'])
             if self.stage not in ('scan', 'previews'):
-                # 无发行番号的创作者文件只检查配套文件，不进入 JAV 下载链。
+                # Creator files with no release code only get companion-file checks and do not enter the JAV download chain.
                 if eligible:
                     self._add('local:' + path, key, self.nfo_bytes)
                     if not self._ready(code):
@@ -176,7 +176,7 @@ class TrafficPlan:
                        and not self.remote._fresh_miss('cover', code, chain))
         if title['missing']:
             for source in pending:
-                # 每站一至两次请求，沿用采集器约 250KB/次的工作量基准。
+                # One to two requests per site, following the collector's workload baseline of about 250KB per request.
                 self._add('metadata:' + code, self._network(source), 2 * 250 * 1024,
                           budgeted=stage_name(source) not in ('amane', 'amane_official'))
         if wants_cover:
@@ -196,7 +196,7 @@ class TrafficPlan:
                     self.units[token][key] = self.history.average(profile + ':' + key, baseline)
 
     def prepare_metadata(self, prepared):
-        """配套文件读完后，使用任务实际取得的字段和核查范围。"""
+        """After companion files are read, use the fields and verification scope the task actually obtained."""
         from .library_processing import COLLECTED_FIELDS, _missing_fields, _scrapes_as_jav
         for token in list(self.units):
             if token.startswith('metadata:'):

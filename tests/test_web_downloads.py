@@ -242,7 +242,7 @@ class SettingsBlockTests(_App):
         response = client.post("/api/configuration/downloads", json={
             "clouddrive_address": "http://localhost:bad-port", "token": "test-only-new-token"})
         self.assertEqual(response.status_code, 400, response.text)
-        self.assertIn("端口", response.text)
+        self.assertIn("port", response.text)
         self.assertEqual(self.service.settings.path.read_bytes(), before)
         self.assertEqual(self.secrets(), stored_secrets)
 
@@ -268,7 +268,7 @@ class SettingsBlockTests(_App):
         state = response.json()["downloads"]
         self.assertEqual(state["config"], raw)
         self.assertTrue(state["token_set"])
-        self.assertTrue(any("端口" in problem for problem in state["problems"]))
+        self.assertTrue(any("port" in problem for problem in state["problems"]))
         self.assertEqual(state["providers"], [])
         self.assertNotIn("test-only-token", response.text)
         self.assertEqual(self.service.settings.path.read_bytes(), before)

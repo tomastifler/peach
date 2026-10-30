@@ -10,7 +10,7 @@ let browser: Browser;
 installDesignBrowser((value) => { browser = value });
 
 const cases = [
-  { name: 'short', html: '已保存配置', label: '' },
+  { name: 'short', html: 'Settings saved', label: '' },
   { name: 'action', html: '已检查 105 个来源：更新 2933 条', label: '查看' },
   { name: 'long', html: '检查了 105 个来源：更新 2933 条 · 跳过 281 条无资源 · 排除 20 个超大合集 · 跳过 862 条超出首次采集范围的历史内容 · 回查 241 条 · 11 个来源没有更新', label: '查看' },
   { name: 'undo', html: '已把 12 项移入回收站', label: '撤销' },

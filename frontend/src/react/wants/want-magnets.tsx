@@ -115,8 +115,8 @@ export function WantMagnets({ want, readOnly, downloads, provider, toast, onSour
           if (!waiting) { refresh.current = true; void query.refetch() }
         }}>Query again</Button>
       </div>
-      {waiting ? <LoadingDots label="正在查找资源链接" /> : null}
-      {failure ? <Note tone="error" title="资源链接未取得">{failure}</Note> : null}
+      {waiting ? <LoadingDots label="Finding resource links" /> : null}
+      {failure ? <Note tone="error" title="Resource links unavailable">{failure}</Note> : null}
       {query.data?.warnings?.map((warning) => <Note key={warning} tone="neutral">{resourceNotice(warning)}</Note>)}
       {query.data?.warnings?.length && query.data.source_url ? <ButtonLink variant="secondary" size="small" className="self-start"
         trailingIcon={RiExternalLinkLine} href={query.data.source_url} target="_blank" rel="noopener noreferrer">View source page</ButtonLink> : null}
@@ -144,11 +144,11 @@ export function WantMagnets({ want, readOnly, downloads, provider, toast, onSour
               </div>
             </div>
             <div data-resource-actions="" className="flex flex-wrap gap-2">
-              <ButtonLink data-button-link="" variant="secondary" size="small" trailingIcon={RiExternalLinkLine} href={candidate.source_url} target="_blank" rel="noopener noreferrer">链接来源</ButtonLink>
+              <ButtonLink data-button-link="" variant="secondary" size="small" trailingIcon={RiExternalLinkLine} href={candidate.source_url} target="_blank" rel="noopener noreferrer">Link source</ButtonLink>
               <Button variant="secondary" size="small" leadingIcon={RiFileCopyLine} {...busyProps(action.busy === `copy:${candidate.id}`)}
-                onClick={() => copy(candidate)}>复制链接</Button>
+                onClick={() => copy(candidate)}>Copy link</Button>
               {candidate.protocol === 'magnet' ?
-              <Button variant="primary" size="small" leadingIcon={configured ? providerIcon(configured.key) : RiCloudLine} title={configured ? `下载到 ${configured.label}` : undefined} disabled={readOnly || !downloads?.available || !configured || added}
+              <Button variant="primary" size="small" leadingIcon={configured ? providerIcon(configured.key) : RiCloudLine} title={configured ? `Download to ${configured.label}` : undefined} disabled={readOnly || !downloads?.available || !configured || added}
                 {...busyProps(action.busy === candidate.id)} onClick={() => add(candidate)}>
                 {added ? 'Added' : 'Add download'}
               </Button> : null}

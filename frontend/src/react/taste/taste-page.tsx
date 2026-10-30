@@ -69,28 +69,28 @@ const CARD = `${cardClass()} flex flex-col gap-4`;
 const TILE = 'rounded-xl bg-background-primary-default p-3';
 
 /* 中文正文写成常量：JSX 里换行的文字会在接缝处多出一个空格，中文句子里看得见。 */
-const REFRESH_TITLE = '读取运行 Peach 的这台电脑上的浏览历史与书签';
-const NO_SOURCE_HINT = '导入或读取浏览记录后，这里会列出记录来自哪些设备。';
-const NO_LEAD_HINT = '馆藏中暂时没有与你浏览过的内容相符的标签。';
-const NO_CATEGORY_HINT = '读取浏览记录后，这里会按类别汇总你浏览过的内容。';
-const GAP_HINT = '这些标签出现在浏览记录中，Peach 的观看或评价记录中尚未出现这些标签';
-const NO_BROWSER_TAG_HINT = '采集浏览记录后，这里会列出浏览过的标签。';
-const NO_BROWSER_CREATOR_HINT = '采集浏览记录后，这里会列出浏览过的创作者。';
-const NO_DOMAIN_HINT = '采集浏览记录后，这里会列出常访问的网站。';
-const NO_PEACH_TAG_HINT = '在 Peach 里播放或评价作品后，这里会列出对应的标签。';
-const NO_PEACH_CREATOR_HINT = '在 Peach 里播放或评价作品后，这里会列出对应的创作者。';
-const NO_PEACH_PERFORMER_HINT = '在 Peach 里播放或评价作品后，这里会列出对应的女优。';
-const GUIDE_LOCAL = '在运行 Peach 的电脑上使用浏览器：点上面的「读取浏览器记录」。';
-const GUIDE_REMOTE = '记录在其他设备上：导出文件后，选择「导入历史文件」或「导入书签文件」。书签支持浏览器导出的 HTML 文件和 Chromium Bookmarks JSON 文件。';
-const GUIDE_REFRESH = '需要刷新时再次读取或导入；数据源可在页面底部移除。';
-const REMOVE_BODY = '删除这个来源的已导入记录，原始文件保留。若浏览器仍启用，下次读取会再次导入。';
+const REFRESH_TITLE = 'Read browsing history and bookmarks on the computer running Peach';
+const NO_SOURCE_HINT = 'After you import or read browsing history, the devices it came from are listed here.';
+const NO_LEAD_HINT = 'No tags in the library match what you have browsed yet.';
+const NO_CATEGORY_HINT = 'After browsing history is read, what you have browsed is summarized by category here.';
+const GAP_HINT = 'These tags appear in your browsing history but have not yet appeared in Peach’s viewing or rating records';
+const NO_BROWSER_TAG_HINT = 'After browsing history is collected, the tags you have browsed are listed here.';
+const NO_BROWSER_CREATOR_HINT = 'After browsing history is collected, the creators you have browsed are listed here.';
+const NO_DOMAIN_HINT = 'After browsing history is collected, frequently visited sites are listed here.';
+const NO_PEACH_TAG_HINT = 'After you play or rate works in Peach, the matching tags are listed here.';
+const NO_PEACH_CREATOR_HINT = 'After you play or rate works in Peach, the matching creators are listed here.';
+const NO_PEACH_PERFORMER_HINT = 'After you play or rate works in Peach, the matching actresses are listed here.';
+const GUIDE_LOCAL = 'If you use the browser on the computer running Peach: click "Read browser history" above.';
+const GUIDE_REMOTE = 'If the history is on another device: after exporting the file, choose "Import history file" or "Import bookmarks file". Bookmarks support HTML files exported by browsers and Chromium Bookmarks JSON files.';
+const GUIDE_REFRESH = 'Read or import again when a refresh is needed; data sources can be removed at the bottom of the page.';
+const REMOVE_BODY = 'Deletes the imported records of this source and keeps the original files. If the browser is still enabled, the next read imports them again.';
 
 /** 跳过指南是这台浏览器的持久偏好，和分析结果无关，所以不进 Query。 */
 export const TASTE_GUIDE_KEY = 'peach-taste-guide-dismissed';
 
 type Glyph = typeof RiEyeLine;
 
-const TasteEmptyAction = createContext<ReactNode>(<ButtonLink size="small" href="/">浏览馆藏</ButtonLink>);
+const TasteEmptyAction = createContext<ReactNode>(<ButtonLink size="small" href="/">Browse library</ButtonLink>);
 
 function TasteRecordActions() {
   return useContext(TasteEmptyAction);
@@ -143,7 +143,7 @@ interface RankListProps {
 /** 一榜名次。点得动的那些是按钮，其余是行——馆藏里没有对应条目时点进去只会是一张空页。 */
 function RankList({ rows, kind, visual, empty, onSignal }: RankListProps) {
   if (!rows.length) {
-    return <EmptyState size="compact" icon={RiSearchLine} title="记录还不够"
+    return <EmptyState size="compact" icon={RiSearchLine} title="Not enough history yet"
       actions={<TasteRecordActions />}>{empty}</EmptyState>;
   }
   const shares = rankShares(rows);
@@ -276,8 +276,8 @@ function AnalysisCard({ data, onSignal, navigate }:
             </button>
           ))}
         </div>
-      ) : <EmptyState size="compact" icon={RiSearchLine} title="还没有可探索的入口"
-        actions={<ButtonLink size="small" href="/">浏览馆藏</ButtonLink>}>{NO_LEAD_HINT}</EmptyState>}
+      ) : <EmptyState size="compact" icon={RiSearchLine} title="No entry points to explore yet"
+        actions={<ButtonLink size="small" href="/">Browse library</ButtonLink>}>{NO_LEAD_HINT}</EmptyState>}
     </section>
   );
 }
@@ -299,14 +299,14 @@ function HistoryGuide({ onboarding, done }: { onboarding: boolean; done: boolean
         <p className="text-body-2-regular text-text-secondary">{GUIDE_REMOTE}</p>
         <ul className="flex list-disc flex-col gap-1 pl-5 text-body-2-regular text-text-secondary">
           <li>
-            Chrome：在 <a href="https://takeout.google.com/" target="_blank" rel="noopener noreferrer"
+            Chrome: in <a href="https://takeout.google.com/" target="_blank" rel="noopener noreferrer"
               className="text-text-primary underline-offset-4 hover:underline">Google Takeout<RiExternalLinkLine aria-hidden className="size-(--icon-inline) shrink-0" /></a>
-            {' '}选择 Chrome 历史记录，下载 ZIP 后直接导入。
+            {' '}, choose Chrome history, download the ZIP and import it directly.
           </li>
           <li>
-            其他浏览器：用 <a href="https://github.com/purarue/browserexport" target="_blank" rel="noopener noreferrer"
+            Other browsers: use <a href="https://github.com/purarue/browserexport" target="_blank" rel="noopener noreferrer"
               className="text-text-primary underline-offset-4 hover:underline">browserexport<RiExternalLinkLine aria-hidden className="size-(--icon-inline) shrink-0" /></a>
-            {' '}导出历史记录，再导入导出文件。
+            {' '}to export the history, then import the exported file.
           </li>
         </ul>
         <p className="text-body-2-regular text-text-secondary">{GUIDE_REFRESH}</p>
@@ -400,7 +400,7 @@ function SourceList(
             </div>
           ))}
         </>
-      ) : !browsers.length ? <EmptyState size="compact" icon={RiDatabase2Line} title="还没有数据源"
+      ) : !browsers.length ? <EmptyState size="compact" icon={RiDatabase2Line} title="No data sources yet"
         actions={emptyActions}>{NO_SOURCE_HINT}</EmptyState> : null}
     </BrowserSources>
   );
@@ -433,8 +433,8 @@ export function TastePage(props: TasteProps) {
       toast(state.warnings?.length ? 'Some browsing history was not retrieved' : 'Taste analysis updated');
     },
   });
-  /* 重算失败后服务端暂不再算，页面也停了轮询。「立即重试」让服务端跳过等待再算一次，回来的
-     那一份换进它所属范围的缓存：算完就是新结果，还在算就带着 `stale` 接着轮询。 */
+  /* After a recalculation fails the server stops recalculating for now, and the page stops polling too. "Retry" makes the server skip the wait and recalculate once more, and what comes back is
+     swapped into the cache of the range it belongs to: if finished it is the new result, and if still calculating it keeps polling with `stale`. */
   const retry = useMutation({
     mutationFn: (window: string) => fetchTaste(window, undefined, true),
     onSuccess: (result, window) => { queryClient.setQueryData(tasteKey(window), result) },
@@ -487,25 +487,25 @@ export function TastePage(props: TasteProps) {
   const problem = refresh.error ? errorMessage(refresh.error)
     : load.error ? errorMessage(load.error)
     : retry.error ? errorMessage(retry.error)
-    : outcome?.status === 'failed' ? (outcome.error || '读取未取得')
+    : outcome?.status === 'failed' ? (outcome.error || 'Read failed')
     : '';
 
   const browserActions = <div className="flex flex-wrap justify-center gap-2">
-            <Button variant="secondary" {...busyProps(running || refresh.isPending || load.isPending)} onClick={startRefresh}>读取浏览器记录</Button>
-            <Button variant="secondary" {...busyProps(load.isPending)} onClick={() => file.current?.click()}>导入历史文件</Button>
+            <Button variant="secondary" {...busyProps(running || refresh.isPending || load.isPending)} onClick={startRefresh}>Read browser history</Button>
+            <Button variant="secondary" {...busyProps(load.isPending)} onClick={() => file.current?.click()}>Import history file</Button>
           </div>;
   return (
     <Page>
       <TasteEmptyAction value={range !== DEFAULT_WINDOW
-        ? <Button size="small" variant="secondary" onClick={() => setRange(DEFAULT_WINDOW)}>查看全部时间</Button>
-        : evidence === 'peach' ? <ButtonLink size="small" variant="secondary" href="/">浏览馆藏</ButtonLink> : browserActions}>
+        ? <Button size="small" variant="secondary" onClick={() => setRange(DEFAULT_WINDOW)}>View all time</Button>
+        : evidence === 'peach' ? <ButtonLink size="small" variant="secondary" href="/">Browse library</ButtonLink> : browserActions}>
       <Tabs selectedKey={evidence} onSelectionChange={(key) => setEvidence(String(key))}
         className="flex flex-col gap-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* 旧 `.insightswitch`：证据来源是两个互斥视图，形态是分段控件不是两枚裸按钮。 */}
-          <TabList aria-label="口味分析的数据来源" className={SEGMENTED_TRACK}>
-            <Tab id="browser" className={SEGMENT}>浏览器记录</Tab>
-            <Tab id="peach" className={SEGMENT}>Peach 观看与评价</Tab>
+          <TabList aria-label="Taste analysis data source" className={SEGMENTED_TRACK}>
+            <Tab id="browser" className={SEGMENT}>Browser history</Tab>
+            <Tab id="peach" className={SEGMENT}>Peach viewing and ratings</Tab>
           </TabList>
           <div className="flex flex-wrap items-center gap-2">
             <Select aria-label="Analysis range" selectedKey={range}
@@ -528,13 +528,13 @@ export function TastePage(props: TasteProps) {
         <div aria-live="polite" className="flex flex-col gap-3 empty:hidden">
           {running ? <TaskProgress label={job?.message || 'Reading browsing history and updating taste analysis'}
             value={job?.checked} total={job?.total} /> : null}
-          {load.isPending ? <TaskProgress label="正在导入口味数据" /> : null}
+          {load.isPending ? <TaskProgress label="Importing taste data" /> : null}
           {data.stale && data.error ? (
             <Note tone="error" action={<Button variant="secondary" size="small"
-              {...busyProps(retry.isPending)} onClick={() => retry.mutate(range)}>立即重试</Button>}>
-              {`口味分析更新失败，当前显示 ${tasteTime(data.computed_at)} 的结果。${data.error}`}
+              {...busyProps(retry.isPending)} onClick={() => retry.mutate(range)}>Retry</Button>}>
+              {`Taste analysis update failed; showing the result from ${tasteTime(data.computed_at)}. ${data.error}`}
             </Note>
-          ) : data.stale ? <TaskProgress label={`正在更新口味分析，当前显示 ${tasteTime(data.computed_at)} 的结果`} /> : null}
+          ) : data.stale ? <TaskProgress label={`Updating taste analysis; showing the result from ${tasteTime(data.computed_at)}`} /> : null}
           {problem ? <Note tone="error">{problem}</Note> : null}
           {outcome?.warnings?.length ? <Note tone="warning">{outcome.warnings.join('; ')}</Note> : null}
         </div>
@@ -564,8 +564,8 @@ export function TastePage(props: TasteProps) {
             {/* 右栏跟着雷达那一栏等高（行内默认拉伸），排行条在纵向 flex 里撑满这一栏。 */}
             <div className="flex min-w-0 grow flex-col">
               {categories.length
-                ? <RankedBars rows={categories} label="口味维度排名" />
-                : <EmptyState size="compact" icon={RiSearchLine} title="暂无口味维度"
+                ? <RankedBars rows={categories} label="Taste dimension ranking" />
+                : <EmptyState size="compact" icon={RiSearchLine} title="No taste dimensions yet"
                   actions={<TasteRecordActions />}>{NO_CATEGORY_HINT}</EmptyState>}
             </div>
           </section>
@@ -597,7 +597,7 @@ export function TastePage(props: TasteProps) {
               <b className="text-display-4-medium tabular-nums text-text-primary">
                 {Number(summary.peach_items || 0).toLocaleString()}
               </b>
-              <span className="text-body-2-regular text-text-secondary">部作品有观看或评价记录</span>
+              <span className="text-body-2-regular text-text-secondary">works have viewing or rating records</span>
             </div>
             <div className="flex min-w-0 grow flex-col">
               <CoverageMetric term="Tagged" value={tagged} rest={coverage.untagged || 0} />

@@ -569,7 +569,7 @@ export interface FeedFollowed {
 export const followFeedByName = (name: string, ids: string[], signal?: AbortSignal) =>
   apiSend<FeedFollowed>(FEED_SOURCE_URL, { action: 'follow-name', name, ids }, 'POST', signal);
 
-/** 首屏：创作者来源、JAV 订阅与凭据状态取回来才画。
+/** First screen: draws only once creator sources, JAV subscriptions and credential status are back.
  *
  * 两趟后台任务不在首屏里：它们的快照常年躺着上一趟的回执，等它们只会让首屏多等一个
  * 往返，而它们自己的键挂上去就会读。中止时 `fetchQuery` 把 `AbortError` 抛回挂载方。 */
@@ -677,7 +677,7 @@ export const sourceIconUrl = (provider: string): string =>
 
 /** 四种凭据状态四种说法：待办（缺凭据）和完成（已配置）不能同色，那正是要一眼分开的两件事。 */
 export const CREDENTIAL_STATE: Record<string, string> = {
-  required: '需要', optional: '可选', none: '不需要', blocked: '暂时无法连接',
+  required: 'Required', optional: 'Optional', none: 'Not needed', blocked: 'Temporarily unreachable',
 };
 
 export const credentialDone = (row: CredentialRow): boolean =>

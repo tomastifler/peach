@@ -26,7 +26,7 @@ export async function tokenColor(page: Page, scope: string, token: string): Prom
   }, [scope, token] as const);
 }
 
-/** 配置页「网络与访问」下的访问密码分区。演示库没有 access.json，分区处于系统口令状态。
+/** 配置页「Network & access」下的访问密码分区。演示库没有 access.json，分区处于系统口令状态。
  * 与冒烟同一口径：先等配置页主体，再 settle、再切分区。 */
 export async function openAccess(browser: Browser): Promise<Visit & { form: Locator }> {
   const opened = await visit(browser, '/settings/library', DESKTOP);
@@ -155,7 +155,7 @@ export async function openScraping(browser: Browser): Promise<Visit> {
 export const REVIEW_ROW = {
   item_key: 'metadata_fields:ABC-123:studio',
   field: 'studio',
-  field_label: '厂牌',
+  field_label: 'Studios',
   code: 'ABC-123',
   query: 'ABC-123',
   evidence: '当前值：尚无；1 个匹配资产；2 个资料来源',
@@ -435,7 +435,7 @@ export const FAILED_JOB = {
   issues_log: 'C:\\peach-data\\state\\library-processing-demo.issues.jsonl',
   issue_preview: Array.from({ length: 20 }, (_, at) => ({
     asset_id: at + 1, title: `示例-${at + 1}.mp4`, path: `B:\\番号\\示例-${at + 1}.mp4`,
-    message: '封面未取得：javdb：本趟采集次数已用完，再跑一次接着采；已有图片保留',
+    message: 'Cover unavailable：javdb：本趟采集次数已用完，再跑一次接着采；已有图片保留',
   })),
 };
 
@@ -706,7 +706,7 @@ export const SUGGEST = {
       { value: '涼森ひより', n: 3, matched: 'すずもりひより', id: null, entity_id: 90_302, has_image: false, rep: null,
         agency: '', works: [] },
     ] },
-    { kind: 'studio', label: '厂牌', total: 1, items: [
+    { kind: 'studio', label: 'Studios', total: 1, items: [
       { value: 'Prestige', n: 900, matched: '', id: null, entity_id: 90_303, has_image: false, has_logo: true },
     ] },
     { kind: 'asset', label: '视频', total: 12, items: [1, 2, 3, 4, 5].map((at) => ({

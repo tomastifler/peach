@@ -28,7 +28,7 @@ def detail_code(args) -> str:
 
 
 def discovery_cover_url(item, source) -> str:
-    """卡片只显示 `/cover-image` 能代理的官方封面地址。"""
+    """Cards show only the official cover addresses that `/cover-image` can proxy."""
     from .jav_cover_fetch import proxyable_cover_url
     for value in (item.get('cover_url'), source.get('cover_url')):
         if proxyable_cover_url(value):
@@ -37,7 +37,7 @@ def discovery_cover_url(item, source) -> str:
 
 
 def stored_cover_url(contract, code) -> str:
-    """`/cover-image` 按番号取的上游地址；只读账本与已缓存的来源资料，不联网。"""
+    """`/cover-image` upstream address looked up by code; reads only the ledger and cached source metadata, with no network access."""
     from .web_jav_discovery import _cached_movie
     with contract.database.read_connection() as connection:
         row = connection.execute("SELECT cover_url FROM feed_discovery WHERE code=? COLLATE NOCASE LIMIT 1",
@@ -230,23 +230,23 @@ def q_jav_reviews(contract, args) -> dict:
             "message": ""}
 
 
-#: 来源图片在浏览器里留多久。样张与来源封面落盘后不再刷新；来源头像在服务端按
-#: `AVATAR_REFRESH_SECONDS` 换新，浏览器只留一天，换过的图第二天就看得到。
+#: How long source images stay in the browser. Sample images and source covers are no longer refreshed once saved to disk; source avatars are on the server refreshed per
+#: `AVATAR_REFRESH_SECONDS` refresh; the browser keeps them for only one day, so a replaced image is visible the next day.
 JAV_IMAGE_MAX_AGE = 30 * 86400
 JAV_ACTOR_IMAGE_MAX_AGE = 86400
 
 
 def jav_image(contract, args) -> tuple[bytes, int]:
-    """来源图片（样张、来源封面、来源头像）的字节，以及浏览器可以缓存的秒数。
+    """The bytes of source images (sample images, source covers, source avatars), and the number of seconds the browser may cache them.
 
-    取过一次就落进远程媒体缓存，再取不出网。取不到抛 `PublicSourceUnavailable` 或
-    `RemoteMediaUnavailable`；番号或图号不合法抛 `ValueError`，都在联网之前。
+    Once fetched they are saved into the remote media cache and later fetches do not go online. When they cannot be fetched, raises `PublicSourceUnavailable` or
+    `RemoteMediaUnavailable`; an invalid code or image number raises `ValueError`, both happening before going online.
     """
     code = detail_code(args)
     index = str(args.get("image") or "cover")
     if (index != "cover" and not re.fullmatch(r"actor:[A-Za-z0-9]{1,64}", index)
             and (not index.isdigit() or not 0 <= int(index) < 30)):
-        raise ValueError("预览图不存在")
+        raise ValueError("Preview image does not exist")
     actor = index.startswith("actor:")
     with public_cache_scope(contract.cover_root.parent / 'jav-public'):
         movie = None

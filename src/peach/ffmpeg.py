@@ -21,15 +21,15 @@ def bundled_tools_root() -> Path:
     return executable.parent / "tools"
 
 
-#: 探测成功的结果按可执行文件的路径、修改时间与字节数记住。系统诊断页每开一次要起三个
-#: 子进程，合计三四百毫秒，而同一个文件的版本与解码器不会变；换了文件这三样至少变一样。
+#: Successful probe results are remembered by executable path, modification time and byte size. Each opening of the system diagnostics page starts three
+#: child processes, totaling three to four hundred milliseconds, while the version and decoders of the same file do not change; when the file is replaced at least one of these three changes.
 _PROBED: dict[tuple, dict] = {}
 
 
 def binary_diagnostics(choice: BinaryChoice | None, *, decoders=False) -> dict:
-    """检查实际工具版本与 AV1 软件解码器；路径存在和可执行分别报告。
+    """Check the actual tool version and AV1 software decoder; path existence and executability are reported separately.
 
-    失败不记：超时、拒绝执行这类可能是一时的，下一次照样重探。"""
+    Failures are not remembered: timeouts and refusals to execute may be transient, so the next time probes again."""
     facts = {'available': choice is not None, 'source': choice.source if choice else None,
              'path': str(choice.path) if choice else None, 'usable': False}
     if choice is None:

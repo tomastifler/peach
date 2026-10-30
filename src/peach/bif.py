@@ -1,4 +1,4 @@
-"""只读 Roku BIF v0 索引，按需读取其中一张 JPEG 预览。"""
+"""Read-only Roku BIF v0 index; read one JPEG preview on demand."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -22,7 +22,7 @@ _MAX_FRAME_PIXELS = 16_000_000
 
 @dataclass(frozen=True)
 class BifFrame:
-    """一张预览的秒数时间戳、文件绝对偏移和字节长度。"""
+    """Timestamp in seconds, absolute file offset and byte length of one preview."""
 
     timestamp: float
     offset: int
@@ -31,7 +31,7 @@ class BifFrame:
 
 @dataclass(frozen=True)
 class BifIndex:
-    """BIF 路径及按时间排列的不可变帧索引。"""
+    """BIF path and the immutable frame index ordered by time."""
 
     path: Path
     frames: tuple[BifFrame, ...]
@@ -50,7 +50,7 @@ def _header(stream: BinaryIO, size: int) -> tuple[int, int] | None:
 
 
 def read_index(path: Path) -> BifIndex | None:
-    """读取有界索引；损坏、截断或不支持的文件返回 None。"""
+    """Read a bounded index; corrupted, truncated or unsupported files return None."""
     try:
         with path.open("rb") as stream:
             before = os.fstat(stream.fileno())
@@ -86,7 +86,7 @@ def read_index(path: Path) -> BifIndex | None:
 
 
 def read_frame(index: BifIndex, number: int) -> bytes | None:
-    """定位并完整验证一张 JPEG；索引失效或图片损坏时返回 None。"""
+    """Locate and fully validate one JPEG; when the index is invalid or the image is corrupt, return None."""
     if not isinstance(number, int) or not 0 <= number < len(index.frames):
         return None
     frame = index.frames[number]

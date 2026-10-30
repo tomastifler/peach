@@ -71,9 +71,9 @@ export function mountCaptionStyle(root: HTMLElement, video: HTMLVideoElement, si
       for (const key of Object.keys(DEFAULTS) as CaptionKey[]) if (!touched.has(key)) style[key] = restored[key];
       paintStyle();
     } else {
-      // 浏览器里保存的外观作为这部视频的初始值，服务端清单承载持久记忆。
+      // The appearance saved in the browser serves as this video's initial value, and the server manifest carries the persistent memory.
       let legacy = false;
-      try { legacy = !!localStorage.getItem(KEY) } catch { /* 使用默认外观 */ }
+      try { legacy = !!localStorage.getItem(KEY) } catch { /* use the default appearance */ }
       if (legacy && !touched.size) void memory.save({ caption_style: style }).catch(() => {});
     }
   });

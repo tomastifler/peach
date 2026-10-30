@@ -1,32 +1,32 @@
-# 实体事实种子
+# Entity Fact Seed
 
-Peach 随应用分发 `resources/seed/entities.json`，用已核对的公开文字资料减少重复刮削。它包含规范名、别名、来源站点编号、官网与社媒链接、人物资料、所属事务所及厂牌关系。种子没有作品文件、用户账本、头像、封面或其他图片字节。
+Peach ships `resources/seed/entities.json` with the app, using verified public text sources to reduce repeated scraping. It contains canonical names, aliases, source-site IDs, official-site and social links, person profiles, and agency and studio relationships. The seed contains no work files, user ledger, avatars, covers or any other image bytes.
 
-## 使用者如何获得更新
+## How Users Get Updates
 
-升级 Peach 即获得该版本附带的种子。扫描与采集结算后，任务中心自动安排资料导入；应用启动本身不触发导入。
+Upgrading Peach gets the seed bundled with that version. After scanning and collection settle, the task center schedules a profile import automatically; app startup itself does not trigger the import.
 
-导入只匹配本机已识别的人物、厂牌与事务所，空库不会因此生成另一人的实体集合。别名和来源编号用于匹配，重复身份与冲突产生复核产物；人工修改和其他采集来源的资料受归属保护。种子自己写入的资料可由新版更新，累计撤销只针对明确记录的错误事实。数据包中没有某条资料不表示删除本机资料。
+The import matches only people, studios and agencies already recognized on this machine, so an empty library does not generate another person's entity set. Aliases and source IDs are used for matching, and duplicate identities and conflicts produce review artifacts; manual edits and data from other collection sources are protected by ownership. Data the seed wrote itself can be updated by newer versions, and cumulative withdrawals target only explicitly recorded erroneous facts. A record's absence from the data pack does not mean local data is deleted.
 
-人物当前名称是种子中置信度至少 0.9 的登记别名、种子规范名为中文汉字且身份唯一时，导入会采用中文规范名并同步作品署名。原名保留为别名，人工选择和非登记自定义名称保持原样。名称更新前自动备份账本，活动记录显示中文名数量；种子批次撤回入口可还原原名与作品署名，保留后续人工选择。细节见 [ADR-0122](adr/0122-seed-performer-names-and-gallery-preparation.md)。
+When a person's current name is a registered alias in the seed with confidence of at least 0.9, and the seed's canonical name is in Chinese characters and the identity is unique, the import adopts the Chinese canonical name and syncs the work credits. The original name is kept as an alias, and manual choices and unregistered custom names stay as they are. The ledger is backed up automatically before names are updated, and the activity record shows the number of Chinese names; the seed batch withdrawal entry can restore the original names and work credits, keeping later manual choices. See [ADR-0122](adr/0122-seed-performer-names-and-gallery-preparation.md) for details.
 
-## 维护者如何更新
+## How Maintainers Update
 
-1. 在隔离工作树完成资料采集与纠错。维护者真实账本仅作为只读导出来源，不把数据库文件放进仓库。
-2. 使用 `scripts/seed_pack.py export`，显式给出 `--db` 指向已维护的账本、`--version` 指定递增版本。默认输出为当前应用资源中的 `resources/seed/entities.json`；格式 2 的修订号自动递增，累计撤销从现有输出文件继承。需要指定基准时使用 `--previous`，已复核的精确撤销由 `--withdrawals` 提供。
-3. 使用 `scripts/seed_pack.py validate` 校验包；该入口不打开账本。复核 Git 差异中的事实、来源、关系、资料与累计撤销，确认没有凭据、本机路径或刮削残片。
-4. 将数据包与相关纠错一并测试、提交、集成，走既有 GitGud／GitHub 版本发布入口。wheel、Docker、Windows 与 macOS 共用资源目录，发行构建必须包含种子。
+1. Complete data collection and corrections in an isolated worktree. The maintainer's real ledger is only a read-only export source, and no database file goes into the repository.
+2. Use `scripts/seed_pack.py export`, explicitly giving `--db` pointing at the maintained ledger and `--version` for the incremented version. The default output is `resources/seed/entities.json` in the current app resources; the revision number of format 2 increments automatically, and cumulative withdrawals are inherited from the existing output file. Use `--previous` when a baseline must be specified, and `--withdrawals` supplies reviewed exact withdrawals.
+3. Use `scripts/seed_pack.py validate` to check the pack; this entry does not open the ledger. Review the facts, sources, relationships, profiles and cumulative withdrawals in the Git diff, and confirm there are no credentials, local paths or scraping debris.
+4. Test, commit and integrate the data pack together with the related corrections, through the existing GitGud/GitHub release entry. The wheel, Docker, Windows and macOS share the resource directory, and release builds must include the seed.
 
-版本示例为 `2026-10-23.1`；内容变更须使用比当前包更高的版本与修订号。同一版本和同一事实重复导出保持字节一致；同版本的不同内容被拒绝。普通用户的扫描和刮削不会向公共仓库自动上传资料，CI 也不读取维护者的本机账本。
+An example version is `2026-10-23.1`; a content change must use a version and revision higher than the current pack. Exporting the same version and the same facts repeatedly stays byte-identical; different content under the same version is rejected. Ordinary users' scans and scraping never upload data to the public repository automatically, and CI does not read the maintainer's local ledger.
 
-私人导出使用 `--out` 指向仓库外位置。公共种子与私人备份使用相同格式，但分发目标由维护者明确选择。
+A private export uses `--out` to point to a location outside the repository. The public seed and private backups use the same format, but the distribution target is explicitly chosen by the maintainer.
 
-## 明文、摘要与加密
+## Plaintext, Digests and Encryption
 
-公共包使用明文 JSON，保留可审阅的事实差异。维护者接受收录的实体组合可能反映自己的馆藏；这不授权发布用户账本、媒体、凭据或私人运行记录。
+The public pack uses plaintext JSON, keeping fact differences reviewable. The maintainer accepts that the combination of entities included may reflect their own library; this does not authorize publishing user ledgers, media, credentials or private run records.
 
-格式 2 的 SHA-256 摘要绑定版本、修订、事实与累计撤销。运行时通过结构校验和持久导入历史拒绝内容损坏、同版本替换及修订回退。摘要不等于数字签名，不能抵抗同时控制内容与摘要的攻击者；来源真实性依赖应用既有发布渠道。
+The SHA-256 digest of format 2 binds the version, revision, facts and cumulative withdrawals. At runtime, structural validation and the persistent import history reject content corruption, same-version replacement and revision rollback. A digest is not a digital signature and cannot resist an attacker who controls both the content and the digest; source authenticity relies on the app's existing release channels.
 
-所有用户都能读取的公共包不适合用共享密钥隐藏内容。把密钥交给客户端的同时，也把解密能力交给了接收者。需要保密的私人备份可使用独立的私人密钥，加密不能代替内容的发布授权。
+A public pack that every user can read is not suited to hiding content behind a shared key. Handing the key to the client also hands the decryption ability to the recipient. Private backups that need confidentiality can use a separate private key, and encryption cannot replace authorization to publish the content.
 
-架构边界见 [ADR-0117](adr/0117-public-entity-seed-distribution.md)，精确纠错见 [ADR-0106](adr/0106-seed-correction-history-and-explicit-withdrawals.md)。
+The architectural boundaries are in [ADR-0117](adr/0117-public-entity-seed-distribution.md), and exact corrections in [ADR-0106](adr/0106-seed-correction-history-and-explicit-withdrawals.md).

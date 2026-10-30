@@ -102,7 +102,7 @@ function tasksFetch(body: unknown = tasks(), { deferred = true } = {}) {
     if (!deferred) return Promise.resolve(reply(body));
     return new Promise<Reply>((resolve, reject) => {
       pending.push(() => resolve(reply(body)));
-      signal?.addEventListener('abort', () => { reject(new DOMException('已中止', 'AbortError')) });
+      signal?.addEventListener('abort', () => { reject(new DOMException('Aborted', 'AbortError')) });
     });
   });
   const taskCalls = () => fetched.mock.calls.filter(([input]) => input.startsWith('/api/tasks')).length;
@@ -437,7 +437,7 @@ it('回执、打开作品与资料页都交回壳：都走过去时回执', asyn
   duplicates.toast('已保留');
   duplicates.failure('删除', 'boom');
   const configuration = element<ConfigurationProps>('/settings/library', r, { section: 'Library & import' }, actions, vi.fn());
-  configuration.receipt('已保存配置');
+  configuration.receipt('Settings saved');
   expect([configuration.reopenTutorial, configuration.section]).toEqual([actions.reopenTutorial, 'Library & import']);
   const review = element<ReviewProps>('/review', r,
     { category: '', readOnly: false, readOnlyMessage: '', writerUrl: '' }, actions, vi.fn());
@@ -456,15 +456,15 @@ it('回执、打开作品与资料页都交回壳：都走过去时回执', asyn
   expect(vi.mocked(actions.failure).mock.calls).toEqual([['删除', 'boom']]);
   expect(actions.toast).not.toHaveBeenCalled();
   expect(vi.mocked(actions.receipt).mock.calls).toEqual([
-    ['已提交离线下载'], ['已删除', { undo }], ['已保留', {}], ['已保存配置'], ['已判定'], ['已添加 1 个关注来源'], ['已导入'],
+    ['已提交离线下载'], ['已删除', { undo }], ['已保留', {}], ['Settings saved'], ['已判定'], ['已添加 1 个关注来源'], ['已导入'],
   ]);
 });
 
 it('采集页的提示走全站 Toast 原样', async () => {
   const r = await load();
   const actions = shellActions();
-  element<ScrapingProps>('/sources', r, {}, actions, vi.fn()).toast('已保存');
-  expect(vi.mocked(actions.toast).mock.calls).toEqual([['已保存']]);
+  element<ScrapingProps>('/sources', r, {}, actions, vi.fn()).toast('Saved');
+  expect(vi.mocked(actions.toast).mock.calls).toEqual([['Saved']]);
   expect(actions.receipt).not.toHaveBeenCalled();
 });
 
@@ -490,7 +490,7 @@ function indexFetch(body: unknown = TAGS, { deferred = true } = {}) {
     if (!deferred) return Promise.resolve(reply(body));
     return new Promise<Reply>((resolve, reject) => {
       pending.push(() => resolve(reply(body)));
-      init?.signal?.addEventListener('abort', () => { reject(new DOMException('已中止', 'AbortError')) });
+      init?.signal?.addEventListener('abort', () => { reject(new DOMException('Aborted', 'AbortError')) });
     });
   });
   return {

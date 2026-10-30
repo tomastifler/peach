@@ -1,7 +1,7 @@
 """整理用的路径模板：占位符取值、可选分组、文件名清洗与逃逸防护（ADR-0039）。
 
 模板只有三种记号：字面量、`{占位符}`、`[可选分组]`。分组里的占位符只要有一个取不到值，
-整段就不出现——`{code}[ {title}][ CD{cd}]` 在没有标题时给 `ABC-123`，而不是
+ the whole segment does not appear - `{code}[ {title}][ CD{cd}]` gives, when there is no title, `ABC-123`, rather than
 `ABC-123  CD2` 这种带着两个空格的名字。
 
 占位符一律从 approved 真相字段取值（见 `organize.placeholder_values`）。候选不参与：
@@ -9,8 +9,8 @@
 
 清洗与逃逸防护分两层，缺一层都会出事：
 
-* **取值这一层**清除符号噪声，并将 Windows 保留字符（标题里的 `:` 与 `?`、演员名之间的 `/`）
-  逐个替换，同时挡住 `CON`、`PRN` 这类保留名与结尾的点和空格。
+* **The value layer** strips symbol noise and replaces Windows reserved characters (in titles the `:` and `?`, between performer names the `/`)
+  one by one, and also blocks reserved names such as `CON`, `PRN` and trailing dots and spaces.
 * **模板本身这一层**才可能带来路径逃逸：`..\\..\\Windows`、`C:\\`、`/etc`。取值那层的
   清洗挡不住它——那些字符是用户自己写在模板里的字面量。所以模板在保存和使用前都要过
   `validate_template`，而不是等渲染完再看结果像不像话。
@@ -24,20 +24,20 @@ from dataclasses import dataclass
 
 #: 模板认识的占位符，以及它在界面上的说明。顺序就是界面上列出来的顺序。
 PLACEHOLDERS: dict[str, str] = {
-    "code": "番号",
-    "title": "标题",
-    "studio": "厂牌",
-    "series": "系列",
-    "year": "发行年",
-    "actors": "出演者",
-    "cd": "分片号",
-    "mosaic": "有码无码",
-    "definition": "画质",
+    "code": "Code",
+    "title": "Title",
+    "studio": "Studio",
+    "series": "Series",
+    "year": "Release year",
+    "actors": "Performers",
+    "cd": "Part number",
+    "mosaic": "Censored/uncensored",
+    "definition": "Quality",
 }
 
 EXAMPLE_VALUES = {
-    "code": "ABC-123", "title": "标题", "studio": "厂牌", "series": "系列",
-    "year": "2024", "actors": "甲、乙", "cd": "2", "mosaic": "无码", "definition": "1080p",
+    "code": "ABC-123", "title": "Title", "studio": "Studio", "series": "Series",
+    "year": "2024", "actors": "A, B", "cd": "2", "mosaic": "Uncensored", "definition": "1080p",
 }
 
 #: 单个路径组件的长度上限。Windows 的组件上限是 255 个字符，但长名字在资源管理器、
@@ -69,7 +69,7 @@ class _Token:
 
 
 def clean_name_symbols(value: str) -> str:
-    """清除装饰符号、替代字形与不可见噪声，保留文字、标点、单位及算术符号。"""
+    """Strip decorative symbols, substitute glyphs and invisible noise, keeping text, punctuation, units and arithmetic symbols."""
     parts: list[str] = []
     for char in value:
         category = unicodedata.category(char)
@@ -90,7 +90,7 @@ def clean_name_symbols(value: str) -> str:
 
 
 def clean_filename(name: str) -> str:
-    """只清理名称主干；扩展名和可辨认的名称保留，空名称不生成改名计划。"""
+    """Clean only the name stem; extensions and recognizable names are kept, and an empty name produces no rename plan."""
     stem, suffix = ntpath.splitext(name)
     cleaned = clean_name_symbols(stem)
     if cleaned != stem:
@@ -149,7 +149,7 @@ def _parse(template: str) -> tuple[_Token, ...]:
             if end < 0:
                 raise TemplateError("Placeholder `{` has no matching `}`")
             name = template[index + 1:end].strip()
-            # 已保存的模板可以使用番号别名。
+            # Saved templates may use the code alias.
             if name == "number":
                 name = "code"
             if name not in PLACEHOLDERS:
@@ -278,12 +278,12 @@ def render(template: str, values: dict[str, str], *,
 
 
 def example_path(file_template: str, dir_template: str) -> dict:
-    """以固定示例字段渲染当前输入的路径。"""
+    """Render the currently entered path with fixed example fields."""
     parts = {}
     for field, text, directory in (("file", file_template, False), ("dir", dir_template, True)):
         try:
             parts[field], _missing = render(text, EXAMPLE_VALUES, directory=directory)
         except TemplateError as error:
             return {"ok": False, "error": str(error), "field": field}
-    filename = (parts["file"] if file_template.strip() else "ABC-123 标题") + ".mp4"
+    filename = (parts["file"] if file_template.strip() else "ABC-123 Title") + ".mp4"
     return {"ok": True, "example": "/".join(filter(None, (parts["dir"], filename)))}

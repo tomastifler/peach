@@ -1,4 +1,4 @@
-/** 应用级更新提示读取本机快照；刷新由用户明确触发。 */
+/** The app-level update notice reads this machine's snapshot; refreshing is explicitly triggered by the user. */
 import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { LinkButton } from '@/components/base/buttons/link-button';
@@ -31,7 +31,7 @@ function pageRuntime(): ClientUpdates['runtime'] | null {
   } catch { return null; }
 }
 
-/** 文档携带加载时的运行标记，后台标签和首次断连也保留同一份基线。 */
+/** The document carries the run marker from when it loaded, so background tabs and the first disconnect also keep the same baseline. */
 export function useClientUpdates() {
   const baseline = useRef<ClientUpdates['runtime'] | null>(pageRuntime());
   const [snapshot, setSnapshot] = useState<ClientUpdates | null>(null);
@@ -53,7 +53,7 @@ export function useClientUpdates() {
           setSnapshot(next);
         }
       } catch {
-        // 服务重启、断连和未取得快照都保留当前提示。
+        // Service restarts, disconnects and a missing snapshot all keep the current notice.
       } finally {
         clearTimeout(timeout);
         if (request === controller) {
@@ -84,7 +84,7 @@ export function useClientUpdates() {
   return { snapshot, refresh };
 }
 
-/** 横幅复用项目 Banner，动作使用 BoardUI；关闭只作用于当前状态。 */
+/** The banner reuses the project's Banner, with actions using BoardUI; dismissing only affects the current state. */
 export function ClientUpdateBanner({ navigate }: { navigate(path: string): void }) {
   const { snapshot, refresh } = useClientUpdates();
   const [dismissed, setDismissed] = useState('');
@@ -97,9 +97,9 @@ export function ClientUpdateBanner({ navigate }: { navigate(path: string): void 
   const version = job.state === 'ready' || ACTIVE.has(job.state) ? job.version || release.latest_version : release.latest_version;
   const identity = JSON.stringify(kind === 'refresh' ? [kind, runtime.version, runtime.build_id] : [kind, version]);
   if (identity === dismissed) return null;
-  const message = kind === 'refresh' ? 'Peach 已更新，刷新页面即可使用。'
-    : kind === 'ready' ? '更新已准备好，可重启安装。'
-      : kind === 'preparing' ? '正在准备更新。' : '有可用更新。';
+  const message = kind === 'refresh' ? 'Peach has been updated; refresh the page to use it.'
+    : kind === 'ready' ? 'The update is ready; restart to install it.'
+      : kind === 'preparing' ? 'Preparing the update.' : 'An update is available.';
   const openUpdates = (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
@@ -113,11 +113,11 @@ export function ClientUpdateBanner({ navigate }: { navigate(path: string): void 
       <div className="flex-wrap">
         {kind === 'refresh'
           ? <LinkButton variant="secondary" size="small" onClick={() => window.location.reload()}
-            data-copy-key="clientUpdates.refresh.action">刷新页面</LinkButton>
+            data-copy-key="clientUpdates.refresh.action">Refresh page</LinkButton>
           : <LinkButton variant="secondary" size="small" href={RELEASE_UPDATES_PATH} onClick={openUpdates}
-            data-copy-key={`clientUpdates.${kind}.action`}>{kind === 'preparing' ? '查看进度' : '查看更新'}</LinkButton>}
+            data-copy-key={`clientUpdates.${kind}.action`}>{kind === 'preparing' ? 'View progress' : 'View update'}</LinkButton>}
         <LinkButton variant="secondary" size="small" onClick={() => setDismissed(identity)}
-          data-copy-key={`clientUpdates.${kind}.later`}>稍后</LinkButton>
+          data-copy-key={`clientUpdates.${kind}.later`}>Later</LinkButton>
       </div>
     </aside>, host,
   );

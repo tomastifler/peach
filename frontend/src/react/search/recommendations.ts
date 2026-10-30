@@ -59,12 +59,12 @@ export async function searchRecommendations(request: Request): Promise<SuggestGr
     }
   }
   return [
-    { kind: 'performer', label: '艺人与新作', items: [...people.values()].slice(0, 3), href: '/subscriptions?tab=add', action: '订阅新作' },
-    { kind: 'author', label: '关注作者', items: authors, href: '/subscriptions?tab=add', action: '添加关注' },
-    { kind: 'asset', label: '作品推荐', items: library.map(card => work(card)), href: '/', action: '全部作品' },
-    { kind: 'jav', label: 'JAV 推荐', items: jav.map(card => work(card, `/assets/${card.asset_id || card.id}`)), href: '/jav?tab=discover', action: '发现 JAV' },
-    { kind: 'post', label: '关注作品', items: posts.slice(0, 5), href: '/follow', action: '全部关注作品' },
-    { kind: 'photo', label: '关注图片', items: photos.slice(0, 5), href: '/follow?media=images', action: '全部关注图片' },
-    { kind: 'release', label: '订阅新作', items: releases.filter(card => card.code).map(card => work({ ...card, sourceWork: true }, `/works/${encodeURIComponent(card.code)}`)), href: '/subscriptions', action: '管理订阅' },
+    { kind: 'performer', label: 'Performers and new releases', items: [...people.values()].slice(0, 3), href: '/subscriptions?tab=add', action: 'Subscribe to new releases' },
+    { kind: 'author', label: 'Followed authors', items: authors, href: '/subscriptions?tab=add', action: 'Add follow' },
+    { kind: 'asset', label: 'Recommended works', items: library.map(card => work(card)), href: '/', action: 'All works' },
+    { kind: 'jav', label: 'JAV recommendations', items: jav.map(card => work(card, `/assets/${card.asset_id || card.id}`)), href: '/jav?tab=discover', action: 'Discover JAV' },
+    { kind: 'post', label: 'Followed works', items: posts.slice(0, 5), href: '/follow', action: 'All followed works' },
+    { kind: 'photo', label: 'Followed images', items: photos.slice(0, 5), href: '/follow?media=images', action: 'All followed images' },
+    { kind: 'release', label: 'Subscribed new releases', items: releases.filter(card => card.code).map(card => work({ ...card, sourceWork: true }, `/works/${encodeURIComponent(card.code)}`)), href: '/subscriptions', action: 'Manage subscriptions' },
   ];
 }

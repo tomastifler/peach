@@ -175,7 +175,7 @@ class PreviewService:
         try:
             source = self._snapshot(asset_id)
         except PreviewUnavailable:
-            # 独立保留且没有生成签名的头像不依赖九宫格。
+            # An avatar kept independently with no generated signature does not depend on the contact sheet.
             if destination.is_file() and not Path(str(destination) + '.rule').exists():
                 return destination
             raise
@@ -400,8 +400,8 @@ class PhotoThumbnailService:
     def cached(self, asset_id: int, *, offline: bool = False) -> Path | None:
         """已经缩好的那一份，没有就是 None。
 
-        以签名记录的本地源路径复验文件代际，不读取图像正文。
-        SMB 源需要调用方解析资源后，再由 `thumbnail` 核对来源。
+        Re-verify the file generation by the local source path recorded in the signature, without reading image content.
+        SMB sources need the caller to resolve the resource first, then `thumbnail` verifies the source.
         """
         destination = self.root / f"{asset_id}.jpg"
         return destination if artifact_rules.current(destination, source_required=True,
@@ -465,12 +465,12 @@ def entity_thumb_root(avatar_root: Path) -> Path:
 COVER_THUMB_EDGE = 1600
 COVER_THUMB_QUALITY = 90
 
-#: 卡片网格的起始档（`/cover?thumb=2`）。首页、资料页与 JAV 页的卡片实测在 1440 宽桌面上
-#: 铺开 168–360 CSS px（大图版式的整张封套按两倍卡宽摆，正封那半露在卡里），一倍屏要不到
-#: 400 设备像素，800 盖得住。这一档实测均 100 KB、上一档均 319 KB（同一组 24 张抽样）。
-#: 页面量过显示尺寸不够清楚就往上换：这一档 → 1600 那一档 → 原件（`framing.ts` 的
-#: `upgradeCover`），所以这里只管常见的小格，不为大位留余量。和上一档同一个目录、
-#: 按长边分文件名（`DerivedImageService.path_for`），按需生成，不批量预生成。
+#: Starting tier of the card grid (`/cover?thumb=2`). Cards on the home page, metadata page and JAV page measured on a 1440-wide desktop
+#: span 168–360 CSS px (full-sleeve layouts place the whole sleeve at twice the card width, with the front-cover half showing in the card), and a 1x screen needs less than
+#: 400 device pixels, 800 covers it. This tier measures on average 100 KB, the previous tier averages 319 KB (the same 24-image sample).
+#: When the page measures the display size and it is not sharp enough, it switches upward: this tier → 1600 the tier → the original (`framing.ts` 's
+#: `upgradeCover`), so this only handles common small cells and leaves no headroom for large slots. Same directory as the previous tier,
+#: named by long edge (`DerivedImageService.path_for`), generated on demand, not pre-generated in bulk.
 COVER_SMALL_THUMB_EDGE = 800
 COVER_SMALL_THUMB_QUALITY = 85
 
@@ -492,7 +492,7 @@ class DerivedImageService:
     目录由 `entity_thumb_root` 与 `cover_thumb_root` 从原件目录推出来，接线处不各写
     一份默认值。
 
-    签名记录规则、源路径及文件代际；换头像、换封面后按需生成。
+    Signature records the rules, source path and file generation; generated on demand after an avatar or cover change.
     """
 
     def __init__(self, root: Path, edge: int = ENTITY_THUMB_EDGE,
@@ -525,7 +525,7 @@ class DerivedImageService:
                         image = ImageOps.exif_transpose(opened)
                         if image.mode not in {"RGB", "L"}:
                             image = image.convert("RGB")
-                        # `thumbnail` 只缩不放：本来就比这一档小的图原样重编码，不上采样。
+                        # `thumbnail` only shrinks and never enlarges: an image already smaller than this tier is re-encoded as is, without upsampling.
                         image.thumbnail((self.edge, self.edge), Image.LANCZOS)
                         image.save(temporary, ENTITY_THUMB_FORMAT,
                                    quality=self.quality, method=4)

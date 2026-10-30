@@ -1,4 +1,4 @@
-"""持久结果的处理规则版本；各能力只失效自己拥有的派生结果。"""
+"""Processing rule versions of persisted results; each capability invalidates only the derived results it owns."""
 
 CATALOG = "catalog-v2"
 PREVIEWS = "previews-v2"

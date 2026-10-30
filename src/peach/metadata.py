@@ -433,7 +433,7 @@ def _url_list_evidence(raw: object, label: str) -> dict | None:
 
 
 def contains_replacement_character(value: object) -> bool:
-    """来源解码已丢失的字符不能作为文字证据，保留原始快照供重新取证。"""
+    """Characters already lost by source decoding cannot serve as text evidence; keep the raw snapshot for re-collection."""
     if isinstance(value, str):
         return '\ufffd' in value
     if isinstance(value, dict):
@@ -444,13 +444,13 @@ def contains_replacement_character(value: object) -> bool:
 
 
 def candidate_text_is_valid(candidate: dict) -> bool:
-    """候选正文与未映射标签均须可解码；来源路径和诊断文字不参与判定。"""
+    """Candidate body text and unmapped tags must both be decodable; source paths and diagnostic text do not take part in the decision."""
     return not any(contains_replacement_character(candidate.get(key))
                    for key in ('value', 'display_value', 'unmapped_genres'))
 
 
 def source_text_is_valid(payload: dict) -> bool:
-    """来源文字必须完整；原始旁证、路径和诊断文字不决定缓存有效性。"""
+    """Source text must be complete; raw side evidence, paths and diagnostic text do not decide cache validity."""
     return not any(contains_replacement_character(payload.get(key)) for key in (
         'title', 'original_title', 'actresses', 'actors', 'performers', 'maker', 'studio',
         'label', 'series', 'genres', 'tags', 'director'))

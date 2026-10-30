@@ -1,4 +1,4 @@
-"""可由启动补修与维护命令复用的已验证存量修复。"""
+"""Verified backfill repairs reusable by startup repair and maintenance commands."""
 from __future__ import annotations
 import json
 import re
@@ -70,7 +70,7 @@ def _snapshot_code(payload: dict[str, object]) -> str:
 
 
 def snapshot_index(root: Path) -> dict[str, Path]:
-    """把一层快照目录按番号索引；同番号多份时拒绝猜哪一份才是证据。"""
+    """Index a layer of snapshot directories by code; when one code has several, refuse to guess which one is the evidence."""
     grouped: dict[str, list[Path]] = defaultdict(list)
     for path in root.glob("*-r18dev.json"):
         grouped[_key(path.name.removesuffix("-r18dev.json"))].append(path)
@@ -146,9 +146,9 @@ def apply_rows(connection: sqlite3.Connection, rows: list[dict[str, object]]) ->
     return {"assets": repaired_assets, "fields": repaired_fields}
 
 
-#: 实体那一遍只看这两类；厂牌的规范名本来就是品牌名。
+#: The entity pass looks only at these two kinds; a studio's canonical name is a brand name anyway.
 ENTITY_KINDS = ("series", "performer")
-#: 这几种关联来源说明实体是按 r18 给的写法建出来的。
+#: These association sources show the entity was built from the spelling r18 gave.
 R18_LINK_SOURCES = tuple(
     f"{prefix}:{kind}" for prefix in ("javinizer:r18dev", "r18") for kind in ENTITY_KINDS)
 ENTITY_ALIAS_SOURCE = "script:repair_r18_machine_translations"
@@ -159,7 +159,7 @@ ENTITY_FIELDS = (
 
 
 def _payload(path: Path) -> dict[str, object] | None:
-    """快照正文。Javinizer-Go 的快照把作品包在 ``result`` 里，Peach 自己的直接是作品。"""
+    """Snapshot body. Javinizer-Go snapshots wrap the work in ``result``, Peach snapshots are the work itself."""
     payload = _snapshot(path)
     if payload is not None and isinstance(payload.get("result"), dict):
         return payload["result"]
@@ -167,7 +167,7 @@ def _payload(path: Path) -> dict[str, object] | None:
 
 
 def _person_key(value: object) -> str:
-    """罗马字人名的比较键：大小写不算，姓名先后也不算（``Remu Suzumori`` 与 ``Suzumori Remu``）。"""
+    """Comparison key for romanized person names: case does not count, and neither does name order (``Remu Suzumori`` and ``Suzumori Remu``)."""
     return " ".join(sorted(_text(value).casefold().split()))
 
 
@@ -180,9 +180,9 @@ def _translation(payload: dict[str, object], language: str) -> dict[str, object]
 
 
 def _japanese_names(payload: dict[str, object], kind: str, current: str) -> set[str]:
-    """这份快照里，与 ``current`` 同一个名字的日文那一侧写法。快照没提到这个英文名时为空。
+    """In this snapshot, the Japanese-side spelling of the same name as ``current``. Empty when the snapshot does not mention this English name.
 
-    日文那一侧也可能就是拉丁字母（``RARA``、``Night Safari``），调用方据此判它本来就是原名。
+    The Japanese side may itself be in Latin letters (``RARA``, ``Night Safari``), the caller takes this to mean it is the original name.
     """
     combined = payload.get("combined") if isinstance(payload.get("combined"), dict) else {}
     raw = payload.get("raw") if isinstance(payload.get("raw"), dict) else {}
@@ -209,7 +209,7 @@ def _japanese_names(payload: dict[str, object], kind: str, current: str) -> set[
 
 def _entity_snapshots(connection: sqlite3.Connection, entity_id: int, metadata: object,
                       indexed: dict[str, Path], javinizer: Path) -> tuple[int, list[Path]]:
-    """挂在这条实体名下的作品数，和它们留下的 r18 快照。"""
+    """The number of works under this entity name, and the r18 snapshots they left."""
     paths: list[Path] = []
 
     def remember(raw: object) -> None:
@@ -239,7 +239,7 @@ def _entity_snapshots(connection: sqlite3.Connection, entity_id: int, metadata: 
 
 
 def _entity_clash(connection: sqlite3.Connection, kind: str, entity_id: int, name: str) -> int | None:
-    """日文名已经属于另一条同类实体（规范名或别名）时，返回那一条的 id。"""
+    """When the Japanese name already belongs to another entity of the same kind (canonical name or alias), return that one's id."""
     key = normalize_entity_name(name)
     taken = connection.execute(
         "SELECT id FROM entity WHERE kind=? AND normalized_name=? AND id<>?",
@@ -255,7 +255,7 @@ def _entity_clash(connection: sqlite3.Connection, kind: str, entity_id: int, nam
 
 def collect_entities(connection: sqlite3.Connection, snapshots: Path,
                      javinizer: Path) -> list[dict[str, object]]:
-    """r18 来源建出、规范名不含日文的系列与女优，逐条找日文写法并判改名、待合并或跳过。"""
+    """r18 source: for series and actresses it built whose canonical name has no Japanese, find the Japanese spelling one by one and decide rename, pending merge or skip."""
     connection.row_factory = sqlite3.Row
     indexed = snapshot_index(snapshots)
     marks = ",".join("?" * len(R18_LINK_SOURCES))
@@ -286,7 +286,7 @@ def collect_entities(connection: sqlite3.Connection, snapshots: Path,
                 sides |= _japanese_names(payload, kind, current)
         evidence = {name for name in sides if _contains_japanese(name)}
         if _text(current).casefold() in {name.casefold() for name in sides}:
-            # 有一份快照的日文那一侧就写这个名字：它是原名，不是译名。
+            # A snapshot whose Japanese side writes this name: it is the original name, not a translation.
             row["reason"] = "already-original"
             continue
         if len(evidence) == 1:
@@ -308,7 +308,7 @@ def collect_entities(connection: sqlite3.Connection, snapshots: Path,
 
 
 def apply_entity_rows(connection: sqlite3.Connection, rows: list[dict[str, object]], now: str) -> Counter:
-    """按 ``rename`` 行改规范名：英文旧名留作别名，扁平投影跟着改。现名已变的整行跳过。"""
+    """Change the canonical name per the ``rename`` row: the old English name is kept as an alias and the flat projection follows. A row whose current name has already changed is skipped."""
     counts: Counter = Counter()
     for row in rows:
         if row["action"] != "rename":

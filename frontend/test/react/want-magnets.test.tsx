@@ -13,7 +13,7 @@ notifyManager.setScheduler((notify) => notify());
 afterEach(() => { queryClient.clear(); localStorage.clear() });
 const candidate: MagnetCandidate = {
   id: 'magnet:abc', protocol: 'magnet', info_hash: 'abc', uri: 'magnet:?xt=urn:btih:abc',
-  name: 'DEMO-001 HD', size: '4 GB', files: '2 個文件', date: '2026-10-01', attributes: ['字幕', '高清'],
+  name: 'DEMO-001 HD', size: '4 GB', files: '2 個文件', date: '2026-10-01', attributes: ['Subtitles', '高清'],
   source: 'JavDB', source_url: 'https://javdb.com/v/demo', origins: ['https://javdb.com/v/demo'],
 };
 async function open(items = [candidate], readOnly = false, ok = true) {
@@ -36,10 +36,10 @@ async function open(items = [candidate], readOnly = false, ok = true) {
 it('自动查询，展示来源、大小、日期与属性，直接添加到选定的云下载目录', async () => {
   const { host, fetcher, toast } = await open();
   expect(fetcher.mock.calls[0]?.[0]).toBe('/api/wants/magnets?id=1');
-  for (const text of ['4 GB', '2 个文件', '2026-10-01', '字幕', 'JavDB']) expect(host.textContent).toContain(text);
+  for (const text of ['4 GB', '2 个文件', '2026-10-01', 'Subtitles', 'JavDB']) expect(host.textContent).toContain(text);
   expect(host.querySelector('[data-resource-facts]')?.textContent).not.toContain('高清');
-  expect([...host.querySelectorAll('[data-resource-actions] button, [data-resource-actions] a')].map(node => node.textContent)).toEqual(['链接来源', '复制链接', '添加下载']);
-  await click(buttonNamed('添加下载', host));
+  expect([...host.querySelectorAll('[data-resource-actions] button, [data-resource-actions] a')].map(node => node.textContent)).toEqual(['Link source', 'Copy link', 'Add download']);
+  await click(buttonNamed('Add download', host));
   await settle();
   const writes = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST');
   expect(JSON.parse(String(writes[0]?.[1]?.body))).toEqual({ magnet: candidate.uri, provider: '115', target: '/下载',
@@ -52,9 +52,9 @@ it('ed2k 与网页链接可复制，不能作为磁链提交', async () => {
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
   const ed2k = { ...candidate, id: 'ed2k:abc:12', protocol: 'ed2k' as const, uri: 'ed2k://|file|demo|12|abc|/' };
   const { host } = await open([ed2k]);
-  expect(buttonNamed('添加下载', host)).toBeNull();
-  expect(buttonNamed('复制链接', host)?.className).not.toContain('bg-button-primary');
-  await click(buttonNamed('复制链接', host));
+  expect(buttonNamed('Add download', host)).toBeNull();
+  expect(buttonNamed('Copy link', host)?.className).not.toContain('bg-button-primary');
+  await click(buttonNamed('Copy link', host));
   expect(writeText).toHaveBeenCalledWith(ed2k.uri);
 });
 it('提交等待期保持按钮可聚焦并拦截重复点击', async () => {

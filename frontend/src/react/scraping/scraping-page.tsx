@@ -170,7 +170,7 @@ function SourceCard({ source, toast }: { source: Source } & ScrapingProps) {
         </SettingsRow>
       </Rows>
       {source.cooldown_until && source.cooldown_until > Date.now() / 1000 ? (
-        <Note tone="warning"><span className="inline-flex flex-wrap items-center gap-2"><StatusLabel tone="warning">冷却中</StatusLabel><span>可在 {new Date(source.cooldown_until * 1000).toLocaleString('zh-CN')} 后重试。</span></span></Note>
+        <Note tone="warning"><span className="inline-flex flex-wrap items-center gap-2"><StatusLabel tone="warning">Cooling down</StatusLabel><span>Retry after {new Date(source.cooldown_until * 1000).toLocaleString('zh-CN')}.</span></span></Note>
       ) : null}
       {detailed ? <Stack divided>
         {network === 'peach'
@@ -187,8 +187,8 @@ function SourceCard({ source, toast }: { source: Source } & ScrapingProps) {
             </p>
           : null}
         {source.accepts_cookie && !source.browser ? <>
-          <div className="flex flex-col gap-2"><span className="self-start"><StatusLabel tone={source.cookie_saved ? 'success' : 'neutral'}>{source.cookie_saved ? 'Cookie 已保存' : 'Cookie 未配置'}</StatusLabel></span>
-            <p className="text-body-2-regular text-text-secondary">{source.cookie_saved ? '登录有效性待验证。' : '需要登录时，任选一种方式提供 Cookie。'}</p></div>
+          <div className="flex flex-col gap-2"><span className="self-start"><StatusLabel tone={source.cookie_saved ? 'success' : 'neutral'}>{source.cookie_saved ? 'Cookie saved' : 'Cookie not configured'}</StatusLabel></span>
+            <p className="text-body-2-regular text-text-secondary">{source.cookie_saved ? 'Login validity not yet verified.' : 'When login is needed, provide the Cookie in either way.'}</p></div>
           {/* 两种方式互斥，交上去的只能是其中一种：切换时把另一种的输入清掉，
               不让看不见的那一份跟着提交。 */}
           <RadioGroup aria-label="How to provide the cookie (choose one)" value={method}
@@ -218,7 +218,7 @@ function SourceCard({ source, toast }: { source: Source } & ScrapingProps) {
         {problem ? <ErrorText>{problem}</ErrorText> : null}
         {results.map((result) => (
           <Note key={result.label} tone={result.ok ? 'success' : 'error'}>
-            <span className="flex flex-col items-start gap-1"><ConnectionStatus tone={result.ok ? 'success' : 'error'}>{result.ok ? '可访问' : '连接失败'}</ConnectionStatus><span>{checkText(result, source.label)}</span></span>
+            <span className="flex flex-col items-start gap-1"><ConnectionStatus tone={result.ok ? 'success' : 'error'}>{result.ok ? 'Reachable' : 'Connection failed'}</ConnectionStatus><span>{checkText(result, source.label)}</span></span>
           </Note>
         ))}
       </Stack> : null}
@@ -325,10 +325,10 @@ function AmaneBridgeCard({ toast }: ScrapingProps) {
         {data.problem
           ? <Note tone="error">{data.problem}</Note>
           : <Help>
-              amane（{data.license}）提供这些内置站点的解析能力。首次需要时，Peach 会自动准备锁定的 {data.version} 版本；安装包内已有可用环境时直接使用。
-              手动安装也使用此版本，不随上游自动升级。
+              amane ({data.license}) provides the parsing for these built-in sites. When first needed, Peach automatically prepares the locked {data.version} version; if the installer already contains a usable environment, it is used directly.
+              Manual installs use this version too and do not auto-upgrade with upstream.
             </Help>}
-        {running ? <LoadingDots label="正在重建运行环境" /> : null}
+        {running ? <LoadingDots label="Rebuilding runtime environment" /> : null}
         {problem ? <Note tone="error">{problem}</Note> : null}
         {outcome?.status === 'complete' ? <Note tone="success">{outcome.result || 'amane bridge rebuilt'}</Note> : null}
       </Stack>
@@ -338,7 +338,7 @@ function AmaneBridgeCard({ toast }: ScrapingProps) {
         </Button>
         <Button disabled={Boolean(data.problem)} onClick={() => { if (!busy) rebuild.mutate() }}
           {...busyProps(running || rebuild.isPending)}>
-          {data.installed ? '重新安装' : '安装'}
+          {data.installed ? 'Reinstall' : 'Install'}
         </Button>
       </Footer>
     </Section>

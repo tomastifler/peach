@@ -1,7 +1,7 @@
 import type { VjsPlayer } from './types';
 import { playerMemory } from './memory';
 
-/** 旋转原生画面；控制条保持正向，尺寸跟随播放器及媒体元数据。 */
+/** Rotates the native picture; the control bar stays upright, and the size follows the player and the media metadata. */
 export function mountPlayerRotation(player: VjsPlayer, video: HTMLVideoElement) {
   let angle = 0, touched = false;
   const memory = playerMemory(player);

@@ -1,29 +1,29 @@
-# 封面取景与边车契约
+# Cover Framing and the Sidecar Contract
 
-封面获取流程见 [JAV 封面技能](../.claude/skills/peach-jav-cover-workflow/SKILL.md)。本文件用于取景或边车任务；来源与算法实证见 [来源采集](SOURCING.md)，正式判据、阈值和版本在 `peach.jav_poster_crop` 与 `peach.face_detect`。
+For the cover acquisition flow, see the [JAV cover skill](../.claude/skills/peach-jav-cover-workflow/SKILL.md). This file is for framing or sidecar tasks; for empirical evidence on sources and algorithms, see [Sourcing](SOURCING.md); the formal criteria, thresholds and versions live in `peach.jav_poster_crop` and `peach.face_detect`.
 
-## 生产者与消费者
+## Producers and Consumers
 
-| 产物 | 生成入口 | 消费与保护 |
+| Artifact | Generating entry point | Consumption and protection |
 | --- | --- | --- |
-| 人脸坐标 | `scripts/detect_cover_faces.py` | 保留归一化 `cx`、`cy` 和图像尺寸；裁切轴由容器比例决定，无脸时居中 |
-| 正封边车 | `scripts/poster_crop_boxes.py`、`peach.jav_poster_crop` | 保存原图坐标和算法版本，原图保持完整；手工框不被自动重算覆盖 |
-| 页面取景 | `frontend/src/card-art/framing.ts`、`frontend/src/jav-artwork.ts` | 复用边车和共享版式，不在页面抄写检测算法 |
+| Face coordinates | `scripts/detect_cover_faces.py` | Keeps the normalized `cx`, `cy` and the image size; the crop axis is decided by the container ratio, and with no face the crop is centered |
+| Front-cover sidecar | `scripts/poster_crop_boxes.py`, `peach.jav_poster_crop` | Stores original-image coordinates and the algorithm version, keeps the original image intact; manual boxes are not overwritten by automatic recomputation |
+| Page framing | `frontend/src/card-art/framing.ts`, `frontend/src/jav-artwork.ts` | Reuses the sidecar and the shared layout, and does not copy the detection algorithm into pages |
 
-默认仅重算缺失、版本过期或尺寸不符的产物，`--redo` 表示明确全算。算法改变时同步版本、生产者与消费者，并验证旧边车的接收与重算；运行中服务需要切换时使用项目入口。
+By default only missing, version-stale or size-mismatched artifacts are recomputed, and `--redo` means explicitly recompute everything. When the algorithm changes, update the version, producers and consumers together, and verify that old sidecars are accepted and recomputed; when a running service needs to switch, use the project entry point.
 
-## 折痕判据
+## Fold Criteria
 
-Sobel 列梯度寻找的是能切出合理正封形状的折痕，不按全宽固定百分比选最强边。窗口、突出度和形状阈值均读取源码常量。
+The Sobel column gradient looks for a fold that cuts out a plausible front-cover shape, rather than picking the strongest edge at a fixed percentage of the full width. The window, prominence and shape thresholds are all read from source constants.
 
-- 厚书脊存在竞争峰时按正封形状选择，不按谁更强；代表回归为 ABP-968。
-- 梯度斜坡的峰与终点分别处理；切点不满高时核对右侧满高接缝，避免把书脊文字边当折痕。ABW-147 覆盖文字边情形，TKM-005 对应已知黑边代价。
-- 无满高缝时结合孤立尖峰、左右纹理方向和局部基线，避免切掉正封内容；IPZ-602、PPT-018 与 ABP-627 覆盖对应输入。
-- 只有两侧接缝与纹理共同证明居中正封时裁中间；数字发行拼图、明确整幅图像与不满足判据的输入沿用当前版式判断。
-- 宽封套结合来源、版次与图片比例，不仅凭接近 16:9 的外形判断。厂牌、比例窗口与例外以当前实现为准。
+- When a thick spine has competing peaks, choose by front-cover shape, not by which is stronger; the representative regression is ABP-968.
+- The peak and the endpoint of a gradient ramp are handled separately; when the cut point does not span the full height, check the full-height seam on the right, to avoid taking the spine's text edge for a fold. ABW-147 covers the text-edge case, and TKM-005 corresponds to a known black-edge cost.
+- With no full-height seam, combine isolated sharp peaks, left and right texture direction and the local baseline, to avoid cutting away front-cover content; IPZ-602, PPT-018 and ABP-627 cover the corresponding inputs.
+- Crop the middle only when seams on both sides and texture together prove a centered front cover; digital-release collages, explicit full-width images and inputs failing the criteria keep following the current layout judgment.
+- Wide jackets combine source, edition and image ratio, rather than judging only by a shape close to 16:9. Studios, ratio windows and exceptions follow the current implementation.
 
-## 页面投影与验收
+## Page Projection and Acceptance
 
-框表达正封本身，页面容器负责最终比例和摆放，不在后端先裁成页面形状。传统正封完整居中，比例留白使用当前共享派生背景；整幅大封竖版按主脸填满、横版完整显示，不使用模糊补边。手工框与明确整幅布局保留。
+The box expresses the front cover itself, and the page container decides the final ratio and placement; the backend does not first crop to the page shape. A traditional front cover is fully centered, and ratio padding uses the current shared derived background; for a full-width large cover, portrait fills by the main face and landscape shows it whole, with no blurred edge fill. Manual boxes and explicit full-width layouts are kept.
 
-验证算法与前端投影时，同时检查人脸轴、图像尺寸、版本、正封边界和实际容器裁切。行为回归以 `tests/test_jav_poster_crop.py` 与前端卡片取景用例为准；通过坐标算术不能代替浏览器实际像素证据。
+When verifying the algorithm and the frontend projection, check the face axis, image size, version, front-cover boundary and the actual container crop together. Behavior regression follows `tests/test_jav_poster_crop.py` and the frontend card-framing cases; passing coordinate arithmetic cannot replace actual browser pixel evidence.

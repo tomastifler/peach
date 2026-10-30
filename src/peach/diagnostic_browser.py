@@ -1,25 +1,25 @@
-"""正式前端包的异常类型、帧与构建映射白名单。"""
+"""Allowlist of exception types, frames and build mappings for the official frontend bundle."""
 import re
 import uuid
 
 NAMES = frozenset({"Error", "TypeError", "ReferenceError", "SyntaxError", "RangeError", "URIError",
     "EvalError", "AggregateError", "DOMException", "SecurityError", "NotAllowedError", "InvalidStateError",
     "QuotaExceededError", "NotSupportedError", "TimeoutError", "NetworkError", "DataError", "OperationError"})
-#: 主包按页拆出的 chunk（ADR-0118）：`peach-app.<名字>-<内容哈希>.js`，由
-#: `frontend/scripts/sentry-build.ts` 的 `chunkPattern` 产出。名字里只有字母、数字、`_` 与 `-`，
-#: 不含路径分隔符与 `..`；是否存在以 `web/dist/` 里的实际文件为准。服务端放行、开发文案热替换
-#: 与构建检查都按它认 chunk。
+#: A chunk split out of the main bundle by page chunk (ADR-0118): `peach-app.<name>-<content-hash>.js`, produced by
+#: `frontend/scripts/sentry-build.ts`'s `chunkPattern` produces it. The name contains only letters and digits, `_` and `-`,
+#: contains no path separators or `..`; Existence is judged by `web/dist/` the actual files in it. Server-side allowance and dev copy hot replacement
+#: and the build check all go by it to recognize a chunk.
 BUNDLE_CHUNK_NAME = re.compile(r"peach-app\.[A-Za-z0-9_-]+\.js")
-#: 正式包的文件名：主包入口、页面包，以及主包按页拆出的 chunk（形态同 `BUNDLE_CHUNK_NAME`）。
+#: File names in the official bundle: the main entry, page bundles, and the chunk (same shape as `BUNDLE_CHUNK_NAME`).
 SHIPPED = r"peach-pages\.js|peach-app(?:\.[A-Za-z0-9_-]+)?\.js"
 _SHIPPED = re.compile(SHIPPED)
 _FRAME = re.compile(rf"(?<![\w.-])({SHIPPED})(?:\?[^\s):]*)?:(\d+):(\d+)")
-#: 一个事件最多带的帧数，也是映射条目的上限。
+#: Maximum frames an event carries, and also the upper bound for mapping entries.
 MAX_FRAMES = 20
 
 
 def shipped(name) -> bool:
-    """是不是正式包里的一份 JavaScript。"""
+    """Whether this is an official-bundle JavaScript."""
     return isinstance(name, str) and _SHIPPED.fullmatch(name) is not None
 
 
@@ -57,7 +57,7 @@ def project(fields):
 
 
 def clean_debug_meta(value):
-    """SDK scope 不能往受限事件中加入任意映射元数据。"""
+    """SDK scope must not add arbitrary mapping metadata to restricted events."""
     if not isinstance(value, dict) or not isinstance(value.get("images"), list):
         return None
     identities = {}

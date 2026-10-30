@@ -23,7 +23,7 @@ const LABELS: Record<string, string> = { performer: 'Performer', creator: 'Creat
 const GLYPHS = { all: spriteGlyph('star'), performer: spriteGlyph('user-round'), creator: spriteGlyph('user-round'), studio: spriteGlyph('clapperboard'), series: spriteGlyph('film'), agency: spriteGlyph('briefcase'), tag: spriteGlyph('tags'), filters: spriteGlyph('list-filter') };
 const SCOPES = [['all', 'All'], ...Object.entries(LABELS), ['filters', 'Saved filters']];
 
-/** 实体行内的图标动作，共用收藏按钮的尺寸、悬停与焦点反馈。 */
+/** Icon actions inside entity rows, sharing the favorite button's size, hover and focus feedback. */
 export function EntityActionButton({ label, children, ...props }: ComponentProps<'button'> & { label: string }) {
   return <button type="button" {...props} data-entity-action="" aria-label={label} title={props.title || label}>{children}</button>;
 }
@@ -42,12 +42,12 @@ function FavoriteChoice({ item }: { item: Favorite }) {
     : item.favorite ?? (query.data ? isFavorite(query.data.favorites || [], item) : false);
   return <span className="inline-flex min-w-0 flex-col gap-1">
     <EntityActionButton data-favorite="" aria-pressed={!!selected}
-      label={`${selected ? '取消收藏' : '收藏'}${entityDisplayName(item.kind, item.name, item.entity_id)}`}
+      label={`${selected ? "Unfavorite " : "Favorite "}${entityDisplayName(item.kind, item.name, item.entity_id)}`}
       {...busyProps(write.isPending)} onClick={() => {
         if (!write.isPending) write.mutate({ action: 'favorite', ...item, on: !selected });
       }}>{write.isPending ? <span aria-hidden dangerouslySetInnerHTML={{ __html: spinnerHtml('') }} /> : <Star />}</EntityActionButton>
     {write.isError ? <Note tone="error">{errorMessage(write.error)}</Note> : null}
-    {query.isError ? <Button variant="secondary" size="small" aria-label="立即重试读取收藏" onClick={() => void query.refetch()}>立即重试</Button> : null}
+    {query.isError ? <Button variant="secondary" size="small" aria-label="Retry loading favorites" onClick={() => void query.refetch()}>Retry</Button> : null}
   </span>;
 }
 
@@ -147,28 +147,28 @@ function ShortcutContents({ currentHref, kind, close }: { currentHref?: () => st
       </aside>
       <div ref={content} data-shortcuts-content="" role="tabpanel" id={`${id}-content`} aria-labelledby={`${id}-${scope}`} tabIndex={0} className="flex min-h-0 min-w-0 flex-col gap-4 overflow-y-auto overscroll-contain">
     {query.isPending ? <div aria-busy="true" data-skeleton="" className="h-12 animate-pulse rounded-lg bg-background-secondary-default" /> : null}
-    {query.isError ? <Note tone="error" action={<Button variant="secondary" onClick={() => void query.refetch()}>立即重试</Button>}>{errorMessage(query.error)}</Note> : null}
+    {query.isError ? <Note tone="error" action={<Button variant="secondary" onClick={() => void query.refetch()}>Retry</Button>}>{errorMessage(query.error)}</Note> : null}
     {write.isError ? <Note tone="error">{errorMessage(write.error)}</Note> : null}
     {data ? scope !== 'filters' ? <>
-      <Input aria-label="搜索收藏" placeholder="搜索收藏" leadingIcon={spriteGlyph('search')} value={search} onChange={setSearch} />
-      {!rows.length ? <EmptyState size="compact" icon={Star} title={search ? '没有匹配的收藏' : (data.favorites.length ? '还没有此类收藏' : '还没有收藏')}
-        actions={search ? <Button size="small" onClick={() => setSearch('')}>清除搜索</Button>
-          : data.favorites.length ? <Button size="small" onClick={() => setScope('all')}>查看全部收藏</Button>
-          : <ButtonLink size="small" href="/" onClick={close}>浏览馆藏</ButtonLink>}>
-        {search ? '试试其他名称。' : '在资料页或标签页收藏常用内容。'}
+      <Input aria-label="Search favorites" placeholder="Search favorites" leadingIcon={spriteGlyph('search')} value={search} onChange={setSearch} />
+      {!rows.length ? <EmptyState size="compact" icon={Star} title={search ? 'No matching favorites' : (data.favorites.length ? 'No favorites of this kind yet' : 'No favorites yet')}
+        actions={search ? <Button size="small" onClick={() => setSearch('')}>Clear search</Button>
+          : data.favorites.length ? <Button size="small" onClick={() => setScope('all')}>View all favorites</Button>
+          : <ButtonLink size="small" href="/" onClick={close}>Browse library</ButtonLink>}>
+        {search ? 'Try another name.' : 'Favorite frequently used items from a profile or tag page.'}
       </EmptyState> : null}
       <div data-shortcuts-list="">{rows.map((row) => <div key={row.key} data-shortcuts-row="" className="flex min-w-0 items-center justify-between gap-3">
         <a href={favoriteHref(row)} aria-label={entityDisplayName(row.kind, row.name, row.entity_id)} onClick={close} className="flex min-w-0 flex-1 items-center gap-3 text-body-regular text-text-primary">
           <FavoriteAvatar key={row.image_url} item={row} />
           <span className="flex min-w-0 flex-col gap-1"><span className="truncate">{entityDisplayName(row.kind, row.name, row.entity_id)}</span>
-            <span className="text-caption-1-regular text-text-secondary">{row.scope === 'online' ? '在线标签' : LABELS[row.kind]}</span></span>
+            <span className="text-caption-1-regular text-text-secondary">{row.scope === 'online' ? 'Online tag' : LABELS[row.kind]}</span></span>
         </a>
-        <Button variant="secondary" size="small" aria-label={`取消收藏${entityDisplayName(row.kind, row.name, row.entity_id)}`} {...busyProps(write.isPending)}
-          onClick={() => { if (!write.isPending) write.mutate({ action: 'favorite', ...row, on: false }) }}>取消收藏</Button>
+        <Button variant="secondary" size="small" aria-label={`Unfavorite ${entityDisplayName(row.kind, row.name, row.entity_id)}`} {...busyProps(write.isPending)}
+          onClick={() => { if (!write.isPending) write.mutate({ action: 'favorite', ...row, on: false }) }}>Remove from favorites</Button>
       </div>)}</div>
     </> : <>
-      {!data.filters.length ? <EmptyState size="compact" icon={spriteGlyph('list-filter')} title="还没有保存的筛选"
-        actions={<ButtonLink size="small" href="/" onClick={close}>浏览馆藏</ButtonLink>}>在馆藏页保存当前条件，随时打开。</EmptyState> : null}
+      {!data.filters.length ? <EmptyState size="compact" icon={spriteGlyph('list-filter')} title="No saved filters yet"
+        actions={<ButtonLink size="small" href="/" onClick={close}>Browse library</ButtonLink>}>Save the current criteria on the library page and open them any time.</EmptyState> : null}
       {data.filters.map((row) => <div key={row.id} className="flex min-w-0 items-center justify-between gap-2">
         <a href={row.href} onClick={close} className="min-w-0 flex-1 break-all text-body-regular text-text-primary underline">{row.name}</a>
         <Button variant="secondary" size="small" aria-label={`Delete filter ${row.name}`} {...busyProps(write.isPending)}

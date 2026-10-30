@@ -1,4 +1,4 @@
-"""关注媒体的播放代理；Rule34Video 与 Iwara 的短效地址按需解析。"""
+"""Playback proxy for followed media; Rule34Video and Iwara short-lived addresses are resolved on demand."""
 from __future__ import annotations
 
 import html
@@ -44,8 +44,8 @@ class ResolvedFollowMedia:
     url: str
     referer: str | None = None
     headers: Mapping[str, str] | None = None
-    #: (高度, URL) 按播放优先级排列；Iwara 的 Source 原画可以没有已知高度。
-    #: 没有多档的来源留空，播放器据此只显示「原画」。
+    #: (height, URL) in playback-priority order; Iwara Source originals may have no known height.
+    #: Sources without multiple tiers leave it empty, and the player then shows only "Original".
     qualities: tuple[tuple[int, str], ...] = ()
     #: 这条媒体允许落到哪些主机后缀。解析时已经按它校验过 `url`，代理层跟重定向
     #: 时还要再按它校验每一跳：`headers` 里可能带 Cookie / Bearer token，一旦上游
@@ -117,7 +117,7 @@ def proxyable(provider: str, media_url: str | None) -> bool:
 class FollowMediaResolver:
     """Resolve stable ledger candidates into short-lived upstream playback URLs."""
 
-    #: 缓存里最多留多少条解析结果。Rule34Video 与 Iwara 的短效地址共用此缓存，
+    #: Maximum number of resolved results kept in the cache. Rule34Video and Iwara short-lived addresses share this cache,
     #: 用户挨个点开就会挨个留下一条；只按 TTL 过期的话，进程活多久它就长多久。
     #: 上限按「一屏反复点开也够用」定，超了先丢已过期的，再丢最早写进来的。
     MAX_CACHE_ENTRIES = 256
@@ -156,7 +156,7 @@ class FollowMediaResolver:
             return max(0.0, self._cooldowns.get(provider, 0.0) - self.clock())
 
     def close(self) -> None:
-        """关闭解析器自己持有的 Iwara 浏览器传输。"""
+        """Close the Iwara browser transport held by the resolver itself."""
         if self._iwara_transport is not self.transport:
             self._iwara_transport.close()
 
@@ -169,7 +169,7 @@ class FollowMediaResolver:
         """
         remaining = self.cooling(provider)
         if remaining:
-            raise FollowMediaUnavailable(f"{provider} 限流冷却中，{int(remaining) + 1} 秒后再试")
+            raise FollowMediaUnavailable(f"{provider} is cooling down after rate limiting, {int(remaining) + 1} seconds before retrying")
         response = (transport or self.transport)(request, timeout, max_bytes)
         if response.status in self.REFUSED_STATUSES:
             headers = {key.lower(): value for key, value in response.headers.items()}
@@ -215,7 +215,7 @@ class FollowMediaResolver:
         missed = self._misses.get(item_id)
         if missed is not None:
             if missed > now:
-                raise FollowMediaUnavailable("来源媒体刚刚未取得，稍后再试")
+                raise FollowMediaUnavailable("The source media was just unavailable; try again later")
             del self._misses[item_id]
         return None
 
@@ -298,7 +298,7 @@ class FollowMediaResolver:
 
     def resolve(self, item: FollowItemRow, media_index: int | None = None,
                 height: int | None = None) -> ResolvedFollowMedia:
-        """解析可播地址。`height` 指定 Rule34Video 或 Iwara 的清晰度；
+        """Resolve the playable address. `height` selects the Rule34Video or Iwara quality;
         要的那档不存在就退回默认（最高档），不报错——签名 URL 会过期，
         为一次选档失败中断播放不值得。"""
         media_items = item.metadata.get("media_items")
@@ -343,9 +343,9 @@ class FollowMediaResolver:
             return _pick_quality(self._fetch_rule34video(item), height)
 
     def _fetch_iwara(self, item: FollowItemRow) -> ResolvedFollowMedia:
-        """Iwara 的短效地址只进播放缓存，访问令牌只交给固定 API。"""
+        """Iwara short-lived addresses go only into the playback cache, and the access token goes only to the fixed API."""
         if not item.url or not _allowed("iwara", item.url):
-            raise FollowMediaUnavailable("Iwara 视频地址不可用")
+            raise FollowMediaUnavailable("Iwara video address unavailable")
         loader = getattr(self, "_credential_loader", None)
         credential = loader("iwara") if loader else None
 
@@ -378,7 +378,7 @@ class FollowMediaResolver:
             LOGGER.warning("rule34video detail page for follow item %s unavailable: HTTP %s",
                            item.id, response.status)
             self._remember_miss(item.id)
-            raise FollowMediaUnavailable("Rule34Video 详情页未取得", status_code=response.status)
+            raise FollowMediaUnavailable("Rule34Video detail page not retrieved", status_code=response.status)
         text = response.body.decode("utf-8", errors="replace")
         found: list[str] = []
         for matched in _VIDEO_URL_RE.finditer(text):
@@ -484,5 +484,5 @@ def open_upstream(client: httpx.Client, method: str, target: ResolvedFollowMedia
     if not 200 <= response.status_code < 300 and response.status_code not in accepted_statuses:
         status = response.status_code
         response.close()
-        raise FollowProxyError(f"上游返回 HTTP {status}", status_code=status)
+        raise FollowProxyError(f"Upstream returned HTTP {status}", status_code=status)
     return response

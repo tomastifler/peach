@@ -1,20 +1,20 @@
 """字幕 sidecar：识别、配对、登记，以及播放器要的那份 WebVTT。
 
-职责边界如下：
+ Responsibility boundaries are as follows:
 
 - **识别与配对**（`directory_sidecars`）只看一个目录里的文件名，不碰数据库，也不读
   文件内容。sidecar 按定义就和正片同目录，跨目录的相似文件名一律不算——番号相同的
   两个目录在这个库里很常见，跨目录配对会把「另一版的字幕」挂到这一版上。
 - **登记**（`record`）把配对结论 upsert 进 `asset_subtitle`，幂等，重扫只更新
   `last_seen` 与可变字段；消失的行不删，沿用 `asset` 的约定。
-- **即时发现**（`discover_sidecars`）只读当前视频目录，复用配对判据，不进入子目录或写账本。
+- **Instant discovery**(`discover_sidecars`) reads only the current video directory, reuses the pairing criteria, and neither enters subdirectories nor writes the ledger.
 - **出口**（`decode`、`to_webvtt`）把磁盘上的 srt/ass/ssa/vtt 换成浏览器唯一认识的
   WebVTT。这一段在 Python 里做而不是叫 FFmpeg：每请求一次字幕就起一个子进程，代价
   落在挂载网盘的目录遍历上；而且 FFmpeg 解码失败只给一个退出码，界面要说的是
   「这份字幕的编码认不出来」，两者不是同一件事。
 
 本模块不 import `scan`：方向是 `scan` → `subtitles`。哪些扩展名算视频是扫描层的
-判断，调用方传入视频文件名或视频扩展名集合。
+ judgment, and the caller passes in video file names or a set of video extensions.
 """
 from __future__ import annotations
 
@@ -253,12 +253,12 @@ def subtitles_for(connection: sqlite3.Connection, asset_id: int) -> list[sqlite3
 
 
 def file_key(name: str) -> str:
-    """字幕在当前视频目录内的稳定身份。"""
+    """Stable identity of a subtitle within the current video directory."""
     return "local:" + hashlib.sha256(name.casefold().encode("utf-8")).hexdigest()
 
 
 def discover_sidecars(video: Path, video_suffixes: set[str]) -> list[dict]:
-    """读取正片所在目录，返回配给当前视频的字幕，不写账本。"""
+    """Read the directory holding the main feature and return the subtitles assigned to the current video, without writing the ledger."""
     try:
         with os.scandir(video.parent) as entries:
             names = [entry.name for entry in entries

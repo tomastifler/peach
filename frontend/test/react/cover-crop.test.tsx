@@ -1,4 +1,4 @@
-/* 裁剪封面：点开之后框摆在哪、确认与恢复默认各发什么。
+/* Crop cover：点开之后框摆在哪、确认与恢复默认各发什么。
  *
  * 裁的是取景框不是图片，所以这里看的是「发出去的那组坐标对不对」。 */
 import { notifyManager, QueryClientProvider } from '@tanstack/react-query';
@@ -58,7 +58,7 @@ async function openCrop(props: Record<string, unknown> = {}) {
 it('详情页那枚键说得出它要裁的是哪一张', async () => {
   const { host } = await openCrop();
   expect(host.querySelector('[data-cover-crop]')?.getAttribute('aria-label'))
-    .toBe('Crop cover of ABW-232');
+    .toBe('Crop the cover of ABW-232');
   expect(document.querySelector('[role="dialog"]')).toBeTruthy();
 });
 

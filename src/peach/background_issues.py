@@ -1,22 +1,22 @@
-"""后台服务此刻存在的问题：任务中心「需要处理」那一块的数据源。
+"""Problems the background services have right now: the data source for the Task Center's "Needs attention" section.
 
-每一项是一种持续状态（调度连续失败、公网入口断开、网络不通），不是跑过的一轮，所以
-不写 `task_run`：那张表每类只留 20 条，持续状态写进去会被挤掉，修好以后还会剩下旧记录。
-这里每次请求现读各服务自己的快照，问题消失这一项就不在了。
+ Each item is an ongoing state (consecutive scheduler failures, public entrance disconnected, network down), not a completed round, so it is
+ not written to `task_run`: that table keeps only 20 entries per kind, so an ongoing state written into it would be squeezed out, and after the fix an old record would remain.
+ Here every request reads each service's own snapshot live; when the problem goes away the item is gone.
 
-一项只说是什么、从什么时候开始、去哪儿处理；原因由 `href` 指向的那个设置位置自己讲，
-这里不再复述一遍。高频逐条的失败（站点圆标、头像、单个推送文件）不进来：它们各自有
-任务记录，汇总在这里只会刷屏。
+ An item says only what it is, since when, and where to handle it; the reason is explained by the settings location that `href` points to,
+ it is not repeated here. High-frequency per-item failures (site favicons, avatars, single pushed files) are not included: each has its own
+ task record, and summarizing them here would only flood the screen.
 
-动作按能不能原地修好分：网络、调度、amane 桥、人脸模型这类重跑一次就可能好的给 `retry`
-（界面上一律叫「立即重试」）；要改设置、填凭据的只给链接。每项都带链接，`link_label` 写具体去处。
+ Actions are split by whether they can be fixed in place: network, scheduler, amane bridge and face model (the kind a single rerun may fix) get `retry`
+(the UI always calls it "Retry now"); ones that need settings changed or credentials filled in get only a link. Every item carries a link, `link_label` spells out the specific destination.
 
-时间分两种：`since` 是服务自己记下的起点，两个调度（连续失败里第一轮的开始）和人脸模型
-（那条失败记录的结束时刻）有；其余服务不记失败时刻，`noticed_at` 是这个进程第一次读到
-这一项的时间，会晚于实际发生，重启后重新计。两者不互相顶替。
+ There are two kinds of time: `since` is the start point the service records itself; the two schedulers (the start of the first round in the consecutive failures) and the face model
+(the end time of that failure record) have it; other services do not record a failure time, `noticed_at` is when this process first read
+ the item, which is later than when it actually happened and is recounted after a restart. The two do not substitute for each other.
 
-加一类问题就是往 `PROVIDERS` 里加一个函数：读 `(app_state, contract, config)`，
-返回零到多条 `Issue`。服务没装配时 `getattr` 拿到 None，函数照样返回空。
+ Adding a kind of problem means adding a function to `PROVIDERS` that reads `(app_state, contract, config)`,
+ returns zero or more `Issue`. When a service is not wired up `getattr` gets None, and the function still returns empty.
 """
 from __future__ import annotations
 
@@ -35,12 +35,12 @@ class Issue:
     key: str
     title: str
     href: str
-    #: 链接文案写具体去处（「打开推送设置」），界面直接用。
+    #: Link text names the specific destination ("Open push settings"), and the UI uses it as is.
     link_label: str
     since: str | None = None
-    #: 能一键重试时的 POST 地址；只给自成一体、不需要表单与修订号的动作。
+    #: POST address when one-click retry is possible; only for self-contained actions that need no form or revision number.
     retry: str | None = None
-    #: 重试接口在只读端会被写入端闸门挡掉，界面据此把按钮置灰。
+    #: On a read-only node the retry endpoint is blocked by the writer gate, so the UI greys out the button accordingly.
     retry_available: bool = False
 
 
@@ -58,9 +58,9 @@ def _push_discovery(state, _contract, _config) -> list[Issue]:
     href = "/settings/library#pushDiscovery"
     issues = []
     if snapshot["queue"].get("last_error"):
-        issues.append(Issue("push-discovery", "自动发现新文件入库失败", href, "打开推送设置"))
+        issues.append(Issue("push-discovery", "Automatic discovery of new files for import failed", href, "Open push settings"))
     if snapshot.get("watch_local") and not snapshot.get("local_running") and snapshot.get("local_message"):
-        issues.append(Issue("push-discovery-watch", "本机文件夹监视没有运行", href, "打开推送设置"))
+        issues.append(Issue("push-discovery-watch", "Local folder watcher is not running", href, "Open push settings"))
     return issues
 
 
@@ -76,7 +76,7 @@ def _downloads(_state, contract, _config) -> list[Issue]:
             "AND coalesce(failure_detail, '') <> ''", tuple(TRACKED_STATES)).fetchone()
     if not count:
         return []
-    return [Issue("downloads", f"{count} 个云下载任务对账暂时失败", "/tasks#cloudDownloads", "查看云下载")]
+    return [Issue("downloads", f"{count} cloud download tasks failed reconciliation for now", "/tasks#cloudDownloads", "View cloud downloads")]
 
 
 def _scheduler(attribute: str, key: str, title: str, href: str, link_label: str, retry: str):
@@ -94,12 +94,12 @@ def _scheduler(attribute: str, key: str, title: str, href: str, link_label: str,
 
 def _tunnel(state, _contract, config) -> list[Issue]:
     manager = getattr(state, "tunnel", None)
-    # 残留的状态文件在停用后仍带着上一次的错误，所以先看是不是开着。
+    # A leftover state file still carries the last error after deactivation, so first check whether it is enabled.
     if manager is None or config is None or not config.tunnel.enabled:
         return []
     if not manager.snapshot().error:
         return []
-    return [Issue("tunnel", "公网入口连接失败", "/settings/network#tunnel", "打开公网入口设置")]
+    return [Issue("tunnel", "Public entrance connection failed", "/settings/network#tunnel", "Open public entrance settings")]
 
 
 def _library_sharing(_state, _contract, config) -> list[Issue]:
@@ -108,14 +108,14 @@ def _library_sharing(_state, _contract, config) -> list[Issue]:
     from . import library_sharing
     if library_sharing.snapshot(config)["last_attempt"].get("status") != "failed":
         return []
-    return [Issue("library-sharing", "馆藏分享上传失败", "/settings/maintenance#librarySharing", "打开数据上传设置")]
+    return [Issue("library-sharing", "Library sharing upload failed", "/settings/maintenance#librarySharing", "Open data upload settings")]
 
 
 def _automatic_updates(state, _contract, _config) -> list[Issue]:
     service = getattr(state, "automatic_updates", None)
     if service is None or not service.snapshot().get("error"):
         return []
-    return [Issue("automatic-updates", "自动更新出错", "/settings/maintenance#automaticUpdates", "打开自动更新设置")]
+    return [Issue("automatic-updates", "Automatic update error", "/settings/maintenance#automaticUpdates", "Open automatic update settings")]
 
 
 def _amane_bridge(state, contract, _config) -> list[Issue]:
@@ -125,37 +125,37 @@ def _amane_bridge(state, contract, _config) -> list[Issue]:
     from .metadata_amane import installed
     if installed(tools_root):
         return []
-    # 重建是后台任务，跑着的时候再点只会撞上 409；只读端的写入闸门同样会挡。
+    # Rebuilding is a background task, and clicking again while it runs would only hit 409; the read-only node's writer gate blocks it as well.
     job = getattr(contract, "amane_bridge_job", None)
     building = bool(job and (job.snapshot() or {}).get("status") == "running")
     sync = getattr(state, "sync", None)
     writer = sync is None or not sync.read_only
-    return [Issue("amane-bridge", "amane 桥未安装", "/sources#amane", "打开 amane 设置",
+    return [Issue("amane-bridge", "amane bridge not installed", "/sources#amane", "Open amane settings",
                   retry="/api/scraping/amane-bridge/rebuild", retry_available=writer and not building)]
 
 
 def _network(state, _contract, _config) -> list[Issue]:
     monitor = getattr(state, "network_reachability", None)
-    # 只读快照，不在这里启动探测：探测线程由页面读 `/api/network-status` 时拉起。
+    # Read-only snapshot; probing is not started here: the probe thread is started when the page reads `/api/network-status`.
     if monitor is None or monitor.summary().get("state") != "offline":
         return []
-    return [Issue("network", "网络不通", "/settings/network#peachProxy", "打开 Peach 代理设置",
+    return [Issue("network", "Network unreachable", "/settings/network#peachProxy", "Open Peach proxy settings",
                   retry="/api/network-status/check", retry_available=True)]
 
 
 def _face_models(_state, contract, _config) -> list[Issue]:
     runs = getattr(contract, "task_runs", None)
-    # 账本还没迁移出任务记录表时任务中心整个是关着的，这一行跟着不报。
+    # While the ledger has not yet migrated out the task-run table, the whole Task Center is off, so this row does not report either.
     if runs is None or not runs.available():
         return []
     from . import face_models
     status = face_models.status(runs)
-    # 只有最新一条记录是失败才报：还没取过（`missing`）下次用到时会自己去取，不算问题；
-    # 重新下载在跑时这一行先收起。失败原因只在那张任务卡上写，链接指过去。
+    # Report only when the latest record is a failure: not yet fetched (`missing`), it will fetch itself the next time it is needed and is not counted as a problem;
+    # While a re-download is running this row stays collapsed. The failure reason is written only on that task card, and the link points there.
     if status["state"] != "failed":
         return []
-    # 模型存在本机工具目录、不碰账本，只读端同样可以重取。
-    return [Issue("face-models", "人脸模型下载失败", f"/tasks#run-{status['run_id']}", "查看失败记录",
+    # The model is stored in the machine's tool directory and does not touch the ledger, so a read-only node can re-fetch it too.
+    return [Issue("face-models", "Face model download failed", f"/tasks#run-{status['run_id']}", "View failure record",
                   since=status["failed_at"], retry=status["retry_url"], retry_available=True)]
 
 
@@ -164,10 +164,10 @@ Provider = Callable[[Any, Any, Any], Iterable[Issue]]
 PROVIDERS: tuple[Provider, ...] = (
     _network,
     _tunnel,
-    _scheduler("follow_scheduler", "follow-schedule", "关注自动检查失败",
-               "/settings/subscriptions#followScheduleSetting", "打开关注调度", "/api/follow/schedule/run"),
-    _scheduler("feed_scheduler", "feed-schedule", "订阅源自动拉取失败",
-               "/settings/subscriptions#feedScheduleSetting", "打开订阅源调度", "/api/feeds/schedule/run"),
+    _scheduler("follow_scheduler", "follow-schedule", "Follow auto-check failed",
+               "/settings/subscriptions#followScheduleSetting", "Open follow schedule", "/api/follow/schedule/run"),
+    _scheduler("feed_scheduler", "feed-schedule", "Feed auto-fetch failed",
+               "/settings/subscriptions#feedScheduleSetting", "Open feed schedule", "/api/feeds/schedule/run"),
     _push_discovery,
     _downloads,
     _automatic_updates,
@@ -178,7 +178,7 @@ PROVIDERS: tuple[Provider, ...] = (
 
 
 class IssueLog:
-    """记下每一项第一次被读到的时刻；那一项消失就忘掉，再出现时重新计。"""
+    """Record the first time each item was read; forget it when the item disappears, and recount when it reappears."""
 
     def __init__(self, clock: Callable[[], float] = time.time):
         self.clock = clock
@@ -190,8 +190,8 @@ class IssueLog:
         for provider in providers:
             try:
                 issues.extend(provider(state, contract, config))
-            except Exception:  # 一个服务读坏了不该让整块消失
-                LOGGER.exception("读取后台问题失败：%s", getattr(provider, "__name__", provider))
+            except Exception:  # one service failing to read must not make the whole block disappear
+                LOGGER.exception("Failed to read background issues: %s", getattr(provider, "__name__", provider))
         now = _stamp(self.clock())
         with self._lock:
             current = {issue.key for issue in issues}

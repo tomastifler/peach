@@ -1,4 +1,4 @@
-/** 语言写法只用于标签。查询、路由和写入始终使用调用方持有的原始名称与 ID。 */
+/** The language spelling is only used for labels. Queries, routes and writes always use the original name and ID held by the caller. */
 export type NameLanguage = 'zh-CN' | 'ja';
 export interface NameWriting {
   id: number; kind: string; canonical_name: string; zh_cn: string | null; ja: string | null;
@@ -61,5 +61,5 @@ export function entityDisplayName(kind: string, name: string, id?: number | null
 export function nameFallback(kind: string, name: string, id?: number | null): string {
   const row = entityWriting(kind, name, id);
   if (!row || (language === 'ja' ? row.ja : row.zh_cn)) return '';
-  return language === 'ja' ? '暂无已核对的日文原文，保留当前名称' : '暂无已核对的中文写法，保留当前名称';
+  return language === 'ja' ? 'No verified Japanese original; keeping the current name' : 'No verified Chinese form; keeping the current name';
 }

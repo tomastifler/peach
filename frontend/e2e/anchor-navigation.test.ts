@@ -24,7 +24,7 @@ describe('跨页锚点定位', () => {
               records: { play_count: 1 }, candidates: [] }] } });
           });
           await page.route('**/api/sources', route => route.fulfill({ json: { sources: [{
-            location: 'local', online: true, roots: ['D:\\Media'], label: '本地',
+            location: 'local', online: true, roots: ['D:\\Media'], label: 'Local',
           }] } }));
           await page.route('**/api/resource-sync/scan', route => route.fulfill({ json: { status: 'idle' } }));
           await page.route('**/api/resource-sync/apply', route => route.fulfill({ json: { status: 'idle' } }));

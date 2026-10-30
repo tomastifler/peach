@@ -1,4 +1,4 @@
-"""当前所选艺名的中日显示写法；只读投影，不更改规范名或作品署名。"""
+"""Chinese and Japanese display spellings of the currently selected stage name; a read-only projection that does not change canonical names or work credits."""
 from __future__ import annotations
 
 import json
@@ -16,8 +16,8 @@ _KANA = re.compile(r"[\u3040-\u30ff]")
 _LATIN = re.compile(r"[A-Za-z]")
 _BRACKET = re.compile(r"[()（）【】\[\]]")
 _SENTENCE = re.compile(r"中に.+ながらも|を実現して|を我慢でき|現在は|正式女優名")
-# 已核对的同一艺名译写。仅当资料原文含对应日文写法时使用，
-# 不把同一人物的新旧艺名当作语言对应。
+# Verified translations of the same stage name. Used only when the metadata original contains the corresponding Japanese spelling,
+# never treating a person's old and new stage names as a language correspondence.
 _REVIEWED_WRITINGS = (
     ("枫花恋", "楓カレン"),
     ("田中柠檬", "田中レモン"),
@@ -31,7 +31,7 @@ def _key(name: str) -> str:
 
 
 def writing(canonical: str, page: dict, source_url: str) -> dict:
-    """只对当前统称找写法；资料页主名与统称不对应时不采用主名。"""
+    """Look up spellings only for the current umbrella name; do not adopt the main name when the metadata page's main name does not correspond to the umbrella name."""
     original = list(dict.fromkeys(
         name for name in [page["name"], *(entry["name"] for entry in page["aliases"])] if name))
     key = _key(canonical)
@@ -39,7 +39,7 @@ def writing(canonical: str, page: dict, source_url: str) -> dict:
         if key in {_key(zh), _key(ja)} and ja in original:
             return {"zh_cn": zh, "ja": ja, "source": source_url, "basis": "reviewed-writing"}
     matches = [name for name in original if _key(name) == key]
-    # 多个原文写法折为相同字形时，只有主名确定属于当前艺名才选主名。
+    # When several original spellings fold into the same glyphs, the main name is chosen only if it definitely belongs to the current stage name.
     ja = page["name"] if page["name"] in matches else matches[0] if len(matches) == 1 else None
     zh = simplify_kanji(canonical) if not _KANA.search(canonical) else None
     if _LATIN.search(canonical):
@@ -56,7 +56,7 @@ def _stage_key(name: str, page: dict) -> str:
 
 
 class _NameEvidence:
-    """资料原文、读音和别名来源构成的艺名判别证据。"""
+    """Stage-name discrimination evidence formed from metadata originals, readings and alias sources."""
 
     def __init__(self, canonical: str, aliases: list[dict], page: dict):
         self.canonical = canonical
@@ -85,7 +85,7 @@ class _NameEvidence:
 
 
 def _registered_stages(canonical: str, aliases: list[dict], page: dict, source_url: str) -> dict:
-    """按同一艺名归并写法，同时保留实际登记值。"""
+    """Merge spellings by the same stage name while keeping the actually registered values."""
     evidence = _NameEvidence(canonical, aliases, page)
     stages: dict[str, dict] = {}
     ordered = [canonical, page["name"], *(entry["name"] for entry in page["aliases"]),
@@ -103,7 +103,7 @@ def _registered_stages(canonical: str, aliases: list[dict], page: dict, source_u
 
 
 def _language_groups(stages: dict, canonical: str, page: dict, grouped: dict | None, field: str) -> dict:
-    """保留来源分组，去除当前艺名的重复写法，按语言展示别名和读音。"""
+    """Keep source groupings, remove duplicate spellings of the current stage name, and show aliases and readings by language."""
     current_key = _stage_key(canonical, page)
     taken = {current_key}
     sections = []
@@ -131,7 +131,7 @@ def _language_groups(stages: dict, canonical: str, page: dict, grouped: dict | N
 
 
 def display(connection, entity_id: int, canonical: str, aliases: list[dict], grouped: dict | None) -> dict:
-    """名称菜单与别名行共享语言投影；原始别名和可选名称的值不改写。"""
+    """The name menu and alias rows share the language projection; raw aliases and the values of selectable names are not rewritten."""
     profile = read_profile(connection, entity_id)
     page = page_names(profile)
     source_url = (profile or {}).get("source_url", "")
@@ -150,7 +150,7 @@ def display(connection, entity_id: int, canonical: str, aliases: list[dict], gro
 
 
 def variants(connection) -> list[dict]:
-    """资料形状接口同时交付只读显示写法；缺失对应关系明确保留为空。"""
+    """The metadata-shape interface also delivers read-only display spellings; a missing correspondence is explicitly kept empty."""
     people = list(connection.execute(
         "SELECT id,kind,canonical_name FROM entity WHERE kind IN ('performer','creator')"))
     categories = entity_classification.summaries(connection, [row["id"] for row in people])

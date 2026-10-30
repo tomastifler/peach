@@ -1,4 +1,4 @@
-"""从媒体库路径与网盘能力生成可提交云下载的渠道。"""
+"""Generate channels that can submit cloud downloads from library paths and cloud drive capabilities."""
 from __future__ import annotations
 
 import hashlib
@@ -22,7 +22,7 @@ def root_key(value):
 
 
 class LibraryChannels:
-    """能力只读探测，缓存随媒体路径、下载设置和凭据变化失效。"""
+    """Capabilities are probed read-only; the cache is invalidated when media paths, download settings or credentials change."""
 
     def __init__(self, service, names, *, client=CloudDriveClient, clock=time.monotonic):
         self.service, self.names, self.client, self.clock = service, names, client, clock
@@ -42,13 +42,13 @@ class LibraryChannels:
             cloud = service.credentials.load(CLOUDDRIVE_CREDENTIAL)
         except CredentialError:
             cloud = None
-            problems.append("CloudDrive2 令牌无法读取，请重新填写。")
+            problems.append("CloudDrive2 token cannot be read; please re-enter it.")
         token = str(cloud.values.get("token", "")) if cloud else ""
         try:
             pikpak = service.credentials.describe(PIKPAK_CREDENTIAL)
         except CredentialError:
             pikpak = {"fields": []}
-            problems.append("PikPak 登录信息无法读取，请重新登录。")
+            problems.append("PikPak login information cannot be read; please log in again.")
         logged_in = "refresh_token" in pikpak["fields"]
         fingerprint = (repr(config.payload()), repr(roots), repr(prefixes), repr(names),
                        repr(getattr(service.landing, "mounts", {})), logged_in,
@@ -75,12 +75,12 @@ class LibraryChannels:
                     phase = 'token_permissions'
                     permissions = client.token_info().permissions
                     if not (permissions.allow_add_offline_download and permissions.allow_list_offline_downloads):
-                        problems.append("CloudDrive2 令牌需要提交和查看离线任务权限。")
+                        problems.append("CloudDrive2 token needs permission to submit and view offline tasks.")
                     else:
                         mounts = []
                         if getattr(permissions, "allow_get_mounts", False):
                             try:
-                                mounts = client.call("GetMountPoints", Empty(), "读取媒体库挂载点").mountPoints
+                                mounts = client.call("GetMountPoints", Empty(), "read library mount points").mountPoints
                             except DownloadError as error:
                                 local_event('download-channel-probe', error, operation='mount_points',
                                             source='clouddrive', failure=error.failure)
@@ -100,11 +100,11 @@ class LibraryChannels:
                             except DownloadError as error:
                                 local_event('download-channel-probe', error, operation='folder_capabilities',
                                             source=source, failure=error.failure)
-                                problems.append(f"{names.get(root_key(root)) or SOURCES[source].name}的云下载能力未取得。")
+                                problems.append(f"{names.get(root_key(root)) or SOURCES[source].name} cloud download capability not obtained.")
             except DownloadError as error:
                 local_event('download-channel-probe', error, operation=phase,
                             source='clouddrive', failure=error.failure)
-                problems.append("CloudDrive2 云下载能力未取得，请检查连接与令牌。")
+                problems.append("CloudDrive2 cloud download capability not obtained; please check the connection and token.")
         return {"providers": rows, "problems": list(dict.fromkeys(problems))}
 
     def _candidates(self, roots, prefixes, mounts, direct, names, problems):
@@ -118,7 +118,7 @@ class LibraryChannels:
             mount = mapped[index] if index < len(mapped) else root
             remote = media_remote_path(root, mount, prefixes, mounts)
             if not remote:
-                problems.append(f"{names.get(root_key(root)) or SOURCES[source].name}尚未关联云端目录，请检查挂载或推送发现配置。")
+                problems.append(f"{names.get(root_key(root)) or SOURCES[source].name} has no associated cloud directory yet; please check the mount or push discovery configuration.")
                 continue
             prefix = normalise_prefix(remote)
             target = self.service.config.targets.get(source, "")

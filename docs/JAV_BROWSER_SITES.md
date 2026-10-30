@@ -6,7 +6,7 @@ Peach validates source addresses with the `web/integrations/jav-sites.json` rele
 
 ## Integration Methods
 
-「自动识别」使用作品详情页主标题和明确番号字段；DMM、MGS 的详情地址交给 Peach 现有商品号解析器识别。识别不到或存在冲突时使用脚本菜单。「选中番号」需要先选中一个完整番号，选择脚本菜单「选中番号加入 Peach」，再点击添加按钮。两种方式都由 Peach 校验番号并执行同一条磁力搜索、云下载和入库流程。
+"Auto-detect" uses the main title of the work's detail page and explicit code fields; the detail URLs of DMM and MGS are handed to Peach's existing product-number resolver. When nothing is recognized or the results conflict, use the userscript menu. "Selected code" needs a complete code selected first: choose the userscript menu item "Add selected code to Peach", then click the add button. Both methods have Peach validate the code and run the same magnet search, cloud download and ingest flow.
 
 ## Gap Filling
 

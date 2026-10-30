@@ -1,4 +1,4 @@
-/* 编辑与确认沿用 formModal / confirmModal，表单字段复用 BoardUI。 */
+/* Editing and confirmation reuse formModal / confirmModal, and form fields reuse BoardUI. */
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { confirmModal, formModal } from '@peach/legacy/ui';
@@ -16,8 +16,8 @@ export type Operation = 'rename' | 'merge' | 'hide' | 'restore' | 'repair' | 'bl
 export interface Command { operation: Operation; ids: TagId[]; name?: string; target_id?: TagId; scope?: TagScope }
 interface Plan { token: string; name?: string; assets: number; overlap: number; tags: ManagedTag[] }
 export const TAG_ACTION_LABELS: Record<Operation, string> = {
-  rename: '重命名标签', merge: '合并标签', hide: '隐藏标签', restore: '恢复标签', repair: '整理重复标签',
-  block: '屏蔽内容', unblock: '恢复内容',
+  rename: 'Rename tag', merge: 'Merge tags', hide: 'Hide tag', restore: 'Restore tag', repair: 'Tidy duplicate tags',
+  block: 'Block content', unblock: 'Unblock content',
 };
 
 export const previewTagOperation = (command: Command, signal?: AbortSignal) =>
@@ -25,18 +25,18 @@ export const previewTagOperation = (command: Command, signal?: AbortSignal) =>
 
 export async function confirmTagOperation(command: Command, plan: Plan, signal?: AbortSignal) {
   if (signal?.aborted) return false;
-  const names = plan.tags.map(tag => `「${tag.k}」`).join('、');
+  const names = plan.tags.map(tag => `"${tag.k}"`).join(', ');
   const consequence = command.operation === 'merge' || command.operation === 'repair'
-    ? `合并 ${plan.tags.length} 个标签，涉及 ${plan.assets} 个资源，重叠关联 ${plan.overlap} 个。旧名称保留为别名。此操作无法直接撤销。`
-    : command.operation === 'rename' ? `${names}将更名为「${plan.name || command.name}」，涉及 ${plan.assets} 个资源。旧名称保留为别名。`
-      : command.operation === 'block' ? `屏蔽带有${names}任一标签的内容及其其它版本，涉及 ${plan.assets} 个资源。可在「已屏蔽内容」中恢复。`
-        : command.operation === 'unblock' ? `解除${names}的内容屏蔽，涉及 ${plan.assets} 个资源。`
-          : `${command.operation === 'hide' ? '隐藏' : '恢复'} ${plan.tags.length} 个标签，涉及 ${plan.assets} 个资源。${command.operation === 'hide' ? '可在“已隐藏”中恢复。' : ''}`;
+    ? `Merge ${plan.tags.length} tags, affecting ${plan.assets} resources, with ${plan.overlap} overlapping links. Old names are kept as aliases. This cannot be undone directly.`
+    : command.operation === 'rename' ? `${names} will be renamed to "${plan.name || command.name}", affecting ${plan.assets} resources. Old names are kept as aliases.`
+      : command.operation === 'block' ? `Block content with any of the tags ${names} and its other versions, affecting ${plan.assets} resources. You can restore it in "Blocked content".`
+        : command.operation === 'unblock' ? `Unblock content for ${names}, affecting ${plan.assets} resources.`
+          : `${command.operation === 'hide' ? 'Hide' : 'Restore'} ${plan.tags.length} tags, affecting ${plan.assets} resources.${command.operation === 'hide' ? 'You can restore them in "Hidden".' : ''}`;
   const done = await confirmModal({ title: TAG_ACTION_LABELS[command.operation], body: consequence,
     confirmLabel: TAG_ACTION_LABELS[command.operation], onConfirm: () => apiSend('/api/tag-management', { ...command, token: plan.token }, 'POST', signal) });
   if (!done.confirmed || signal?.aborted) return false;
   await queryClient.invalidateQueries();
-  showToast(`tag-management-${Date.now()}`, { html: `已${TAG_ACTION_LABELS[command.operation]}`, alert: false, timeout: 6000, action: null });
+  showToast(`tag-management-${Date.now()}`, { html: `Done: ${TAG_ACTION_LABELS[command.operation]}`, alert: false, timeout: 6000, action: null });
   return true;
 }
 
@@ -50,7 +50,7 @@ export function TagEditor({ operation, selected, close, done, scope = 'local' }:
   useEffect(() => {
     const controller = new AbortController();
     const given = initial.current;
-    const dialog = formModal({ title: TAG_ACTION_LABELS[given.operation], confirmLabel: '预览影响范围', confirmDisabled: true,
+    const dialog = formModal({ title: TAG_ACTION_LABELS[given.operation], confirmLabel: 'Preview affected scope', confirmDisabled: true,
       body: '<div class="peach-react" data-tag-editor-fields></div>',
       onConfirm: async () => {
         const command: Command = { operation: given.operation, ids: given.selected.map(managedTagId), ...(given.scope === 'online' ? { scope: given.scope } : {}),
@@ -83,8 +83,8 @@ function TagFields({ operation, selected, dialog, update }: {
     update({ name, target_id: target });
     dialog.confirmButton.disabled = operation === 'rename' && (!name.trim() || name.trim() === selected[0]?.k);
   }, [name, target, dialog, operation, selected, update]);
-  return operation === 'rename' ? <Input autoFocus aria-label="标签名称" value={name} onChange={setName} maxLength={80} />
-    : <Select aria-label="保留的标签" prefix="保留" selectedKey={String(target)} onSelectionChange={key => {
+  return operation === 'rename' ? <Input autoFocus aria-label="Tag name" value={name} onChange={setName} maxLength={80} />
+    : <Select aria-label="Tag to keep" prefix="Keep" selectedKey={String(target)} onSelectionChange={key => {
       const row = selected.find(tag => String(managedTagId(tag)) === String(key)); if (row) setTarget(managedTagId(row));
     }}>
       {selected.map(row => <SelectItem key={managedTagId(row)} id={String(managedTagId(row))}>{row.k}</SelectItem>)}

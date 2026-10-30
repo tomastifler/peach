@@ -1,4 +1,4 @@
-/* 检查执行期间，断口周围的四条短线闪烁。 */
+/* While the check runs, the four short lines around the break flicker. */
 import './link-check-icon.css';
 
 export function LinkCheckIcon({ className }: { className?: string }) {

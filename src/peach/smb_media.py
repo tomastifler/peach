@@ -1,4 +1,4 @@
-"""SMB 媒体资源与媒体工具的回环读取入口。"""
+"""SMB loopback read entry point for media resources and media tools."""
 from __future__ import annotations
 
 import atexit
@@ -18,20 +18,20 @@ from urllib.parse import quote, unquote, urlsplit
 
 
 def address(value: str) -> tuple[str, str, tuple[str, ...], int]:
-    """解析不含凭据的共享地址；路径始终限定在一个共享内。"""
+    """Parse a share address without credentials; the path is always confined to one share."""
     try:
         parsed = urlsplit(value)
         port = parsed.port or 445
     except ValueError:
-        raise ValueError("SMB 地址或端口无效") from None
+        raise ValueError("SMB address or port invalid") from None
     if (parsed.scheme != 'smb' or not parsed.hostname or parsed.username is not None
             or parsed.password is not None or parsed.query or parsed.fragment
             or not 1 <= port <= 65535 or any(ord(c) < 33 or c in '\\/%' for c in parsed.hostname)):
-        raise ValueError("请填写 smb://服务器/共享/目录，账号和密码单独填写")
+        raise ValueError("Please enter smb://server/share/directory; enter the account and password separately")
     parts = tuple(unquote(part) for part in parsed.path.split('/') if part)
     if not parts or any(part in {'.', '..'} or any(c in part for c in '\\/:\x00')
                         or any(ord(c) < 32 for c in part) for part in parts):
-        raise ValueError("SMB 地址需要共享名，目录不能包含上级目录或路径分隔符")
+        raise ValueError("SMB address needs a share name, and the directory cannot contain parent directories or path separators")
     return parsed.hostname, parts[0], parts[1:], port
 
 
@@ -47,7 +47,7 @@ def is_address(value) -> bool:
 
 
 def source_identity(value):
-    """将本进程媒体工具的回环地址还原为账本路径。"""
+    """Restore this process's media-tool loopback address to a ledger path."""
     if _BRIDGE is None or not isinstance(value, str):
         return value
     prefix = f'http://127.0.0.1:{_BRIDGE.server.server_port}/{_BRIDGE.secret}/'
@@ -72,7 +72,7 @@ def save_credentials(config, sources):
                         if value.get('transport') == 'smb'
                         and canonical(value['mount']) == canonical(row['path'])), None)
         if root_id is None:
-            raise ValueError('SMB 媒体目录身份无效')
+            raise ValueError('SMB media directory identity invalid')
         key = 'smb-' + root_id
         previous = store.load(key)
         values = dict(previous.values) if previous else {}
@@ -84,7 +84,7 @@ def save_credentials(config, sources):
         username = row.get('smb_username', values.get('username', ''))
         password = row.get('smb_password', '')
         if not isinstance(username, str) or not isinstance(password, str):
-            raise ValueError('SMB 账号和密码必须是文字')
+            raise ValueError('SMB account and password must be text')
         if username != values.get('username', ''):
             values.pop('password', None)
         values['username'] = username
@@ -100,7 +100,7 @@ def save_credentials(config, sources):
 
 @contextmanager
 def credential_transaction(config, sources):
-    """配置文件替换失败时恢复本次涉及的本机凭据。"""
+    """Restore the local credentials involved when the configuration file replacement fails."""
     store = credential_store(config)
     keys = {'smb-' + key for key, value in config.storage_roots.items()
             if value.get('transport') == 'smb'
@@ -131,7 +131,7 @@ def connection_for(config, root_id: str, uri: str):
 
 @dataclass(frozen=True)
 class SmbResource:
-    """以账本路径标识的远端资源；不实现操作系统路径协议。"""
+    """A remote resource identified by a ledger path; does not implement the operating system path protocol."""
     root_id: str
     ledger_root: str
     uri: str
@@ -177,7 +177,7 @@ class SmbResource:
         from dataclasses import replace
         parts = tuple(relative)
         if any(part in {'.', '..'} or any(c in part for c in '/\\:\x00') for part in parts):
-            raise ValueError('媒体目录越界')
+            raise ValueError('Media directory out of bounds')
         return replace(self, relative=parts)
 
     def joinpath(self, *parts):
@@ -236,9 +236,9 @@ class SmbResource:
 
     def open(self, mode='rb'):
         if mode not in ('rb', 'wb', 'xb', 'ab', 'r+b'):
-            raise ValueError('SMB 文件模式无效')
+            raise ValueError('SMB file mode invalid')
         if mode != 'rb' and not self.relative:
-            raise PermissionError('不能写入声明的媒体根目录')
+            raise PermissionError('Cannot write to the declared media root directory')
         transport = self._transport()
         try:
             handle = (transport.open(self.remote_parts) if mode == 'rb' else
@@ -265,16 +265,16 @@ class SmbResource:
 
     def rename(self, target):
         if not isinstance(target, SmbResource) or target.root_id != self.root_id or target.uri != self.uri:
-            raise OSError(errno.EXDEV, 'SMB 改名仅支持同一媒体根目录')
+            raise OSError(errno.EXDEV, 'SMB rename supports only the same media root directory')
         if not self.relative or not target.relative:
-            raise PermissionError('不能修改声明的媒体根目录')
+            raise PermissionError('Cannot modify the declared media root directory')
         with self._transport() as transport:
             transport.rename(self.remote_parts, target.remote_parts)
         return target
 
     def unlink(self, missing_ok=False):
         if not self.relative:
-            raise PermissionError('不能删除声明的媒体根目录')
+            raise PermissionError('Cannot delete the declared media root directory')
         try:
             with self._transport() as transport:
                 transport.unlink(self.remote_parts)
@@ -284,7 +284,7 @@ class SmbResource:
 
     def rmdir(self):
         if not self.relative:
-            raise PermissionError('不能删除声明的媒体根目录')
+            raise PermissionError('Cannot delete the declared media root directory')
         with self._transport() as transport:
             transport.unlink(self.remote_parts, directory=True)
 
@@ -292,7 +292,7 @@ class SmbResource:
         if not self.relative:
             if exist_ok and self.is_dir():
                 return
-            raise PermissionError('不能创建或替换声明的媒体根目录')
+            raise PermissionError('Cannot create or replace the declared media root directory')
         if parents:
             self.parent.mkdir(mode, parents=True, exist_ok=True)
         try:
@@ -319,7 +319,7 @@ class _OwnedReader(io.IOBase):
 
     def write(self, data):
         if not self.writable():
-            raise io.UnsupportedOperation('SMB 句柄不可写')
+            raise io.UnsupportedOperation('SMB handle is not writable')
         return self.handle.write(data)
 
     def flush(self):
@@ -357,7 +357,7 @@ class _OwnedReader(io.IOBase):
 
 
 def resolve(raw, config=None):
-    """仅解析已声明的 SMB 根；普通本机文件返回 None。"""
+    """Resolve only declared SMB roots; ordinary local files return None."""
     if isinstance(raw, SmbResource):
         return raw
     from . import media_identity, settings_file
@@ -379,7 +379,7 @@ def resolve(raw, config=None):
 
 
 def input_url(source):
-    """本机路径原样交给工具；SMB 资源生成进程内有效的回环地址。"""
+    """Local paths are handed to the tool as is; SMB resources get a loopback address valid within the process."""
     resource = resolve(source)
     return _bridge().register(resource) if resource else str(source)
 
@@ -459,7 +459,7 @@ class _Bridge:
                 while remaining > 0:
                     block = handle.read(min(1 << 20, remaining))
                     if not block:
-                        raise OSError('SMB 文件在读取期间发生变化')
+                        raise OSError('SMB file changed during reading')
                     self.wfile.write(block)
                     remaining -= len(block)
 

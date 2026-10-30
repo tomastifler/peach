@@ -80,8 +80,8 @@
 /* 侧栏光晕的参数区。它跟着上面那一行开关走，关掉就整块收起来——一组调不出任何效果的
    拉条和色块留在原地，读的人只会以为是坏了。
 
-   分组统一留左侧 12px；设置行、光晕参数区与侧栏排序区的边界延伸到卡片右沿。
-   每块内容的右内边距保留 10px，使读数、色块与动作避开圆角。
+   Groups all keep 12px on the left; the edges of the setting rows, glow settings area and sidebar order area extend to the card's right edge.
+   Each block keeps 10px of right padding so readouts, color swatches and actions stay clear of the rounded corner.
 
    版式照 feralui.dev/gradients 的工作台面板：分组标题是一行小号灰字，参数行是
    「84px 标签 + 自绘拉条 + 等宽读数」，颜色行点开在自己下方弹一张色板。
@@ -116,13 +116,13 @@
 [data-settings-panel] [data-glow-field][hidden],[data-settings-panel] [data-glow-group][hidden]{display:none}
 [data-settings-panel] [data-glow-field-label]{flex:none;width:84px;color:var(--muted);font-size:var(--fs-xs);font-weight:400;white-space:nowrap}
 [data-settings-panel] [data-glow-field] [class~=ui-dial]{flex:1;min-width:0}
-/* 颜色行与设置行共用左侧内缩、右侧通栏的分隔线。 */
+/* Color rows and setting rows share dividers inset on the left and full-width on the right. */
 [data-settings-panel] [data-glow-stops]{display:grid;min-width:0}
 [data-settings-panel] [data-glow-colour-card]{overflow:hidden}
 [data-settings-panel] [data-glow-stop]{position:relative;min-width:0;border-bottom:1px solid var(--line-soft)}
 [data-settings-panel] [data-glow-stop]:last-child{border-bottom:0}
 [data-settings-panel] [data-glow-stop-toggle]{display:flex;align-items:center;gap:10px;width:calc(100% + 12px);margin-left:-12px;min-width:0;min-height:var(--glowrow-min);padding:var(--glowrow-pad) 10px var(--glowrow-pad) 12px;border:0;border-radius:0;background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
-/* 行反馈向上下各覆盖 1px，使相邻分隔线融入反馈面；边框仍占位，切换状态不改变行高。 */
+/* Row feedback overlaps 1px above and below so adjacent dividers blend into the feedback surface; the border still takes space, so switching state does not change row height. */
 [data-settings-panel] [data-glow-stop-toggle]:hover,[data-settings-panel] [data-glow-stop-toggle][aria-expanded="true"]{position:relative;z-index:1;background:var(--control-hover);box-shadow:0 -1px 0 var(--control-hover),0 1px 0 var(--control-hover)}
 [data-settings-panel] [data-glow-stop-toggle]:focus-visible{outline:2px solid var(--tungsten);outline-offset:-2px}
 [data-settings-panel] [data-glow-stop-toggle]>svg{width:var(--icon-inline);height:var(--icon-inline);flex:none;margin-left:auto;color:var(--muted);stroke:currentColor;fill:none}
@@ -160,7 +160,7 @@
 [data-settings-panel] [data-sidebar-setting]>span small{margin-top:3px;color:var(--muted);line-height:1.45}
 [data-settings-panel] [data-sidebar-order]{display:grid;gap:6px}
 /* 这一列的行、下面那个下拉和「添加」按钮同高：它们是同一张清单的三段，差几像素就
-   看得出是两拨控件。紧凑档的图标钮加上下 1px 内边距和 1px 边框正好是 --control-h。 */
+   it reads as two groups of controls. The compact icon button plus 1px vertical padding and a 1px border is exactly --control-h. */
 [data-settings-panel] [data-sidebar-row]{position:relative;display:flex;align-items:center;justify-content:space-between;min-height:var(--control-h);padding:1px 5px;border:1px solid var(--line-soft);border-radius:var(--surface-radius);background:var(--surface);cursor:grab}
 [data-settings-panel] [data-sidebar-row]:active{cursor:grabbing}
 [data-settings-panel] [data-sidebar-row][data-dragging]{opacity:.42}
@@ -169,7 +169,7 @@
 [data-settings-panel] [data-sidebar-row][data-drop="after"]::after{bottom:-5px}
 [data-settings-panel] [data-sidebar-row]>span{display:flex;align-items:center;gap:8px}
 [data-settings-panel] [data-sidebar-row] svg{width:18px;height:18px;stroke:currentColor;fill:none}
-/* 名目前那枚字形与名字同行，随字号缩放；拖柄和右端的上移、下移键仍按键的尺寸。 */
+/* The glyph before the name sits on the same line as the name and scales with font size; the drag handle and the move-up and move-down keys at the right end keep the key size. */
 [data-settings-panel] [data-sidebar-label]>svg{width:var(--icon-inline);height:var(--icon-inline)}
 [data-settings-panel] [data-sidebar-label]{min-width:0}
 [data-settings-panel] [data-sidebar-label]>b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -203,7 +203,7 @@
 /* ── Board 外观 ──
  * 下面这一层照 BoardUI 的设置弹层改写上面的骨架：两栏卡片、左栏玻璃、分组灰卡与紧凑控件。
  * 同权重时后写的胜出，这个顺序是外观的一部分。 */
-/* 侧栏排序区和设置行共用边界、上下行距与右侧内容留白。 */
+/* The sidebar order area and setting rows share edges, vertical spacing and right-side content padding. */
 [data-settings-panel] [data-settings-card] [data-settings-scroll] [data-sidebar-setting]{padding:10px 10px 10px 0!important;margin:0!important}
 [data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-sort-controls]>[hidden]{display:none}
 [data-settings-panel] [data-number-setting]{display:flex;align-items:center;gap:12px;flex-direction:row-reverse}
@@ -341,7 +341,7 @@ html[data-theme-snapshot] [data-settings-panel] :is([data-settings-glide],[data-
 @media (prefers-reduced-motion:reduce){[data-settings-panel] [data-toggle],[data-settings-panel] [data-toggle]::after,[data-settings-panel] [data-toggle]::before{transition:none}}
 @media (max-width:760px){[data-settings-panel][data-settings-panel]{padding:12px;grid-template-columns:minmax(0,1fr)}}
 @media (max-width:760px){[data-settings-panel] [data-settings-card][data-settings-card]{width:calc(100vw - 24px);max-width:calc(100vw - 24px);min-width:0}}
-/* 设置行按标题与控件的实际宽度换行，控件始终靠右。 */
+/* Setting rows wrap by the actual widths of title and control, and the control always stays on the right. */
 @media (max-width:760px){
   [data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-row]{display:flex;flex-wrap:wrap;gap:8px 12px}
   [data-settings-panel] [data-settings-card] [data-settings-scroll] [data-setting-row]>:first-child{flex:1 1 max-content;min-width:0}

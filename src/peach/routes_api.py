@@ -281,13 +281,13 @@ def clouddrive_inbox(request: Request, body: dict[str, Any] = Body(default_facto
 
 @router.get("/api/background-issues")
 def background_issues(request: Request, _args: dict[str, str] = Depends(require_auth)):
-    """任务中心「需要处理」：各后台服务此刻存在的问题。只读，不出网，不启动任何服务。"""
+    """Task Center "Needs attention": the problems each background service has right now. Read-only, no network access, and no service is started."""
     from . import settings_file
     state = request.app.state
     try:
         config = settings_file.load_config()
     except settings_file.SettingsFileError:
-        # 设置文件本身坏了由配置页报；依赖它的几项这一次读不出来，其余照常。
+        # A broken settings file itself is reported by the configuration page; the items depending on it cannot be read this time, and the rest proceed as usual.
         config = None
     if config is not None and not config.present:
         config = None
@@ -310,9 +310,9 @@ def _conflict(error: TaskRunConflict) -> JSONResponse:
         status_code=409)
 
 
-#: 走通用契约入口、却是运行 Peach 那台电脑的配置：生成预览与编解码方式、时间轴缩略图档位。
-#: 只有配置页读写它们，读写都按 `/api/configuration/*` 的本机判据放行，非本机一律 403。
-#: 判据由组装点 `api.create_app` 挂在 `app.state.local_only`：路由模块之间只许依赖 `routes_auth`。
+#: Go through the generic contract entry but are settings of the computer running Peach: preview generation and codec method, timeline thumbnail tiers.
+#: Only the configuration page reads and writes them, and both are allowed by the local-machine criterion of `/api/configuration/*` and non-local requests always get 403.
+#: The criterion is attached by the assembly point `api.create_app` on `app.state.local_only`: route modules may depend only on `routes_auth`.
 LOCAL_ONLY_ROUTES = frozenset({"/api/media-processing", "/api/thumbnail-jobs"})
 
 
@@ -389,7 +389,7 @@ def api_post(
             status_code=409,
         )
     except (TypeError, ValueError) as exc:
-        # 拒收原因只落本机错误日志，诊断包据此解释页面上的 400；4xx 不远程上报。
+        # The rejection reason goes only to the local error log, from which the diagnostic bundle explains the page's 400; 4xx is not reported remotely.
         from .error_reporting import event
         event('http-request', exc, method='POST', route=route_path.lstrip('/'), status_code=400)
         return JSONResponse({"error": f"{type(exc).__name__}: {exc}"}, status_code=400)

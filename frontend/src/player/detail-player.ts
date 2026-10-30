@@ -219,7 +219,7 @@ export async function mountDetailPlayer(
     if (options.checkSourceStatus === false) return;
     void host.loadSourceStatus().then((status) => {
       if (status[String(item.root_id || item.location)] !== false || player.isDisposed()) return;
-      player.error({ code: 2, message: `媒体目录无法访问 · ${host.offlineReason(String(item.root_id || item.location))}` });
+      player.error({ code: 2, message: `Media folder unreachable · ${host.offlineReason(String(item.root_id || item.location))}` });
     });
   });
   player.ready(() => {
@@ -255,8 +255,8 @@ export async function mountDetailPlayer(
 
 const AMBIENT_CANVAS = '<canvas data-ambient-canvas="" width="32" height="18"></canvas>';
 
-/** 氛围光放在媒体框首部；作品详情的统计键与速率挂到 React 留出的工具栏插槽，统计面板留在框内。
- *  关注详情没有工具栏，读数插在 `before` 前面。已有读数时保留当前节点与事件。 */
+/** The ambient light goes at the head of the media frame; on the work details the stats button and speed attach to the toolbar slot React leaves, and the stats panel stays inside the frame.
+ *  Follow details have no toolbar, so the readout is inserted before `before`. When a readout already exists, the current node and events are kept. */
 export function preparePlayerFrame(frame: HTMLElement, before: Element | null = null): void {
   if (!frame.querySelector(':scope > [data-ambient-canvas]')) frame.insertAdjacentHTML('afterbegin', AMBIENT_CANVAS);
   if (frame.querySelector('#playerStatsBtn')) return;

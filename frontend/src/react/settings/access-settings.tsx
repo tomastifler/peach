@@ -78,10 +78,10 @@ export function AccessSettings({ initial, receipt }: AccessSettingsProps) {
                 isInvalid={Boolean(fields.current_password)} hint={fields.current_password} />
             : null}
           {editable && !disable
-            ? <PasswordPair label={state.mode === 'password' ? '新访问密码' : '设置访问密码'}
+            ? <PasswordPair label={state.mode === 'password' ? 'New access password' : 'Set access password'}
                 password={password} confirmation={confirmation} onPassword={setPassword} onConfirmation={setConfirmation}
                 passwordError={fields.password} confirmationError={fields.confirmation}
-                passwordHint="至少 8 个字符。保存后其他设备需要重新登录。" />
+                passwordHint="At least 8 characters. Other devices must sign in again after saving." />
             : null}
           {disable ? <Note tone="warning" title="Access scope">After saving, any device that can reach Peach will open the library directly.</Note> : null}
           {action.error ? <ErrorText>{action.error}</ErrorText> : null}

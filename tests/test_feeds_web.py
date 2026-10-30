@@ -209,7 +209,7 @@ class FeedWebTest(FeedWebFixture):
         status = dispatch_api_get(self.contract, "/api/feeds/schedule", {})
         self.assertEqual((status["available"], status["enabled"], status["interval_minutes"]),
                          (True, True, feeds.DEFAULT_INTERVAL_MINUTES))
-        self.assertEqual((status["last_error"], status["consecutive_failures"]), ("1 个来源检查失败", 2))
+        self.assertEqual((status["last_error"], status["consecutive_failures"]), ("1 source checks failed", 2))
 
     def test_recovery_keeps_source_selection_progress_and_discovered_codes(self):
         from peach import job_recovery
@@ -794,7 +794,7 @@ class FeedWebTest(FeedWebFixture):
                 seen["remaining"] = float(deadline) - time.monotonic()
                 raise DeadlineExceeded("动作预算已用尽")
 
-        with self.assertRaisesRegex(DeadlineExceeded, "秒内没有答复"):
+        with self.assertRaisesRegex(DeadlineExceeded, "did not answer within"):
             self._collect(Silent(), "SSIS-950")
         self.assertLessEqual(seen["remaining"], ACTION_BUDGETS["querying_metadata"])
         self.assertGreater(seen["remaining"], ACTION_BUDGETS["querying_metadata"] - 5)

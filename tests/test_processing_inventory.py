@@ -145,7 +145,7 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(result['workload']['video_files'], 0)
 
     def test_invalid_continuation_is_rejected(self):
-        with self.assertRaisesRegex(ValueError, '预检已结束'):
+        with self.assertRaisesRegex(ValueError, 'pre-check has ended'):
             preview(self.config, self.db, 'scan', None, 'invalid')
 
     def test_incremental_preview_finds_additions_in_a_root_with_completed_assets(self):

@@ -14,9 +14,9 @@
 
 | 条目 | 注册表 JSON 的 SHA-256 | 复制的文件 |
 | --- | --- | --- |
-| `radio`（2026-10-27） | `e2b75fb0560c2dcceb66ca323680af83ff36f8b2238515712d22af176f48ddbb` | `components/base/radio/radio.tsx` |
-| `radio-card`（2026-10-27） | `7ac63768bce4d854890cb3138bf605764436e0f7361cadf82fc9198f309d3d5a` | `components/base/radio/radio-card.tsx` |
-| `textarea`（2026-10-22） | `b370013f5257c38d05c5c3b7778e343ff5e42ea8e1fb0ba4db58d818b2730e16` | `components/base/textarea/textarea.tsx` |
+| `radio`(2026-10-27) | `e2b75fb0560c2dcceb66ca323680af83ff36f8b2238515712d22af176f48ddbb` | `components/base/radio/radio.tsx` |
+| `radio-card`(2026-10-27) | `7ac63768bce4d854890cb3138bf605764436e0f7361cadf82fc9198f309d3d5a` | `components/base/radio/radio-card.tsx` |
+| `textarea`(2026-10-22) | `b370013f5257c38d05c5c3b7778e343ff5e42ea8e1fb0ba4db58d818b2730e16` | `components/base/textarea/textarea.tsx` |
 | `tree-view`（2026-10-17） | `72b06e3187ae7738bd1eabd46bc15ebe1d2d49be768e44306b266d91206eeb9c` | `components/base/tree-view/tree-view.tsx` |
 | `breadcrumb`（2026-10-17） | `15ec77574bb50fd5e37bf6d157905ffe7eb03226585cc77983c0beea92abd811` | `components/base/breadcrumb/breadcrumb.tsx` |
 | `direction`（2026-10-17） | `94ff665ff5060ffbbbda89f395882c0236646db74f6b080ab987518fb5fa4592` | `components/foundations/direction/direction.tsx` |
@@ -44,8 +44,8 @@
 
 | 上游 | 处理 | 原因 |
 | --- | --- | --- |
-| PillTabList | `../components/pill-tab.tsx` 从公开 `tabs` 条目适配，保留上游测量与 300ms 过渡，增加外部集合宿主的 Portal；`pill-aria-tab-list.tsx` 对接 React Aria，灰色面、行高与焦点沿用 Peach 语义样式 | React Aria 的集合只接收选项；装饰层通过 Portal 加入同一宿主，不参与集合。来源、原始 SHA-256 与消费范围见 `docs/reference-snapshots/boardui-settings-tabs.md` |
-| 设置行分隔线 | 配置页与设置弹层沿用 `SettingsCard` 的左侧 12px 内缩、右侧通到卡片边缘；`../settings/section.tsx` 的行组标记由 `configuration-page.css` 连接相邻行组 | 设置项由独立组件组合时，组与组之间仍保留一条分隔线；底部操作栏使用通栏线 |
+| PillTabList | `../components/pill-tab.tsx` adapted from the public `tabs` entry, keeping upstream measurement and the 300ms transition, and adding a Portal for an external collection host; `pill-aria-tab-list.tsx` connects to React Aria, with the gray surface, row height and focus following Peach semantic styles | React Aria's collection only accepts options; the decoration layer joins the same host through a Portal and does not take part in the collection. For source, original SHA-256 and consumption scope see `docs/reference-snapshots/boardui-settings-tabs.md` |
+| Settings row divider | The configuration page and settings dialog keep `SettingsCard`'s 12px inset on the left and run to the card edge on the right; the row-group markers of `../settings/section.tsx` are connected to adjacent row groups by `configuration-page.css` | When settings items are composed from separate components, a divider line is still kept between groups; the bottom action bar uses a full-width line |
 | `globals`（`693885494e6f229637fe118852efbfb3df820dd8d174a2a7e47f65dadfcd96bf`） | 不复制整份；用到的 `check-draw` 动画、根元素的字体平滑和 `.bui-table` 那一组规则逐字搬进 `../styles.css`，作用域是 `.peach-react` | 整份 `@import "tailwindcss"` 会把 Preflight 和 `html`、`body` 的底色铺到整页，未迁移页面仍由旧样式表绘制。`table` 条目的外观全在 `globals.css` 里（React Aria 的集合组件包不进自定义组件），不搬就只剩一张没有边线和字阶的裸表 |
 | `data-table`（`7bb73a6cd099b9b16390e5fe00f8ba2d55b5ef96c1e8f90a056168cd2e3235e6`） | 不复制；表格视图用 `table` 条目的 `Table` 配 `@tanstack/react-table`，列定义、排序、行选择与分页写在 `../follow-manage/` 里 | 该条目是 `registry:block`，只有一份 `docs/examples/data-table-example.tsx` 示例，依赖的 avatar、segmented-control、status-dot、tooltip 等条目 Peach 都没有；它演示的正是「`table` 加 TanStack Table」这套接法 |
 | Tailwind Preflight | `../preflight-scoped.css` 逐字包进 `@scope (.peach-react)` | 同上 |
@@ -57,11 +57,11 @@
 | 弹出层的挂载位置 | `../entry.tsx` 用 `react-aria` 的 `UNSAFE_PortalProvider` 把 Popover 渲染进 `body` 末尾一个同样带 `.peach-react` 的容器 | 上游 Popover 渲染到 `body`，落在 token 重声明与 Preflight 的作用域外，读到的是 `board.css` 的值 |
 | 焦点环 | 输入框只画 BoardUI 外框上的 `ring`；`web/css/01-base.css` 的全局 `:focus-visible` 排除 `.peach-react` 子树 | 旧样式表排在后面，同特指度时会盖过 `outline-none`，内层输入框多出一圈 |
 | 与旧样式表同名的类 | 网格容器放在 flex 父元素里写 `inline-grid`，块级化后按 `display:grid` 计算，类名不和卡片网格撞，也不触发任意值 lint；`../styles.css` 用 `@source not inline("ring")` 不生成注释里扫到的 `ring`；`frontend/test/legacy-class-names.test.ts` 核对产物与旧样式表无同名类 | 旧样式表排在后面，卡片网格那条同名规则会把 `grid-cols-*` 压成一列，生成的 `.ring` 也会落到旧页面的 `.ring` 元素上 |
-| 下拉框内前缀 | `../components/select.tsx` 的 `Select` 收一个 `prefix`，经上游的 `renderValue` 在值前面画一段 `text-tertiary` 名称（`aria-hidden`），再补 3px（`sm` 2px）让它与值隔开 8px（`sm` 6px）；`SelectItem` 原样转出 | 工具栏与重复块里的下拉没有字段标签，只看值说不清在选什么；上游 `select` 条目没有前缀槽 |
-| 下拉面板宽度 | `../styles.css` 给 `[data-trigger='Select']` 加 `min-width: var(--trigger-width)`；上游的 `w-[266px]` 不动 | 上游面板定宽 266px，表单里通栏的触发框展开后只剩半截；React Aria 的惯例是面板跟触发框同宽，取下限是为了让比 266px 窄的触发框照旧展开到 266px |
-| 行内字形 | 带字的 `Button`、`ButtonLink` 与 `LinkButton` 的字形由 `../styles.css` 按结构改取 `--icon-inline`（1.2em）；目录树的文件夹字形经 `TreeViewItem` 的 `iconClassName` 传 `size-(--icon-inline)` | 字形与同行文字按字号一起缩放，各档文字字号不同，上游按档位写死的 20、18、14px 在小字号上显大 |
+| In-dropdown prefix | `Select` in `../components/select.tsx` takes a `prefix` and, through upstream's `renderValue`, draws a `text-tertiary` name (`aria-hidden`) before the value, then adds 3px (`sm` 2px) to separate it from the value by 8px (`sm` 6px); `SelectItem` is re-exported as is | Dropdowns in toolbars and repeated blocks have no field label, and the value alone does not say what is being chosen; the upstream `select` entry has no prefix slot |
+| Dropdown panel width | `../styles.css` adds `min-width: var(--trigger-width)` to `[data-trigger='Select']`; upstream's `w-[266px]` is left alone | The upstream panel is fixed at 266px, so a full-width trigger in a form opens to only half its width; React Aria's convention is for the panel to match the trigger width, and the lower bound is taken so that triggers narrower than 266px still open to 266px |
+| Inline glyphs | The glyphs of `Button`, `ButtonLink` and `LinkButton` with text use `--icon-inline` (1.2em) by structure via `../styles.css`; the folder glyphs of the directory tree pass `size-(--icon-inline)` through `TreeViewItem`'s `iconClassName` | Glyphs scale with the same-row text by font size; text sizes differ per tier, and upstream's hard-coded 20, 18 and 14px per tier look too large at small font sizes |
 | 提交键忙态 | 写 `aria-busy` 与 `aria-disabled`，不画 Spinner | `button` 条目没有加载态 |
-| 行内提示 | `../components/note.tsx` 的 `Note` 按语气取 `status-yellow`、`background-tertiary-error`、`notification-*` token 组合；正文与动作按内容宽度换行，`below` 将动作固定在下方 | 注册表里没有行内 Note 组件；`notification` 条目是带关闭键和动效的浮动通知 |
+| Inline notice | `Note` in `../components/note.tsx` combines the `status-yellow`, `background-tertiary-error` and `notification-*` tokens by tone; body and action wrap by content width, and `below` pins the action underneath | The registry has no inline Note component; the `notification` entry is a floating notification with a close button and animation |
 | 进度条 | `../components/progress.tsx` 的 `Progress` 用 SVG 矩形画 | 注册表里没有进度组件 |
 | 空态 | `../components/empty-state.tsx` 用一圈 `separator-border` 框住图标、标题与说明 | 注册表里没有空态组件 |
 | 等待点 | `../components/loading-dots.tsx` 三颗点，错相由 `../styles.css` 的 `dot-wave-*` 给 | 注册表里没有等待态组件，没有总量时也不画进度条 |

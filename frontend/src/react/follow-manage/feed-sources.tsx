@@ -1,8 +1,8 @@
-/* 关注列表里的 JAV 订阅表：
+/* The JAV subscriptions table in the follow list:
  * 一行一条源，名字前是她的资料图，列出类型、来源、状态、频率、上次拉取与新增，行尾是启用开关、
  * 拉取键与移除键（ADR-0042）。行尾这三样和关注列表那一行一一对应，两张表看起来是一回事。
  *
- * 订阅从人物页的「订阅新作」或「添加关注」按名字进，两条路都不收地址（ADR-0047、ADR-0083）。拉回来的
+ * Subscriptions come in by name from the person page's "Subscribe to new releases" or from "Add follow"; neither path accepts an address (ADR-0047, ADR-0083). What is pulled back
  * 新作排在首页与人物页筛选栏下面那一行，不在这里列——这里再列一遍就成了第二个入口，两处的
  * 已读状态会各说各话。
  * 服务端是唯一真相：开关与移除之后重取这一份，不在前端按响应拼一份新的本地状态。
@@ -97,12 +97,12 @@ function originHost(url: string): string {
   }
 }
 
-/** 启用状态与已取得的拉取结果共同决定当前标签。 */
+/** Enabled state and the fetch result obtained so far together decide the current label. */
 function StatusChip({ source }: { source: FeedSource }) {
-  if (!source.enabled) return <Chip variant="caption" color="gray">已暂停</Chip>;
-  if (source.last_error) return <Chip variant="caption" color="rose">拉取失败</Chip>;
-  if (!source.last_fetched_at) return <Chip variant="caption" color="gray">未检查</Chip>;
-  return <Chip variant="caption" color="lime">正常</Chip>;
+  if (!source.enabled) return <Chip variant="caption" color="gray">Paused</Chip>;
+  if (source.last_error) return <Chip variant="caption" color="rose">Fetch failed</Chip>;
+  if (!source.last_fetched_at) return <Chip variant="caption" color="gray">Not checked</Chip>;
+  return <Chip variant="caption" color="lime">OK</Chip>;
 }
 
 /** 名字前的圆框：和关注列表的创作者圆标同一个尺寸与底色。里面那段由 `card-art` 的 `avatarInner` 拼：
@@ -244,7 +244,7 @@ export function FeedSources({ readOnly, toast, onAdd, selection }: {
     return column.columns([
       column.display({
         id: 'select',
-        header: context => <TableSelectionHeader table={context.table} label="全选本页订阅源" page />,
+        header: context => <TableSelectionHeader table={context.table} label="Select all feeds on this page" page />,
         /* `slot={null}`：表格自带一个叫 selection 的插槽，摆进去的勾不声明归属就会被它
            拦下报错。这一列的勾归 TanStack Table 那份行选择管，不走 Table 自己的选择。 */
         cell: (context) => (
@@ -282,7 +282,7 @@ export function FeedSources({ readOnly, toast, onAdd, selection }: {
         id: 'origin',
         header: label('origin'),
         cell: (context) => (
-          <a href={context.getValue()} target="_blank" rel="noopener noreferrer" title="打开来源页面"
+          <a href={context.getValue()} target="_blank" rel="noopener noreferrer" title="Open source page"
             className="text-text-primary underline-offset-2 hover:underline">
             <SiteLabel site={context.row.original.kind.startsWith('javdb') ? 'javdb' : originHost(context.getValue())}
               label={originHost(context.getValue())} />
@@ -321,12 +321,12 @@ export function FeedSources({ readOnly, toast, onAdd, selection }: {
               isSelected={context.row.original.enabled} isDisabled={handlers.current.readOnly}
               onChange={(enabled) => handlers.current.toggle(context.row.original, enabled)} />
             <Button variant="secondary" size="small" iconOnly leadingIcon={RiRefreshLine}
-              aria-label={`拉取 ${feedName(context.row.original)}`}
+              aria-label={`Fetch ${feedName(context.row.original)}`}
               disabled={handlers.current.readOnly}
               {...busyProps(handlers.current.busy === `check-${context.row.original.id}`)}
               onClick={() => handlers.current.fetch(context.row.original)} />
             <Button variant="secondary" size="small" iconOnly leadingIcon={RiDeleteBinLine}
-              aria-label={`移除 ${feedName(context.row.original)}`}
+              aria-label={`Remove ${feedName(context.row.original)}`}
               disabled={handlers.current.readOnly}
               onClick={() => handlers.current.remove(context.row.original)} />
           </span>
@@ -373,17 +373,17 @@ export function FeedSources({ readOnly, toast, onAdd, selection }: {
 
   return (
     <div className="flex flex-col gap-3">
-      <section aria-label="JAV 订阅列表"
+      <section aria-label="JAV subscription list"
         className={cardClass({ padding: 'none', className: 'flex flex-col gap-4 px-6 py-5 max-sm:px-4' })}>
       <div data-responsive-toolbar="">
         <div data-toolbar-heading="">
-        <h3 className="text-title-2-medium text-text-primary">JAV 订阅源</h3>
-        <span className="text-body-2-regular text-text-secondary">{`${sources.length.toLocaleString()} 个订阅源 · ${(Number(data.unread) || 0).toLocaleString()} 条未看`}</span>
+        <h3 className="text-title-2-medium text-text-primary">JAV feeds</h3>
+        <span className="text-body-2-regular text-text-secondary">{`${sources.length.toLocaleString()} feeds · ${(Number(data.unread) || 0).toLocaleString()} unseen`}</span>
         </div>
         <div data-toolbar-actions="">
-        <Button onClick={check} disabled={readOnly} {...busyProps(action.busy === 'check')}>立即拉取</Button>
-        <TableColumnControls preferences={preferences} label="JAV 订阅源" />
-        <DataTableSort label="JAV 订阅源" sorting={sorting} onChange={(next) => { setSorting(next); setPage(1); }}
+        <Button onClick={check} disabled={readOnly} {...busyProps(action.busy === 'check')}>Fetch now</Button>
+        <TableColumnControls preferences={preferences} label="JAV feeds" />
+        <DataTableSort label="JAV feeds" sorting={sorting} onChange={(next) => { setSorting(next); setPage(1); }}
           options={['name', 'kind', 'origin', 'status', 'interval', 'fetched', 'fresh'].map((id) => ({ id, label: COLUMN_LABELS[id]! }))} />
         </div>
       </div>
@@ -421,7 +421,7 @@ export function FeedSources({ readOnly, toast, onAdd, selection }: {
 
       {sources.length ? (
         <DataTableFrame follow preferences={preferences} onRowClick={(key) => toggleRow(Number(key))}>
-          <Table aria-label="JAV 订阅源" size="sm"
+          <Table aria-label="JAV feeds" size="sm"
             sortDescriptor={sorting[0] ? { column: sorting[0].id, direction: sorting[0].desc ? 'descending' : 'ascending' } : undefined}
             onSortChange={(sort) => table.getColumn(String(sort.column))?.toggleSorting(sort.direction === 'descending')}>
             <TableHeader>
@@ -436,7 +436,7 @@ export function FeedSources({ readOnly, toast, onAdd, selection }: {
                   </TableColumn>
                 );
               })}
-              <TableColumn id="remaining-space" aria-label="行空白区域" data-table-space="" width={preferences.spaceWidth} minWidth={0} />
+              <TableColumn id="remaining-space" aria-label="Row spacer" data-table-space="" width={preferences.spaceWidth} minWidth={0} />
             </TableHeader>
             <TableBody>
               {table.getRowModel().rows.map((row) => (
@@ -453,9 +453,9 @@ export function FeedSources({ readOnly, toast, onAdd, selection }: {
           </Table>
         </DataTableFrame>
       ) : (
-        <EmptyState icon={RiRssLine} title="还没有订阅源" size="compact"
-          actions={!readOnly ? <Button variant="secondary" onClick={onAdd}>添加订阅</Button> : undefined}>
-          在「添加关注」按女优名添加，或在人物页点「订阅新作」。
+        <EmptyState icon={RiRssLine} title="No feeds yet" size="compact"
+          actions={!readOnly ? <Button variant="secondary" onClick={onAdd}>Add subscription</Button> : undefined}>
+          Add one by actress name in "Add follow", or click "Subscribe to new releases" on a person page.
         </EmptyState>
       )}
       {sources.length ? (

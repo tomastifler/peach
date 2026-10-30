@@ -1,37 +1,37 @@
-# 界面验收预览
+# UI Acceptance Preview
 
-用户可见的界面验收预览使用真实账本的小样本独立副本，保留原有作品、人物及关联关系，复用已有图像缓存。隔离自动化测试中的夹具不作为用户验收预览，也不进入演示站的数据来源。
+A user-visible UI acceptance preview uses an independent copy of a small sample of the real ledger, keeping the original works, people and their relationships, and reusing the existing image cache. Fixtures in isolated automated tests are not used as user acceptance previews, nor do they enter the demo site's data sources.
 
-开工先检索项目记忆中的“界面预览与真实样本”，读取 `<数据根>/state/project-context/UI_PREVIEW.md` 和覆盖清单，复用已登记的生成与启动入口。未取得真实样本时说明缺少的来源并补入真实记录，不以合成作品、伪造姓名或拼装关系替代。
+At the start of work, first search project memory for "UI preview and real samples", read `<data root>/state/project-context/UI_PREVIEW.md` and the coverage list, and reuse the registered generation and launch entry points. When real samples are not obtained, state the missing source and add real records, and do not substitute synthetic works, forged names or assembled relationships.
 
-## 来源核验
+## Source Verification
 
-预览启动入口在监听端口前调用 `scripts/check_ui_preview.py`，指定 `--source-data`、`--sample-data` 与仓库外的 `--output`。原账本和样本均以 SQLite `mode=ro` 打开；核验不修改任一数据库。
+The preview launch entry calls `scripts/check_ui_preview.py` before listening on a port, specifying `--source-data`, `--sample-data` and an `--output` outside the repository. The original ledger and the sample are both opened with SQLite `mode=ro`; verification modifies neither database.
 
-核验要求样本数据根独立，且包含指向原账本的 `sample-manifest.json`。逐条对照作品身份和标题字段、人物身份、作品实体关联与清单计数，并核对图像缓存的原路径及文件摘要。来源缺失或不一致时退出码为 2，停止启动与交付。样本快照和当前原账本存在真实字段变化时，重新从原账本抽取，保持事实完整，不手改样本字段凑场景。
+Verification requires the sample data root to be independent and to contain a `sample-manifest.json` pointing at the original ledger. It checks work identity and title fields, person identity, work-entity associations and manifest counts item by item, and verifies the original paths and file digests of the image cache. When a source is missing or inconsistent, the exit code is 2, and launch and delivery stop. When the sample snapshot and the current original ledger show real field changes, extract again from the original ledger, keeping the facts complete, and do not hand-edit sample fields to fit a scenario.
 
-通过后产出 `real-ledger-subset` 报告，包含计数、缓存图像数和样本内容摘要。报告只证明数据来源；头像、封面、列表、详情与目标交互仍需在浏览器查看实际像素和状态。启动成功和 `/healthz` 返回正常均不能单独代替视觉核验。
+After passing, it produces a `real-ledger-subset` report with counts, the number of cached images and a digest of the sample content. The report proves only the data source; avatars, covers, lists, details and target interactions still need the actual pixels and state viewed in a browser. Neither a successful launch nor a normal `/healthz` response can substitute for visual verification on its own.
 
-图像摘要核验覆盖头像、封面、海报、标志与照片缓存；头像和封面的响应式缩略图由应用从缓存原图派生，实际裁切与显示另做视觉核验。
+Image digest verification covers avatar, cover, poster, logo and photo caches; the responsive thumbnails of avatars and covers are derived by the app from the cached originals, and the actual cropping and display are verified visually separately.
 
-样本覆盖清单按实际记录列出横屏、竖屏、图片、音频、压缩包、其它资源、多出演者、长标题、稍后看、已观看、评分、回收站、文件失联、播放队列与播放列表。新作发现及想要记录所引用的封面和人物身份也须保留，不能只按馆藏资产复制缓存。来源已有而样本缺失的资源应从原数据补齐；来源本身未取得的图片保留真实缺图状态，并在清单标明。没有真实记录的类型列为未覆盖，不拼装数据代替。
+The sample coverage list enumerates, by actual records, landscape, portrait, image, audio, archive, other resources, multiple performers, long titles, watch later, watched, rated, recycle bin, file lost, play queue and playlists. The covers and person identities referenced by new-release discovery and wanted records must also be kept, and caches must not be copied by library assets alone. Resources the source has but the sample lacks should be filled in from the original data; images the source itself did not obtain keep their real missing state, noted in the list. Types with no real records are listed as uncovered, and no assembled data stands in for them.
 
-## 确认与交付
+## Confirmation and Delivery
 
-提供可访问预览，并说明读取的约定、使用的真实样本与已查看的场景。原账本、原媒体与凭据保持独立；预览拦截业务修改请求，关闭后台调度、账本同步、mDNS 与详情自动播放。
+Provide an accessible preview, and state the conventions read, the real samples used and the scenes viewed. The original ledger, original media and credentials stay independent; the preview intercepts business-modifying requests, and turns off background scheduling, ledger sync, mDNS and automatic playback in details.
 
-只有用户明确确认当前预览后才能运行界面回归；新增纠正后停止本任务运行及排队的测试，修复并重新提供预览。测试、生产切换与发布结果分别报告，不以预览代替已生效结论。
+UI regression may run only after the user explicitly confirms the current preview; after a new correction, stop this task's running and queued tests, fix, and provide the preview again. Test, production switchover and release results are reported separately, and a preview does not stand in for a conclusion that has taken effect.
 
-## 文案编辑
+## Copy Editing
 
-交给用户的所有页面预览同时提供普通版和文案编辑版，普通版在前，包括首次设置、登录、错误页、主界面、新路由与演示站。普通版移除 `edit` 参数；编辑版在无查询参数时加 `?edit`，已有查询参数时加 `&edit`。两份链接均保留其它查询参数和片段。
+Every page preview handed to the user comes in both a normal version and a copy-editing version, normal first, including first-run setup, login, error pages, the main UI, new routes and the demo site. The normal version drops the `edit` parameter; the editing version adds `?edit` when there are no query parameters and `&edit` when there are. Both links keep the other query parameters and the fragment.
 
-复用[源码环境改字](OPERATIONS.md#源码环境改字)的核心、适配器和保存接口。主界面的注入不会自动覆盖首次设置等独立页面壳；目标页面缺少接入时，在当前界面任务中补齐共用入口。不得把参数存在当成已启用，也不另造一套编辑器。
+Reuse the core, adapters and save endpoints of [text editing in a source environment](OPERATIONS.md#editing-text-in-a-source-environment). Injection in the main UI does not automatically cover standalone page shells such as first-run setup; when a target page lacks the hookup, add the shared entry point within the current UI task. The mere presence of the parameter must not be taken as enabled, and no separate editor is built.
 
-源码预览的页面、`PROJECT_ROOT`、文案来源、备份和构建产物必须指向本任务隔离工作树。预览仍拦截业务写入，只向本机同源编辑器放行 `POST /dev/copy-save` 和 `POST /dev/copy-apply`；沿用认证、来源摘要校验与备份。Python 文案的重载只针对本任务预览进程，不交给生产托盘。演示站沿用浏览器草稿，不宣称已写回源码。
+The page, `PROJECT_ROOT`, copy sources, backups and build artifacts of a source preview must point at this task's isolated worktree. The preview still intercepts business writes, and lets only `POST /dev/copy-save` and `POST /dev/copy-apply` through to the local same-origin editor; authentication, source digest verification and backups are retained. Reloading Python copy applies only to this task's preview process and is not handed to the production tray. The demo site keeps browser drafts and does not claim write-back to the source.
 
-提供预览前，在目标页面确认「文案编辑」浮条、悬停范围、原位输入和取消操作可用。首次接入或保存链路变化时，用隔离的临时源码副本核对保存、构建或重载、刷新后生效及 `edit` 参数保留；同一工作树和入口的有效证据可复用。核对后恢复临时文案，保留用户修改。未取得某项能力时说明具体页面和错误，不宣称可编辑预览已就绪。
+Before providing a preview, confirm on the target page that the "Copy editing" floating bar, hover scope, in-place input and cancel operation work. On first hookup or when the save path changes, use an isolated temporary source copy to verify save, build or reload, taking effect after refresh and retention of the `edit` parameter; valid evidence for the same worktree and entry point can be reused. After verification, restore the temporary copy and keep the user's edits. When a capability is not obtained, state the specific page and the error, and do not claim the editable preview is ready.
 
-布局验收和控件操作使用普通查看状态；文案编辑版可通过「暂停编辑」操作页面。编辑器产生的源码修改纳入当前任务的 diff、回归和集成，不写真实账本或修改生产配置。
+Layout acceptance and control operation use the normal viewing state; the copy-editing version can operate the page through "Pause editing". Source changes produced by the editor are included in the current task's diff, regression and integration, and neither write to the real ledger nor modify the production configuration.
 
-文案编辑工具栏、样式、来源选择和模态跟随由 `frontend/src/copy-editor-core.js` 的 `createTools()` 共用；适配器提供来源、草稿、保存与动作回调。工具栏、悬停范围和来源选择跟随当前模态弹层，弹层关闭后回到页面。工具栏为页面的底部选择操作条让出空间。
+The copy-editing toolbar, styles, source selection and modal following are shared through `createTools()` in `frontend/src/copy-editor-core.js`; adapters provide sources, drafts, save and action callbacks. The toolbar, hover scope and source selection follow the current modal layer, and return to the page after the layer closes. The toolbar leaves room for the page's bottom selection action bar.

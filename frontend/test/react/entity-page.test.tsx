@@ -117,9 +117,9 @@ function shellProps(patch: Partial<EntityPageProps> = {}): EntityPageProps {
   return {
     kind: 'performer', name: NAME, filters: {}, media: { media: 'videos', set: 0 }, jav: false, seed: '42',
     revision: 0, feedRevision: 0, photoSize: 'small', photoLayout: 'masonry', followImagesOnly: false,
-    javLayout: 'small', javLayouts: [['big', '大图', 'maximize'], ['small', '小图', 'layout-grid']],
+    javLayout: 'small', javLayouts: [['big', 'Large', 'maximize'], ['small', 'Small', 'layout-grid']],
     photoLayouts: [['fixed', '固定比例', 'layout-grid'], ['masonry', '瀑布流', 'columns-2']],
-    states: [{ k: '', label: '全部' }, { k: 'fresh', label: '没看过' }], peopleLayout: 'big',
+    states: [{ k: '', label: 'All' }, { k: 'fresh', label: '没看过' }], peopleLayout: 'big',
     hosts: { filter: host(), feed, body: host() },
     layout: { active: false, size: 'small', portrait: false, javImage: 'cover' },
     selectMode: false, selected: new Set(), seekSeconds: 10, wireDrag: vi.fn(),
@@ -149,7 +149,7 @@ function shellProps(patch: Partial<EntityPageProps> = {}): EntityPageProps {
       feedRowHtml: (data) => `<div class="feednewrow">${(data?.items || []).map((one) => `<div data-feed-id="${one.id}"></div>`).join('')}</div>`,
       receipt: vi.fn(), failure: vi.fn(), aliasForm: vi.fn(async () => {}),
       sourceToolsHtml: () => '', wireSourceTools: vi.fn(), comboItems: () => [],
-      sortKeys: vi.fn((sort: string) => [{ key: 'new', label: '入库时间', pressed: sort === 'new', dir: '' as const, ariaLabel: '' }]),
+      sortKeys: vi.fn((sort: string) => [{ key: 'new', label: 'Added', pressed: sort === 'new', dir: '' as const, ariaLabel: '' }]),
     },
     actions: {
       route: vi.fn(), toggleTag: vi.fn(), clearFilter: vi.fn(), clearAll: vi.fn(), setSort: vi.fn(),
@@ -302,14 +302,14 @@ describe('换筛选与视图', () => {
     expect(page.props.hosts.body.textContent).toContain('No videos yet');
     expect(page.props.hosts.body.querySelector('[data-media-grid]')).toBeNull();
     expect(page.props.hosts.filter.querySelector('[data-entity-sort]')).toBeNull();
-    expect(buttonNamed('清除筛选', page.props.hosts.body)).toBeNull();
+    expect(buttonNamed('Clear filters', page.props.hosts.body)).toBeNull();
   });
 
   it('筛完一部不剩：空态给一条回到全部视频的路，撤掉观看状态与交集条上的筛选', async () => {
     const page = await open({ items: (query) => items(query.get('tag') ? [] : [1, 2, 3]) },
       { filters: { tag: '巨乳', state: 'fresh', sort: 'new' } });
-    expect(page.props.hosts.body.textContent).toContain('没有符合条件的视频');
-    await click(buttonNamed('清除筛选', page.props.hosts.body));
+    expect(page.props.hosts.body.textContent).toContain('No matching videos');
+    await click(buttonNamed('Clear filters', page.props.hosts.body));
     expect(page.props.actions.route).toHaveBeenCalledWith(
       expect.objectContaining({ sort: 'new', tag: '', state: '', creator: '', studio: '', owner: '' }),
       expect.objectContaining({ media: 'videos' }));
@@ -448,7 +448,7 @@ describe('创作者的在线视图', () => {
 });
 
 describe('写操作', () => {
-  it('添加别名：表单在壳，写回在岛；写完资料卡与作品列表一起重取', async () => {
+  it('Add alias：表单在壳，写回在岛；写完资料卡与作品列表一起重取', async () => {
     const page = await open();
     await click(page.host.querySelector('[data-namepick-toggle]'));
     await click(document.querySelector('[data-namepick-alias]'));
@@ -501,13 +501,13 @@ describe('写操作', () => {
     await settle();
     // 换统称会重写整条实体的扁平投影：写之前让人看见换成什么、旧写法去哪；按钮与回执同一个动词。
     expect(legacyUi.confirmModal).toHaveBeenCalledWith(expect.objectContaining({
-      title: '更改统一名称', confirmLabel: '更改统一名称',
-      body: `「しのだゆう」将成为这份档案显示的名称，「${NAME}」留作别名。作品上的署名、搜索和标签都会跟着改写。`,
+      title: 'Change unified name', confirmLabel: 'Change unified name',
+      body: `"しのだゆう" will become the name shown for this profile, and "${NAME}" will be kept as an alias. Bylines, search and tags on works will be rewritten accordingly.`,
     }));
     expect(page.writes[0]).toEqual({ url: '/api/entity-name', body: { kind: 'performer', name: NAME, canonical: 'しのだゆう' } });
     expect(page.props.actions.openEntity).toHaveBeenLastCalledWith('performer', 'しのだゆう');
     const [message, options] = vi.mocked(page.props.helpers.receipt).mock.calls[0]!;
-    expect(message).toBe('已把统一名称更改为 しのだゆう');
+    expect(message).toBe('Unified name changed to しのだゆう');
     await act(async () => { await options?.undo?.() });
     expect(page.writes[1]).toEqual({ url: '/api/entity-name', body: { kind: 'performer', name: 'しのだゆう', canonical: NAME } });
     expect(page.props.actions.openEntity).toHaveBeenLastCalledWith('performer', NAME);

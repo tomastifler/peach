@@ -1,4 +1,4 @@
-"""标签管理的读取、预览与事务写入端点。"""
+"""Read, preview and transactional write endpoints for tag management."""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -15,7 +15,7 @@ from .web_follow import FOLLOW_GROUP_TABLES, online_tag_inventory
 def _online(body):
     scope = body.get('scope', 'local')
     if scope not in ('local', 'online'):
-        raise ValueError('未知的标签词表')
+        raise ValueError('Unknown tag vocabulary')
     return scope == 'online'
 
 
@@ -44,9 +44,9 @@ def _tag_page(inventory, args):
     state = str(args.get('state') or 'active').strip().casefold()
     view = str(args.get('view') or 'cloud').strip().casefold()
     if state not in ('active', 'hidden', 'blocked'):
-        raise ValueError('未知的标签状态')
+        raise ValueError('Unknown tag status')
     if view not in ('cloud', 'alphabet'):
-        raise ValueError('未知的标签视图')
+        raise ValueError('Unknown tag view')
     try:
         limit = min(max(int(args.get('limit') or 20), 1), 600)
     except (TypeError, ValueError):
@@ -91,7 +91,7 @@ def w_tag_management(contract, body):
         rows = online_tag_inventory(connection) if online else None
         plan = online_tag_management.preview(connection, body, rows) if online else preview(connection, body)
         if plan['token'] != body.get('token'):
-            raise ValueError('标签已变化，请重新预览操作范围')
+            raise ValueError('Tags have changed; please preview the operation scope again')
         stamp = datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')
         backup = contract.db_path.with_name(f'ledger.pre-tag-management-{stamp}-{uuid4().hex[:8]}.db')
         sqlite_backup(contract.db_path, backup)

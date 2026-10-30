@@ -166,8 +166,8 @@ def drop_sidecar(image_path: Path) -> None:
     sidecar_path(image_path).unlink(missing_ok=True)
 
 
-#: 模型取不到之后隔多久再试。服务进程里的探针活得和进程一样久：启动时恰好没网，
-#: 联网后要能自己恢复；但也不能每张图都在请求线程里重下一遍。
+#: How long to wait before retrying after the model could not be fetched. A probe in the service process lives as long as the process: if there happened to be no network at startup,
+#: it must recover on its own once online; but it must also not re-download for every image on the request thread.
 RETRY_SECONDS = 3600
 
 
@@ -177,8 +177,8 @@ class FaceProbe:
     模型是懒构造的：这一趟一个候选都没走到就不必去下 232 KB 的 ONNX。取不到模型也不
     让整轮停下——那会把「今天没网」变成「所有人都没有头像」——但要把原因记进 `unavailable`
     让调用方报出来，不然一次下载失败会静悄悄地把整批退回不看脸的旧判据。
-    取不到之后 `RETRY_SECONDS` 内直接回 None，过了这段再试一次；取到了 `unavailable` 清空。
-    窗口内别处取到了模型（活动中心的「立即重试」）就不再等，下一张图当场重试。
+    After a failed fetch, within `RETRY_SECONDS` return None, then retry once after this window; once fetched, `unavailable` is cleared.
+    If the model is fetched elsewhere within the window (the Activity Center's "Retry now"), stop waiting and retry the next image immediately.
     """
 
     def __init__(self, clock=time.monotonic):
@@ -200,7 +200,7 @@ class FaceProbe:
             return None
         try:
             self._detector = FaceDetector()
-        except Exception as error:              # 缺模型、缺 OpenCV、下载失败
+        except Exception as error:              # missing model, missing OpenCV, download failed
             self._unavailable = str(error)
             self._failed_at = self._clock()
             self._failed_generation = face_detect.downloads

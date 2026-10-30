@@ -442,7 +442,7 @@ class SettingsTests(_Deployment):
         path.write_bytes(payload)
         loaded = self.service.settings.load()
         self.assertEqual(loaded.payload(), stored)
-        self.assertIn("端口", loaded.problems[0])
+        self.assertIn("port", loaded.problems[0])
         self.assertEqual(path.read_bytes(), payload)
         corrected = self.service.settings.save({**stored, "clouddrive_address": "localhost:19798"}, None)
         self.assertEqual(corrected.problems, ())

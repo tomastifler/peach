@@ -1,4 +1,4 @@
-"""用户脚本的人物补充：只读馆藏、元数据快照、详情页出演者与已安装头像，头像按人脸记录取景。"""
+"""People supplement for the userscript: reads only the library, metadata snapshots, detail-page performers and installed avatars, and frames avatars by face records."""
 from __future__ import annotations
 
 import base64
@@ -21,25 +21,25 @@ def _snapshots(contract, codes):
     path = contract.cover_root.parent / 'jav-discovery-metadata.json'
     try:
         if path.stat().st_size > 16 * 1024 * 1024:
-            raise ValueError('本地人物快照过大')
+            raise ValueError('Local people snapshot too large')
         payload = json.loads(path.read_text(encoding='utf-8'))
         if payload.get('version') != 1 or not isinstance(payload.get('records'), dict):
-            raise ValueError('本地人物快照格式无效')
+            raise ValueError('Invalid local people snapshot format')
         records = payload['records']
         return {code: records.get(code, {}).get('movie', {}) for code in codes}
     except FileNotFoundError:
         return {}
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        raise ValueError('本地人物快照未取得') from error
+        raise ValueError('Local people snapshot not obtained') from error
 
 
-#: 用户脚本的人物头像是 24 CSS px 圆框，返回 64 px 图；取景沿用 `frontend/src/card-art/face-frame.ts`。
+#: A userscript's people avatar is a 24 CSS px circle and a 64 px image is returned; framing follows `frontend/src/card-art/face-frame.ts`.
 FRAME_PX, OUTPUT_PX = 24, 64
 FACE_TARGET, MIN_FACE_PX, FACE_CEILING = 0.32, 13, 0.6
 
 
 def _face_zoom(box: dict) -> float:
-    """与页面 `faceZoom` 同一判据：脸要够大、要摆正，不超过构图上限，也不上采样。"""
+    """Matches the page's `faceZoom` criteria: the face must be big enough and upright, within the composition limit, and not upsampled."""
     base = max(FRAME_PX / box['imgW'], FRAME_PX / box['imgH'])
     shown = box['faceW'] * base
     if shown <= 0:
@@ -52,9 +52,9 @@ def _face_zoom(box: dict) -> float:
 
 
 def _framed(original: Image.Image, focus: dict | None) -> Image.Image:
-    """按实体图的人脸记录裁出圆头像：有脸框时脸心对准框心再放大，只有取景轴时按 object-position 平移。
+    """Crop a circular avatar from the entity image's face record: with a face box, align the face center to the box center and then enlarge; with only a framing axis, shift by object-position.
 
-    记录的源图尺寸与文件对不上时退回几何居中，与页面核对 `naturalWidth` 的做法一致。
+    When the recorded source image size does not match the file, fall back to geometric centering, consistent with how the page checks `naturalWidth`.
     """
     image = original.convert('RGB')
     box = (focus or {}).get('box')
@@ -72,15 +72,15 @@ def _framed(original: Image.Image, focus: dict | None) -> Image.Image:
 
 
 def _page_names(performers) -> list[str]:
-    """详情页出演者原文：去掉 ♀ 标记，男演员（♂）不参与；只在查询单个番号时使用。"""
+    """Performer text from the detail page: strip the ♀ marker; male performers (♂) do not take part; used only when querying a single code."""
     names = [str(name).strip() for name in performers or ()]
     if len(names) > 10 or any(not name or len(name) > 60 for name in names):
-        raise ValueError('出演者最多 10 位，每位不超过 60 个字符')
+        raise ValueError('At most 10 performers, each at most 60 characters')
     return [name.replace('♀', '').strip() for name in names if '♂' not in name]
 
 
 def _page_person(connection, name: str) -> dict:
-    """「河北彩花（河北彩伽）」先按括号外的名字，再按括号里的别名匹配本地人物；都未匹配时只留名字。"""
+    """For "河北彩花（河北彩伽）", match local people first by the name outside the parentheses, then by the alias inside; if neither matches, keep only the name."""
     base = re.sub(r'[（(][^）)]*[）)]', '', name).strip() or name
     for candidate in (base, *re.findall(r'[（(]([^（）()]+)[）)]', name)):
         found = entities.resolve_entity(connection, 'performer', candidate.strip())
@@ -92,11 +92,11 @@ def _page_person(connection, name: str) -> dict:
 def cached_people(contract, preview, value: str, performers=()) -> dict:
     raw = value.split(',')
     if not 1 <= len(raw) <= 50:
-        raise ValueError('每次最多查询 50 个番号')
+        raise ValueError('At most 50 codes per query')
     codes = list(dict.fromkeys(code_key(code) for code in raw))
     page_names = _page_names(performers)
     if page_names and len(codes) != 1:
-        raise ValueError('出演者只能随单个番号查询')
+        raise ValueError('Performers can only be queried with a single code')
     items, avatars = {}, {}
     snapshots = _snapshots(contract, codes)
     with contract.database.read_connection() as connection:

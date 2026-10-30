@@ -119,7 +119,7 @@ def resume(db: Path, handlers: dict) -> list[str]:
                 if key == 'library-processing' and user_cancelled(db, data.get('job_id')):
                     if data.get('run_id') is not None:
                         from .task_runs import TaskRunStore
-                        TaskRunStore(db).finish(data['run_id'], 'cancelled', error='用户停止任务')
+                        TaskRunStore(db).finish(data['run_id'], 'cancelled', error='User stopped the task')
                     finish(db, key, data['job_id'], 'cancelled')
                     continue
                 try:

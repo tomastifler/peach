@@ -94,7 +94,7 @@ describe('取数', () => {
         { k:'未知', n:1, cat:'unknown', aliases:[], hidden:false },
       ] }) }) : fallback(url, init)));
     const { host } = await show(data(item(8, { tags:['3d'], detail_tags:['3d'], tag_types:{ '3d':'general' } })));
-    await click(host.querySelector('[aria-label="添加标签"]')); await settle();
+    await click(host.querySelector('[aria-label="Add tag"]')); await settle();
     const selected = host.querySelector('[data-pick="3D"]')!;
     expect(selected.getAttribute('aria-pressed')).toBe('true');
     expect(selected.getAttribute('data-tag-cat')).toBe('r34-general');
@@ -116,22 +116,22 @@ describe('取数', () => {
     vi.stubGlobal('fetch', fetcher);
     const { host, actions: receipts } = await show(data(original));
     queryClient.setQueryData(followItemKey(sibling.id), data(sibling, group(original, { variants: [sibling] })));
-    expect(buttonNamed('管理标签', host)).toBeNull();
-    await click(host.querySelector('[aria-label="添加标签"]'));
+    expect(buttonNamed('Manage tags', host)).toBeNull();
+    await click(host.querySelector('[aria-label="Add tag"]'));
     const input = host.querySelector<HTMLInputElement>('#tagPickSearch')!;
     await type(input, '精选');
     await click(host.querySelector('[data-pick="精选"]'));
     expect(host.querySelector('[data-pick="精选"]')).toBeNull();
     expect(fetcher.mock.calls.filter(([url]) => url === '/api/follow/tag')).toHaveLength(1);
     expect(input.value).toBe('精选');
-    expect(host.querySelector('[aria-label="添加标签"]')?.getAttribute('aria-busy')).toBe('true');
+    expect(host.querySelector('[aria-label="Add tag"]')?.getAttribute('aria-busy')).toBe('true');
     expect(receipts.toast).not.toHaveBeenCalled();
     await waiting.release({ ok: true, json: async () => ({ item: updated, group: group(updated, { variants: [sibling] }) }) });
     await settle();
     expect(host.querySelector('[data-follow-tag="精选"]')).not.toBeNull();
     expect(queryClient.getQueryData<FollowDetailData>(followItemKey(sibling.id))?.group?.primary.tags).toContain('精选');
-    expect(receipts.toast).toHaveBeenCalledWith('已添加标签「精选」', expect.objectContaining({ undo: expect.any(Function) }));
-    await click(host.querySelector('[aria-label="删除标签 精选"]')); await settle();
+    expect(receipts.toast).toHaveBeenCalledWith('Added tag "精选"', expect.objectContaining({ undo: expect.any(Function) }));
+    await click(host.querySelector('[aria-label="Delete tag 精选"]')); await settle();
     expect(host.querySelector('[data-follow-tag="精选"]')).toBeNull();
     expect(host.querySelector('[data-follow-tag="source"]')).not.toBeNull();
   });
@@ -141,11 +141,11 @@ describe('取数', () => {
     vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => url === '/api/follow/tag'
       ? Promise.resolve({ ok: false, status: 400, json: async () => ({ error: '标签名不含逗号' }) }) : fallback(url, init)));
     const { host, actions: receipts } = await show(data(item(8)));
-    await click(host.querySelector('[aria-label="添加标签"]'));
+    await click(host.querySelector('[aria-label="Add tag"]'));
     const input = host.querySelector<HTMLInputElement>('#tagPickSearch')!;
     await type(input, 'a,b');
     await click(host.querySelector('[data-pick="a,b"]')); await settle();
-    await click(host.querySelector('[aria-label="添加标签"]'));
+    await click(host.querySelector('[aria-label="Add tag"]'));
     expect(input.value).toBe('a,b');
     expect(host.textContent).toContain('标签名不含逗号');
     expect(receipts.toast).not.toHaveBeenCalled();
@@ -405,7 +405,7 @@ describe('文案与排序', () => {
     await click(host.querySelector('[data-follow-related] [data-follow-open]'));
     expect(props.actions.openItem).toHaveBeenCalledWith(42);
     await act(async () => { setFollowItemStatus(42, 'seen') });
-    expect(host.querySelector('[data-follow-related] [data-empty-state] h3')?.textContent).toBe('Nothing up next');
+    expect(host.querySelector('[data-follow-related] [data-empty-state] h3')?.textContent).toBe('Nothing to continue watching');
     const { host: disabled } = await show(data(item(43)), { relatedLimit: 0 });
     expect(disabled.querySelector('[data-follow-related]')).toBeNull();
     expect(fetcher.mock.calls.some(([url]) => String(url).startsWith('/api/follow?limit='))).toBe(false);

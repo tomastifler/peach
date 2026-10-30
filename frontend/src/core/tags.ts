@@ -1,2 +1,2 @@
-/** 标签显示沿用服务端当前名称；Application 与 React 页面共用。 */
+/** Tag display follows the server's current names; shared by Application and the React pages. */
 export const tagLabel = (tag: string) => tag;

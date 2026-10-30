@@ -199,7 +199,7 @@ it('没有播放时间记录时看过那一层不出热力图，留一张说明�
   await click(tabNamed(host, 'Watched'));
   expect(host.querySelector('[role=tabpanel] svg[role=img]')).toBeNull();
   expect(host.querySelector('[role=tabpanel] section[aria-label="Play times"] p')?.textContent)
-    .toBe('Which times of the week you play show up here once you start playing.');
+    .toBe('The times of the week when you play appear here after you start playing.');
 });
 
 it('全是 0 的分布图与没有分段的径向图都换成说明卡', async () => {
@@ -209,8 +209,8 @@ it('全是 0 的分布图与没有分段的径向图都换成说明卡', async (
   }));
   const panel = host.querySelector('[role=tabpanel]')!;
   expect(panel.querySelector('section[aria-label="Libraries"] p')?.textContent)
-    .toBe('Video counts per library show up here after you assign media folders to a library.');
-  expect(panel.querySelector('section[aria-label="Quality"] p')?.textContent).toBe('The quality distribution shows up here after quality is probed.');
+    .toBe('Video counts per library appear here after you assign media folders to libraries.');
+  expect(panel.querySelector('section[aria-label="Quality"] p')?.textContent).toBe('The quality distribution appears here after quality is detected.');
 });
 
 it('计数取不到时读「未取得」，不白屏也不读成 NaN', async () => {
@@ -340,19 +340,19 @@ it('快进扫过和正常看完是两回事，一行里分得出来', async () =
 
 it('空馆藏提供添加媒体入口，链到媒体库设置', async () => {
   const { host } = await open(payload({ by_loc: [], by_library: [] }));
-  expect(host.querySelector('h3')?.textContent).toBe('还没有视频');
+  expect(host.querySelector('h3')?.textContent).toBe('No videos yet');
   expect(radialCharts(host)).toEqual([]);
   expect(host.querySelector('[role=tabpanel] section[aria-label]')).toBeNull();
-  expect(buttonNamed('添加媒体', host)).toBeNull();
-  expect(linkNamed(host, '添加媒体')?.getAttribute('href')).toBe('/settings/library');
+  expect(buttonNamed('Add media', host)).toBeNull();
+  expect(linkNamed(host, 'Add media')?.getAttribute('href')).toBe('/settings/library');
 });
 
 it('媒体配置与添加关注是两个独立去向，次要的添加关注在左', async () => {
   const props = legacyProps();
   const { host } = await open(payload({ by_loc: [], by_library: [] }), props);
-  expect(actionOrder(host.querySelector('[data-empty-state]'))).toEqual(['添加关注', '添加媒体']);
-  expect(linkNamed(host, '添加关注')?.getAttribute('href')).toBe('/subscriptions?tab=add');
-  expect(looksLikeButton(linkNamed(host, '添加关注'))).toBe(true);
+  expect(actionOrder(host.querySelector('[data-empty-state]'))).toEqual(['Add follow', 'Add media']);
+  expect(linkNamed(host, 'Add follow')?.getAttribute('href')).toBe('/subscriptions?tab=add');
+  expect(looksLikeButton(linkNamed(host, 'Add follow'))).toBe(true);
 });
 
 /** 空态里的去处画成次级实底按钮（白底、发丝边框），不是一行带下划线的文字链接。 */
@@ -363,7 +363,7 @@ const linkNamed = (root: ParentNode, name: string) =>
 
 it('没有内容标签时空态给一枚「补全资料」按钮，去数据整理页', async () => {
   const { host } = await open(payload({ top_tags: [] }));
-  const link = linkNamed(host, 'Complete metadata');
+  const link = linkNamed(host, 'Complete details');
   expect(link?.getAttribute('href')).toBe('/data-cleanup');
   expect(looksLikeButton(link)).toBe(true);
 });

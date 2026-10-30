@@ -18,7 +18,7 @@ _LOCK = threading.Lock()
 
 
 class ItemSkipped(InterruptedError):
-    """当前资产由用户跳过，任务继续处理下一项。"""
+    """The current asset was skipped by the user and the task continues with the next one."""
 
 
 @contextmanager
@@ -90,7 +90,7 @@ def checkpoint_values(values):
 
 def interrupted_state(control):
     if control is not None and control.cancelled:
-        return dict(status='cancelled', outcome='cancelled', stage='已停止', error='')
+        return dict(status='cancelled', outcome='cancelled', stage='Stopped', error='')
     return dict(status='paused', error='', completed_at=None) if control is not None and control.paused else {}
 
 
@@ -213,7 +213,7 @@ class ProcessingControl:
         with self.lock:
             self.refresh(force=True)
             if self.job_id != job_id:
-                raise ValueError('任务已变化，请刷新页面后重试')
+                raise ValueError('The task has changed; please refresh the page and retry')
             self.skip_asset_id = asset_id
             self._save()
             self.event.set()
@@ -222,9 +222,9 @@ class ProcessingControl:
         self.refresh()
         if self.cancelled:
             from .jobs import JobCancelled
-            raise JobCancelled('用户停止任务')
+            raise JobCancelled('User stopped the task')
         if self.current_asset_id is not None and self.skip_asset_id == self.current_asset_id:
-            raise ItemSkipped('已跳过当前影片')
+            raise ItemSkipped('Skipped the current movie')
 
     def request(self, action, job_id=None, mode=None):
         with self.lock:

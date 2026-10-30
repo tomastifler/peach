@@ -29,5 +29,5 @@ it('来源图片超时结束等待并提供重试', async () => {
   await act(async () => { vi.advanceTimersByTime(30_000) });
   expect(host.querySelector('img')).toBeNull();
   expect(host.querySelector('[role=status]')).toBeNull();
-  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('立即重试加载来源图片');
+  expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Retry loading source image');
 });

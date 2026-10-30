@@ -19,7 +19,7 @@ describe('已设计动效的实际触发', () => {
         await settle(page);
         await page.emulateMedia({ reducedMotion: 'no-preference' });
         await page.route(/\/api\/items\?/, async route => { await gate; await route.fallback() });
-        const button = page.getByRole('button', { name: '换一批', exact: true });
+        const button = page.getByRole('button', { name: 'Shuffle', exact: true });
         const icon = await button.locator('svg').elementHandle();
         await button.click();
         await page.waitForFunction(() => document.querySelector('[data-entity-batch]')?.getAttribute('aria-busy') === 'true');

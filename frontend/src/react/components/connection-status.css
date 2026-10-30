@@ -1,4 +1,4 @@
-/* 中性与错误连接状态复用 BoardUI 的圆点结构及语义色。 */
+/* Neutral and error connection states reuse BoardUI's dot structure and semantic colors. */
 [data-connection-tone="neutral"] > [aria-hidden] {
   background-color: var(--color-background-tertiary-default);
 }

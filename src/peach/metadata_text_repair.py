@@ -1,4 +1,4 @@
-"""按字段归属和同番号来源证据补修已损坏的机器文字。"""
+"""Repair corrupted machine text by field ownership and same-code source evidence."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -18,7 +18,7 @@ FIELDS = {'title': 'catalog_title', 'original_title': 'original_title',
 
 
 def _damaged_snapshots(connection, root: Path) -> tuple[list[dict], list[int]]:
-    """失效损坏文字或旧 JavDB 绑定快照，保留原文并选择对应资产重采。"""
+    """Invalidate corrupted text or old JavDB-bound snapshots, keep the original, and choose the corresponding assets for re-collection."""
     snapshots, affected = [], []
     for path in root.glob('*.json'):
         code, separator, source = path.stem.rpartition('-')
@@ -82,7 +82,7 @@ def _candidates(root: Path, code: str, field: str) -> list[dict]:
 
 
 def collect(connection, snapshots: Path) -> dict:
-    """选中损坏文字与失效来源快照的资产；人物规范名保留给复核。"""
+    """Select assets with corrupted text and invalidated source snapshots; canonical person names are left for review."""
     marker = '\ufffd'
     tests = ' OR '.join(f'instr(COALESCE(a.{column},\'\'),?)>0' for column in FIELDS.values())
     assets = connection.execute(

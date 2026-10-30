@@ -30,8 +30,8 @@ describe('列表缩略图取景', () => {
     try {
       const { page } = opened;
       await page.locator('#grid [data-media-card]').first().waitFor();
-      await page.getByRole('radiogroup', { name: '馆藏显示方式' }).locator('label')
-        .filter({ has: page.getByRole('radio', { name: '列表', exact: true }) }).click();
+      await page.getByRole('radiogroup', { name: 'Library view' }).locator('label')
+        .filter({ has: page.getByRole('radio', { name: 'List', exact: true }) }).click();
       for (const example of examples) {
         const image = page.locator(`[data-catalog-row] img${example.code ? `[data-cover-code="${example.code}"]` : ':not(.cover)'}`);
         await image.scrollIntoViewIfNeeded();

@@ -797,7 +797,7 @@
         "ref": "refs/heads/main",
         "revision": "17b5fe414c273437ef5586480f097c9f862d5174"
       },
-      "role": "README 的主图、折叠截图与安装导航；诊断提示、播放交互和多端客户端仅作产品行为证据，不复制源码、文案或功能承诺。",
+      "role": "Main image, collapsed screenshots and installation navigation for the README; diagnostic prompts, playback interactions and multi-client apps serve only as evidence of product behavior, and no source code, copy or feature promises are copied.",
       "consumers": [
         "README.md",
         "README.zh-CN.md"

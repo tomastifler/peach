@@ -169,7 +169,7 @@ AGENCY_SEARCH_CLAUSE = (
 )
 
 
-#: 普通馆藏展示在库正片，排除附属媒体、回收站和标「已消失」的资源。
+#: Ordinary library display shows main features in the library, excluding sidecar media, the recycle bin and resources marked "gone".
 #: （`disposal` 为空，ADR-0087）。列表、搜索和补全
 #: 共用这一份。各写各的后果是补全会补出回收站里的作品——那一条点开是已经删掉的片，
 #: 而列表本身从来不显示它，所以只会在补全这一个表面上露出来。
@@ -217,7 +217,7 @@ def _entity_asset_filter(connection, kind: str, name: str) -> tuple[str, list[in
 
 
 def _canonical_tag_names(contract, names):
-    """筛选使用当前规范名，重复别名只生成一份条件。"""
+    """Filtering uses the current canonical names, and duplicate aliases produce only one condition."""
     with contract.read_connection() as connection:
         canonical = []
         for name in names:
@@ -238,7 +238,7 @@ def release_year_filter(value, *, trash=False):
         return [], []
     years = sorted(set(str(value).split(',')))
     if any(year != 'none' and (not re.fullmatch(r'[1-9][0-9]{3}', year)) for year in years):
-        raise ValueError('发行年份须为四位年份或未知年份')
+        raise ValueError('Release year must be a four-digit year or unknown year')
     return [RELEASE_YEAR_SQL + ' IN (' + ','.join('?' for _ in years) + ')'], [
         '' if year == 'none' else year for year in years]
 
@@ -359,11 +359,11 @@ def catalog_filter(contract: WebContract, args):
 
 
 def orientation_member(args) -> Callable[[dict], bool] | None:
-    """列表按画幅筛时，分卷、版本组里哪些成员算进这张卡。
+    """When a list is filtered by aspect ratio, which members of a volume or version group count into this card.
 
-    条件与 `catalog_filter` 的画幅那两条逐字对应：显式 `orient` 只算同画幅，首页主网格的
-    `exclude_vertical` 只算非竖屏（未测出画幅的也算）。回收站不按画幅筛，也不收窄。
-    不按画幅筛时返回 None，组照整部作品算。
+    The conditions correspond word for word to the two aspect-ratio conditions of `catalog_filter` explicit `orient` counts only the same aspect ratio, and the home main grid's
+    `exclude_vertical` counts only non-portrait (ones with no measured aspect ratio count too). The recycle bin is not filtered by aspect ratio and is not narrowed either.
+    When not filtering by aspect ratio, returns None, and the group is counted as the whole work.
     """
     if args.get("state") == "trash":
         return None
@@ -756,8 +756,8 @@ def attach_edition_groups(contract: WebContract, rows,
 
     用户实测：`ABF-234` 与 `ABF-234 UN` 是两张并排的卡，`ABF-216` 也是。它们是同一部
     片的两个版次，占两个格子只是让人多滚一屏，还得自己认哪个是无码。
-    按画幅筛的列表里版本数与版本名只算同画幅的文件，口径同 `attach_multipart_groups`；
-    只剩一个版本时 `count` 为 1，卡片不标版本数。`key` 与 `seed_id` 仍是整组的。
+    In a list filtered by aspect ratio, the version count and version names count only files of the same aspect ratio, on the same basis as `attach_multipart_groups`;
+    When only one version remains `count` is 1, and the card does not show a version count. `key` and `seed_id` still belong to the whole group.
     """
     if not rows:
         return
@@ -771,7 +771,7 @@ def attach_edition_groups(contract: WebContract, rows,
         members = members or group
         row["edition_group"] = {
             "key": code,
-            "title": code or str(row.get("code") or "多版本作品"),
+            "title": code or str(row.get("code") or "Multi-version work"),
             "count": len({item['version_id'] for item in members}),
             "seed_id": group[0]["id"],
             "item_ids": [item["id"] for item in members],
@@ -861,10 +861,10 @@ def attach_multipart_groups(contract: WebContract, rows,
                             shown: Callable[[dict], bool] | None = None) -> None:
     """Annotate list cards with one derived multipart release, without ledger writes.
 
-    按画幅筛的列表（`shown` 见 `orientation_member`）里，卷数、成员与合计只算同画幅的
-    那几卷：FC2-PPV-3189161 前三卷横屏、后两卷竖屏，竖屏带里的卡写「2 卷」和两卷的合计，
-    首页主网格（排除竖屏）写「3 卷」和三卷的合计。只剩一卷时 `count` 为 1，卡片按单卷画。
-    `key` 与 `seed_id` 仍是整部作品的，折叠去重与分卷队列认同一部作品。
+    In a list filtered by aspect ratio (`shown` see `orientation_member`) the volume count, members and total count only those of the same aspect ratio
+    those volumes: FC2-PPV-3189161 first three volumes landscape, last two portrait; a card in the portrait band says"2 volumes" and the total of two volumes,
+    the home main grid (portrait excluded) says"3 volumes" and the total of three volumes. When only one volume remains `count` is 1, and the card is drawn as a single volume.
+    `key` and `seed_id` still belong to the whole work, so folding dedup and the multi-volume queue recognize one work.
     """
     if not rows:
         return
@@ -879,7 +879,7 @@ def attach_multipart_groups(contract: WebContract, rows,
         members = members or group
         row["part_group"] = {
             "key": key,
-            "title": code or str(row.get("code") or "分卷作品"),
+            "title": code or str(row.get("code") or "Multi-volume work"),
             "count": len(members),
             "seed_id": group[0]["id"],
             "item_ids": [item["id"] for item in members],
@@ -1265,7 +1265,7 @@ def state_clause(state: str) -> str:
 #: 又能真的换一批。倍数太大就会开始出现只有一两部作品的冷门项。
 TOPS_POOL_FACTOR = 4
 
-#: 顶部两排候选池读到的账本表：作品与实体三张、「已标记」读的偏好、「稍后看」读的队列。
+#: Ledger tables read by the two candidate pools at the top: three for works and entities, the preferences read by "Marked", and the queue read by "Watch later".
 TOPS_TABLES = GROUP_TABLES + ("asset_preference", "watch_queue")
 
 
@@ -1279,10 +1279,10 @@ def q_tops(contract: WebContract, n=28, jav=False, seed="", state="", page=0, fi
 
     `page` 给横滚续接用。第一页那 n 个是从数量前 `n * TOPS_POOL_FACTOR` 里抽的，
     续页要是再回到那一段就会把同一个人给两次，所以那一段归第一页独占，续页从它的
-    末尾往后按数量数下去。库里六百多位女优，一排给到头才是「滚到底还能接着滚」。
+    Counting continues by number from the end onward. The library has over six hundred actresses, and a row that runs to the end is only "scrolling to the bottom and still being able to keep scrolling".
 
-    两条分组 SQL 的结果只取决于账本与口径，与种子无关：候选池按
-    `TOPS_TABLES` 的版本缓存，种子抽样和读目录索引的那几个标志都在缓存之外现做。"""
+    The results of the two grouping SQLs depend only on the ledger and the criteria, not on the seed: the candidate pool is cached by the
+    `TOPS_TABLES` version, with seed sampling and the flags read from the catalog index all computed fresh outside the cache."""
     state = state if state_predicate(state) else ""
     scope = PRESENT_ASSET_CLAUSE + (JAV_ASSET_CLAUSE if jav else "") + state_clause(state)
     folder_params = []
@@ -1308,24 +1308,24 @@ def q_tops(contract: WebContract, n=28, jav=False, seed="", state="", page=0, fi
                 return [{"id": entity_id, "k": k, "n": cnt, "rep": representative}
                         for entity_id, k, cnt, representative
                         in c.execute(base, (kind, *folder_params, limit, skip))]
-        # 目录筛选的条件已在上面按目录索引展开成 SQL，键里带上它，口径就完整了。
+        # The catalog filter conditions have already been expanded above from the catalog index into SQL, and including it in the key makes the criteria complete.
         key = repr(("tops-pool", kind, jav, state, scope, tuple(folder_params), limit, skip))
         rows = contract.cached_until_changed(key, compute, tables=TOPS_TABLES)
-        # 下面还要往每行补目录索引的标志，不能写进缓存里那一份。
+        # Flags from the catalog index still have to be added to each row below and must not be written into the cached copy.
         return [dict(row) for row in rows]
 
     def pick(kind):
-        """按数量取候选池，再按种子确定性抽样。种子为空时退回严格前 N。"""
+        """Take the candidate pool by count, then sample deterministically by seed. With an empty seed, fall back to strictly the first N."""
         if page:
             return read(kind, n, first_page_span + (page - 1) * n)
         pool = read(kind, first_page_span, 0)
         if not seed or len(pool) <= n:
             return pool[:n]
-        # 同一个种子必须给出同一批人：翻页和重绘之间不能抖动。
+        # The same seed must give the same set of people: there must be no jitter between paging and redraws.
         digest = hashlib.blake2b(f"{seed}:{kind}".encode(), digest_size=8).digest()
         rng = random.Random(int.from_bytes(digest, "big"))
         chosen = rng.sample(pool, n)
-        # 抽完仍按数量排序，免得常见身份被排到末尾。
+        # After sampling, still sort by count, so common identities are not pushed to the end.
         return sorted(chosen, key=lambda row: -row["n"])
 
     out = {}
@@ -1352,20 +1352,20 @@ def q_tops(contract: WebContract, n=28, jav=False, seed="", state="", page=0, fi
 
 
 
-#: 筛选项读到的账本表（不含实体范围与搜索词那几条分支，它们不走按版本的缓存）：
-#: 作品与实体、标签隐藏偏好与标签实体的别名（`tag_not_hidden`）、「已标记」「稍后看」两种
-#: 状态，以及在线卡片的关注标签。
+#: Ledger tables read by the filter options (excluding the entity-scope and search-term branches, which do not go through the version cache):
+#: works and entities, tag-hide preferences and aliases of tag entities (`tag_not_hidden`), "Marked" and "Watch later" two kinds of
+#: state, and the follow tags of online cards.
 FACETS_TABLES = GROUP_TABLES + ("entity_alias", "asset_tag_preference", "asset_preference",
                                 "watch_queue", "follow_item", "follow_source")
 
 
 def _release_year_facets(contract, connection, scope, values, state, filters, asset_id):
-    """年份选项遵循其它筛选，但不被已选年份收窄。"""
+    """Year options follow the other filters but are not narrowed by the selected year."""
     if filters is not None and asset_id is None:
         conditions, parameters = catalog_filter(contract, {**filters, 'state':state, 'year':''})
         scope += 'AND ' + ' AND '.join(conditions) + ' '
         values = [*values, *parameters]
-    return [dict(k=row['k'] or 'none', label=row['k'] or '未知年份', n=row['n'])
+    return [dict(k=row['k'] or 'none', label=row['k'] or 'Unknown year', n=row['n'])
             for row in connection.execute('SELECT '+RELEASE_YEAR_SQL+' AS k,count(*) AS n FROM asset a '
                 "WHERE a.medium='video' "+scope+' GROUP BY k ORDER BY k DESC', values)]
 
@@ -1422,7 +1422,7 @@ def q_facets(
             f"SELECT {EFFECTIVE_REGION_SQL} AS k,count(*) AS n FROM asset a "
             "WHERE a.medium='video' " + scope + "GROUP BY k ORDER BY n DESC",
             scope_params))
-        # 先独立筛选资产，避免错误统计让每对实体与视频都执行资产谓词。
+        # Filter assets independently first, so a wrong count does not make every entity-video pair execute the asset predicate.
         facet_assets = "SELECT a.id FROM asset a WHERE a.medium='video' " + scope
         out["creators"] = [dict(r) for r in c.execute(
             "SELECT e.canonical_name AS k,count(DISTINCT ae.asset_id) AS n "

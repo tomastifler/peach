@@ -37,8 +37,8 @@ effects.own(()=>{
 /* Board 外壳：媒体库选择、侧栏底部、玻璃折射。 */
 document.documentElement.classList.toggle('board-high-contrast',localStorage.getItem('peach.high-contrast')==='true');
 const boardBrand=document.querySelector('#brandHome');
-boardBrand.setAttribute('aria-label','选择媒体库');
-const libraryPicker=document.createElement('div');libraryPicker.className='board-library-menu';libraryPicker.id='boardLibraryMenu';libraryPicker.hidden=true;libraryPicker.setAttribute('popover','manual');libraryPicker.setAttribute('role','dialog');libraryPicker.setAttribute('aria-label','媒体库');
+boardBrand.setAttribute('aria-label','Choose library');
+const libraryPicker=document.createElement('div');libraryPicker.className='board-library-menu';libraryPicker.id='boardLibraryMenu';libraryPicker.hidden=true;libraryPicker.setAttribute('popover','manual');libraryPicker.setAttribute('role','dialog');libraryPicker.setAttribute('aria-label','Library');
 document.body.append(libraryPicker);
 effects.own(()=>libraryPicker.remove());
 boardBrand.setAttribute('aria-haspopup','dialog');boardBrand.setAttribute('aria-controls',libraryPicker.id);
@@ -75,7 +75,7 @@ effects.listen(libraryPicker, 'keydown', event=>{if(event.key==='Escape'){event.
 api('/api/libraries',{signal:effects.signal}).then(data=>{
   if(!effects.isActive)return;
   publishLibraries(data.libraries);
-  const choices=[['','全部媒体库','database'],...data.libraries.map(row=>[row.id,row.name,row.icon||'database'])];
+  const choices=[['','All libraries','database'],...data.libraries.map(row=>[row.id,row.name,row.icon||'database'])];
   const selected=sessionStorage.getItem('peach.library')||'';
   if(!choices.some(row=>row[0]===selected)){
     const matching=data.libraries.filter(row=>row.name===selected);
@@ -84,15 +84,15 @@ api('/api/libraries',{signal:effects.signal}).then(data=>{
     sessionStorage.removeItem('peach.library-label');location.reload();return;
   }
   const current=sessionStorage.getItem('peach.library')||'';
-  const currentName=choices.find(row=>row[0]===current)?.[1]||'全部媒体库';
+  const currentName=choices.find(row=>row[0]===current)?.[1]||'All libraries';
   sessionStorage.setItem('peach.library-label',currentName);
   boardBrand.querySelector('h1').textContent=currentName;
   const libraryMark=glyph=>MEDIA_SOURCE_ICONS[glyph]?.startsWith('data:')?`<img src="${MEDIA_SOURCE_ICONS[glyph]}" alt="">`:icon(MEDIA_SOURCE_ICONS[glyph]||glyph);
   const mark=document.createElement('span');mark.className='mark';mark.setAttribute('aria-hidden','true');
   mark.innerHTML=libraryMark(choices.find(row=>row[0]===current)?.[2]||'database');boardBrand.querySelector('.mark').replaceWith(mark);
-  libraryPicker.innerHTML=`<p>媒体库</p><div class="board-library-rows">${choices.map(([id,name,glyph])=>`<button type="button" data-library="${esc(id)}" aria-pressed="${id===current}"><span class="board-library-avatar">${libraryMark(glyph)}</span><span>${esc(name)}</span></button>`).join('')}</div><footer><button type="button" class="geist-button primary" data-library-manage>管理媒体库</button></footer>`;
-  libraryPicker.querySelectorAll('[data-library]').forEach(button=>effects.handler(button, 'onclick', ()=>{sessionStorage.setItem('peach.library',button.dataset.library);sessionStorage.setItem('peach.library-label',choices.find(row=>row[0]===button.dataset.library)?.[1]||'全部媒体库');location.assign('/')}));
-  effects.handler(libraryPicker.querySelector('[data-library-manage]'), 'onclick', ()=>{libraryFloating.setOpen(false);openDrawer(false);openConfigurationSection('媒体库与入库')});
+  libraryPicker.innerHTML=`<p>Libraries</p><div class="board-library-rows">${choices.map(([id,name,glyph])=>`<button type="button" data-library="${esc(id)}" aria-pressed="${id===current}"><span class="board-library-avatar">${libraryMark(glyph)}</span><span>${esc(name)}</span></button>`).join('')}</div><footer><button type="button" class="geist-button primary" data-library-manage>Manage libraries</button></footer>`;
+  libraryPicker.querySelectorAll('[data-library]').forEach(button=>effects.handler(button, 'onclick', ()=>{sessionStorage.setItem('peach.library',button.dataset.library);sessionStorage.setItem('peach.library-label',choices.find(row=>row[0]===button.dataset.library)?.[1]||'All libraries');location.assign('/')}));
+  effects.handler(libraryPicker.querySelector('[data-library-manage]'), 'onclick', ()=>{libraryFloating.setOpen(false);openDrawer(false);openConfigurationSection('Library & import')});
   /* 委托在这一列上，不挂在每个按钮身上：菜单每次取回媒体库都整块重画。
      `pointerover`／`pointerout` 而不是 enter／leave，后两个不冒泡，委托接不到。 */
   const libraryRows=libraryPicker.querySelector('.board-library-rows');
@@ -112,9 +112,9 @@ const boardToggle=document.querySelector('#filterBtn'),toggleHome=document.creat
 effects.own(()=>toggleHome.remove());
 const boardFoot=document.createElement('div');boardFoot.className='board-sidebar-foot';
 effects.own(()=>boardFoot.remove());
-boardFoot.innerHTML=`<div class="board-theme-toggle" role="group" aria-label="明暗主题"><span class="board-theme-thumb" aria-hidden="true"></span><button type="button" data-board-theme="light" aria-label="浅色主题">${icon('sun')}</button><button type="button" data-board-theme="dark" aria-label="深色主题">${icon('moon')}</button></div>`;
-/* 光晕配色钮和设置钮归一组，明暗键单独一组。展开时从左到右、收起时从上到下
-   均按明暗、配色、设置排列，键盘焦点也沿用同一顺序。
+boardFoot.innerHTML=`<div class="board-theme-toggle" role="group" aria-label="Light/dark theme"><span class="board-theme-thumb" aria-hidden="true"></span><button type="button" data-board-theme="light" aria-label="Light theme">${icon('sun')}</button><button type="button" data-board-theme="dark" aria-label="Dark theme">${icon('moon')}</button></div>`;
+/* The glow color button and the settings button form one group, and the light/dark buttons are a separate group. When expanded left to right and when collapsed top to bottom,
+   they are ordered light/dark, color, settings, and keyboard focus follows the same order.
    字形直接引 `#ri-palette-line`，不走 `icon()`：那一枚是 Remix 的实心路径，`icon()` 拼的是
    `#i-` 前缀的线条件。它和设置分区「界面」那一枚是同一个意思——这枚钮的弹层底部「详细
    设置」开的正是那一页，两处说的都是外观，同一个意思本来就只该有一枚字形。 */
@@ -191,7 +191,7 @@ if(/Chrome|Chromium|Edg\//.test(navigator.userAgent)){
   effects.listen(document, 'transitionrun', event=>{if(sizingEvent(event))sizing++}, true);
   const settleSizing=event=>{
     if(!sizingEvent(event)||!sizing||--sizing)return;
-    // 过渡刚停，补画不等空闲：终态那一帧就该是终态尺寸的贴图。
+    // Right after the transition stops, repaint without waiting for idle: the final frame should already have a map at the final size.
     stale.forEach(node=>pendingOptics.add(node));stale.clear();flushOptics(null);
   };
   effects.listen(document, 'transitionend', settleSizing, true);effects.listen(document, 'transitioncancel', settleSizing, true);
@@ -218,16 +218,16 @@ if(/Chrome|Chromium|Edg\//.test(navigator.userAgent)){
     const observer=effects.resize(draw);observer.observe(node);
     attached.set(node,{observer,filter,draw,paint,fallback,optic:node.style.getPropertyValue('--glass-optic'),priority:node.style.getPropertyPriority('--glass-optic'),flag:node.dataset.opticGlass});draw();
   }
-  /* 位移贴图只由宽、高、圆角决定：顶栏那几枚圆钮同一个尺寸，侧栏开合来回也只在两档之间换，
-     画过的按这三个数留着直接复用。 */
+  /* A displacement map depends only on width, height and corner radius: the round buttons in the top bar share one size, and opening and closing the sidebar only switches between two tiers,
+     so those already drawn are kept by these three numbers for direct reuse. */
   const edgeMaps=new Map();
   function edgeMap(width,height,radius){
     const key=`${width}:${height}:${radius}`;const cached=edgeMaps.get(key);
     if(cached){edgeMaps.delete(key);edgeMaps.set(key,cached);return cached}
     const ratio=Math.min(1,600/width,600/height);const w=Math.max(2,Math.round(width*ratio)),h=Math.max(2,Math.round(height*ratio));
-    /* 画布只拿来写一次像素、读一次 PNG，走 CPU 那一种：默认的 GPU 画布在 toDataURL 时要把
-       像素读回来，第一次还得先建 GPU 上下文，冷启动实测单这一下就是一百毫秒上下，之后的
-       重画也时不时要和合成抢 GPU 等几十毫秒。 */
+    /* The canvas is only used to write pixels once and read a PNG once, so use the CPU kind: the default GPU canvas has to read pixels back on toDataURL, and the first time must also create a GPU context first;
+       a cold start measured about a hundred milliseconds for this one step alone, and later
+       redraws also occasionally contend with compositing for the GPU for tens of milliseconds. */
     const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d',{willReadFrequently:true});const pixels=ctx.createImageData(w,h);
     const distance=(x,y)=>{const qx=Math.abs(x-width/2)-(width/2-radius),qy=Math.abs(y-height/2)-(height/2-radius);return Math.hypot(Math.max(qx,0),Math.max(qy,0))+Math.min(Math.max(qx,qy),0)-radius};
     const depth=Math.min(24,Math.min(width,height)/3);
@@ -240,9 +240,9 @@ if(/Chrome|Chromium|Edg\//.test(navigator.userAgent)){
     edgeMaps.set(key,href);if(edgeMaps.size>24)edgeMaps.delete(edgeMaps.keys().next().value);
     return href;
   }
-  /* 贴图放到空闲时画，先把排队的几块玻璃的尺寸一起量完再统一写：边量边写的话，前一块写进
-     `--glass-optic` 弄脏的样式会让后一块读圆角时当场整树重算。空闲时间用完就把剩下的
-     留到下一段空闲；最多等 300ms，在那之前玻璃用样式表里的纯模糊。 */
+  /* Draw the maps during idle time: measure the sizes of the queued glass panes first and write them together afterwards: if measuring and writing alternate, the styles dirtied by writing
+     `--glass-optic` for the previous pane would make the next pane's corner-radius read force a whole-tree recalculation. When idle time runs out the remainder
+     waits for the next idle period; at most 300ms, before which the glass uses the plain blur from the stylesheet. */
   const pendingOptics=new Set();let opticsHandle=0;
   const idle=typeof requestIdleCallback==='function';
   function scheduleOptics(){

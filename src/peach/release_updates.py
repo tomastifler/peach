@@ -1,4 +1,4 @@
-"""公开测试版查询；传输复用共享 HTTPX，发行包支持 R2 与 GitHub。"""
+"""Public beta lookup; transport reuses the shared HTTPX, release packages support R2 and GitHub."""
 from __future__ import annotations
 
 import json
@@ -16,7 +16,7 @@ DOWNLOADS_API = DOWNLOADS_BASE + "/releases.json"
 
 
 def download_sources(url: str) -> tuple[str, ...]:
-    """发行包保留同版本、同文件名的另一公开源；校验沿用原发布摘要。"""
+    """A release package keeps another public source of the same version and file name; verification follows the original release digest."""
     github = RELEASES_URL + "/download/"
     mirror = DOWNLOADS_BASE + "/"
     for primary, backup in ((github, mirror), (mirror, github)):
@@ -38,7 +38,7 @@ def _version(value: object) -> tuple[int, ...] | None:
 
 
 def _release_candidates(rows: list, endpoint: str) -> list[tuple]:
-    """从一个公开发行源选择完整包，并构造受信任的下载地址。"""
+    """Choose a complete package from one public release source and build a trusted download address."""
     releases = []
     for row in rows:
         if not isinstance(row, dict) or row.get("draft"):
@@ -89,7 +89,7 @@ def check(*, transport=None) -> dict:
                 continue
         if not releases:
             return dict(result, state="empty" if obtained else "error",
-                        message="暂未找到可下载的测试版。" if obtained else "未能取得版本信息，请重试。")
+                        message="No downloadable beta found yet." if obtained else "Could not obtain version information; please retry.")
         version, tag, asset, full, directory, release_url = max(releases, key=lambda item: item[0])
         current = _version(result["current_version"])
         if current is None:
@@ -100,7 +100,7 @@ def check(*, transport=None) -> dict:
                     asset_url=f"{directory}/{asset['name']}",
                     asset_size=asset.get("size", 0), asset_digest=asset.get("digest"),
                     package_kind="update" if asset is not full else "full",
-                    # 应用更新包准备不下去（清单或工具包与本版更新器对不上）时改下的同版本完整包。
+                    # The same-version full package to use instead when the app update package cannot be prepared (the manifest or tool package does not match this version's updater).
                     full_url=f"{directory}/{full['name']}", full_size=full.get("size", 0),
                     full_digest=full.get("digest"),
                     release_url=release_url)

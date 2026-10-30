@@ -1,4 +1,4 @@
-/* 作品列表的列定义与本机列偏好的存放位置。不依赖 React：壳的首屏骨架与列表岛读同一份。 */
+/* Column definitions for the work list and where local column preferences are stored. Does not depend on React: the shell's first-paint skeleton and the list island read the same copy. */
 
 export const CATALOG_COLUMN_WIDTHS_KEY = 'peach.catalog-column-widths.v1';
 export const CATALOG_COLUMN_VISIBILITY_KEY = 'peach.catalog-column-visibility.v1';
@@ -20,8 +20,8 @@ export const columnSizes: Record<string, { width: number; min: number; max: numb
 };
 
 export const defaultColumnVisibility: Record<string, boolean> = { code: false, o: false, new: false, played: false, release: false };
-const labels: Record<string, string> = { select: '选择', name: '作品', dur: '时长', size: '体积', resolution: '分辨率',
-  rating: '评分', o: '高潮计数', plays: '观看次数', new: '入库时间', played: '观看时间', release: '发行时间', code: '番号', tags: '标签' };
+const labels: Record<string, string> = { select: 'Select', name: 'Name', dur: 'Duration', size: 'Size', resolution: 'Resolution',
+  rating: 'Rating', o: 'O count', plays: 'Play count', new: 'Added', played: 'Watched', release: 'Released', code: 'Product code', tags: 'Tags' };
 export const catalogColumns = ['select', 'name', 'tags', 'code', 'dur', 'resolution', 'size', 'rating', 'plays', 'o', 'played', 'new', 'release']
   .map(id => ({ id, label: labels[id]!, ...columnSizes[id]!, flex: id === 'name', required: id === 'select' || id === 'name', visible: defaultColumnVisibility[id] !== false }));
 
@@ -32,8 +32,8 @@ function stored(key: string): Record<string, unknown> {
   } catch { return {} }
 }
 
-/** 首屏骨架按当前列偏好排版：只读存下来的宽度与可见性，与表格的取值规则一致；
- *  `width` 为空的是承接剩余宽度的那一列，`min` 是它不再缩小的宽度。勾选列只在选择模式出现，不画。 */
+/** The first-paint skeleton is laid out by the current column preferences: it only reads the stored widths and visibility, with the same value rules as the table;
+ *  a column with empty `width` is the one that takes the remaining width, and `min` is the width below which it no longer shrinks. The checkbox column only appears in select mode and is not drawn. */
 export function catalogTableSnapshot(): { id: string; label: string; width: number | null; min: number }[] {
   const widths = stored(CATALOG_COLUMN_WIDTHS_KEY);
   const shown = stored(CATALOG_COLUMN_VISIBILITY_KEY);

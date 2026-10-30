@@ -9,8 +9,8 @@ async function showTable(page: Page) {
   const items = Array.from({ length: 12 }, (_, index) => ({ id: 98000 + index, name: `示例影片 ${index + 1}.mp4`,
     medium: 'video', location: 'local', duration: 60, size: 1000000, width: 1920, height: 1080, rating: 80 }));
   await page.route('**/api/items?*', route => route.fulfill({ json: { items, total: items.length } }));
-  await page.getByRole('radiogroup', { name: '馆藏显示方式' }).locator('label')
-    .filter({ has: page.getByRole('radio', { name: '列表', exact: true }) }).click();
+  await page.getByRole('radiogroup', { name: 'Library view' }).locator('label')
+    .filter({ has: page.getByRole('radio', { name: 'List', exact: true }) }).click();
   await page.locator('[data-catalog-row][data-id="98000"]').waitFor();
 }
 
@@ -46,13 +46,13 @@ describe('馆藏表格宽屏与选择操作', () => {
       release();
       await row.getByRole('group', { name: '评分 5 / 5', exact: true }).waitFor();
       await row.getByRole('button', { name: '取消评分（当前 5 星）', exact: true }).click();
-      await row.getByRole('group', { name: '未评分', exact: true }).waitFor();
+      await row.getByRole('group', { name: 'Not rated', exact: true }).waitFor();
       await row.getByRole('button', { name: '评为 2 星', exact: true }).click();
       await row.getByText('示例评分失败', { exact: true }).waitFor();
-      await row.getByRole('button', { name: '立即重试评分', exact: true }).click();
+      await row.getByRole('button', { name: 'Retry rating', exact: true }).click();
       await row.getByRole('group', { name: '评分 2 / 5', exact: true }).waitFor();
       await page.locator('[data-sonner-toast]').filter({ hasText: '已评 2 星' }).getByRole('button', { name: '撤销', exact: true }).click();
-      await row.getByRole('group', { name: '未评分', exact: true }).waitFor();
+      await row.getByRole('group', { name: 'Not rated', exact: true }).waitFor();
       assert.deepEqual(writes, [100, 0, 40, 40, 0]);
       assert.equal(await page.locator('#selectMode').getAttribute('aria-pressed'), 'false');
       assert.equal(new URL(page.url()).pathname, '/');

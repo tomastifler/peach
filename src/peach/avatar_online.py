@@ -104,6 +104,6 @@ def resolve(ref: str, connection: sqlite3.Connection, entity_id: int, *, project
             body = media(item, index)
         provider = "follow-content"
     if not body or len(body) > MAX_IMAGE_BYTES:
-        raise PickerError("这张图未取得或太大了")
+        raise PickerError("This image was not retrieved or is too large")
     body = prepare_image(body)
     return body, {"source": "avatar picker", "provider": provider, "external_id": ref}

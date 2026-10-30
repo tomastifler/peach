@@ -38,7 +38,7 @@ describe('来源图标', () => {
   });
 });
 
-describe('创作者', () => {
+describe('Creator', () => {
   it('作者导航只认唯一实体，并跟随实际发布者', () => {
     const bound = source(1, { entity_id: 90, entity_name: 'Kou', author_key: 'entity:90', author_name: 'Kou' });
     expect(followAuthorEntity([bound, source(2)])).toBe('Kou');

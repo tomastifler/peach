@@ -30,7 +30,7 @@ class PublicProtocolTests(unittest.TestCase):
         for matches in (rows, rows[::-1]):
             api = PublicAPI(sleeper=lambda _: None)
             with patch.object(api, '_rows', return_value=matches), patch.object(api, '_json') as detail:
-                with self.assertRaisesRegex(PublicSourceUnavailable, '多个作品'):
+                with self.assertRaisesRegex(PublicSourceUnavailable, 'multiple works'):
                     api.movie('MIKR-023')
                 detail.assert_not_called()
 
@@ -46,7 +46,7 @@ class PublicProtocolTests(unittest.TestCase):
             api.remember_movie_identity('MIKR-023', {'id': 'XeYkdb', 'number': 'MIKR-023'})
             with patch.object(api, '_rows', return_value=[{'id': identity, 'number': 'MIKR-023'}
                                                         for identity in ('XeYkdb', 'MO50k')]):
-                with self.assertRaisesRegex(PublicSourceUnavailable, '多个作品'):
+                with self.assertRaisesRegex(PublicSourceUnavailable, 'multiple works'):
                     api.movie('MIKR-023')
             for path, body in paths.items():
                 self.assertEqual(path.read_bytes(), body)
@@ -56,9 +56,9 @@ class PublicProtocolTests(unittest.TestCase):
         self.assertEqual(api.movie('EXM-001')['id'], 'Exact')
         rows = [{'id': identity, 'number': 'EXM-001'} for identity in ('Exact', 'Another')]
         with patch.object(api, '_rows', return_value=rows):
-            with self.assertRaisesRegex(PublicSourceUnavailable, '多个作品'):
+            with self.assertRaisesRegex(PublicSourceUnavailable, 'multiple works'):
                 api.movie('EXM-001', refresh=True)
-            with self.assertRaisesRegex(PublicSourceUnavailable, '多个作品'):
+            with self.assertRaisesRegex(PublicSourceUnavailable, 'multiple works'):
                 api.movie('EXM-001')
 
     def test_transient_identity_refresh_failure_reuses_the_same_confirmed_work(self):
@@ -375,7 +375,7 @@ class PublicProtocolTests(unittest.TestCase):
 class DetailProjectionTests(unittest.TestCase):
     def test_ambiguous_detail_does_not_fall_back_to_number_bound_preview(self):
         from peach.javdb_public import PublicIdentityAmbiguous
-        with patch('peach.web_jav_detail.PUBLIC_API.movie', side_effect=PublicIdentityAmbiguous('多个作品')), \
+        with patch('peach.web_jav_detail.PUBLIC_API.movie', side_effect=PublicIdentityAmbiguous('multiple works')), \
                 patch('peach.web_jav_detail._preview_fields') as preview:
             result = q_jav_detail(self.contract, {'code': 'MIKR-023'})
         self.assertEqual(result['state'], 'partial')
@@ -414,8 +414,8 @@ class DetailProjectionTests(unittest.TestCase):
     def test_legacy_image_bytes_cannot_bypass_ambiguous_source_and_new_ids_have_distinct_bytes(self):
         from peach.remote_media_cache import cache_for
         cache_for(self.contract).bytes('jav:MIKR-023:image:cover', lambda: b'old wrong work')
-        with patch('peach.web_jav_detail.PUBLIC_API.movie', side_effect=PublicSourceUnavailable('多个作品')):
-            with self.assertRaisesRegex(PublicSourceUnavailable, '多个作品'):
+        with patch('peach.web_jav_detail.PUBLIC_API.movie', side_effect=PublicSourceUnavailable('multiple works')):
+            with self.assertRaisesRegex(PublicSourceUnavailable, 'multiple works'):
                 jav_image(self.contract, {'code': 'MIKR-023'})
         for identity, data in (('XeYkdb', 'Zmlyc3Q='), ('MO50k', 'c2Vjb25k')):
             source = {'id': identity, 'number': 'MIKR-023'}

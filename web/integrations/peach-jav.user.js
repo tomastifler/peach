@@ -292,19 +292,19 @@
   const STORAGE_APPEARANCE = 'peach.jav.appearance';
   const ROOT_ID = 'peach-jav-action';
   const SCRIPT_VERSION = "0.6.9";
-  // 0.6.3 起默认名改为英文；发布页切换前仍返回原名。
+  // Since 0.6.3 the default name is English; the release page still returns the original name until it switches.
   const PUBLISHED_NAMES = ['Peach Userscript', 'Peach · JAV 入库'];
   const PEACH_LOGO = "data:image/png;base64,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";
   const STORAGE_SOUND = 'peach.jav.success-sound';
   const STORAGE_INSTALLED = 'peach.jav.installed-version';
   const STORAGE_UPDATES = 'peach.jav.updates';
   const STORAGE_CHECKED = 'peach.jav.update-attempted-at';
-  // 更新入口直接打开 Sleazy 的安装文件，与 @downloadURL 相同，脚本管理器随即弹出更新确认。
+  // The update entry opens Sleazy's install file directly, the same as @downloadURL, and the script manager then shows the update confirmation.
   const RELEASE_INSTALL = 'https://update.sleazyfork.org/scripts/600821/Peach%20%C2%B7%20JAV%20%E5%85%A5%E5%BA%93.user.js';
   const RELEASE_META = 'https://update.sleazyfork.org/scripts/600821/Peach%20%C2%B7%20JAV%20%E5%85%A5%E5%BA%93.meta.js';
   const infoVersion = typeof GM_info === 'object' && validVersion(GM_info?.script?.version) ? GM_info.script.version : SCRIPT_VERSION;
   const RUNNING_VERSION = compareVersion(SCRIPT_VERSION, infoVersion) <= 0 ? SCRIPT_VERSION : infoVersion;
-  // 新实例在同页去重及桥接返回之前登记安装版本，正在运行的实例可收到变化。
+  // A new instance registers the installed version before same-page deduplication and the bridge's return, so running instances can receive the change.
   recordInstalledVersion();
   if (location.pathname === '/integrations/peach-userscript-bridge') {
     let origin;
@@ -326,19 +326,19 @@
   const STATES = new Set([...ACTIVE, 'ingested', 'owned', 'failed', 'no_match', 'idle']);
   const LABELS = {
     queued: '已排队', searching: '正在搜磁力', submitted: '云下载中',
-    ingested: '已加入 Peach 馆藏', owned: '馆藏已有该番号影片', failed: '任务失败', no_match: '未找到资源', idle: '可以加入 Peach 馆藏',
+    ingested: 'Added to Peach library', owned: 'Library already has this code', failed: 'Job failed', no_match: 'No resource found', idle: 'Can be added to Peach library',
   };
-  // 本页番号的行状态：短标签与 BoardUI Chip 颜色，配色沿用 Peach 活动页 StatusBadge
-  // （完成绿、失败红、进行中蓝、需留意黄）。表格行底色与 neutral Chip 同为三级背景，排队改用 soft；
-  // 未提交的「待加入」不是任务状态，只用次级文字。完整说明放在悬停提示。
+  // Row status for codes on this page: short labels and BoardUI Chip colors, with the colors following the Peach activity page's StatusBadge
+  // (done green, failed red, in progress blue, needs attention yellow). Table row backgrounds are the same tertiary background as the neutral Chip, so queued uses soft;
+  // "To add", which has not been submitted, is not a job status and uses only secondary text. The full description goes in the hover tooltip.
   const ROW_STATES = {
-    pending: ['待加入', 'plain'], checking: ['查询中', 'plain'], sending: ['提交中', 'blue'],
-    queued: ['排队中', 'soft'], searching: ['搜索中', 'blue'], submitted: ['下载中', 'blue'],
-    importing: ['入库中', 'blue'], organizing: ['整理中', 'blue'],
-    ingested: ['已入库', 'lime'], owned: ['已有', 'lime'], no_match: ['无资源', 'yellow'], failed: ['失败', 'rose'],
+    pending: ['To add', 'plain'], checking: ['Checking', 'plain'], sending: ['Sending', 'blue'],
+    queued: ['Queued', 'soft'], searching: ['Searching', 'blue'], submitted: ['Downloading', 'blue'],
+    importing: ['Importing', 'blue'], organizing: ['Organizing', 'blue'],
+    ingested: ['In library', 'lime'], owned: ['Owned', 'lime'], no_match: ['No resource', 'yellow'], failed: ['Failed', 'rose'],
   };
-  // 提示音沿用 Peach `ui-kit/sounds.ts` 的配方，Web Audio 当场合成、不带音频文件：点加入用 toggle-on
-  // 的一声上扬表示开始，一部影片完成入库用 success 的大三度两音。默认开启，与 Peach 界面音效一致，可在设置中关闭。
+  // The sounds follow the recipes in Peach's `ui-kit/sounds.ts` , synthesized on the spot with Web Audio and with no audio files: clicking add uses an upward note of toggle-on
+  // to mark the start, and a video finishing import uses success's two notes a major third apart. On by default, consistent with Peach's UI sounds, and can be turned off in settings.
   const SOUNDS = {
     start: [{from:550, to:650, duration:0.08, volume:0.15, start:0}],
     success: [{from:523, duration:0.12, volume:0.18, start:0}, {from:523 * 1.25, duration:0.12, volume:0.18, start:0.2}],
@@ -360,25 +360,25 @@
         osc.connect(gain); gain.connect(soundContext.destination);
         osc.start(at); osc.stop(at + duration + 0.01);
       }
-    } catch { /* 浏览器不允许出声时静默跳过。 */ }
+    } catch { /* Skip silently when the browser does not allow sound. */ }
   }
 
-  // 云下载可能要几十分钟：前 1 分钟每 2 秒查一次，之后每 15 秒一次，最长跟踪 1 小时；页面在后台时暂停。
+  // Cloud download can take tens of minutes: check every 2 seconds for the first minute, then every 15 seconds, tracking for at most 1 hour; paused while the page is in the background.
   const POLL_LIMIT = 60 * 60_000;
   async function pollWait(count) {
     await new Promise(resolve => setTimeout(resolve, count < 30 ? 2000 : 15_000));
     while (document.hidden) await new Promise(resolve => document.addEventListener('visibilitychange', resolve, {once:true}));
   }
-  // 失败原因来自 Peach 下载任务：磁力本身的问题换一个磁力，网盘一侧的问题修好后重试。
+  // The failure reason comes from the Peach download job: for a problem with the magnet itself, switch to another magnet; for a problem on the cloud drive side, fix it and retry.
   function failureText(body) {
     const detail = typeof body.message === 'string' ? body.message.slice(0, 120) : LABELS[body.state];
-    return body.cause === 'magnet' ? `磁力问题：${detail}。可以换一个磁力。`
-      : body.cause === 'cloud' ? `网盘问题：${detail}。请在 Peach 检查网盘后重试。` : detail;
+    return body.cause === 'magnet' ? `Magnet problem: ${detail}. You can switch to another magnet.`
+      : body.cause === 'cloud' ? `Cloud drive problem: ${detail}. Check the cloud drive in Peach and retry.` : detail;
   }
   function errorLabel(error) {
-    if (error?.kind === 'http') return [401, 403].includes(error.status) ? '令牌无效' : error.status >= 500 ? '服务不可用'
-      : error.status === 429 ? '请求过多' : '请求失败';
-    return {invalid_response:'返回无效', network:'连接失败', client_exception:'连接失败', timeout:'请求超时', abort:'已中止'}[error?.kind] || '失败';
+    if (error?.kind === 'http') return [401, 403].includes(error.status) ? 'Invalid token' : error.status >= 500 ? 'Service unavailable'
+      : error.status === 429 ? 'Too many requests' : 'Request failed';
+    return {invalid_response:'Invalid response', network:'Connection failed', client_exception:'Connection failed', timeout:'Request timed out', abort:'Aborted'}[error?.kind] || 'Failed';
   }
   function setRowState(item, state, detail = '', label = '') {
     const [text, color] = ROW_STATES[state] || ROW_STATES.failed;
@@ -400,7 +400,7 @@
   let updateChecking = false;
   let updateInstallVersion = '';
   let updateDismissed = '';
-  // 没有单部作品浮卡的页面，图标展开的是入口面板；本页番号返回时回到这里。
+  // On pages without a single-work floating card, the icon expands the entry panel; returning from this page's codes comes back here.
   let entryOpen = false;
   let updateGeneration = 0;
   let updateTimer;
@@ -457,7 +457,7 @@
       --color-separator-border:oklch(37.1% 0 0);--color-text-error:oklch(70.4% .191 22.216);
       --update-script-foreground:#3392ff;--update-peach-foreground:oklch(82.8% .189 84.429);
       --elevation-xs:0 1px 2px 0 rgb(0 0 0 / .18);--elevation-dropdown:0 1px 1px 0 rgb(0 0 0 / .14),0 4px 4px 0 rgb(0 0 0 / .10);`;
-  // Peach BoardUI DOM 控件快照：来源与适配范围见 docs/REUSE.md。
+  // Peach BoardUI DOM control snapshot: see docs/REUSE.md for the source and adaptation scope.
   const UI_STYLE = `
     :host{all:initial;--color-text-primary:oklch(14.5% 0 0);--color-text-secondary:oklch(55.6% 0 0);--color-text-tertiary:oklch(70.8% 0 0);
       --color-border-checkbox-default:oklch(87% 0 0);--color-border-checkbox-hover:oklch(70.8% 0 0);
@@ -584,8 +584,8 @@
     .ui-pcheck input:focus-visible+span{outline:2px solid var(--tungsten);outline-offset:2px}.ui-pcheck:has(input:disabled){cursor:default}.ui-pcheck input:disabled+span{opacity:.5}
     @media(hover:hover) and (pointer:fine){.ui-pcheck:hover input:not(:disabled)+span{border-color:var(--color-border-checkbox-hover)}.ui-pcheck:hover input:is(:checked,:indeterminate):not(:disabled)+span{border-color:transparent;background:var(--board-blue-hover)}}
     .batch-row-main{display:flex;align-items:center;gap:8px;min-width:0;flex:1;container:identity/inline-size}
-    /* 叠放头像沿用 Peach 作品卡 .mavstack（web/css/12-cards.css、25-motion.css），按 24px 头像等比换算：
-       常态步长 10px，指到的一枚抬起放大，右侧邻座逐枚让开；窄单元格只留两枚，与播放队列的窄场景一致。 */
+    /* Stacked avatars follow the Peach work card's .mavstack (web/css/12-cards.css, 25-motion.css), scaled proportionally from 24px avatars:
+       normal step 10px, the pointed one lifts and enlarges while neighbors on the right move aside one by one; narrow cells keep only two, consistent with the play queue's narrow case. */
     .batch-people{--ring:var(--row-bg,var(--ground));--lift-motion:calc(var(--spring-press-ms) * 1ms) var(--spring-press)}
     .batch-people:has(:hover){--lift-motion:var(--board-motion)}
     .batch-people>.batch-person{box-shadow:0 0 0 2px var(--ring);transform:translate(var(--lift-x,0),var(--lift-y,0)) scale(var(--lift-scale,1));transition:transform var(--lift-motion)}
@@ -598,7 +598,7 @@
     .batch-people>.batch-person:hover+.batch-person+.batch-person+.batch-person{--lift-x:18px}
     .batch-people>.batch-person:hover+.batch-person+.batch-person+.batch-person+.batch-person{--lift-x:24px}
     @container identity (max-width:179px){.batch-people>.batch-person:nth-child(n+3){display:none}.batch-row-code{--cap:2}}
-    /* 头像右侧紧跟番号：展开时番号随最后一枚头像同步右移，距离为 6px ×（显示枚数 − 指到的序号）。 */
+    /* The code follows right after the avatars: when expanded the code shifts right in step with the last avatar, by 6px × (number shown − index pointed at). */
     :is(.batch-row-code,.bar-title>strong){transition:transform calc(var(--spring-press-ms) * 1ms) var(--spring-press)}
     :is(.batch-row-main,.bar-title):has(.batch-person:hover) :is(.batch-row-code,.bar-title>strong){transition-timing-function:cubic-bezier(.4,0,.2,1);transition-duration:.3s;transform:translateX(calc(6px * (min(var(--count,1),var(--cap,5)) - var(--hovered,1))))}
     :is(.batch-row-main,.bar-title):has(>.batch-people>.batch-person:nth-child(2)) :is(.batch-row-code,.bar-title>strong){--count:2}
@@ -656,8 +656,8 @@
     return node;
   }
 
-  // Peach 任务列表的 Remix Icon 4.9.0 图形；Copyright (c) 2017–2026 Remix Design。
-  // 图形遵循 Remix Icon License v1.0：https://github.com/Remix-Design/RemixIcon/blob/master/License。
+  // Peach task list's Remix Icon 4.9.0 glyphs; Copyright (c) 2017–2026 Remix Design.
+  // The glyphs follow Remix Icon License v1.0: https://github.com/Remix-Design/RemixIcon/blob/master/License.
   const STEP_ICON_PATHS = {
     check: 'M9.9997 15.1709L19.1921 5.97852L20.6063 7.39273L9.9997 17.9993L3.63574 11.6354L5.04996 10.2212L9.9997 15.1709Z',
     circle: 'M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20Z',
@@ -732,7 +732,7 @@
         if (!Object.values(colors).every(value => value && value.length <= 100 && CSS.supports('color', value))) return;
         const snapshot = JSON.stringify({base:location.origin, theme, accent:String(settings.accent || 'blue').slice(0, 40), colors});
         if (snapshot !== GM_getValue(STORAGE_APPEARANCE, '')) GM_setValue(STORAGE_APPEARANCE, snapshot);
-      } catch { /* 页面偏好未取得时保留上次同步的外观。 */ }
+      } catch { /* Keep the last synced appearance when the page preferences are unavailable. */ }
     };
     new MutationObserver(publish).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme','data-accent','class','style']});
     addEventListener('storage', event => { if (event.key === 'peach.settings.v1') publish(); });
@@ -819,7 +819,7 @@
   }
 
   function defaultPersonAvatar() {
-    const avatar=element('span','batch-person');avatar.title='默认头像';avatar.setAttribute('role','img');avatar.setAttribute('aria-label','默认头像');
+    const avatar=element('span','batch-person');avatar.title='Default avatar';avatar.setAttribute('role','img');avatar.setAttribute('aria-label','Default avatar');
     const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('aria-hidden','true');
     const path=document.createElementNS(svg.namespaceURI,'path');
     path.setAttribute('d','M4 22C4 17.5817 7.58172 14 12 14C16.4183 14 20 17.5817 20 22H18C18 18.6863 15.3137 16 12 16C8.68629 16 6 18.6863 6 22H4ZM12 13C8.685 13 6 10.315 6 7C6 3.685 8.685 1 12 1C15.315 1 18 3.685 18 7C18 10.315 15.315 13 12 13ZM12 11C14.21 11 16 9.21 16 7C16 4.79 14.21 3 12 3C9.79 3 8 4.79 8 7C8 9.21 9.79 11 12 11Z');
@@ -827,7 +827,7 @@
   }
 
   let motionId = 0;
-  // loading-dev 0.3.6 的原生 DOM 适配；固定源码与 MIT 许可见 assets/loading-dev-source.json。
+  // loading-dev 0.3.6 native DOM adaptation; see assets/loading-dev-source.json for the pinned source and MIT license.
   function stageAnimation(index) {
     const node = element('span');
     node.dataset.stageAnimation = ['clock','radar','linear-dots','gather','blocks'][index];
@@ -863,10 +863,10 @@
 
   function showNotice(message) {
     document.getElementById('peach-jav-notice')?.remove();
-    const { root, shadow } = surface('peach-jav-notice', 'Peach 提示');
+    const { root, shadow } = surface('peach-jav-notice', 'Peach notice');
     const panel = element('section', 'panel');
     const bar = element('div', 'bar');
-    const dismiss = control('关闭 Peach 提示', { icon: 'close' });
+    const dismiss = control('Close Peach notice', { icon: 'close' });
     dismiss.addEventListener('click', () => root.remove());
     bar.append(element('strong', '', 'Peach'), dismiss);
     const body = element('div', 'body');
@@ -878,8 +878,8 @@
     note.textContent = message;
   }
 
-  // 只做粗提取；合法番号由 Peach 校验。separated 用于整页文本：与 Peach 的 is_jav_code 一致，
-  // 只收原文带连字符的厂牌与素人番号，用户名、导航、域名里的「字母+数字」不补分隔符。
+  // Only a rough extraction is done; valid codes are verified by Peach. separated is for whole-page text: consistent with Peach's is_jav_code, 
+  // only studio and amateur codes that have a hyphen in the original text are taken, and "letters + digits" in usernames, navigation and domains get no separator added.
   function candidates(value, maxLength = 800, separated = false) {
     const found = new Set();
     const bounded = String(value || '').slice(0, maxLength).toUpperCase();
@@ -902,12 +902,12 @@
     return found;
   }
 
-  // 纵向覆盖滚动条：沿用 Peach `ui-kit/overlay-scrollbar.ts` 的轨道、滑块、边缘渐隐与拖动规则；
-  // 吸顶表头不参与滚动，轨道与上边缘渐隐从表头下沿算起。
+  // Vertical overlay scrollbar: follows Peach's `ui-kit/overlay-scrollbar.ts` track, thumb, edge fade and drag rules;
+  // The sticky header does not scroll, and the track and top edge fade are measured from the header's lower edge.
   function overlayScrollbar(container, { square = false } = {}) {
     const host = container.parentElement;
     const edges = element('div', 'ui-ov-edges'); edges.hidden = true; edges.setAttribute('aria-hidden', 'true');
-    // 表格框底部是圆角；弹窗主体上下接标题栏和底栏，渐隐不带圆角。
+    // The bottom of the table frame is rounded; the dialog body connects to the title bar and footer above and below, so its fade has no rounded corners.
     if (square) edges.style.borderRadius = '0';
     edges.append(element('span', 'ui-ov-edge-top'), element('span', 'ui-ov-edge-bottom'));
     const track = element('div', 'ovtrack ov-y'); track.hidden = true; track.setAttribute('aria-hidden', 'true');
@@ -930,7 +930,7 @@
       const trackSize = Math.max(0, height - 16);
       Object.assign(track.style, {top:`${top + 8}px`, height:`${trackSize}px`,
         right:`${host.clientWidth - left - container.clientLeft - width}px`});
-      // 内容很长时滑块保留 24px 下限，保证仍可拖动。
+      // When the content is very long the thumb keeps a 24px minimum so it can still be dragged.
       const thumbSize = Math.min(trackSize, Math.max(24, height / content * trackSize));
       travel = trackSize - thumbSize; thumb.style.height = `${thumbSize}px`; paint();
     };
@@ -942,7 +942,7 @@
       const trackRect = track.getBoundingClientRect(), thumbRect = thumb.getBoundingClientRect();
       const distance = trackRect.height - thumbRect.height, scrollRange = container.scrollHeight - container.clientHeight;
       if (distance <= 0 || scrollRange <= 0) return;
-      // 按在滑块上保持按住的那一点，按在轨道空白处则把滑块中心挪过来。
+      // Pressing on the thumb keeps the pressed point held; pressing on empty track moves the thumb's center there.
       const grab = event.clientY >= thumbRect.top && event.clientY <= thumbRect.bottom ? event.clientY - thumbRect.top : thumbRect.height / 2;
       const to = moved => { container.scrollTop = Math.max(0, Math.min(scrollRange, (moved.clientY - trackRect.top - grab) / distance * scrollRange)); };
       const stop = () => { track.classList.remove('dragging'); track.removeEventListener('pointermove', to);
@@ -1008,7 +1008,7 @@
   }
 
   const PERFORMER_LABELS = new Set(['出演者', '出演', '演員', '演员', '女優', '女优', 'actress', 'actresses', 'cast', 'performer', 'performers', 'stars']);
-  // 详情页出演者：按字段标签读取，优先取链接文字。JavDB 在名字后用 ♀/♂ 标性别，原样带给 Peach 判别。
+  // Details page performers: read by field label, preferring link text. JavDB marks gender after the name with ♀/♂, passed to Peach unchanged for it to judge.
   function performerNames(url = new URL(location.href)) {
     const site = siteFor(url), names = [];
     for (const selector of site?.selectors || []) {
@@ -1035,7 +1035,7 @@
     if (site.mode !== 'automatic' || !site.detail_pattern) return null;
     const match = new RegExp(site.detail_pattern, 'i').exec(url.pathname);
     if (!match) return null;
-    // 发行平台的商品号交给 Peach 编目规则识别。
+    // Release platform product numbers are handed to Peach's cataloging rules for recognition.
     if (site.identity === 'peach') {
       if (!match[1] && site.query_keys?.some(key => url.searchParams.getAll(key).length !== 1
         || !/^[A-Za-z0-9_-]{1,100}$/.test(url.searchParams.get(key)))) return null;
@@ -1097,7 +1097,7 @@
     const shortCode = /^(?:FC2(?:[-_ ]?PPV)?[-_ ]?\d{4,9}|[NK]\d{4}|MKB?D-S\d{2,4}|(?:\d{1,5})?[A-Z]{2,12}[-_]?\d{1,8}[A-Z]{0,2}|\d{6}[-_]\d{2,4})$/i;
     const extracted = candidates(raw);
     if (raw.length > 80 || !shortCode.test(raw) || extracted.size !== 1) {
-      showNotice('请只选中一个完整的短番号，再在脚本菜单选择「开启」。');
+      showNotice('Select just one complete short code, then choose "Enable" in the script menu.');
       return;
     }
     selected = { url: location.href, code: [...extracted][0], conflict: false, source: sourcePage(url, site) };
@@ -1142,7 +1142,7 @@
       const metadata = typeof GM_info === 'object' && validVersion(GM_info?.script?.version) ? GM_info.script.version : SCRIPT_VERSION;
       const installed = compareVersion(SCRIPT_VERSION, metadata) >= 0 ? SCRIPT_VERSION : metadata;
       if (compareVersion(installed, GM_getValue(STORAGE_INSTALLED, '0.0.0')) > 0) GM_setValue(STORAGE_INSTALLED, installed);
-    } catch { /* 安装检测不阻断原有入口。 */ }
+    } catch { /* Install detection does not block the existing entry. */ }
   }
 
   function installedVersion() {
@@ -1152,7 +1152,7 @@
   function updateModel() {
     const installed = installedVersion();
     if (compareVersion(installed, RUNNING_VERSION) > 0) return {
-      key: `refresh:${installed}`, kind: 'refresh', message: `用户脚本已更新至 v${installed}，刷新本页即可使用。`,
+      key: `refresh:${installed}`, kind: 'refresh', message: `Userscript updated to v${installed}; refresh this page to use it.`,
     };
     const config = configuration();
     const local = config && updateCache.peach?.base === config.base ? updateCache.peach : null;
@@ -1163,21 +1163,21 @@
     if (compareVersion(version, RUNNING_VERSION) > 0) return {
       key: `${updateInstallVersion === version ? 'install' : 'script'}:${version}`,
       kind: updateInstallVersion === version ? 'install' : 'script', version,
-      message: updateInstallVersion === version ? '在脚本管理器完成更新后，刷新本页即可使用。' : `用户脚本 v${version} 可更新。`,
+      message: updateInstallVersion === version ? 'After the update finishes in the script manager, refresh this page to use it.' : `Userscript v${version} is available.`,
       href: fromPeach && config ? `${config.base}/integrations/peach-jav.user.js` : RELEASE_INSTALL,
     };
     if (local?.release?.state === 'available' && typeof local.release.latest_version === 'string') return {
       key: `peach:${config.base}:${local.release.latest_version}`, kind: 'peach',
-      message: `Peach ${local.release.latest_version} 可更新。`, href: `${config.base}/settings/maintenance#releaseUpdates`,
+      message: `Peach ${local.release.latest_version} is available.`, href: `${config.base}/settings/maintenance#releaseUpdates`,
     };
-    return { key: '', kind: 'current', message: `当前用户脚本 v${RUNNING_VERSION}` };
+    return { key: '', kind: 'current', message: `Current userscript v${RUNNING_VERSION}` };
   }
 
   function updateSection({ availableOnly = false } = {}) {
     for (const previous of updateContainers) if (!previous.isConnected) updateContainers.delete(previous);
     const node = element('section', 'update-section');
     node.dataset.availableOnly = String(availableOnly);
-    node.setAttribute('aria-label', '检查更新');
+    node.setAttribute('aria-label', 'Check for updates');
     node.setAttribute('aria-live', 'polite');
     node.setAttribute('aria-atomic', 'true');
     updateContainers.add(node);
@@ -1192,20 +1192,20 @@
     node.hidden = availableOnly && model.kind === 'current';
     if (node.hidden) { node.replaceChildren(); return; }
     const checking = updateChecking && model.kind === 'current';
-    const note = element('p', 'geist-note', checking ? '正在检查更新。' : model.message);
+    const note = element('p', 'geist-note', checking ? 'Checking for updates.' : model.message);
     note.dataset.updateKind = model.kind;
     note.dataset.copyKey = `userscript.updates.${checking ? 'checking' : model.kind}.message`;
-    note.setAttribute('aria-label', '用户脚本更新状态');
+    note.setAttribute('aria-label', 'Userscript update status');
     const actions = element('div', 'update-actions');
     if (model.kind === 'refresh' || model.kind === 'install') {
-      const reload = control('刷新本页');
+      const reload = control('Reload this page');
       reload.dataset.updateKind = 'refresh';
       reload.dataset.copyKey = 'userscript.updates.refresh.action';
       reload.addEventListener('click', () => location.reload());
       actions.append(reload);
     }
     if (model.href) {
-      const install = element('a', 'geist-button', model.kind === 'script' || model.kind === 'install' ? '更新用户脚本' : '查看 Peach 更新');
+      const install = element('a', 'geist-button', model.kind === 'script' || model.kind === 'install' ? 'Update userscript' : 'View Peach update');
       install.dataset.updateKind = model.kind;
       Object.assign(install, { href: model.href, target: '_blank', rel: 'noopener noreferrer' });
       install.dataset.copyKey = `userscript.updates.${model.kind}.action`;
@@ -1215,7 +1215,7 @@
       });
       actions.append(install);
     }
-    const check = control('检查更新');
+    const check = control('Check for updates');
     check.dataset.copyKey = 'userscript.updates.check.action';
     check.setAttribute('aria-busy', String(updateChecking));
     check.setAttribute('aria-disabled', String(updateChecking));
@@ -1233,10 +1233,10 @@
     const config = configuration();
     const peach = config && updateCache.peach?.base === config.base ? updateCache.peach : null;
     if (model.kind !== 'peach' && peach?.release?.state === 'available' && typeof peach.release.latest_version === 'string') {
-      const app = element('p', 'geist-note', `Peach ${peach.release.latest_version} 可更新。`);
+      const app = element('p', 'geist-note', `Peach ${peach.release.latest_version} is available.`);
       app.dataset.updateKind = 'peach';
       app.dataset.copyKey = 'userscript.updates.peach.message';
-      const open = element('a', 'geist-button', '查看 Peach 更新');
+      const open = element('a', 'geist-button', 'View Peach update');
       open.dataset.updateKind = 'peach';
       Object.assign(open, { href: `${config.base}/settings/maintenance#releaseUpdates`, target: '_blank', rel: 'noopener noreferrer' });
       open.dataset.copyKey = 'userscript.updates.peach.action';
@@ -1262,23 +1262,23 @@
     const expanded = document.visibilityState !== 'hidden' && (entryOpen || model.kind !== 'current' && updateDismissed !== model.key);
     if (!updateEntry?.root.isConnected) {
       const entry = surface('peach-jav-updates', 'Peach');
-      const launcher = control('Peach 设置与更新');
-      launcher.setAttribute('aria-label', 'Peach 设置与更新');
+      const launcher = control('Peach settings and updates');
+      launcher.setAttribute('aria-label', 'Peach settings and updates');
       launcher.classList.add('launcher');
       const logo = element('img'); logo.src = PEACH_LOGO; logo.alt = ''; logo.draggable=false;
       launcher.replaceChildren(logo);
       wireLauncher(entry.root, launcher);
       const panel = element('section', 'panel');
       const bar = element('header', 'bar');
-      const later = control('收起', { icon: 'close' });
+      const later = control('Collapse', { icon: 'close' });
       later.addEventListener('click', () => {
         const shown = updateModel();
         if (shown.kind !== 'current') updateDismissed = shown.key;
         entryOpen = false; refreshUpdateEntry(); updateEntry?.launcher.focus();
       });
       bar.append(element('strong', '', 'Peach'), later);
-      const scan = control('识别本页全部番号', { primary: true }); scan.addEventListener('click', openPageActions);
-      const settings = control('Peach 设置'); settings.addEventListener('click', configure);
+      const scan = control('Detect all codes on this page', { primary: true }); scan.addEventListener('click', openPageActions);
+      const settings = control('Peach settings'); settings.addEventListener('click', configure);
       const body = element('div', 'body'); body.append(updateSection({ availableOnly: true }), scan, settings);
       launcher.addEventListener('click', () => { entryOpen = true; refreshUpdateEntry(); later.focus(); });
       panel.append(bar, body); entry.shadow.append(panel, launcher);
@@ -1303,9 +1303,9 @@
         if (ticket) updateRequests.delete(ticket);
         if (error) reject(error); else resolve(value);
       };
-      const failed = () => finish(new Error(config ? 'Peach 更新状态未取得，请检查连接和令牌后重试。' : '脚本发行状态未取得，请稍后重试。'));
+      const failed = () => finish(new Error(config ? 'Peach update status unavailable; check the connection and token and try again.' : 'Script release status unavailable; try again later.'));
       ticket = { abort() { failed(); handle?.abort?.(); } };
-      // anonymous 使用的 fetch 模式在 Chrome 中不保证 GM timeout 生效。
+      // anonymous The fetch mode used is not guaranteed in Chrome to make GM timeout take effect.
       watchdog = setTimeout(() => ticket.abort(), 15_000);
       try {
         handle = GM_xmlhttpRequest({ method: 'GET', url, anonymous: true, timeout: 15_000, redirect: 'error',
@@ -1328,7 +1328,7 @@
                 if (!validVersion(body.userscript?.version) || !validVersion(body.userscript?.minimum_version)
                   || typeof body.runtime?.version !== 'string' || typeof body.runtime?.build_id !== 'string'
                   || typeof body.release?.state !== 'string') throw new Error();
-                // 安装链接只由当前配置地址和固定路径组成。
+                // The install link is composed only of the current configured address and a fixed path.
                 finish(null, { base: config.base, runtime: body.runtime, release: body.release,
                   userscript: { version: body.userscript.version, minimum_version: body.userscript.minimum_version } });
               }
@@ -1357,7 +1357,7 @@
     const errors = results.filter(result => result.status === 'rejected');
     if (manual && errors.length) updateError = errors.map(result => result.reason.message).join(' ');
     updateCache = latest;
-    try { GM_setValue(STORAGE_UPDATES, JSON.stringify(latest)); } catch { /* 页面内保留本次结果。 */ }
+    try { GM_setValue(STORAGE_UPDATES, JSON.stringify(latest)); } catch { /* Keep this result within the page. */ }
     paintAllUpdates(); scheduleUpdateCheck();
   }
 
@@ -1400,20 +1400,20 @@
 
   async function scanPage(view) {
     const codes = new Map();
-    // 详情已取得的规范身份优先，避免 DMM 商品号的补零写法覆盖它。
+    // The canonical identity already obtained from details takes priority, so the zero-padded form of a DMM product number does not override it.
     let detail = current?.url === location.href ? current.identity : identity();
     if (detail?.resolve && !detail.conflict && configuration()) {
       try {
         const result = await request(configuration(), detail.code, detail.source, 'GET', true);
         detail = {...detail, code:result.code, resolve:false};
       } catch (error) {
-        view.peopleNote.hidden=false;view.peopleNote.textContent=`${error.message}，列表保留页面候选。`;
+        view.peopleNote.hidden=false;view.peopleNote.textContent=`${error.message}; the list keeps the page candidates.`;
       }
     }
     if (!view.root.isConnected) return;
     view.detailCode = detail?.code && !detail.resolve && !detail.conflict ? detail.code : '';
     if (view.detailCode) codes.set(comparisonKey(view.detailCode), view.detailCode);
-    // 整页文本只收原文带分隔符的番号；PS4、TOP250、jay925 这类设备名、导航与用户名不作为候选。
+    // Whole-page text takes only codes that have a separator in the original; PS4, TOP250, jay925 and similar device names, navigation and usernames are not taken as candidates.
     const add = text => { for (const code of candidates(text, text.length, true)) if (!codes.has(comparisonKey(code))) codes.set(comparisonKey(code), code); };
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, {acceptNode(node) {
       const parent = node.parentElement;
@@ -1434,14 +1434,14 @@
     view.rows = [...codes.values()].map(code => {
       const row = element('tr', 'batch-row');
       row.setAttribute('data-copy-interact','');
-      const {wrapper,input}=tableCheckbox(`选择 ${code}`);
+      const {wrapper,input}=tableCheckbox(`Select ${code}`);
       const selection=element('td');selection.append(wrapper);
       const identity=element('td');
       const main = element('span', 'batch-row-main');
       const people = element('span', 'batch-people');
       people.append(defaultPersonAvatar());
       const status = element('span', 'batch-row-status chip');
-      status.dataset.chip='plain';status.textContent='查询中';status.title='正在查询 Peach 状态';
+      status.dataset.chip='plain';status.textContent='Checking';status.title='Checking Peach status';
       const result=element('td');result.append(status);
       const codeLabel=element('span','batch-row-code',code);codeLabel.title=code;
       main.append(people,codeLabel);identity.append(main);row.append(selection,identity,result);
@@ -1451,8 +1451,8 @@
     });
     view.list.replaceChildren(...view.rows.map(item => item.row));
     view.tableFrame.hidden = !view.rows.length;
-    view.note.textContent = view.rows.length ? `识别到 ${view.rows.length} 个候选番号，重复番号已合并。`
-      : '本页未识别到完整番号。可以选中一个番号后使用脚本菜单，或切换到作品列表页。';
+    view.note.textContent = view.rows.length ? `Detected ${view.rows.length} candidate codes; duplicate codes were merged.`
+      : 'No complete code detected on this page. You can select a code and use the script menu, or switch to a works list page.';
     view.paint();
     void loadPagePeople(view);
     const config = configuration(), rows = view.rows;
@@ -1464,34 +1464,34 @@
         applyRowStatus(item, body);
       } catch (error) {
         if (!view.root.isConnected || view.rows !== rows) return;
-        setRowState(item, 'failed', error.message, '未取得');
+        setRowState(item, 'failed', error.message, 'Unavailable');
       }
     }
     view.busy = false; view.paint();
     void trackRows(view);
   }
 
-  // 只读 Peach 本地人物资料；setAbort 收到可中止当前请求的函数，结束时收到 null。
+  // Reads only Peach's local person profiles; setAbort receives a function that can abort the current request, and receives null when finished.
   function requestPeople(config, codes, setAbort = () => {}, performers = []) {
     return new Promise((resolve,reject)=>{
       let handle, timer, finished=false;
       const finish=(error,value)=>{if(finished)return;finished=true;clearTimeout(timer);setAbort(null);error?reject(error):resolve(value);};
-      const abort=()=>{finish(new Error('本地女优资料未取得'));handle?.abort?.();};
+      const abort=()=>{finish(new Error('Local actress profile unavailable'));handle?.abort?.();};
       setAbort(abort); timer=setTimeout(abort,5000);
       const names=codes.length===1?performers.map(name=>`&performers=${encodeURIComponent(name)}`).join(''):'';
       handle=GM_xmlhttpRequest({method:'GET',url:`${config.base}/api/jav-browser/people?codes=${encodeURIComponent(codes.join(','))}${names}`,anonymous:true,redirect:'error',timeout:5000,
         headers:{Accept:'application/json',Authorization:`Bearer ${config.token}`},
         onload(response){try{if(response.status!==200||response.responseText.length>2*1024*1024)throw new Error();
           const data=JSON.parse(response.responseText);if(data.ok!==true||data.source!=='local-cache'||!data.items)throw new Error();finish(null,data);
-        }catch{finish(new Error('本地女优资料未取得'));}},onerror:()=>finish(new Error('本地女优资料未取得')),ontimeout:()=>finish(new Error('本地女优资料未取得')),onabort:()=>finish(new Error('本地女优资料未取得'))});
+        }catch{finish(new Error('Local actress profile unavailable'));}},onerror:()=>finish(new Error('Local actress profile unavailable')),ontimeout:()=>finish(new Error('Local actress profile unavailable')),onabort:()=>finish(new Error('Local actress profile unavailable'))});
     });
   }
 
-  // 人物头像按 Peach 作品卡的叠放头像排列，最多五位；无人物资料显示默认人像。
+  // Person avatars are arranged like the stacked avatars on Peach work cards, up to five; without person profiles a default portrait is shown.
   function renderPeople(target, people) {
-    if (!Array.isArray(people) || people.some(person=>!person||typeof person.name!=='string'||!person.name.trim()||person.name.length>200)) throw new Error('本地女优资料格式无效');
+    if (!Array.isArray(people) || people.some(person=>!person||typeof person.name!=='string'||!person.name.trim()||person.name.length>200)) throw new Error('Local actress profile format is invalid');
     target.replaceChildren(...(people.length ? [] : [defaultPersonAvatar()]));
-    target.title = people.map(person => person.name).join('、');
+    target.title = people.map(person => person.name).join(', ');
     for (const person of people.slice(0,5)) {
       const avatar=element('span','batch-person',Array.from(person.name.trim())[0].toLocaleUpperCase());
       avatar.title=person.name;avatar.setAttribute('role','img');avatar.setAttribute('aria-label',person.name);
@@ -1504,23 +1504,23 @@
 
   function applyRowStatus(item, body) {
     const download = body.download;
-    // 只在本次跟踪中由进行中变为已入库时响；提交即返回已入库（早已加过）不响。
+    // Sounds only when, during this tracking, a job goes from in progress to imported; a submission that immediately returns imported (added long ago) does not sound.
     if (body.state === 'ingested' && ['queued', 'searching', 'submitted', 'importing'].includes(item.row.dataset.state)) playSound('success');
     item.cause = body.state === 'failed' ? body.cause || '' : '';
     item.tracking = tracking(body);
     item.done = !['idle', 'failed', 'no_match'].includes(body.state);
     if (body.state === 'idle') setRowState(item, 'pending');
-    else if (body.state === 'failed') setRowState(item, 'failed', failureText(body), {magnet:'磁力失效', cloud:'网盘问题'}[item.cause] || '失败');
+    else if (body.state === 'failed') setRowState(item, 'failed', failureText(body), {magnet:'Magnet failed', cloud:'Cloud drive problem'}[item.cause] || 'Failed');
     else if (body.state === 'no_match') setRowState(item, 'no_match', failureText(body));
-    else if (body.state === 'submitted' && ['remote_done', 'landed'].includes(download?.state)) setRowState(item, 'importing', download.label || '入库中');
+    else if (body.state === 'submitted' && ['remote_done', 'landed'].includes(download?.state)) setRowState(item, 'importing', download.label || 'Importing');
     else if (body.state === 'submitted' && download?.state === 'remote_running' && typeof download.progress === 'number' && Number.isFinite(download.progress)) {
       const percent = Math.round(Math.min(1, Math.max(0, download.progress)) * 100);
-      setRowState(item, 'submitted', `网盘下载中 ${percent}%`, `下载中 ${percent}%`);
-    } else if (item.tracking && body.state === 'ingested') setRowState(item, 'organizing', download?.postprocess_label || '整理中');
+      setRowState(item, 'submitted', `Cloud drive downloading ${percent}%`, `Downloading ${percent}%`);
+    } else if (item.tracking && body.state === 'ingested') setRowState(item, 'organizing', download?.postprocess_label || 'Organizing');
     else setRowState(item, body.state, LABELS[body.state]);
   }
 
-  // 提交后自动查询仍在进行的行；再次提交会让上一轮跟踪退出。
+  // After submission, rows still in progress are queried automatically; submitting again makes the previous tracking round exit.
   async function trackRows(view) {
     const config = configuration(), generation = (view.trackGeneration = (view.trackGeneration || 0) + 1);
     if (!config) return;
@@ -1532,7 +1532,7 @@
       for (const item of view.rows.filter(row => row.tracking)) {
         if (!view.root.isConnected || view.trackGeneration !== generation) return;
         try { applyRowStatus(item, await request(config, item.code, source, 'GET')); }
-        catch { /* 连接异常时保留最近一次确认的状态，下一轮再查。 */ }
+        catch { /* On a connection error keep the last confirmed state and check again in the next round. */ }
       }
       if (view.root.isConnected && view.trackGeneration === generation && !view.busy) view.paint();
     }
@@ -1548,15 +1548,15 @@
         const body=await requestPeople(config, codes, abort => { view.peopleAbort = abort; });
         if (!view.root.isConnected || view.rows !== rows) return;
         for (const item of chunk) renderPeople(item.people, body.items[item.code]);
-      } catch(error) { if(view.root.isConnected && view.rows===rows){view.peopleNote.hidden=false;view.peopleNote.textContent=`${error.message}，仍可选择番号加入。`;} return; }
+      } catch(error) { if(view.root.isConnected && view.rows===rows){view.peopleNote.hidden=false;view.peopleNote.textContent=`${error.message}; you can still select codes to add.`;} return; }
     }
-    // 不在馆藏的作品只能靠详情页的出演者名字找到本地人物。
+    // For works not in the library, local persons can only be found through the performer names on the details page.
     const names=performerNames(), item=view.detailCode && rows.find(row=>comparisonKey(row.code)===comparisonKey(view.detailCode));
     if (!item || !names.length) return;
     try {
       const body=await requestPeople(config, [item.code], abort => { view.peopleAbort = abort; }, names);
       if (view.root.isConnected && view.rows === rows) renderPeople(item.people, Object.values(body.items)[0]);
-    } catch { /* 保留按番号取得的结果。 */ }
+    } catch { /* Keep the results obtained by code. */ }
   }
 
   function openPageActions() {
@@ -1565,38 +1565,38 @@
     if (settingsView?.dialog.open) settingsView.dialog.close();
     if (!current) entryOpen = true;
     const previousFocus=current?.root.shadowRoot?.activeElement || updateEntry?.root.shadowRoot?.activeElement || document.activeElement;
-    const {root, shadow} = surface('peach-jav-batch', 'Peach 页面番号');
-    const dialog = element('dialog'); dialog.setAttribute('aria-label', '本页番号');
+    const {root, shadow} = surface('peach-jav-batch', 'Peach page codes');
+    const dialog = element('dialog'); dialog.setAttribute('aria-label', 'Codes on this page');
     const form = element('div'); form.style.display='flex'; form.style.flexDirection='column'; form.style.maxHeight='calc(100dvh - 34px)';
     const bar = element('header', 'bar subpage-bar');
-    const close = control('返回 Peach 主界面', {icon:'back'});
-    bar.append(close,element('h2', '', '本页番号'));
+    const close = control('Back to Peach main interface', {icon:'back'});
+    bar.append(close,element('h2', '', 'Codes on this page'));
     const body = element('div', 'body');
-    const note = element('p', 'geist-note', '正在识别本页番号…'); note.setAttribute('role', 'status');
-    const tip = element('p', 'hint', '候选番号由 Peach 校验。返回后停止继续提交，已提交的任务继续处理。');
+    const note = element('p', 'geist-note', 'Detecting codes on this page…'); note.setAttribute('role', 'status');
+    const tip = element('p', 'hint', 'Candidate codes are verified by Peach. After going back, further submission stops, and jobs already submitted keep processing.');
     const tableFrame=element('div','batch-list');tableFrame.hidden=true;tableFrame.setAttribute('data-board-data-table','');
-    const table=element('table','bui-table');table.setAttribute('aria-label','本页番号列表');
+    const table=element('table','bui-table');table.setAttribute('aria-label','Codes on this page list');
     const columns=element('colgroup');for(let i=0;i<3;i++)columns.append(element('col'));
     const head=element('thead'),header=element('tr'),selection=element('th');selection.scope='col';
-    const {wrapper:selectLabel,input:selectAll}=tableCheckbox('全选本页番号');selection.append(selectLabel);
-    const numberHeader=element('th','','番号');numberHeader.scope='col';
-    const statusHeader=element('th','','状态');statusHeader.scope='col';
+    const {wrapper:selectLabel,input:selectAll}=tableCheckbox('Select all codes on this page');selection.append(selectLabel);
+    const numberHeader=element('th','','Code');numberHeader.scope='col';
+    const statusHeader=element('th','','Status');statusHeader.scope='col';
     header.append(selection,numberHeader,statusHeader);head.append(header);
     const list=element('tbody');table.append(columns,head,list);tableFrame.append(table);
     const peopleNote=element('p','hint');peopleNote.hidden=true;peopleNote.setAttribute('role','status');
     const tableHost=element('div','batch-frame');tableHost.append(tableFrame);
     body.append(note, tip, tableHost, peopleNote);overlayScrollbar(tableFrame);
     const footer = element('footer', 'footer batch-footer');
-    const rescan = control('重新识别', {icon:'refresh'}); rescan.title='重新识别';
-    const addSelected = control('加入所选', {primary:true});
-    const addAll = control('全部加入');
+    const rescan = control('Detect again', {icon:'refresh'}); rescan.title='Detect again';
+    const addSelected = control('Add selected', {primary:true});
+    const addAll = control('Add all');
     footer.append(rescan, addAll, addSelected);
     form.append(bar, body, footer); dialog.append(form); shadow.append(dialog); overlayScrollbar(body, {square:true});
     const view = {root, dialog, note, list, tableFrame, peopleNote, rows:[], busy:true, paint() {
       const available = view.rows.filter(item => !item.done);
       const chosen = available.filter(item => item.input.checked);
-      addSelected.textContent = `加入所选${chosen.length ? `（${chosen.length}）` : ''}`;
-      addAll.textContent = `全部加入${available.length ? `（${available.length}）` : ''}`;
+      addSelected.textContent = `Add selected${chosen.length ? ` (${chosen.length})` : ''}`;
+      addAll.textContent = `Add all${available.length ? ` (${available.length})` : ''}`;
       addSelected.disabled = view.busy || !chosen.length; addAll.disabled = view.busy || !available.length;
       rescan.disabled = view.busy; selectAll.disabled = view.busy || !available.length;
       selectAll.checked = available.length > 0 && chosen.length === available.length;
@@ -1614,7 +1614,7 @@
       const chosen = view.rows.filter(item => !item.done && (all || item.input.checked));
       if (!chosen.length) return;
       const config = configuration();
-      if (!config) { note.textContent='配对信息已失效，请重新设置。'; return; }
+      if (!config) { note.textContent='Pairing info has expired; set it up again.'; return; }
       playSound('start');
       view.busy=true; view.paint();
       const url = new URL(location.href), site = siteFor(url);
@@ -1623,7 +1623,7 @@
       for (const item of chosen) {
         if (!root.isConnected || !dialog.open) break;
         const switching = item.cause === 'magnet';
-        setRowState(item, 'sending', switching ? '正在换一个磁力…' : '正在交给 Peach…');
+        setRowState(item, 'sending', switching ? 'Switching to another magnet…' : 'Handing over to Peach…');
         try {
           const result = await request(config, item.code, source, 'POST', false, switching ? {switch:true} : {});
           if (!root.isConnected) break;
@@ -1633,20 +1633,20 @@
           if (!root.isConnected) break;
           setRowState(item, 'failed', error.message, errorLabel(error)); failed++;
         }
-        // 已处理的行取消勾选：完成项不再可选，未完成项留待重新勾选或全部加入。
+        // Handled rows are unticked: finished items can no longer be selected, and unfinished items are left to be ticked again or added all together.
         item.input.checked=false;
-        handled++; note.textContent=`已处理 ${handled}/${chosen.length} 项${failed ? `，${failed} 项未完成` : ''}。`;
+        handled++; note.textContent=`Handled ${handled}/${chosen.length} items${failed ? `, ${failed} items not finished` : ''}.`;
       }
       const magnets = view.rows.filter(item => item.cause === 'magnet').length;
-      if (magnets && root.isConnected) note.textContent += `${magnets} 项磁力失效，再次加入会换一个磁力。`;
+      if (magnets && root.isConnected) note.textContent += `${magnets} items had failed magnets; adding again switches to another magnet.`;
       view.busy=false; view.paint();
       void trackRows(view);
     };
     addSelected.addEventListener('click', () => { void submit(false); });
     addAll.addEventListener('click', () => { void submit(true); });
-    // 识别通常很快，图标至少转满一圈，识别结束后转完当前这一圈再停。
+    // Detection is usually fast, so the icon spins at least one full turn and, after detection ends, finishes the current turn before stopping.
     rescan.addEventListener('animationiteration', () => { if (!view.busy) delete rescan.dataset.spinning; });
-    rescan.addEventListener('click', () => { rescan.dataset.spinning = ''; view.peopleAbort?.();peopleNote.hidden=true;view.busy=true; view.paint(); note.textContent='正在识别本页番号…'; void scanPage(view); });
+    rescan.addEventListener('click', () => { rescan.dataset.spinning = ''; view.peopleAbort?.();peopleNote.hidden=true;view.busy=true; view.paint(); note.textContent='Detecting codes on this page…'; void scanPage(view); });
     close.addEventListener('click', () => dialog.close());
     dialog.addEventListener('close', () => {
       view.peopleAbort?.();
@@ -1665,16 +1665,16 @@
     if (settingsView?.dialog.open) { settingsView.reopen(); return; }
     const previousFocus = current?.root.shadowRoot?.activeElement || updateEntry?.root.shadowRoot?.activeElement || document.activeElement;
     const saved = configuration();
-    const { root, shadow } = surface('peach-jav-settings', 'Peach 设置');
+    const { root, shadow } = surface('peach-jav-settings', 'Peach settings');
     const dialog = element('dialog');
     dialog.setAttribute('aria-labelledby', 'peach-settings-title');
     const form = element('form');
     form.noValidate = true;
     const bar = element('header', 'bar subpage-bar');
-    const heading = element('h2', '', 'Peach 设置');
+    const heading = element('h2', '', 'Peach settings');
     heading.id = 'peach-settings-title';
-    const close = control('返回 Peach 主界面', { icon: 'back' });
-    const cancel = control('取消');
+    const close = control('Back to Peach main interface', { icon: 'back' });
+    const cancel = control('Cancel');
     const body = element('div', 'body');
     function field(id, label, hint, type = 'text') {
       const wrapper = element('div', 'field');
@@ -1689,41 +1689,41 @@
       body.append(wrapper);
       return { wrapper, input, help };
     }
-    const address = field('peach-base', 'Peach 地址', '可粘贴配对信息，一并填好令牌。', 'url');
+    const address = field('peach-base', 'Peach address', 'You can paste the pairing info to fill in the token as well.', 'url');
     address.input.placeholder = 'https://peach.example.com';
     address.input.value = String(GM_getValue(STORAGE_BASE, '') || '');
     address.input.autofocus = true;
-    const secret = field('peach-token', '专用令牌', '在 Peach 配置 → 下载渠道 → 浏览器添加 JAV 生成。', 'password');
-    secret.input.placeholder = saved ? '已保存，留空保留' : '粘贴专用令牌';
+    const secret = field('peach-token', 'Dedicated token', 'Generate it in Peach settings → Download channels → Browser add JAV.', 'password');
+    secret.input.placeholder = saved ? 'Saved; leave blank to keep' : 'Paste the dedicated token';
     const secretRow = element('div', 'secret');
     secret.input.replaceWith(secretRow);
-    const reveal = control('显示');
-    reveal.setAttribute('aria-label', '显示专用令牌');
+    const reveal = control('Show');
+    reveal.setAttribute('aria-label', 'Show dedicated token');
     reveal.setAttribute('aria-pressed', 'false');
     reveal.addEventListener('click', () => {
       const visible = secret.input.type === 'password';
       secret.input.type = visible ? 'text' : 'password';
-      reveal.textContent = visible ? '隐藏' : '显示';
-      reveal.setAttribute('aria-label', visible ? '隐藏专用令牌' : '显示专用令牌');
+      reveal.textContent = visible ? 'Hide' : 'Show';
+      reveal.setAttribute('aria-label', visible ? 'Hide dedicated token' : 'Show dedicated token');
       reveal.setAttribute('aria-pressed', String(visible));
     });
     secretRow.append(secret.input, reveal);
     const display = element('fieldset', 'display-scope');
-    display.append(element('legend', '', '按钮显示范围'));
+    display.append(element('legend', '', 'Button display scope'));
     const displayValue=GM_getValue(STORAGE_ENABLED,true) === false ? 'off' : GM_getValue(STORAGE_DISPLAY,'jav') === 'always' ? 'always' : 'jav';
-    for (const [value, title] of [['jav', '仅在 JAV 网站显示'], ['always', '在所有网页常驻显示'], ['off','彻底关闭图标']]) {
+    for (const [value, title] of [['jav', 'Show only on JAV sites'], ['always', 'Always show on all web pages'], ['off','Turn the icon off completely']]) {
       const option = element('label');
       const radio = element('input');
       Object.assign(radio, {type:'radio', name:'peach-display', value, checked:displayValue === value});
       option.append(radio, document.createTextNode(title)); display.append(option);
     }
-    display.append(element('p','hint','关闭后从篡改猴菜单「开启」恢复。'));
+    display.append(element('p','hint','After turning it off, restore it from the Tampermonkey menu "Enable".'));
     body.append(display);
     const sound = element('fieldset', 'display-scope');
-    sound.append(element('legend', '', '提示音'));
+    sound.append(element('legend', '', 'Sounds'));
     const soundOption = element('label'), soundInput = element('input');
     Object.assign(soundInput, {type:'checkbox', name:'peach-success-sound', checked:GM_getValue(STORAGE_SOUND, true) !== false});
-    soundOption.append(soundInput, document.createTextNode('点加入和影片完成入库时播放提示音'));
+    soundOption.append(soundInput, document.createTextNode('Play a sound when clicking Add and when a video finishes importing'));
     sound.append(soundOption);
     body.append(sound);
     const error = element('p', 'geist-note');
@@ -1745,19 +1745,19 @@
         address.input.value = config.base;
         secret.input.type = 'password';
         secret.input.value = config.token;
-        reveal.textContent = '显示';
-        reveal.setAttribute('aria-label', '显示专用令牌');
+        reveal.textContent = 'Show';
+        reveal.setAttribute('aria-label', 'Show dedicated token');
         reveal.setAttribute('aria-pressed', 'false');
         error.hidden = true;
         for (const input of [address.input, secret.input]) input.removeAttribute('aria-invalid');
         save.focus();
       } catch {
-        error.textContent = '配对信息无效，请在 Peach 重新复制，或分别填写地址与令牌。';
+        error.textContent = 'The pairing info is invalid; copy it again in Peach, or enter the address and token separately.';
         error.hidden = false;
       }
     });
     const footer = element('footer', 'footer');
-    const save = control('保存设置', { primary: true });
+    const save = control('Save settings', { primary: true });
     save.type = 'submit';
     footer.append(cancel, save);
     bar.append(close, heading);
@@ -1835,7 +1835,7 @@
       const range=display.querySelector('input:checked').value;
       if(range==='off' && !saved && !address.input.value.trim() && !secret.input.value.trim()) {
         try{GM_setValue(STORAGE_ENABLED,false);}catch{
-          error.textContent='设置未能保存，请检查脚本管理器的存储权限后重试。';error.hidden=false;return;
+          error.textContent='Settings could not be saved; check the script manager’s storage permission and try again.';error.hidden=false;return;
         }
         dismiss();applyDisplayPreference();return;
       }
@@ -1843,7 +1843,7 @@
       let config;
       let invalid = address.input;
       try {
-        // 换地址时必须重新输入令牌，避免把已存令牌交给另一个服务。
+        // When the address changes the token must be entered again, to avoid handing the saved token to another service.
         const base = settings(address.input.value, 'validation-only').base;
         invalid = secret.input;
         const token = secret.input.value || (base === saved?.base ? saved.token : '');
@@ -1852,8 +1852,8 @@
         invalid.setAttribute('aria-invalid', 'true');
         invalid.setAttribute('aria-describedby', `${invalid.id}-hint ${error.id}`);
         error.textContent = invalid === address.input
-          ? '请输入有效的 Peach 地址，不含路径、查询参数或账号密码。HTTP 仅支持本机地址。'
-          : '请输入专用令牌；更换 Peach 地址时需要重新填写令牌。';
+          ? 'Enter a valid Peach address without a path, query parameters or credentials. HTTP is supported only for local addresses.'
+          : 'Enter the dedicated token; the token must be entered again when the Peach address changes.';
         error.hidden = false;
         invalid.focus();
         return;
@@ -1865,7 +1865,7 @@
         GM_setValue(STORAGE_ENABLED,range !== 'off');
         GM_setValue(STORAGE_SOUND,soundInput.checked);
       } catch {
-        error.textContent = '设置未能保存，请检查脚本管理器的存储权限后重试。';
+        error.textContent = 'Settings could not be saved; check the script manager’s storage permission and try again.';
         error.hidden = false;
         return;
       }
@@ -1882,9 +1882,9 @@
     placeSurface(root);
   }
 
-  GM_registerMenuCommand('开启', activateInterface);
-  GM_registerMenuCommand('检测更新', () => { configure(); void checkUpdates(true); });
-  GM_registerMenuCommand('设置', configure);
+  GM_registerMenuCommand('Enable', activateInterface);
+  GM_registerMenuCommand('Check for updates', () => { configure(); void checkUpdates(true); });
+  GM_registerMenuCommand('Settings', configure);
 
   let reporting = false;
   let reportAfter = 0;
@@ -1913,7 +1913,7 @@
               const ids = new Set(rows.map(row => row.event.id));
               GM_setValue(STORAGE_ERRORS, JSON.stringify(pendingErrors().filter(row => !ids.has(row.event.id))));
             }
-          } catch { /* 错误取证不影响添加和状态查询。 */ }
+          } catch { /* Error forensics does not affect adding and status queries. */ }
           done();
         }, onerror: done, ontimeout: done, onabort: done,
       });
@@ -1928,7 +1928,7 @@
         code, elapsed_ms: Math.min(3_600_000, Math.max(0, Math.round(elapsed))), status, script_version: SCRIPT_VERSION };
       GM_setValue(STORAGE_ERRORS, JSON.stringify([...pendingErrors(), { base: config.base, event }].slice(-20)));
       flushErrors(config);
-    } catch { /* GM 存储不可用时保留原操作的错误反馈。 */ }
+    } catch { /* When GM storage is unavailable, keep the original operation's error feedback. */ }
   }
 
   function request(config, code, source, method, resolveIdentity = false, extra = {}) {
@@ -1953,13 +1953,13 @@
           onload(response) {
             if (response.status < 200 || response.status >= 300) {
               let detail = '';
-              try { const value = JSON.parse(response.responseText).detail; if (typeof value === 'string' && value.length <= 200) detail = value; } catch { /* 非 JSON 错误使用 HTTP 状态提示。 */ }
-              fail('http', response.status === 401 || response.status === 403 ? '令牌无效或无权限，请重新配置。'
-                : response.status >= 500 ? 'Peach 服务暂时不可用，请稍后查询状态。'
-                : response.status === 429 ? 'Peach 请求过于频繁，请稍后查询。'
-                : resolveIdentity && [404, 405].includes(response.status) ? 'Peach 尚不支持商品号识别，请更新 Peach。'
+              try { const value = JSON.parse(response.responseText).detail; if (typeof value === 'string' && value.length <= 200) detail = value; } catch { /* A non-JSON error uses the HTTP status message. */ }
+              fail('http', response.status === 401 || response.status === 403 ? 'The token is invalid or lacks permission; reconfigure it.'
+                : response.status >= 500 ? 'Peach service is temporarily unavailable; check the status later.'
+                : response.status === 429 ? 'Peach is receiving requests too frequently; check later.'
+                : resolveIdentity && [404, 405].includes(response.status) ? 'Peach does not yet support product number recognition; update Peach.'
                 : response.status === 400 && detail ? detail
-                : resolveIdentity ? '未识别到作品番号，请选中页面的完整番号后加入 Peach。' : 'Peach 请求失败，请查询状态。', response.status);
+                : resolveIdentity ? 'No work code detected; select the complete code on the page and add it to Peach.' : 'Peach request failed; check the status.', response.status);
               return;
             }
             try {
@@ -1969,13 +1969,13 @@
                 || ((!resolveIdentity || code) && ![...candidates(body.code)].some(candidate => comparisonKey(candidate) === comparisonKey(code)))) throw new Error();
               resolve(body);
               flushErrors(config);
-            } catch { fail('invalid_response', 'Peach 返回的状态无效，请查询状态。', response.status); }
+            } catch { fail('invalid_response', 'Peach returned an invalid status; check the status.', response.status); }
           },
-          onerror: () => fail('network', '无法连接 Peach，请查询状态。'),
-          ontimeout: () => fail('timeout', 'Peach 请求超时，请查询状态。'),
-          onabort: () => fail('abort', 'Peach 请求已中止，请查询状态。'),
+          onerror: () => fail('network', 'Cannot connect to Peach; check the status.'),
+          ontimeout: () => fail('timeout', 'Peach request timed out; check the status.'),
+          onabort: () => fail('abort', 'Peach request was aborted; check the status.'),
         });
-      } catch { fail('client_exception', '无法连接 Peach，请查询状态。'); }
+      } catch { fail('client_exception', 'Cannot connect to Peach; check the status.'); }
     });
   }
 
@@ -1995,7 +1995,7 @@
     view.summary.hidden = expanded;
     view.summary.textContent = mode === 'collapsed' ? view.note.textContent : '';
     view.collapse.setAttribute('aria-expanded', String(expanded));
-    view.collapse.setAttribute('aria-label', expanded ? '折叠 Peach 详情' : '展开 Peach 详情');
+    view.collapse.setAttribute('aria-label', expanded ? 'Collapse Peach details' : 'Expand Peach details');
     placeSurface(view.root);
     if (focus) {
       (minimized ? view.launcher : view.collapse).focus();
@@ -2016,11 +2016,11 @@
     view.button.setAttribute('aria-disabled', String(view.busy || view.button.disabled));
     view.button.textContent = view.identity.conflict ? '番号存在冲突'
       : !configuration() ? '配置 Peach'
-      : terminalSuccess ? '已有该影片'
-      : view.busy ? '正在查询 Peach'
-      : view.queryOnly || ACTIVE.has(view.state) ? '查询 Peach 状态'
-      : view.state === 'failed' && view.cause === 'magnet' ? '换一个磁力'
-      : ['failed', 'no_match'].includes(view.state) ? '重试加入 Peach 馆藏' : '加入 Peach 馆藏';
+      : terminalSuccess ? 'Already have this video'
+      : view.busy ? 'Checking Peach'
+      : view.queryOnly || ACTIVE.has(view.state) ? 'Check Peach status'
+      : view.state === 'failed' && view.cause === 'magnet' ? 'Switch magnet'
+      : ['failed', 'no_match'].includes(view.state) ? 'Retry adding to Peach library' : 'Add to Peach library';
     if (view.busy) {
       const spinner = element('span', 'ui-geist-spinner');
       spinner.setAttribute('aria-hidden', 'true');
@@ -2063,7 +2063,7 @@
     view.flow.toggleAttribute('hidden', !body || ['idle', 'owned'].includes(body.state));
     view.progress.setAttribute('aria-valuenow', String(Math.round((completed + fraction) * 1000) / 1000));
     view.progress.setAttribute('aria-valuetext', download?.state === 'ingested' && download.postprocess_state === 'not_requested'
-      ? '流程完成，整理未请求' : `${completed} 个阶段已完成${current >= 0 ? `，${failed ? '未完成' : '当前'}：${['排队', '搜索', '下载', '入库', '整理'][current]}` : ''}`);
+      ? 'Flow complete; organizing was not requested' : `${completed} stages complete${current >= 0 ? `, ${failed ? 'not finished' : 'current'}: ${['Queued', 'Searching', 'Downloading', 'Importing', 'Organizing'][current]}` : ''}`);
     view.progressFill.setAttribute('width', String((completed + fraction) * 20));
     view.steps.forEach((step, index) => {
       const skipped = download?.state === 'ingested' && download.postprocess_state === 'not_requested' && index === 4;
@@ -2071,7 +2071,7 @@
       step.dataset.state = state;
       if (index === current) step.setAttribute('aria-current', 'step'); else step.removeAttribute('aria-current');
       step.querySelector('.flow-mark path').setAttribute('d', state === 'complete' ? STEP_ICON_PATHS.check : state === 'error' ? STEP_ICON_PATHS.error : state === 'skipped' ? STEP_ICON_PATHS.skipped : STAGE_ICON_PATHS[index]);
-      step.setAttribute('aria-label', `${['排队', '搜索', '下载', '入库', '整理'][index]}，${{complete:'已完成',current:'当前阶段',error:'未完成',skipped:'未请求',pending:'待处理'}[state]}`);
+      step.setAttribute('aria-label', `${['Queued', 'Searching', 'Downloading', 'Importing', 'Organizing'][index]}, ${{complete:'Complete',current:'Current stage',error:'Not finished',skipped:'Not requested',pending:'Pending'}[state]}`);
     });
   }
 
@@ -2090,7 +2090,7 @@
     if (!view.queryOnly) attempts.delete(comparisonKey(view.identity.code));
     const download = body.download;
     const known = download && ['submitted', 'remote_running', 'remote_done', 'landed', 'ingested', 'failed', 'cancelled', 'stalled'].includes(download.state);
-    let label = body.stage === 'submitting' ? '正在提交网盘' : LABELS[body.state];
+    let label = body.stage === 'submitting' ? 'Submitting to cloud drive' : LABELS[body.state];
     renderFlow(view, body);
     if (known && typeof download.label === 'string') {
       label = download.label.slice(0, 80);
@@ -2104,7 +2104,7 @@
     if (['failed', 'no_match'].includes(body.state) && body.stage !== 'submitting') label = failureText(body);
     view.statusText = label;
     view.note.textContent = label;
-    // 可以加入时按钮自己说明；不能加入时按钮会变成不可用并给出原因，这行只在其他状态显示。
+    // When adding is possible the button explains itself; when it is not, the button becomes unavailable and gives the reason, and this line shows only in other states.
     view.note.hidden = body.state === 'idle' && body.stage !== 'submitting';
     view.note.dataset.variant = body.state === 'failed' || download?.postprocess_state === 'failed' ? 'error' : 'secondary';
     render(view);
@@ -2120,10 +2120,10 @@
       playSound('start');
       attempts.add(comparisonKey(view.identity.code));
       view.queryOnly = true;
-      view.note.textContent = '正在交给 Peach'; view.note.hidden = false;
+      view.note.textContent = 'Handing over to Peach'; view.note.hidden = false;
       renderFlow(view, { state: 'pending' });
       view.progress.removeAttribute('aria-valuenow');
-      view.progress.setAttribute('aria-valuetext', '等待 Peach 确认任务状态');
+      view.progress.setAttribute('aria-valuetext', 'Waiting for Peach to confirm the job status');
     }
     render(view);
     const deadline = Date.now() + POLL_LIMIT;
@@ -2139,16 +2139,16 @@
         if (!alive(view)) return;
         applyState(view, body);
       }
-      if (tracking(body)) view.note.textContent = `${view.statusText}，可查询状态。`;
+      if (tracking(body)) view.note.textContent = `${view.statusText}; you can check the status.`;
     } catch (error) {
       if (alive(view)) {
         view.queryOnly = true;
         if (view.flow.hasAttribute('hidden')) {
           renderFlow(view, { state: 'pending' });
           view.progress.removeAttribute('aria-valuenow');
-          view.progress.setAttribute('aria-valuetext', '连接异常，任务状态待确认');
+          view.progress.setAttribute('aria-valuetext', 'Connection error; job status to be confirmed');
         } else view.progress.setAttribute('aria-valuetext', view.progress.hasAttribute('aria-valuenow')
-          ? '连接异常，显示最近一次确认的阶段' : '连接异常，任务状态待确认');
+          ? 'Connection error; showing the last confirmed stage' : 'Connection error; job status to be confirmed');
         view.note.textContent = error.message; view.note.hidden = false;
         view.note.dataset.variant = 'error';
       }
@@ -2170,18 +2170,18 @@
     current?.root.remove();
     current = null;
     if (!item || !document.body) { refreshUpdateEntry(); return; }
-    // Shadow DOM 隔离宿主样式。
+    // Shadow DOM isolates host styles.
     document.getElementById(ROOT_ID)?.remove();
-    const { root, shadow } = surface(ROOT_ID, 'Peach 入库');
+    const { root, shadow } = surface(ROOT_ID, 'Peach import');
     const panel = element('section', 'panel');
     panel.id = `${ROOT_ID}-panel`;
     const bar = element('header', 'bar');
-    const label = element('strong', '', item.conflict ? '番号待核对' : item.code || '作品番号');
+    const label = element('strong', '', item.conflict ? 'Code to verify' : item.code || 'Work code');
     const summary = element('span', 'bar-summary');
     summary.hidden = true;
     const heading = element('div', 'bar-heading');
     const title = element('div', 'bar-title');
-    // 与本页番号列表相同的人物头像；资料未取得时保留默认人像。商品号要等 Peach 解析出番号后再查。
+    // The same person avatars as the codes list on this page; the default portrait is kept when the profile is unavailable. Product numbers are looked up only after Peach resolves them to a code.
     let titlePeople = null;
     const loadTitlePeople = code => {
       const config = configuration();
@@ -2197,25 +2197,25 @@
     title.append(label);
     heading.append(title, summary);
     const actions = element('div', 'bar-actions');
-    const settingsButton = control('Peach 设置', { icon: 'settings' });
+    const settingsButton = control('Peach settings', { icon: 'settings' });
     settingsButton.addEventListener('click', configure);
-    const collapse = control('折叠 Peach 详情', { icon: 'collapse' });
+    const collapse = control('Collapse Peach details', { icon: 'collapse' });
     collapse.setAttribute('aria-expanded', 'true');
     collapse.setAttribute('aria-controls', `${ROOT_ID}-body`);
-    const hide = control('隐藏 Peach 面板', { icon: 'close' });
+    const hide = control('Hide Peach panel', { icon: 'close' });
     actions.append(settingsButton, collapse, hide);
     bar.append(heading, actions);
     const body = element('div', 'body');
     body.id = `${ROOT_ID}-body`;
-    const button = control('加入 Peach 馆藏', { primary: true });
+    const button = control('Add to Peach library', { primary: true });
     button.dataset.action = 'add';
     const note = element('p', 'geist-note');
     note.setAttribute('role', 'status');
-    note.setAttribute('aria-label', 'Peach 任务状态');
+    note.setAttribute('aria-label', 'Peach job status');
     note.setAttribute('aria-live', 'polite');
-    // 结构与尺寸复用 Peach 生产 Progress 的 SVG 快照。
+    // Structure and size reuse the SVG snapshot of Peach's production Progress.
     const progress = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    for (const [name, value] of Object.entries({ role: 'progressbar', 'aria-label': '整体任务进度',
+    for (const [name, value] of Object.entries({ role: 'progressbar', 'aria-label': 'Overall job progress',
       'aria-valuemin': '0', 'aria-valuemax': '5', viewBox: '0 0 100 1', preserveAspectRatio: 'none', class: 'task-progress' })) progress.setAttribute(name, value);
     const progressFill = document.createElementNS(progress.namespaceURI, 'rect');
     const progressTrack = document.createElementNS(progress.namespaceURI, 'rect');
@@ -2231,19 +2231,19 @@
     const flow = element('div', 'flow');
     flow.hidden = true;
     const stepList = element('ol', 'flow-steps');
-    stepList.setAttribute('aria-label', '整体任务阶段');
-    const steps = ['排队', '搜索', '下载', '入库', '整理'].map((label, index) => {
+    stepList.setAttribute('aria-label', 'Overall job stages');
+    const steps = ['Queued', 'Searching', 'Downloading', 'Importing', 'Organizing'].map((label, index) => {
       const step = element('li', 'flow-step');
       const mark = element('span', 'flow-mark'); mark.setAttribute('aria-hidden', 'true'); mark.append(stepMark(index), stageAnimation(index));
       step.append(mark, element('span', 'flow-label', label)); stepList.append(step); return step;
     });
     flow.append(progress, stepList);
-    const scan = control('识别本页全部番号'); scan.addEventListener('click', openPageActions);
+    const scan = control('Detect all codes on this page'); scan.addEventListener('click', openPageActions);
     body.append(note, flow, button, scan, updateSection({ availableOnly: true }));
     panel.append(bar, body);
-    const launcher = control('展开 Peach 面板');
+    const launcher = control('Expand Peach panel');
     launcher.classList.add('launcher');
-    launcher.setAttribute('aria-label', '展开 Peach 面板');
+    launcher.setAttribute('aria-label', 'Expand Peach panel');
     launcher.setAttribute('aria-controls', panel.id);
     launcher.setAttribute('aria-expanded', 'false');
     const logo = document.createElement('img');
@@ -2268,7 +2268,7 @@
       present(view, 'expanded', true);
       if (!view.identity.conflict && configuration() && !view.busy) void query(view);
     });
-    note.textContent = item.conflict ? '页面身份不一致，请核对番号。' : configuration() ? '正在查询 Peach 馆藏' : '配置地址与令牌后，即可加入 Peach 馆藏。';
+    note.textContent = item.conflict ? 'The page identity is inconsistent; check the code.' : configuration() ? 'Checking Peach library' : 'After configuring the address and token, you can add to the Peach library.';
     button.addEventListener('click', () => {
       if (!alive(view) || view.busy || view.button.disabled) return;
       if (!configuration()) { configure(); return; }

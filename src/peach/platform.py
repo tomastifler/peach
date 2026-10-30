@@ -1,7 +1,7 @@
 """把数据库中的媒体路径转换为当前系统可以读取的文件路径。
 
-账本里的 `asset.path` 一律是 Windows 形态的绝对路径，前缀取自媒体目录配置。
-来源由配置声明，与具体盘符无关；读取时按本机挂载目录转换。
+ In the ledger `asset.path` is always an absolute path in Windows form, with the prefix taken from the media directory configuration.
+ Sources are declared by configuration, independent of any specific drive letter; at read time they are converted by the local mount directory.
 
 `asset.location` 保存媒体来源的键，例如 local、115、pikpak（见 `media_sources.SOURCE_REGISTRY`）。
 `[media.locations]` 保存每个来源在数据库中的目录前缀；`[media.mounts]` 保存本机实际目录。
@@ -162,7 +162,7 @@ def within_root(path: Path, root: Path) -> bool:
 def system_volume() -> Path:
     """磁盘闸门看的那块盘。
 
-    Windows 读取系统目录所在卷，其他平台使用根卷。
+    Windows reads the volume holding the system directory; other platforms use the root volume.
     """
     if os.name != "nt":
         return Path("/")
@@ -170,7 +170,7 @@ def system_volume() -> Path:
     buffer = ctypes.create_unicode_buffer(32768)
     length = ctypes.windll.kernel32.GetWindowsDirectoryW(buffer, len(buffer))
     if not 0 < length < len(buffer):
-        raise OSError("未取得 Windows 系统目录")
+        raise OSError("Could not obtain the Windows system directory")
     return Path(PureWindowsPath(buffer.value).anchor)
 
 

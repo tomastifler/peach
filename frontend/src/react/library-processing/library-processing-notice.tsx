@@ -67,9 +67,9 @@ export function ProcessingNoticePanel({ state, problem = '', measure = false, on
   if (!problem && !active && !failed && !partial) return null;
   const slow = problem ? null : slowItem(state);
   const warning = !!problem || !!state?.stalled || partial || !!slow;
-  const title = partial ? '处理已结束，部分项目需处理' : failed ? '扫描与采集已中断' : state?.status === 'paused' ? '扫描与采集已暂停' : '扫描与采集';
+  const title = partial ? 'Processing finished; some items need attention' : failed ? 'Scan and collect interrupted' : state?.status === 'paused' ? 'Scan and collect paused' : 'Scan and collect';
   return <aside ref={panel} data-processing-dock="" data-processing-tone={failed ? 'error' : warning ? 'warning' : 'neutral'}
-    aria-label="扫描任务" role={failed ? 'alert' : 'status'}
+    aria-label="Scan job" role={failed ? 'alert' : 'status'}
     className={cx('flex min-w-0 flex-col border bg-background-primary-default p-4',
       failed ? 'border-current/35 text-text-error-primary'
         : warning ? 'border-current/35 text-status-yellow-text'
@@ -84,12 +84,12 @@ export function ProcessingNoticePanel({ state, problem = '', measure = false, on
         {active ? <p data-processing-eta="" className="text-caption-1-regular text-text-secondary tabular-nums wrap-anywhere">{remainingTime(state!)}</p> : null}
       </div>
       <Button size="small" variant="secondary" iconOnly leadingIcon={CollapseChevron} data-processing-toggle="" data-collapse-upward=""
-        aria-label={expanded ? '收起任务详情' : '展开任务详情'} aria-expanded={expanded} aria-controls={bodyId} onClick={toggle} />
+        aria-label={expanded ? 'Collapse job details' : 'Expand job details'} aria-expanded={expanded} aria-controls={bodyId} onClick={toggle} />
       {onHide ? <Button size="small" variant="secondary" iconOnly leadingIcon={RiCloseLine}
-        aria-label="隐藏任务提示" onClick={onHide} /> : null}
+        aria-label="Hide job notice" onClick={onHide} /> : null}
     </div>
     <TrafficProgress traffic={state?.traffic} detailsOpen={trafficExpanded} onDetailsChange={setTrafficExpanded} />
-    {/* 收起时也露在外面：要人当场拿主意的事不能藏进折叠区。 */}
+    {/* Shown outside even when collapsed: anything that needs a person to decide on the spot must not be hidden in the collapsed area. */}
     {slow ? <SlowItemInline state={state!} slow={slow} /> : null}
     </div>
     <CollapseRegion id={bodyId} open={expanded} data-processing-body=""><div className="pt-3"><div className={cx('flex min-w-0 flex-col gap-2 border-t pt-3',
@@ -101,20 +101,20 @@ export function ProcessingNoticePanel({ state, problem = '', measure = false, on
             step.status === 'current' ? 'text-text-primary' : 'text-text-tertiary')}>
           {step.status === 'complete' ? <RiCheckLine aria-hidden className="size-(--icon-inline) shrink-0" />
             : <RiCheckboxBlankCircleLine aria-hidden className={cx('size-(--icon-inline) shrink-0', step.status === 'current' && 'text-border-focus-ring')} />}
-          <VisuallyHidden>{step.status === 'complete' ? '已完成：' : step.status === 'current' ? '当前：' : '待处理：'}</VisuallyHidden>
+          <VisuallyHidden>{step.status === 'complete' ? 'Completed: ' : step.status === 'current' ? 'Current: ' : 'Pending: '}</VisuallyHidden>
           {step.status === 'complete' ? <s className="wrap-anywhere">{step.label}</s> : <span className="wrap-anywhere">{step.label}</span>}
         </li>)}
       </ol> : null}
-      <p className="text-body-2-regular wrap-anywhere">{problem || (failed || partial ? state?.error || '请查看并处理未完成项' : <ProcessingLine state={state!} />)}</p>
+      <p className="text-body-2-regular wrap-anywhere">{problem || (failed || partial ? state?.error || 'Review and handle the unfinished items' : <ProcessingLine state={state!} />)}</p>
       {partial ? <p className="text-body-2-regular wrap-anywhere">{PARTIAL_RESULT_TEXT}</p> : null}
-      {active && state?.stage && !state.steps?.length ? <p className="text-caption-1-regular text-text-tertiary">当前阶段 · {state.stage}</p> : null}
-      {state?.stalled && !problem && !slow ? <p className="text-caption-1-regular">当前步骤耗时较长，正在等待进展</p> : null}
+      {active && state?.stage && !state.steps?.length ? <p className="text-caption-1-regular text-text-tertiary">Current stage · {state.stage}</p> : null}
+      {state?.stalled && !problem && !slow ? <p className="text-caption-1-regular">The current step is taking a while; waiting for progress</p> : null}
     </div></div></CollapseRegion>
     <div className="flex flex-wrap items-center justify-between gap-2 pt-3">
       <LinkButton href="/data-cleanup#libraryProcessing" variant="secondary" size="small" trailingIcon={RiArrowRightLine}>
-        {problem || failed || partial ? '打开扫描与采集' : '任务详情'}
+        {problem || failed || partial ? 'Open scan and collect' : 'Job details'}
       </LinkButton>
-      {partial ? <LinkButton href={ALL_CONTENT_URL} size="small" trailingIcon={RiArrowRightLine}>查看全部内容</LinkButton> : null}
+      {partial ? <LinkButton href={ALL_CONTENT_URL} size="small" trailingIcon={RiArrowRightLine}>View all content</LinkButton> : null}
       {active ? <ProcessingControls state={state!} disabled={!!problem} /> : null}
     </div>
   </aside>;

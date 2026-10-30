@@ -85,7 +85,7 @@ class TagManagementTests(unittest.TestCase):
         self.assertEqual(q_tag_management(contract, dict(limit='20', state='blocked'))['total'], 0)
         past_end = q_tag_management(contract, dict(limit='2', offset='99'))
         self.assertEqual((past_end['items'], past_end['total'], past_end['has_more']), ([], 4, False))
-        complete = q_tag_management(contract, dict(q='不存在', state='active'))
+        complete = q_tag_management(contract, dict(q='does not exist', state='active'))
         self.assertEqual(set(complete), {'items', 'duplicate_groups'})
         self.assertEqual(len(complete['items']), 5)
 
@@ -98,7 +98,7 @@ class TagManagementTests(unittest.TestCase):
             complete = q_tag_management(contract, {})
             self.assertEqual(len(complete['duplicate_groups']), 1)
             for raw, expected in [('invalid', 20), ('0', 1), ('-5', 1), ('99999', 600)]:
-                page = q_tag_management(contract, dict(limit=raw, offset='invalid', q='不存在'))
+                page = q_tag_management(contract, dict(limit=raw, offset='invalid', q='does not exist'))
                 self.assertEqual((page['limit'], page['offset'], page['total']), (expected, 0, 0))
                 self.assertEqual(page['duplicate_groups'], complete['duplicate_groups'])
             self.assertEqual(inventory.call_count, 1)
@@ -112,7 +112,7 @@ class TagManagementTests(unittest.TestCase):
             self.assertEqual(q_tag_management(contract, dict(limit='20'))['total'], 3)
             self.assertEqual(inventory.call_count, 3)
         for args in [dict(limit='20', state='unknown'), dict(limit='20', view='unknown')]:
-            with self.subTest(args=args), self.assertRaisesRegex(ValueError, '未知的标签'):
+            with self.subTest(args=args), self.assertRaisesRegex(ValueError, 'Unknown tag'):
                 q_tag_management(contract, args)
 
     def test_local_browse_tag_total_counts_filtered_rows_on_every_page(self):
@@ -150,7 +150,7 @@ class TagManagementTests(unittest.TestCase):
         self.c.execute('CREATE TABLE tag_reference(entity_id REFERENCES entity(id))')
         self.c.execute('CREATE TRIGGER bad_tag_reference AFTER UPDATE OF canonical_name ON entity BEGIN INSERT INTO tag_reference VALUES(-1); END')
         self.c.commit()
-        with self.assertRaisesRegex(ValueError, '外键检查'):
+        with self.assertRaisesRegex(ValueError, 'foreign key check'):
             self.execute('rename', [entity_id], name='我的眼镜')
         self.c.rollback()
         self.assertEqual(self.c.execute('SELECT canonical_name FROM entity WHERE id=?', (entity_id,)).fetchone()[0], '眼镜')
@@ -192,7 +192,7 @@ class TagManagementTests(unittest.TestCase):
     def test_rename_conflict_requires_explicit_merge(self):
         first = self.tag('甲')
         self.tag('乙')
-        with self.assertRaisesRegex(ValueError, '请使用合并'):
+        with self.assertRaisesRegex(ValueError, 'please use merge'):
             preview(self.c, dict(operation='rename', ids=[first], name='乙'))
 
     def test_stale_plan_does_not_apply(self):
@@ -200,7 +200,7 @@ class TagManagementTests(unittest.TestCase):
         body = dict(operation='rename', ids=[entity_id], name='乙')
         plan = preview(self.c, body)
         self.tag('甲', (2,))
-        with self.assertRaisesRegex(ValueError, '重新预览'):
+        with self.assertRaisesRegex(ValueError, 'preview the operation scope again'):
             apply_plan(self.c, dict(body, token=plan['token']))
         self.assertEqual(self.c.execute('SELECT canonical_name FROM entity').fetchone()[0], '甲')
 
@@ -433,7 +433,7 @@ class OnlineTagManagementTests(unittest.TestCase):
         self.seed()
         item_id = self.c.execute("SELECT id FROM follow_item WHERE external_id='2'").fetchone()[0]
         for tag in ['', ' ', 'a,b', 'a\nb', 'x' * 81]:
-            with self.subTest(tag=repr(tag)), self.assertRaisesRegex(ValueError, '标签名'):
+            with self.subTest(tag=repr(tag)), self.assertRaisesRegex(ValueError, 'Tag name'):
                 web_follow.w_follow_tag(self.contract, dict(id=item_id, operation='add', tag=tag))
         original = self.c.execute('SELECT metadata_json FROM follow_item WHERE id=?', (item_id,)).fetchone()[0]
         removed = web_follow.w_follow_tag(self.contract, dict(id=item_id, operation='remove', tag='outdoors'))
@@ -446,7 +446,7 @@ class OnlineTagManagementTests(unittest.TestCase):
         restored = web_follow.w_follow_tag(self.contract, dict(id=item_id, operation='restore', tag='户外'))
         self.assertIn('户外', restored['item']['tags'])
         self.assertEqual(restored['item']['custom_tags'], [])
-        with self.assertRaisesRegex(ValueError, '不存在'):
+        with self.assertRaisesRegex(ValueError, 'does not exist'):
             web_follow.w_follow_tag(self.contract, dict(id=987654, operation='add', tag='精选'))
 
     def test_merge_preserves_content_blocking_and_unblock_remains_available_without_items(self):
@@ -464,14 +464,14 @@ class OnlineTagManagementTests(unittest.TestCase):
 
     def test_online_conflicts_types_and_stale_plans_are_rejected(self):
         self.seed()
-        with self.assertRaisesRegex(ValueError, '相同来源类型'):
+        with self.assertRaisesRegex(ValueError, 'same source type'):
             online_tag_management.preview(self.c, dict(operation='merge', ids=['outdoors', 'preview_artist'], target_id='outdoors'), web_follow.online_tag_inventory(self.c))
-        with self.assertRaisesRegex(ValueError, '合并标签'):
+        with self.assertRaisesRegex(ValueError, 'please use merge tags'):
             online_tag_management.preview(self.c, dict(operation='rename', ids=['outdoors'], name='landscape'), web_follow.online_tag_inventory(self.c))
         command = dict(scope='online', operation='rename', ids=['outdoors'], name='户外')
         command['token'] = online_tag_management.preview(self.c, command, web_follow.online_tag_inventory(self.c))['token']
         self.execute('hide', ['outdoors'])
-        with self.assertRaisesRegex(ValueError, '重新预览'):
+        with self.assertRaisesRegex(ValueError, 'preview the operation scope again'):
             w_tag_management(self.contract, command)
 
     def test_online_favorites_follow_rename_merge_and_keep_local_tags_independent(self):

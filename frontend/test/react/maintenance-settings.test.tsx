@@ -11,17 +11,17 @@ import { actionOrder, buttonNamed, choose, click, fetchMock, mount, section, sen
 
 const automatic = { mode: 'off', interval_hours: 24, available: true, download_available: true };
 const release: ReleaseState = {
-  current_version: '0.9.0', latest_version: null, channel: '测试版', installation: '独立测试包',
-  state: 'unchecked', message: '尚未检查', release_url: 'https://github.com/peach-mitao/peach/releases',
+  current_version: '0.9.0', latest_version: null, channel: '测试版', installation: 'Standalone test build',
+  state: 'unchecked', message: 'Not checked yet', release_url: 'https://github.com/peach-mitao/peach/releases',
 };
 const uninstall = { available: true, full_available: true, message: '', data_root: 'fixture', directories: ['fixture', 'fixture/cache'] };
 
-it('分区依次是运行信息、安装教程、卸载；缺依赖的那条运行信息带下载链接，系统诊断入口在运行信息底栏', async () => {
+it('分区依次是运行信息、Installation guide、卸载；缺依赖的那条运行信息带下载链接，系统诊断入口在运行信息底栏', async () => {
   const data: ConfigurationData = {
     editable: true, notice: '', revision: 'r', media_dirs: [], library_count: 0, port: 9123,
     automatic_updates: automatic, updates: release, uninstall,
     facts: [
-      { term: '版本', value: '0.7.25' },
+      { term: 'Version', value: '0.7.25' },
       { term: 'FFmpeg', value: '未找到 FFmpeg', download_url: 'https://ffmpeg.org/download.html', download_label: '下载 FFmpeg' },
     ],
   };
@@ -29,13 +29,13 @@ it('分区依次是运行信息、安装教程、卸载；缺依赖的那条运�
   expect([...host.firstElementChild!.children].map((node) => node.getAttribute('aria-label')))
     .toEqual(['Runtime info', 'Setup tutorial', 'Uninstall Peach']);
   const facts = section(host, 'Runtime info')!;
-  expect([...facts.querySelectorAll('dt')].map((dt) => dt.textContent)).toEqual(['版本', 'FFmpeg']);
+  expect([...facts.querySelectorAll('dt')].map((dt) => dt.textContent)).toEqual(['Version', 'FFmpeg']);
   const link = facts.querySelector('a[href="https://ffmpeg.org/download.html"]');
   expect(link?.getAttribute('target')).toBe('_blank');
   expect(link?.textContent).toBe('下载 FFmpeg');
 });
 
-describe('自动更新', () => {
+describe('Auto-update', () => {
   it('两颗开关互相约束，服务端成功后才回执，关闭也能保存', async () => {
     const fetcher = fetchMock(200, automatic);
     vi.stubGlobal('fetch', fetcher);
@@ -71,12 +71,12 @@ describe('自动更新', () => {
   });
 });
 
-describe('检查更新', () => {
+describe('Check for updates', () => {
   it('标明应用更新包体积和工具补下载条件', async () => {
     const host = await mount(<ReleaseUpdates initial={{ ...release, state: 'available', latest_version: '1.0.0',
       package_kind: 'update', asset_size: 12 * 1048576 }} />);
     expect(host.textContent).toContain('App update package · 12.0 MB');
-    expect(host.textContent).toContain('if tools are missing, damaged or change version, the required tool package is downloaded separately');
+    expect(host.textContent).toContain('if a tool is missing, damaged or changed in version, the required tool package is downloaded separately');
     expect(host.textContent).not.toContain('首次安装');
     expect([...host.querySelectorAll('a')].some((a) => a.textContent === 'Full installer package')).toBe(false);
   });
@@ -115,22 +115,22 @@ describe('检查更新', () => {
     await settle();
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls[0]?.[0]).toBe('/api/configuration/updates');
-    expect(updates.textContent).toContain('最新版本0.10.0');
-    expect(updates.querySelector('[role="status"]')?.textContent).toContain('有可用更新');
-    expect(buttonNamed('下载并安装', updates)).not.toBeNull();
-    expect(actionOrder(check.parentElement)).toEqual(['官网', 'GitHub', '查看发布页', '检查更新', '下载并安装']);
+    expect(updates.textContent).toContain('Latest version0.10.0');
+    expect(updates.querySelector('[role="status"]')?.textContent).toContain('Update available');
+    expect(buttonNamed('Download and install', updates)).not.toBeNull();
+    expect(actionOrder(check.parentElement)).toEqual(['Website', 'GitHub', 'View release page', 'Check for updates', 'Download and install']);
     expect([...updates.querySelectorAll('a')].map((link) => [link.textContent, link.getAttribute('href')]))
       .toEqual([
-        ['官网', 'https://peach.video/#download'],
+        ['Website', 'https://peach.video/#download'],
         ['GitHub', 'https://github.com/peach-mitao/peach'],
-        ['查看发布页', 'https://github.com/peach-mitao/peach/releases'],
+        ['View release page', 'https://github.com/peach-mitao/peach/releases'],
       ]);
     expect(updates.textContent).not.toContain('暂无法更新');
     expect(document.activeElement).toBe(check);
-    vi.stubGlobal('fetch', fetchMock(503, { detail: '连接失败' }));
+    vi.stubGlobal('fetch', fetchMock(503, { detail: 'Connection failed.' }));
     await click(check);
     await settle();
-    expect(updates.querySelector('[role="alert"]')?.textContent).toBe('连接失败');
+    expect(updates.querySelector('[role="alert"]')?.textContent).toBe('Connection failed.');
     expect(updates.textContent).not.toContain('0.10.0');
     expect(check.disabled).toBe(false);
   });
@@ -169,7 +169,7 @@ it('卸载默认保留数据，勾选完全卸载后确认文案点名要删的�
   expect(buttonNamed('Uninstall Peach', area)?.disabled).toBe(true);
 });
 
-describe('安装教程', () => {
+describe('Installation guide', () => {
   it('按下去调遗留层那一半，成功后发回执', async () => {
     const reopenTutorial = vi.fn(async () => {});
     const receipt = vi.fn();

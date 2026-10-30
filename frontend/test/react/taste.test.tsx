@@ -154,7 +154,7 @@ it('首屏读 prefetch 落进缓存的那一份，两套证据是页签不是并
   expect(tasteGets(fetcher)).toHaveLength(1);
   expect(tasteGets(fetcher)[0]?.[0]).toBe(`${TASTE_URL}?window=all`);
   expect([...host.querySelectorAll('[role=tab]')].map((tab) => tab.textContent).slice(0, 2))
-    .toEqual(['浏览器记录', 'Peach 观看与评价']);
+    .toEqual(['Browser history', 'Peach viewing and ratings']);
   expect(host.textContent).toContain('900');
   expect(host.textContent).not.toContain('works have internal behavior evidence');
 });
@@ -203,11 +203,11 @@ it('维度不足三个时画像卡不出雷达，排行条照常出', async () =
 
 it('没有名次的榜给一句怎么补，不重复「暂无足够证据」', async () => {
   const { host } = await open();
-  await click([...host.querySelectorAll('[role=tab]')].find((tab) => tab.textContent === 'Peach 观看与评价') ?? null);
-  await click([...host.querySelectorAll('[role=tab]')].find((tab) => tab.textContent === '创作者') ?? null);
+  await click([...host.querySelectorAll('[role=tab]')].find((tab) => tab.textContent === 'Peach viewing and ratings') ?? null);
+  await click([...host.querySelectorAll('[role=tab]')].find((tab) => tab.textContent === 'Creators') ?? null);
   const panel = [...host.querySelectorAll('[role=tabpanel]')].at(-1)!;
-  expect(panel.textContent).toContain('记录还不够');
-  expect(panel.textContent).toContain('在 Peach 里播放或评价作品后，这里会列出对应的创作者。');
+  expect(panel.textContent).toContain('Not enough history yet');
+  expect(panel.textContent).toContain('After you play or rate works in Peach, the matching creators are listed here.');
 });
 
 it('雷达半径按平方根刻度：最大的维度落在外圈，浮层读的仍是原始次数', async () => {
@@ -241,7 +241,7 @@ it('雷达半径按平方根刻度：最大的维度落在外圈，浮层读的�
   });
   const tip = host.querySelector('.recharts-tooltip-wrapper')!;
   expect(tip.textContent).toContain('维度0');
-  expect([...tip.querySelectorAll('span')].map((span) => span.textContent)).toEqual(['标签出现次数', '657']);
+  expect([...tip.querySelectorAll('span')].map((span) => span.textContent)).toEqual(['Tag occurrences', '657']);
 });
 
 it('浏览器画像的雷达、排行与浏览活跃热力图都按这一份数画', async () => {
@@ -270,29 +270,29 @@ it('换分析范围时留住上一份：这一屏不退回等待态，只等新�
 it('后台重算时隔一会儿再问，算完换上新结果就停', async () => {
   vi.useFakeTimers();
   const { fetcher, host } = await open({ taste: [payload({ stale: true }), payload()] });
-  expect(host.textContent).toContain('正在更新口味分析');
+  expect(host.textContent).toContain('Updating taste analysis; showing the result from');
   await tick(STALE_POLL_MS);
   await settle();
   expect(tasteGets(fetcher)).toHaveLength(2);
-  expect(host.textContent).not.toContain('正在更新口味分析');
+  expect(host.textContent).not.toContain('Updating taste analysis; showing the result from');
   await tick(STALE_POLL_MS * 3);
   expect(tasteGets(fetcher)).toHaveLength(2);
 });
 
-it('重算失败时不再轮询，提示条说明更新失败，「立即重试」让服务端跳过等待再算一次', async () => {
+it('重算失败时不再轮询，提示条说明更新失败，「Retry now」让服务端跳过等待再算一次', async () => {
   vi.useFakeTimers();
   const failed = payload({ stale: true, error: '账本读取失败', computed_at: '2026-09-10T00:00:00Z' });
   const fresh = payload({ summary: { history_visits: 4321, history_sources: 2 } });
   const { fetcher, host } = await open({ taste: [failed, fresh] });
-  expect(host.textContent).toContain('口味分析更新失败');
+  expect(host.textContent).toContain('Taste analysis update failed');
   expect(host.textContent).toContain('账本读取失败');
-  expect(host.textContent).not.toContain('正在更新口味分析');
+  expect(host.textContent).not.toContain('Updating taste analysis; showing the result from');
   await tick(STALE_POLL_MS * 3);
   expect(tasteGets(fetcher), '失败之后还在轮询').toHaveLength(1);
-  await click(rowNamed(host, '立即重试'));
+  await click(rowNamed(host, 'Retry'));
   await settle();
   expect(String(tasteGets(fetcher).at(-1)?.[0])).toBe(`${TASTE_URL}?window=all&retry=1`);
-  expect(host.textContent).not.toContain('口味分析更新失败');
+  expect(host.textContent).not.toContain('Taste analysis update failed');
   expect(host.textContent).toContain('4,321');
 });
 

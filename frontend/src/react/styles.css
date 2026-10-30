@@ -145,14 +145,14 @@
   --breakpoint-duplicate-narrow: 901px;
   /* 旧 `board.css` 600px 那条窄屏媒体查询：列表页汇总块改上下两行，重复文件的组头与行距收一档。 */
   --breakpoint-compact: 601px;
-  /* 760px 以下下划线 Tabs 收紧，索引页头的名册读数独占次行。 */
+  /* 760px and below, underline Tabs tighten and the roster readout in the index page header takes its own second line. */
   --breakpoint-board-narrow: 761px;
   /* 索引页的格宽：人格 150px，公司格放宽一档到 180px（给方标识换宽度），字母表一行一枚标签
    * 最窄 200px。壳铺的骨架（`web/css/06-index.css` 的 `.igrid` 与 `ui-kit/skeleton.css` 的 `.ui-alphalist`）用同一组宽。 */
   --container-index-person: 150px;
   --container-index-company: 180px;
   --container-index-tag: 200px;
-  /* 空状态两档（`components/empty-state.tsx`）共用三个值，同遗留层
+  /* Empty state's two tiers (`components/empty-state.tsx`) share three values, same as the legacy layer
    * `ui-kit/markup.css` 的 `.ui-emptystate`：图标盒子 54px 见方，说明最宽 340px、行高 1.55。 */
   --spacing-empty-glyph: 54px;
   --container-empty-copy: 340px;
@@ -371,7 +371,7 @@ html:has([data-selection-dock]) { scroll-padding-bottom: var(--selection-dock-sp
 
 /* 页面分区使用与遗留导航相同的中性填充。 */
 .peach-react [data-board-tab-list] > button[aria-selected="true"] { background: var(--hover); color: var(--ink); }
-/* 错误详情是次要文本动作，使用中性悬停面与常规字重。 */
+/* Error details are a secondary text action and use a neutral hover surface and regular font weight. */
 .peach-react [data-error-details-toggle]{font:var(--board-compact);color:var(--ink-2);background:transparent}
 .peach-react [data-error-details-toggle]:hover:not(:disabled,[aria-disabled="true"]){background:var(--control-hover);color:var(--ink)}
 .peach-react [data-error-details-toggle]:active:not(:disabled,[aria-disabled="true"]){background:var(--hover);color:var(--ink)}
@@ -383,14 +383,14 @@ html:has([data-selection-dock]) { scroll-padding-bottom: var(--selection-dock-sp
   box-shadow: inset 0 0 0 1px var(--glass-rim), var(--glass-pick-shadow);
 }
 
-/* BoardUI 带字按键与链接键的字形和文字同行，画框取 `--icon-inline`，随所在文字字号缩放；纯图标键
- * 没有文字那一格，仍按档位取 20、18、14px。`button-press-motion` 只在 Button 与 ButtonLink 上，
- * `underline-offset-3` 只在 LinkButton 上，上游副本不改（`boardui/ORIGIN.md`）。 */
+/* BoardUI buttons with text and link buttons keep the glyph on the same line as the text, with the frame taken from `--icon-inline` and scaled with the surrounding font size; icon-only buttons
+ * have no text cell and still use 20, 18 and 14px per tier. `button-press-motion` is only on Button and ButtonLink,
+ * `underline-offset-3` is only on LinkButton, and the upstream copy is left unchanged (`boardui/ORIGIN.md`). */
 .peach-react .button-press-motion:has(> span) > svg,
 .peach-react .underline-offset-3 > svg { width: var(--icon-inline); height: var(--icon-inline); }
 
-/* 玻璃筛选条整条取紧凑档：页签、药丸、排序、分段与图标键同高。实体页标题右侧那一行有默认档的
- * 过滤输入框与分段器外框，同一枚收藏键和管理标签键在那里取默认档。 */
+/* The whole glass filter bar uses the compact tier: tabs, pills, sort, segmented control and icon buttons share one height. The row to the right of an entity page title has a default-tier
+ * filter input and segmented-control frame, and the same favorite button and manage-tags button take the default tier there. */
 .peach-react [data-filter-glass] :is(button, a[aria-pressed], [data-glass-segment]) { height: var(--control-h-compact); min-height: var(--control-h-compact); }
 .peach-react [data-filter-glass] .tag-skeleton-view { padding:0;border:0;gap:2px;height:var(--control-h-compact);background:none; }
 .peach-react [data-filter-glass] .tag-skeleton-view > label { width:var(--control-h-compact);height:var(--control-h-compact);min-height:var(--control-h-compact);padding:0;border-radius:8px; }
@@ -731,9 +731,9 @@ html:has([data-selection-dock]) { scroll-padding-bottom: var(--selection-dock-sp
   outline: none;
 }
 
-/* BoardUI 下拉的选项面板定宽 266px，表单里通栏的触发框（查找资源的「优先寻找」）展开后只剩
- * 半截。React Aria 给每个下拉面板写了 `--trigger-width`：面板至少与触发框同宽，比 266px 窄的
- * 触发框（工具栏、设置行里的短下拉）仍按 266px 展开，长选项不会被挤断。 */
+/* BoardUI dropdown option panels have a fixed width of 266px, so a full-width trigger in a form (the "Prefer" field of Find resources) is left with only half
+ * of its width when expanded. React Aria writes `--trigger-width` on every dropdown panel: the panel is at least as wide as the trigger, and triggers narrower than 266px
+ * (short dropdowns in toolbars and setting rows) still expand at 266px so long options are not squeezed and cut off. */
 .peach-react [data-trigger='Select'] {
   min-width: var(--trigger-width);
 }
@@ -777,7 +777,7 @@ html:has([data-selection-dock]) { scroll-padding-bottom: var(--selection-dock-sp
   border-bottom: 1px solid var(--color-separator-border);
   transition: padding 200ms ease, font-size 200ms ease;
 }
-/* 工具栏按操作组换行；组内仍可适应比自身固有宽度更窄的容器。 */
+/* The toolbar wraps by action group; a group can still fit a container narrower than its own intrinsic width. */
 [data-responsive-toolbar] {
   display: flex;
   flex-wrap: wrap;

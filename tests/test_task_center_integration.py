@@ -128,8 +128,8 @@ class BackgroundJobTaskRunTests(unittest.TestCase):
         self.assertEqual(summary['source_failed'], 1)
         self.assertEqual(summary['source_warning'], 1)
         self.assertEqual(summary['issues'], [
-            {'source': 17, 'label': '示例作者', 'provider': '示例站点', 'kind': '检查失败', 'error': 'HTTP 403'},
-            {'source': 18, 'label': '另一来源', 'provider': '', 'kind': '补查失败', 'error': '连接超时'},
+            {'source': 17, 'label': '示例作者', 'provider': '示例站点', 'kind': 'Check failed', 'error': 'HTTP 403'},
+            {'source': 18, 'label': '另一来源', 'provider': '', 'kind': 'Backfill failed', 'error': '连接超时'},
         ])
         self.assertNotIn('private', json.dumps(summary))
 

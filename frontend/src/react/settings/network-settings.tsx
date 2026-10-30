@@ -43,7 +43,7 @@ export function PeachProxy({ initial, receipt }: { initial: PeachProxyState; rec
   return (
     <Section id="peachProxy" title="Peach proxy" onSubmit={submit}>
       <Rows>
-        <SettingsRow label="连接方式">
+        <SettingsRow label="Connection method">
           <ProxyModeSelect mode={mode} onChange={setMode} />
         </SettingsRow>
       </Rows>

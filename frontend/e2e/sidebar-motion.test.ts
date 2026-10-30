@@ -121,7 +121,7 @@ describe('侧栏开合', () => {
 
       const collapsed = await toggle(page);
       const expanded = await toggle(page);
-      for (const [name, state] of [['收起', collapsed], ['展开', expanded]] as const) {
+      for (const [name, state] of [['Collapse', collapsed], ['Expand', expanded]] as const) {
         assert.equal(state.mapsDuring, 0, `${name}过渡中重画了 ${state.mapsDuring} 张玻璃贴图`);
         assert.equal(state.opticDuring, 'blur(14px)', `${name}过渡中抽屉仍挂着旧尺寸的位移贴图`);
         assert.equal(state.mapWidth, state.drawerClientWidth, `${name}停下后贴图宽 ${state.mapWidth}，没有按终态尺寸 ${state.drawerClientWidth} 补上`);

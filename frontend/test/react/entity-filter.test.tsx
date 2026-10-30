@@ -12,8 +12,8 @@ import {
 import { FOLLOW_FILTERS } from '../../src/react/follow-feed/follow-feed';
 import { click, mount, settle } from './render';
 
-const STATES = [{ k: '', label: '全部' }, { k: 'fresh', label: '没看过' }, { k: 'later', label: '稍后看' }, { k: 'flagged', label: '已标记' }];
-const LAYOUTS = [['big', '大图', 'maximize'], ['small', '小图', 'layout-grid']] as const;
+const STATES = [{ k: '', label: 'All' }, { k: 'fresh', label: '没看过' }, { k: 'later', label: 'Watch later' }, { k: 'flagged', label: '已标记' }];
+const LAYOUTS = [['big', 'Large', 'maximize'], ['small', 'Small', 'layout-grid']] as const;
 
 function actions(patch: Partial<EntityFilterActions> = {}): EntityFilterActions {
   return {
@@ -38,8 +38,8 @@ function props(patch: Partial<EntityFilterProps> = {}): EntityFilterProps {
     readout: '视频 · 24 · 中出', busy: false,
     video: {
       sorts: [
-        { key: 'release', label: '发行时间', pressed: true, dir: 'desc', ariaLabel: '按发行时间从旧到新排序' },
-        { key: 'rating', label: '评分', pressed: false, dir: '', ariaLabel: '按评分从高到低排序' },
+        { key: 'release', label: 'Released', pressed: true, dir: 'desc', ariaLabel: '按发行时间从旧到新排序' },
+        { key: 'rating', label: 'Rating', pressed: false, dir: '', ariaLabel: '按评分从高到低排序' },
       ],
       jav: { layout: 'big', options: LAYOUTS },
     },
@@ -174,7 +174,7 @@ describe('照片与名册视图', () => {
     const shell = actions();
     const host = await mount(<EntityFilterPage {...props({
       kind: 'agency', view: 'people', readout: '艺人 · 3', video: null, actions: shell,
-      views: { label: '页面视图', people: { label: '艺人', count: 3, icon: 'user-round' }, videos: { count: 24 }, photos: null, online: null },
+      views: { label: '页面视图', people: { label: 'Performers', count: 3, icon: 'user-round' }, videos: { count: 24 }, photos: null, online: null },
     })} />);
     expect($$(host, '[data-media-view]').map((key) => key.dataset.mediaView)).toEqual(['people', 'videos']);
     expect($(host, '[data-media-view="people"]')?.getAttribute('aria-pressed')).toBe('true');

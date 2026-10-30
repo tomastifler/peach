@@ -63,17 +63,17 @@ describe('视频预览设置', () => {
         assert.deepEqual(writes, [{ metadata_only: true }, { metadata_only: false }]);
         const preview = page.locator('#previewAccelerationSetting button');
         await preview.click();
-        await page.getByRole('option', { name: '软件解码', exact: true }).click();
-        await page.getByText('已保存抽帧解码方式', { exact: true }).waitFor();
+        await page.getByRole('option', { name: 'Software decoding', exact: true }).click();
+        await page.getByText('Frame-extraction decoding saved', { exact: true }).waitFor();
         assert.equal(state.previewAcceleration, 'software');
         assert.equal(state.playbackAcceleration, 'auto');
         assert.deepEqual(writes.slice(-1), [{ preview_acceleration: 'software' }]);
-        // 播放转码在「应用与维护 → 视频播放」，这一页签里只有抽帧解码方式。
+        // 播放转码在「App & maintenance → Video playback」，这一页签里只有抽帧解码方式。
         assert.equal(await page.locator('.ui-board-group-active #playbackAccelerationSetting').count(), 0);
         await page.reload();
         await preview.waitFor();
         await settle(page);
-        assert.match(await preview.innerText(), /软件解码/);
+        assert.match(await preview.innerText(), /Software decoding/);
         const measured = await layout(page);
         assert.ok(measured.scrollWidth <= measured.viewportWidth, JSON.stringify(measured));
         assert.deepEqual(measured.offenders, []);
@@ -84,12 +84,12 @@ describe('视频预览设置', () => {
       } finally { await opened.close() }
     });
 
-    it(`${viewport.name}：「应用与维护 → 视频播放」里改转码方式，只写这一项，重新载入读回`, async () => {
+    it(`${viewport.name}：「App & maintenance → Video playback」里改转码方式，只写这一项，重新载入读回`, async () => {
       const { state, writes, route } = mediaProcessing();
       const opened = await visit(browser, '/settings/maintenance', viewport, route);
       const { page } = opened;
       try {
-        const section = page.getByRole('region', { name: '视频播放', exact: true });
+        const section = page.getByRole('region', { name: 'Video playback', exact: true });
         const trigger = section.locator('#playbackAccelerationSetting button');
         await trigger.waitFor({ state: 'visible' });
         await page.waitForFunction(() => document.querySelector('#playbackAccelerationSetting button')?.hasAttribute('disabled') === false);
@@ -100,19 +100,19 @@ describe('视频预览设置', () => {
         await trigger.scrollIntoViewIfNeeded();
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         await trigger.click();
-        await page.getByRole('option', { name: '软件编解码', exact: true }).click();
-        await page.getByText('已保存转码方式', { exact: true }).waitFor();
+        await page.getByRole('option', { name: 'Software codec', exact: true }).click();
+        await page.getByText('Transcoding method saved', { exact: true }).waitFor();
         assert.equal(state.playbackAcceleration, 'software');
         assert.equal(state.previewAcceleration, 'auto');
         assert.deepEqual(writes, [{ playback_acceleration: 'software' }]);
-        // 「视频播放」排在「开机自启」之后、「存储空间」之前（没有这两张卡的环境只比相对次序）。
+        // 「Video playback」排在「Launch at startup」之后、「Storage」之前（没有这两张卡的环境只比相对次序）。
         const order = await page.locator('.ui-board-group-active').evaluate((group) =>
           [...group.querySelectorAll('section[aria-label], form[aria-label]')].map((node) => node.getAttribute('aria-label')));
-        const at = order.indexOf('视频播放');
-        assert.ok(at >= 0 && order.slice(0, at).every((name) => ['检查更新', '自动修复', '自动更新', '开机自启'].includes(name ?? '')), JSON.stringify(order));
+        const at = order.indexOf('Video playback');
+        assert.ok(at >= 0 && order.slice(0, at).every((name) => ['Check for updates', 'Automatic repair', 'Auto-update', 'Launch at startup'].includes(name ?? '')), JSON.stringify(order));
         await page.reload();
         await trigger.waitFor({ state: 'visible' });
-        await page.waitForFunction(() => /软件编解码/.test(document.querySelector('#playbackAccelerationSetting button')?.textContent || ''));
+        await page.waitForFunction(() => /Software codec/.test(document.querySelector('#playbackAccelerationSetting button')?.textContent || ''));
         const measured = await layout(page);
         assert.ok(measured.scrollWidth <= measured.viewportWidth, JSON.stringify(measured));
         assert.deepEqual(measured.offenders, []);

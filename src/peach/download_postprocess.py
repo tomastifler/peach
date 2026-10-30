@@ -90,11 +90,11 @@ def _isolate_ads(contract, main: int, folder_ids: list[int]) -> int:
 
 
 def _probe_folder(contract, task, main, folder_ids, *, on_junk=lambda result: None):
-    """只为该下载范围补允许自动读取的媒体属性，正片身份在整个阶段都受保护。"""
+    """Fill in only the media properties allowed for automatic reading within this download scope; the main feature's identity is protected throughout the stage."""
     config = settings_file.active()
     if not config.configured or Path(contract.db_path).resolve() != (
             config.directory('database') / 'ledger.db').resolve():
-        raise ValueError('当前馆藏与媒体配置不一致，不能探测下载媒体')
+        raise ValueError('The current library and media configuration are inconsistent; downloaded media cannot be probed')
     return probe_unmeasured(contract.db_path, _ffprobe_path(config), task.location, task.ledger_path,
                             asset_ids=folder_ids, config=config, protected_ids=[main], on_junk=on_junk)
 
@@ -124,9 +124,9 @@ def _collect(contract, main: int, handle) -> dict:
 def _organize(contract, task, main: int) -> dict:
     templates = contract.download_organize_templates().get(task.location, {})
     if not templates:
-        return {"moved": 0, "skipped": "未配置整理模板"}
+        return {"moved": 0, "skipped": "No organize template configured"}
     if organize.unverified_location(task.location):
-        return {"moved": 0, "skipped": f"{task.location} 缺少官方核验改名通道"}
+        return {"moved": 0, "skipped": f"{task.location} lacks an officially verified rename channel"}
     with contract.database.read_connection() as connection:
         plan = organize.build_plan(
             connection, location=task.location, file_template=templates.get("file", ""),
@@ -137,7 +137,7 @@ def _organize(contract, task, main: int) -> dict:
     if blocked:
         raise RuntimeError('File organising did not finish: ' + '; '.join(str(row['reason']) for row in blocked))
     if not movable:
-        return {"moved": 0, "skipped": next(iter(plan["reasons"]), "无需整理")}
+        return {"moved": 0, "skipped": next(iter(plan["reasons"]), "Nothing to organize")}
     name = f"ledger.pre-download-{task.id}-{time.strftime('%Y%m%d-%H%M%S')}.db"
     with ledger_backups.organize_backup(Path(contract.db_path), contract.candidate_root,
                                         name) as backup, \
@@ -170,12 +170,12 @@ def run(contract, key: str, handle) -> dict:
         main, _path, folder_ids = _bind_main(contract, task)
         handle.progress(label="Quarantining promo attachments", throttle=0)
         isolated = _isolate_ads(contract, main, folder_ids)
-        handle.progress(label='读取下载媒体属性', throttle=0)
+        handle.progress(label='Reading downloaded media properties', throttle=0)
         measured_junk = []
         probed = _probe_folder(contract, task, main, folder_ids, on_junk=measured_junk.append)
         isolated += sum(result['isolated'] for result in measured_junk)
         isolated += _isolate_ads(contract, main, folder_ids)
-        handle.progress(label="采集作品资料", throttle=0)
+        handle.progress(label="Collecting work metadata", throttle=0)
         metadata = _collect(contract, main, handle)
         isolated += int(metadata.get('junk_isolated') or 0)
         isolated += _isolate_ads(contract, main, folder_ids)
@@ -186,7 +186,7 @@ def run(contract, key: str, handle) -> dict:
         if rows and getattr(handle, 'run_id', None) is not None:
             contract.task_runs.enqueue_followups(handle.run_id, rows)
     except JobDeferred as error:
-        # 给扫描与采集让路：后继回到队列，路让回来后从头续跑，这次不算失败。
+        # Yield to scanning and collection: the successor returns to the queue and resumes from the start once the way is clear; this does not count as a failure.
         store.postprocess(task_id, POSTPROCESS_QUEUED, detail=str(error))
         raise
     except Exception as error:

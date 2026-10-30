@@ -13,15 +13,15 @@ const questions = (over: Partial<SetupQuestions> = {}): SetupQuestions => ({
   windows: true,
   standalone: false,
   questions: [
-    { key: 'data_root', label: '数据目录', help: ['Peach 数据库、缓存和设置文件都放在这里。'], default: 'C:\\peach-data',
+    { key: 'data_root', label: 'Data folder', help: ['Peach 数据库、缓存和设置文件都放在这里。'], default: 'C:\\peach-data',
       required: true, advanced: false, input: 'folder', prefix: '', suffix: '' },
-    { key: 'media_dir', label: '媒体目录', help: ['选择存放视频和图片的现有文件夹。'], default: 'D:\\Videos',
+    { key: 'media_dir', label: 'Media folders', help: ['选择存放视频和图片的现有文件夹。'], default: 'D:\\Videos',
       required: true, advanced: false, input: 'folders', prefix: '', suffix: '' },
-    { key: 'host', label: '谁可以访问', help: [], default: '2', required: false, advanced: false, input: 'choice',
-      prefix: '', suffix: '', options: [{ value: '2', label: '同一局域网的设备' }, { value: '1', label: '只有这台电脑' }] },
-    { key: 'port', label: '端口', help: ['浏览器地址里冒号后面的数字，一般不用改。'], default: '8900',
+    { key: 'host', label: 'Who can access', help: [], default: '2', required: false, advanced: false, input: 'choice',
+      prefix: '', suffix: '', options: [{ value: '2', label: 'Devices on the same local network' }, { value: '1', label: 'Only this computer' }] },
+    { key: 'port', label: 'Port', help: ['浏览器地址里冒号后面的数字，一般不用改。'], default: '8900',
       required: true, advanced: true, input: 'number', prefix: 'localhost:', suffix: '' },
-    { key: 'mdns_name', label: '局域网访问地址', help: [], default: 'peach', required: true, advanced: true,
+    { key: 'mdns_name', label: 'LAN access address', help: [], default: 'peach', required: true, advanced: true,
       input: 'text', prefix: 'https://', suffix: '.local', visible_when: { host: '2' } },
   ],
   media_sources: MEDIA_SOURCE_OPTIONS.map(([value, label]) => ({ value, label })),
@@ -40,7 +40,7 @@ const questions = (over: Partial<SetupQuestions> = {}): SetupQuestions => ({
 
 const done = (over: Partial<SetupDone> = {}): SetupDone => ({
   url: 'http://127.0.0.1:8900/?onboarding=1', scan_requested: true, history_guide: false, standalone: false,
-  redirect: null, facts: [{ term: '版本', value: '0.9.0' }, { term: '数据目录', value: 'C:\\peach-data' }], ...over,
+  redirect: null, facts: [{ term: 'Version', value: '0.9.0' }, { term: 'Data folder', value: 'C:\\peach-data' }], ...over,
 });
 
 type Reply = { status: number; body: unknown };
@@ -67,20 +67,20 @@ async function open(over: Partial<SetupQuestions> = {}, routes: Record<string, R
 }
 
 const rows = (root: ParentNode) => [...root.querySelectorAll('[data-folder-row]')];
-const paths = (root: ParentNode) => [...root.querySelectorAll<HTMLInputElement>('input[aria-label^="媒体目录 "]')];
+const paths = (root: ParentNode) => [...root.querySelectorAll<HTMLInputElement>('input[aria-label^="Media folders "]')];
 const field = (root: ParentNode, key: string) => root.querySelector<HTMLInputElement>(`#f-${key}`);
 const radio = (root: ParentNode, label: string) =>
   [...root.querySelectorAll('label')].find((node) => node.textContent?.trim() === label);
-const advanced = (root: ParentNode) => [...root.querySelectorAll('summary')].find((node) => node.textContent === '高级设置');
+const advanced = (root: ParentNode) => [...root.querySelectorAll('summary')].find((node) => node.textContent === 'Advanced settings');
 const submitForm = async (root: ParentNode) => {
-  for (let count = 0; count < 3 && !buttonNamed('完成设置', root); count++) {
-    await click(buttonNamed('开始设置', root) || buttonNamed('继续', root));
+  for (let count = 0; count < 3 && !buttonNamed('Finish setup', root); count++) {
+    await click(buttonNamed('Start setup', root) || buttonNamed('Continue', root));
     await settle();
   }
-  await click(buttonNamed('完成设置', root)); await settle();
+  await click(buttonNamed('Finish setup', root)); await settle();
 };
 const chooseProcessing = async (root: ParentNode, option: string) => {
-  const field = root.querySelector('[aria-label="我的媒体库 处理方式"]');
+  const field = root.querySelector('[aria-label="My library Processing mode"]');
   await click(field?.matches('[aria-haspopup]') ? field : field?.querySelector('[aria-haspopup="listbox"]'));
   await click([...document.querySelectorAll('[role="option"]')].find(node => node.textContent?.startsWith(option)));
 };
@@ -90,11 +90,11 @@ const occurrences = (root: HTMLElement, message: string) => (root.textContent ??
 
 it('分步设置返回后保留目录，确认前不提交配置', async () => {
   const { host, fetcher } = await open();
-  await click(buttonNamed('开始设置', host));
+  await click(buttonNamed('Start setup', host));
   await type(paths(host)[0], 'F:\\Library');
-  await click(buttonNamed('继续', host));
-  expect(host.querySelector('h1')?.textContent).toBe('在哪里使用 Peach？');
-  await click(buttonNamed('返回', host));
+  await click(buttonNamed('Continue', host));
+  expect(host.querySelector('h1')?.textContent).toBe('Where will you use Peach?');
+  await click(buttonNamed('Back', host));
   expect(paths(host)[0]?.value).toBe('F:\\Library');
   expect(fetcher.mock.calls.filter(([url]) => url === SETUP_URL)).toHaveLength(0);
 });
@@ -106,9 +106,9 @@ it('编辑草稿随步骤匹配场景标题、说明和操作文字', async () =
   } }).PeachCopyEditorCore;
   const originals = new WeakMap<Node, string>();
   const edits = {
-    '你的私人媒体空间。': '私人馆藏。',
-    '把喜欢的内容，整理成自己的收藏。': '整理你的收藏。',
-    '开始设置': '开始整理', '继续': '下一步', '完成设置': '保存设置',
+    'Your private media space.': '私人馆藏。',
+    'Organize what you love into your own collection.': '整理你的收藏。',
+    'Start setup': '开始整理', 'Continue': '下一步', 'Finish setup': 'Save settings',
   };
   const apply = () => core.applyDrafts(host, edits, originals);
   const caption = () => [...host.querySelectorAll('[data-setup-scene-caption] p')].map(node => node.textContent);
@@ -116,15 +116,15 @@ it('编辑草稿随步骤匹配场景标题、说明和操作文字', async () =
   expect(caption()).toEqual(['私人馆藏。', '整理你的收藏。']);
   await click(buttonNamed('开始整理', host));
   apply();
-  expect(caption()).toEqual(['让文件成为馆藏。', '按媒体库归类，文件保留在原来的位置。']);
+  expect(caption()).toEqual(['Turn files into a library.', 'Organized by library, with files staying where they are.']);
   await click(buttonNamed('下一步', host));
   apply();
-  expect(caption()).toEqual(['从书桌，到手边。', '电脑与手机，连接同一套 Peach。']);
+  expect(caption()).toEqual(['From the desk to your hand.', 'Computer and phone, connected to the same Peach.']);
   await click(buttonNamed('下一步', host));
   apply();
-  expect(caption()).toEqual(['全都准备好了。', '确认后保存，扫描按你的选择开始。']);
-  expect(buttonNamed('保存设置', host)).not.toBeNull();
-  for (let count = 0; count < 3; count++) { await click(buttonNamed('返回', host)); apply(); }
+  expect(caption()).toEqual(['All set.', 'Save after confirming; scanning starts as you choose.']);
+  expect(buttonNamed('Save settings', host)).not.toBeNull();
+  for (let count = 0; count < 3; count++) { await click(buttonNamed('Back', host)); apply(); }
   expect(caption()).toEqual(['私人馆藏。', '整理你的收藏。']);
   expect(buttonNamed('开始整理', host)).not.toBeNull();
 });
@@ -154,13 +154,13 @@ function expectAnnounced(root: HTMLElement, input: Element | null | undefined, m
 
 it('目录与访问范围直接显示，端口和局域网名称按需展开', async () => {
   const { host } = await open();
-  expect(host.querySelector('h1')?.textContent).toBe('欢迎使用 Peach');
+  expect(host.querySelector('h1')?.textContent).toBe('Welcome to Peach');
   expect(paths(host).map((input) => input.value)).toEqual(['']);
   expect(advanced(host)?.getAttribute('aria-expanded')).toBe('false');
   expect(field(host, 'port')?.value).toBe('8900');
   expect(host.textContent).toContain('localhost:');
-  expect(host.textContent).toContain('完成设置后扫描媒体目录');
-  // 「谁可以访问」是两段式单选，局域网在左边并且默认选中。
+  expect(host.textContent).toContain('Scan media folders after setup');
+  // 「Who can access」是两段式单选，局域网在左边并且默认选中。
   const group = host.querySelector('[role="radiogroup"]')!;
   expect(group.closest('details')).toBeNull();
   expect([...group.querySelectorAll('input[type="radio"]')].map((input) => [
@@ -171,42 +171,42 @@ it('读取策略直接显示，新增文件夹沿用所属媒体库', async () =
   const { host, sent } = await open({}, { [SETUP_URL]: { status: 200, body: done() } });
   expect(host.querySelector('[data-media-read-policy]')?.closest('details')).toBeNull();
   expect(host.querySelector('[data-library-head]')?.closest('details')).toBeNull();
-  await click(buttonNamed('添加文件夹', host));
+  await click(buttonNamed('Add folder', host));
   await type(paths(host)[1], 'E:\\More');
   await submitForm(host);
   const body = sent(SETUP_URL);
   expect(body.media_dir[0].library_id).toBe(body.media_dir[1].library_id);
-  expect(body.media_dir.map((row: { library: string }) => row.library)).toEqual(['我的媒体库', '我的媒体库']);
+  expect(body.media_dir.map((row: { library: string }) => row.library)).toEqual(['My library', 'My library']);
 });
 
 it('初次处理选择保存到媒体库，摘要与提交使用同一份选择', async () => {
   const { host, sent } = await open({}, { [SETUP_URL]: { status: 200, body: done() } });
-  await chooseProcessing(host, '仅使用本地资料');
+  await chooseProcessing(host, 'Local details only');
   const summary = host.querySelector('[aria-labelledby="setup-summary-title"]');
-  expect(summary?.textContent).toContain('仅使用本地资料');
+  expect(summary?.textContent).toContain('Local details only');
   await submitForm(host);
   expect(sent(SETUP_URL).media_dir[0].library_policy).toBe('local');
 });
 
 it('新增媒体库拥有独立名称与处理方式', async () => {
   const { host, sent } = await open({}, { [SETUP_URL]: { status: 200, body: done() } });
-  await chooseProcessing(host, '仅使用本地资料');
-  await click(buttonNamed('添加媒体库', host));
-  await type(host.querySelector<HTMLInputElement>('input[aria-label="媒体库 2 名称"]'), '电影');
+  await chooseProcessing(host, 'Local details only');
+  await click(buttonNamed('Add library', host));
+  await type(host.querySelector<HTMLInputElement>('input[aria-label="Library 2 name"]'), '电影');
   await type(paths(host)[1], 'E:\\Films');
   await submitForm(host);
   const libraries = sent(SETUP_URL).media_dir;
-  expect(libraries[0]).toMatchObject({ library: '我的媒体库', library_policy: 'local' });
+  expect(libraries[0]).toMatchObject({ library: 'My library', library_policy: 'local' });
   expect(libraries[1]).toMatchObject({ library: '电影', library_policy: 'auto' });
   expect(libraries[0].library_id).not.toBe(libraries[1].library_id);
 });
 
 it('自定义处理步骤随同库的全部目录提交', async () => {
   const { host, sent } = await open({}, { [SETUP_URL]: { status: 200, body: done() } });
-  await click(buttonNamed('添加文件夹', host));
+  await click(buttonNamed('Add folder', host));
   await type(paths(host)[1], 'E:\\More');
-  await chooseProcessing(host, '自定义');
-  await click(radio(host, '联网补资料'));
+  await chooseProcessing(host, 'Custom');
+  await click(radio(host, 'Fill in details online'));
   await submitForm(host);
   for (const row of sent(SETUP_URL).media_dir) {
     expect(row.library_policy).toBe('custom');
@@ -216,7 +216,7 @@ it('自定义处理步骤随同库的全部目录提交', async () => {
 
 it('首次设置不提供浏览历史选项，并保留接口已有的显式选择', async () => {
   const { host, sent } = await open({ history_guide: true }, { [SETUP_URL]: { status: 200, body: done() } });
-  expect(host.textContent).not.toContain('接下来导入浏览器历史记录');
+  expect(host.textContent).not.toContain('Import browser history next');
   await submitForm(host);
   expect(sent(SETUP_URL).history_guide).toBe(true);
 });
@@ -224,7 +224,7 @@ it('首次设置不提供浏览历史选项，并保留接口已有的显式选�
 it('选「只有这台电脑」时局域网地址整项消失，也不随提交发出去', async () => {
   const { host, sent } = await open({}, { [SETUP_URL]: { status: 200, body: done() } });
   expect(field(host, 'mdns_name')).not.toBeNull();
-  await click(radio(host, '只有这台电脑'));
+  await click(radio(host, 'Only this computer'));
   expect(field(host, 'mdns_name')).toBeNull();
   await submitForm(host);
   const body = sent(SETUP_URL);
@@ -233,14 +233,14 @@ it('选「只有这台电脑」时局域网地址整项消失，也不随提交�
   expect(body.port).toBe('8900');
 });
 
-describe('访问密码', () => {
+describe('Access password', () => {
   it('切换访问范围保留已填写的密码，访问地址跟随表单值', async () => {
     const { host, sent } = await open({}, { [SETUP_URL]: { status: 200, body: done() } });
     await type(host.querySelector<HTMLInputElement>('#access-password'), 'secret-password');
     await type(host.querySelector<HTMLInputElement>('#access-confirm'), 'secret-password');
-    await click(radio(host, '只有这台电脑'));
+    await click(radio(host, 'Only this computer'));
     expect(host.textContent).toContain('http://127.0.0.1:8900/');
-    await click(radio(host, '同一局域网的设备'));
+    await click(radio(host, 'Devices on the same local network'));
     expect(host.textContent).toContain('https://peach.local/');
     await submitForm(host);
     expect(sent(SETUP_URL)).toMatchObject({ access_password: 'secret-password', access_confirm: 'secret-password' });
@@ -269,33 +269,33 @@ describe('访问密码', () => {
   });
 });
 
-describe('Peach 代理', () => {
+describe('Peach proxy', () => {
   const proxyMode = (host: ParentNode) => host.querySelector('[aria-labelledby="setup-proxy-title"] [aria-haspopup="listbox"]');
 
   it('跟随环境为初始值，自定义地址随设置提交，直连不携带隐藏地址', async () => {
     const { host, sent } = await open({}, { [SETUP_URL]: { status: 400, body: { error: '稍后重试' } } });
-    expect(proxyMode(host)?.textContent).toContain('跟随环境');
+    expect(proxyMode(host)?.textContent).toContain('Follow environment');
     expect(host.querySelector('#setupProxyAddress')).toBeNull();
     await submitForm(host);
     expect(sent(SETUP_URL).peach_proxy).toEqual({ mode: 'environment', proxy: '' });
-    await choose(proxyMode(host), '自定义');
+    await choose(proxyMode(host), 'Custom');
     const address = host.querySelector<HTMLInputElement>('#setupProxyAddress');
     expect(address?.type).toBe('password');
     await type(address, 'socks5h://user:private@127.0.0.1:7890');
     await submitForm(host);
     expect(sent(SETUP_URL, 1).peach_proxy).toEqual({ mode: 'proxy', proxy: 'socks5h://user:private@127.0.0.1:7890' });
-    await choose(proxyMode(host), '直连');
+    await choose(proxyMode(host), 'Direct');
     expect(host.querySelector('#setupProxyAddress')).toBeNull();
     await submitForm(host);
     expect(sent(SETUP_URL, 2).peach_proxy).toEqual({ mode: 'direct', proxy: '' });
   });
 
   it('代理地址校验原位报错并保留输入', async () => {
-    const message = '请填写带端口的 HTTP 或 SOCKS 代理地址';
+    const message = '请填写带端口的 HTTP 或 SOCKS Proxy address';
     const { host } = await open({ peach_proxy: { mode: 'proxy', proxy_saved: true, needs_selection: false } },
       { [SETUP_URL]: { status: 400, body: { error: '有几项需要修改', errors: { peach_proxy: message } } } });
     const address = host.querySelector<HTMLInputElement>('#setupProxyAddress');
-    expect(address?.placeholder).toBe('已保存，留空保留');
+    expect(address?.placeholder).toBe('Saved; leave blank to keep');
     await type(address, 'http://proxy.invalid');
     await submitForm(host);
     expect(address?.value).toBe('http://proxy.invalid');
@@ -305,44 +305,44 @@ describe('Peach 代理', () => {
 
   it.each([true, false])('Docker 回环提示只适用于容器中的自定义回环地址：%s', async (docker) => {
     const { host } = await open({ docker });
-    await choose(proxyMode(host), '自定义');
+    await choose(proxyMode(host), 'Custom');
     const address = host.querySelector<HTMLInputElement>('#setupProxyAddress');
     await type(address, 'http://127.0.0.1:7890');
-    expect(host.textContent?.includes('回环地址指向容器自身')).toBe(docker);
+    expect(host.textContent?.includes('A loopback address points to the container itself')).toBe(docker);
     await type(address, 'http://host.docker.internal:7890');
-    expect(host.textContent).not.toContain('回环地址指向容器自身');
-    await choose(proxyMode(host), '跟随环境');
-    expect(host.textContent).not.toContain('回环地址指向容器自身');
+    expect(host.textContent).not.toContain('A loopback address points to the container itself');
+    await choose(proxyMode(host), 'Follow environment');
+    expect(host.textContent).not.toContain('A loopback address points to the container itself');
   });
 });
 
-describe('媒体库', () => {
+describe('Library', () => {
   it('稍后添加媒体库收起目录并跳过扫描，取消勾选保留已填路径', async () => {
     const { host, sent } = await open({ access_enabled: false }, { [SETUP_URL]: {
       status: 200, body: done({ skip_media: true, scan_requested: false }),
     } });
     await type(paths(host)[0], 'E:\\Films');
-    await click(radio(host, '稍后添加媒体库'));
+    await click(radio(host, 'Add a library later'));
     expect(paths(host)).toHaveLength(0);
-    expect(host.textContent).not.toContain('完成设置后扫描');
-    expect(host.querySelector('[aria-labelledby="setup-summary-title"]')?.textContent).toContain('稍后添加');
-    await click(radio(host, '稍后添加媒体库'));
+    expect(host.textContent).not.toContain('after setup');
+    expect(host.querySelector('[aria-labelledby="setup-summary-title"]')?.textContent).toContain('Add later');
+    await click(radio(host, 'Add a library later'));
     expect(paths(host)[0]?.value).toBe('E:\\Films');
-    await click(radio(host, '稍后添加媒体库'));
+    await click(radio(host, 'Add a library later'));
     await submitForm(host);
     expect(sent(SETUP_URL)).toMatchObject({ media_dir: [], skip_media: true, scan_now: false });
-    expect(host.textContent).toContain('可在「媒体库与入库」添加媒体目录并开始扫描。');
+    expect(host.textContent).toContain('You can add a media folder under "Library & import" and start scanning.');
   });
 
   it('媒体库图标与来源色随同库的全部目录保存', async () => {
     const { host, sent } = await open({}, { [SETUP_URL]: { status: 200, body: done() } });
     await type(paths(host)[0], 'D:\\Videos');
-    await click(host.querySelector('[aria-label="我的媒体库 图标"]'));
-    await click(document.querySelector('[aria-label="电影"]'));
-    await click(buttonNamed('应用', document));
-    await click(host.querySelector('[aria-label="我的媒体库 来源色：无颜色"]'));
-    await click(document.querySelector('[data-library-colors] [aria-label="翠绿"]'));
-    await click(buttonNamed('添加文件夹', host));
+    await click(host.querySelector('[aria-label="My library icon"]'));
+    await click(document.querySelector('[aria-label="Movie"]'));
+    await click(buttonNamed('Apply', document));
+    await click(host.querySelector('[aria-label="My library source color: No color"]'));
+    await click(document.querySelector('[data-library-colors] [aria-label="Emerald"]'));
+    await click(buttonNamed('Add folder', host));
     await type(paths(host)[1], 'E:\\More');
     await submitForm(host);
     expect(sent(SETUP_URL).media_dir).toMatchObject([
@@ -355,9 +355,9 @@ describe('媒体库', () => {
     await type(paths(host)[0], 'D:\\Videos');
     await choose(rows(host)[0]!.querySelector('[aria-haspopup="listbox"]'), 'OneDrive');
     const policy = rows(host)[0]!.querySelector('[data-media-read-policy] [aria-haspopup="listbox"]');
-    expect(policy?.textContent).toContain('Choose a read policy');
+    expect(policy?.textContent).toContain('Choose reading policy');
     await submitForm(host);
-    expect(host.textContent).toContain('Choose a media read policy');
+    expect(host.textContent).toContain('Choose a media reading policy');
     await choose(policy, 'Normal reads');
     await submitForm(host);
     expect(sent(SETUP_URL).media_dir).toMatchObject([
@@ -368,12 +368,12 @@ describe('媒体库', () => {
   it('加一行、删一行，扫描说明跟着行数走，提交按行带上来源', async () => {
     const { host, sent } = await open({}, { [SETUP_URL]: { status: 200, body: done() } });
     await type(paths(host)[0], 'D:\\Videos');
-    await click(buttonNamed('添加文件夹', host));
+    await click(buttonNamed('Add folder', host));
     expect(rows(host)).toHaveLength(2);
     expect(document.activeElement).toBe(paths(host)[1]);
     await type(paths(host)[1], 'E:\\More');
-    expect(host.textContent).toContain('完成设置后扫描 2 个文件夹');
-    await click(rows(host)[0]!.querySelector('button[aria-label="移除这个文件夹"]'));
+    expect(host.textContent).toContain('Scan 2 folders after setup');
+    await click(rows(host)[0]!.querySelector('button[aria-label="Remove this folder"]'));
     expect(paths(host).map((input) => input.value)).toEqual(['E:\\More']);
     expect(rows(host)[0]!.querySelector('button[aria-label="Remove this folder"]')).toBeNull();
     await submitForm(host);
@@ -394,7 +394,7 @@ describe('媒体库', () => {
     await choose(rows(host)[0]!.querySelector('[aria-haspopup="listbox"]'), 'CloudDrive · 115');
     expect(host.textContent).toContain('先在 CloudDrive 登录网盘并完成挂载。');
     expect(host.querySelector('a[href="https://winfsp.dev/rel/"]')?.textContent).toContain('下载 WinFsp');
-    await choose(rows(host)[0]!.querySelector('[aria-haspopup="listbox"]'), '本地磁盘');
+    await choose(rows(host)[0]!.querySelector('[aria-haspopup="listbox"]'), 'Local disk');
     expect(host.textContent).not.toContain('挂载帮助');
   });
 
@@ -430,7 +430,7 @@ describe('填错时原位标错', () => {
   it('整表不成立的那一句写在目录区上方，不挂到某一行', async () => {
     const { host } = await open({}, { [SETUP_URL]: { status: 400, body: {
       error: '有几项需要修改', errors: { media_dir: ['请添加 1 到 100 个媒体目录'] } } } });
-    await click(buttonNamed('添加文件夹', host));
+    await click(buttonNamed('Add folder', host));
     await submitForm(host);
     const [alert, ...more] = alertsWith(host, '请添加 1 到 100 个媒体目录');
     expect(alert).toBeDefined();
@@ -461,10 +461,10 @@ describe('完成态', () => {
   it('成功后同一页换成完成态：扫描说明、入口链接、运行信息默认收起', async () => {
     const { host } = await open({}, { [SETUP_URL]: { status: 200, body: done() } });
     await submitForm(host);
-    expect(host.querySelector('h1')?.textContent).toBe('可以开始使用了');
-    expect(host.textContent).toContain('馆藏，准备开启。');
-    expect(host.textContent).toContain('首次扫描已排队，在后台整理媒体库，期间可以照常使用 Peach。');
-    const entry = [...host.querySelectorAll('a')].find((link) => link.textContent === '进入 Peach');
+    expect(host.querySelector('h1')?.textContent).toBe("You're ready to go");
+    expect(host.textContent).toContain('Your library, ready to open.');
+    expect(host.textContent).toContain('The first scan is queued and organizes the library in the background; you can keep using Peach meanwhile.');
+    const entry = [...host.querySelectorAll('a')].find((link) => link.textContent === 'Open Peach');
     expect(entry?.getAttribute('href')).toBe('http://127.0.0.1:8900/?onboarding=1');
     expect(document.activeElement).toBe(entry);
     const facts = [...host.querySelectorAll('summary')].find((node) => node.textContent === 'Runtime info');
@@ -476,7 +476,7 @@ describe('完成态', () => {
     const { host } = await open({}, { [SETUP_URL]: { status: 200, body: done({
       url: 'http://127.0.0.1:8900/taste?onboarding=1', scan_requested: false, history_guide: true }) } });
     await submitForm(host);
-    expect(host.textContent).toContain('Start scanning your library later from the settings page.');
+    expect(host.textContent).toContain('Start scanning the library later on the settings page.');
     const entry = [...host.querySelectorAll('a')].find((link) => link.textContent === 'Import browser history');
     expect(entry?.getAttribute('href')).toBe('http://127.0.0.1:8900/taste?onboarding=1');
   });
@@ -510,7 +510,7 @@ it('别的设备打开时读题接口回 403，只说去哪里打开、不画表
   const host = await mount(<SetupPage />);
   await settle();
   expect(host.querySelector('form')).toBeNull();
-  expect(host.querySelector('[role="alert"]')?.textContent).toBe('Open setup on the computer running Peach.');
+  expect(host.querySelector('[role="alert"]')?.textContent).toBe('Open setup on the computer that runs Peach.');
 });
 
 it('读题失败时给原因和重试', async () => {
@@ -519,7 +519,7 @@ it('读题失败时给原因和重试', async () => {
   const host = await mount(<SetupPage />);
   await settle();
   expect(host.querySelector('[role="alert"]')?.textContent).toContain('服务出错了');
-  await click(buttonNamed('立即重试', host));
+  await click(buttonNamed('Retry', host));
   await settle();
   expect(fetcher).toHaveBeenCalledTimes(2);
   expect(paths(host)).toHaveLength(1);

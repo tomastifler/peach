@@ -100,7 +100,7 @@ export class SubtitleControls {
     });
     if (this.session.error) {
       this.status(this.session.error, true);
-      panel.querySelector('[data-subtitle-status]')!.insertAdjacentHTML('beforeend', '<button type="button" class="vjs-peach-caption-action" data-subtitle-memory-retry>立即重试</button>');
+      panel.querySelector('[data-subtitle-status]')!.insertAdjacentHTML('beforeend', '<button type="button" class="vjs-peach-caption-action" data-subtitle-memory-retry>Retry now</button>');
       panel.querySelector<HTMLButtonElement>('[data-subtitle-memory-retry]')!.onclick = () => { void this.session.retry() };
     }
   }
@@ -144,16 +144,16 @@ export class SubtitleControls {
   }
   private async importFile(file: File) {
     this.show(0);
-    if (!/\.(srt|ass|ssa|vtt)$/i.test(file.name) || file.size > 4 * 1024 * 1024) { this.status('请选择 4 MiB 以内的 SRT、ASS、SSA 或 VTT 文件', true); return }
-    const signal = this.busy(); this.status('正在加载字幕', false, true);
+    if (!/\.(srt|ass|ssa|vtt)$/i.test(file.name) || file.size > 4 * 1024 * 1024) { this.status('Choose an SRT, ASS, SSA or VTT file under 4 MiB', true); return }
+    const signal = this.busy(); this.status('Loading subtitles', false, true);
     try {
       await this.session.ready;
       if (signal.aborted) return;
       const text = await this.text(await fetch(`/api/subtitles/convert?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file, signal }));
       const key = `file:${file.name}:${file.size}:${file.lastModified}`;
       await this.session.import(text, file.name, key, signal);
-      if (!signal.aborted) { this.show(0); this.status(`已加载 ${file.name}`) }
-    } catch (error) { if (!signal.aborted) this.status(error instanceof Error ? error.message : '字幕加载失败', true) }
+      if (!signal.aborted) { this.show(0); this.status(`Loaded ${file.name}`) }
+    } catch (error) { if (!signal.aborted) this.status(error instanceof Error ? error.message : 'Failed to load subtitles', true) }
   }
 
   private searchPanel() {
@@ -162,8 +162,8 @@ export class SubtitleControls {
     const item = this.player.peachItem;
     const query = String(item?.code || item?.title || String(item?.name || '').replace(/\.(mp4|mkv|avi|mov|webm|m4v|ts|wmv)$/i, '')).trim().slice(0, 200);
     if (query !== this.query) { this.query = query; this.offset = 0; this.results = []; this.searched = false }
-    const panel = this.panel(this.header('搜索中文字幕') + '<div class="vjs-peach-subtitle-search"><p class="vjs-peach-subtitle-status" data-subtitle-status role="status" hidden></p><div data-subtitle-results></div><a href="https://www.subtitlecat.com" target="_blank" rel="noopener noreferrer">中文字幕由 SubtitleCat 提供，可能包含机翻' + icon('external-link', 'ui-externalmark') + '</a></div>', () => { this.request?.abort(); this.show(-1) });
-    if (query.length < 3) { this.status('当前作品没有可用于搜索的番号或片名'); return }
+    const panel = this.panel(this.header('Search Chinese subtitles') + '<div class="vjs-peach-subtitle-search"><p class="vjs-peach-subtitle-status" data-subtitle-status role="status" hidden></p><div data-subtitle-results></div><a href="https://www.subtitlecat.com" target="_blank" rel="noopener noreferrer">Chinese subtitles provided by SubtitleCat; may include machine translation' + icon('external-link', 'ui-externalmark') + '</a></div>', () => { this.request?.abort(); this.show(-1) });
+    if (query.length < 3) { this.status('This work has no product code or title usable for searching'); return }
     if (this.searched) this.searchResults(panel);
     else void this.runSearch(panel, 0);
   }
@@ -182,7 +182,7 @@ export class SubtitleControls {
     const signal = this.busy(), generation = this.generation;
     const trigger = panel.querySelector<HTMLButtonElement>('[data-subtitle-more],[data-subtitle-retry]');
     const list = panel.querySelector<HTMLElement>('[data-subtitle-results]')!;
-    panel.setAttribute('aria-busy', 'true'); if (trigger) setActionBusy(trigger); list.inert = true; this.status('正在搜索字幕', false, true);
+    panel.setAttribute('aria-busy', 'true'); if (trigger) setActionBusy(trigger); list.inert = true; this.status('Searching subtitles', false, true);
     try {
       const payload = await api(`/api/subtitles/search?q=${encodeURIComponent(this.query)}&offset=${offset}`, { signal }) as { results: SearchResult[]; more: boolean };
       if (signal.aborted || generation !== this.generation) return;
@@ -193,7 +193,7 @@ export class SubtitleControls {
         this.status(error instanceof Error ? error.message : 'Subtitle search failed', true);
         list.querySelector('[data-subtitle-more]')?.remove();
         list.querySelector('[data-subtitle-retry]')?.remove();
-        list.insertAdjacentHTML('beforeend', '<button type="button" class="vjs-peach-caption-action" data-subtitle-retry>立即重试</button>');
+        list.insertAdjacentHTML('beforeend', '<button type="button" class="vjs-peach-caption-action" data-subtitle-retry>Retry now</button>');
         list.querySelector<HTMLButtonElement>('[data-subtitle-retry]')!.onclick = () => { void this.runSearch(panel, offset) };
       }
     } finally { panel.removeAttribute('aria-busy'); if (trigger) setActionBusy(trigger, false); list.inert = false }
@@ -201,8 +201,8 @@ export class SubtitleControls {
 
   private async showFiles(result: SearchResult) {
     this.page = 'files';
-    const panel = this.panel(this.header('选择字幕文件') + '<div class="vjs-peach-panel-menu" data-subtitle-files></div><p class="vjs-peach-subtitle-status" data-subtitle-status role="status"></p>', () => { void this.searchPanel() });
-    const signal = this.busy(), generation = this.generation; this.status('正在读取字幕文件', false, true);
+    const panel = this.panel(this.header('Choose subtitle file') + '<div class="vjs-peach-panel-menu" data-subtitle-files></div><p class="vjs-peach-subtitle-status" data-subtitle-status role="status"></p>', () => { void this.searchPanel() });
+    const signal = this.busy(), generation = this.generation; this.status('Reading subtitle files', false, true);
     try {
       const payload = await api(`/api/subtitles/subtitlecat/${result.id}`, { signal }) as { files: SubtitleFile[] };
       if (signal.aborted || generation !== this.generation) return;
@@ -216,7 +216,7 @@ export class SubtitleControls {
   }
 
   private async loadOnline(id: string, file: SubtitleFile) {
-    const signal = this.busy(); this.status('正在加载字幕', false, true);
+    const signal = this.busy(); this.status('Loading subtitles', false, true);
     try {
       await this.session.ready;
       if (signal.aborted) return;
@@ -226,8 +226,8 @@ export class SubtitleControls {
         const text = await this.text(await fetch(`/api/subtitles/subtitlecat/${id}/${file.index}`, { signal }));
         await this.session.import(text, file.name, key, signal);
       }
-      if (!signal.aborted) { this.show(0); this.status(`已加载 ${file.name}`) }
-    } catch (error) { if (!signal.aborted) this.status(error instanceof Error ? error.message : '字幕加载失败', true) }
+      if (!signal.aborted) { this.show(0); this.status(`Loaded ${file.name}`) }
+    } catch (error) { if (!signal.aborted) this.status(error instanceof Error ? error.message : 'Failed to load subtitles', true) }
   }
 
 }

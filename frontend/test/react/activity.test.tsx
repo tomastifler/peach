@@ -62,7 +62,7 @@ const payload = (overrides: Partial<ActivityData> = {}): ActivityData => ({
   available: true, running: [], skipped: [], finished: [], ...overrides,
 });
 
-/* 云下载段自己取 `/api/downloads`，「需要处理」自己取 `/api/background-issues`。这里的用例只数
+/* 云下载段自己取 `/api/downloads`，「Needs attention」自己取 `/api/background-issues`。这里的用例只数
    任务中心的请求，那两路另答：云下载回空表、后台问题回 `issues` 当前那一份（默认没有），两段就不画。 */
 const DOWNLOADS_IDLE: DownloadsSnapshot = { available: true, providers: [], tasks: [] };
 let issues: BackgroundIssue[] = [];
@@ -98,11 +98,11 @@ function serve(...responses: (ActivityData | null)[]) {
 const page = () => <QueryClientProvider client={queryClient}><ActivityPage /></QueryClientProvider>;
 
 it('扫描各阶段已结束且留有问题时显示部分结果状态', async () => {
-  serve(payload({ finished: [run({ task_key: 'library-processing', task_label: '扫描与采集',
+  serve(payload({ finished: [run({ task_key: 'library-processing', task_label: 'Scan and collection',
     status: 'failed', finished_at: '2026-09-11T10:04:00Z',
     result_summary: { outcome: 'partial', issue_count: 2 }, error: '2 项需要处理' })] }));
   const host = await mount(page());
-  expect(host.textContent).toContain('部分项目需处理');
+  expect(host.textContent).toContain('Some items need attention');
   expect(host.textContent).toContain('2 项需要处理');
   expect(host.querySelector('[data-task-key="library-processing"] > div > ul')?.textContent).not.toContain('partial');
 });
@@ -115,11 +115,11 @@ it('追更检查的问题详情绑定任务快照并提供来源入口', async (
   expect(host.querySelector('[data-task-issues]')?.textContent).toContain('示例作者 · 示例站点 · 检查失败');
   expect(host.querySelector('[data-task-issues]')?.textContent).toContain('HTTP 403');
   expect(host.querySelector('[data-task-issues]')?.closest('details')?.open).toBe(false);
-  expect(host.querySelector('a[href="/subscriptions"]')?.textContent).toContain('查看关注来源');
+  expect(host.querySelector('a[href="/subscriptions"]')?.textContent).toContain('View followed sources');
 });
 
 it('扫描与采集只有最新那一轮失败才去卡片上重试未完成项', async () => {
-  const scan = (overrides: Partial<TaskRunPayload>) => run({ task_key: 'library-processing', task_label: '扫描与采集',
+  const scan = (overrides: Partial<TaskRunPayload>) => run({ task_key: 'library-processing', task_label: 'Scan and collection',
     status: 'failed', progress_total: null, error: '768 项需要处理，其中 533 项是来源限流，等一会儿再跑；其余可重试未完成的部分。',
     ...overrides });
   // 卡片上的失败集合只属于最新那一轮：更早的失败点过去对不上任何东西。
@@ -127,7 +127,7 @@ it('扫描与采集只有最新那一轮失败才去卡片上重试未完成项'
     scan({ id: 5, finished_at: '2026-09-11T10:05:00Z' }),
     scan({ id: 4, status: 'succeeded', error: '', finished_at: '2026-09-11T09:05:00Z' }),
     scan({ id: 3, finished_at: '2026-09-11T08:05:00Z' }),
-    // amane 桥的处理入口在页顶「需要处理」那一行，卡上不放。
+    // amane 桥的处理入口在页顶「Needs attention」那一行，卡上不放。
     run({ id: 2, task_key: 'amane-bridge', task_label: '重建 amane 桥', status: 'failed',
           progress_total: null, finished_at: '2026-09-11T07:05:00Z', error: '重建未完成' }),
   ] }));
@@ -135,7 +135,7 @@ it('扫描与采集只有最新那一轮失败才去卡片上重试未完成项'
   const host = await mount(page());
   const links = [...host.querySelectorAll('[data-task-key=library-processing] a, [data-task-key=amane-bridge] a')];
   expect(links.map((link) => [link.closest('[data-run-id]')?.getAttribute('data-run-id'),
-    link.getAttribute('href'), link.textContent])).toEqual([['5', '/data-cleanup#libraryProcessing', '查看未完成项']]);
+    link.getAttribute('href'), link.textContent])).toEqual([['5', '/data-cleanup#libraryProcessing', 'View unfinished items']]);
 });
 
 /** 走完真实的首屏路径：先 prefetch 落进缓存，再挂载。 */
@@ -171,30 +171,29 @@ it('后台问题排在最前，每项只写是什么、从什么时候起和写�
   ];
   const { host } = await open(payload({ running: [run()] }));
   await vi.waitFor(() => { if (!host.querySelector('[role="alert"]')) throw new Error('需要处理还没画出来') });
-  expect(sections(host)).toEqual(['需要处理', '正在进行']);
+  expect(sections(host)).toEqual(['Needs attention', 'In progress']);
   const [tunnel, follow] = [...host.querySelectorAll('[role="alert"]')];
   expect(tunnel?.textContent).toContain('公网入口连接失败');
-  expect(tunnel?.textContent).toContain('发现于');
+  expect(tunnel?.textContent).toContain('Noticed at');
   expect(tunnel?.querySelector('a')?.getAttribute('href')).toBe('/settings/network#tunnel');
   expect(tunnel?.querySelector('a')?.textContent).toContain('打开公网入口设置');
-  expect(buttonNamed('立即重试', tunnel!)).toBeNull();
-  expect(follow?.textContent).toContain('自 ');
-  expect(follow?.textContent).toContain(' 起');
+  expect(buttonNamed('Retry now', tunnel!)).toBeNull();
+  expect(follow?.textContent).toMatch(/Since \d/);
   // 任务卡带锚点，「查看失败记录」这类链接能滚到那张卡。
   expect(host.querySelector('#run-1')?.getAttribute('data-run-id')).toBe('1');
   // 链接在左、重试在右。
   const [first, second] = [...follow!.querySelectorAll('[data-note-action] a, [data-note-action] button')];
-  expect([first?.textContent, second?.textContent]).toEqual([expect.stringContaining('打开关注调度'), '立即重试']);
+  expect([first?.textContent, second?.textContent]).toEqual([expect.stringContaining('打开关注调度'), 'Retry now']);
 
-  await click(buttonNamed('立即重试', follow!));
+  await click(buttonNamed('Retry now', follow!));
   await vi.waitFor(() => { if (host.querySelectorAll('[role="alert"]').length !== 1) throw new Error('重试后那一项还在') });
   expect(issuePosts).toEqual(['/api/follow/schedule/run']);
 });
 
-it('没有后台问题时不画「需要处理」', async () => {
+it('没有后台问题时不画「Needs attention」', async () => {
   const { host } = await open(payload());
   await settle();
-  expect(host.textContent).not.toContain('需要处理');
+  expect(host.textContent).not.toContain('Needs attention');
   expect(host.querySelector('[role="alert"]')).toBeNull();
 });
 
@@ -221,7 +220,7 @@ it('被挡下的那一轮单独成段，不在最近完成里再出现一次', a
     result_summary: { blocked_by: 3 }, error: '与第 3 轮（手动触发）冲突，本次跳过',
   });
   const { host } = await open(payload({ skipped: [blocked], finished: [blocked] }));
-  expect(sections(host)).toEqual(['正在进行', '本次未执行']);
+  expect(sections(host)).toEqual(['In progress', 'Not run this time']);
   expect(host.querySelectorAll('li')).toHaveLength(1);
   // 原因落在卡片底部的说明区，状态由徽章说。
   expect(host.querySelector('[data-status=cancelled]')?.textContent).toContain('与第 3 轮');
@@ -232,21 +231,21 @@ it('跑完那一轮显示摘要，失败那一轮显示原因', async () => {
   const { host } = await open(payload({ finished: [
     run({ id: 2, status: 'succeeded', finished_at: '2026-09-11T10:02:00Z',
           progress_total: null, result_summary: { checked: 7, results: [1, 2] } }),
-    run({ id: 3, status: 'failed', task_label: '扫描与采集', finished_at: '2026-09-11T10:03:00Z',
+    run({ id: 3, status: 'failed', task_label: 'Scan and collection', finished_at: '2026-09-11T10:03:00Z',
           progress_total: null, error: 'RuntimeError: 上游挡回来了' }),
   ] }));
   expect(host.querySelector('[data-status=succeeded]')?.textContent).toContain('Checked 7');
   expect(host.querySelector('[data-status=failed]')?.textContent).toContain('上游挡回来了');
-  expect(host.querySelector('[data-status=succeeded] span')?.textContent).toBe('已完成');
+  expect(host.querySelector('[data-status=succeeded] span')?.textContent).toBe('Completed');
   // 跑成功那张没有说明区：没有原因可写时不留一条空条子。只有一句摘要时不加项目符号。
   expect([...host.querySelectorAll('[data-status=succeeded] p')].map((node) => node.textContent))
-    .toEqual([expect.stringContaining('手动'), '已检查 7']);
+    .toEqual([expect.stringContaining('Manual'), 'Checked 7']);
   expect(host.querySelector('[data-status=succeeded] ul')).toBeNull();
 });
 
 it('做完的几批派发并成一张卡，摘要说一共处理了几项、失败几项，失败的明细排在前面', async () => {
   const batch = (id: number, minute: number) => run({
-    id, task_key: 'upgrade-repairs', task_label: '自动修复', trigger: 'scheduled', status: 'succeeded',
+    id, task_key: 'upgrade-repairs', task_label: 'Automatic repair', trigger: 'scheduled', status: 'succeeded',
     progress_total: null, finished_at: `2026-10-28T08:${minute}:00Z`, result_summary: { outcome: '已安排 64 项处理' } });
   const child = (id: number, parent: number, status: string) => followup(parent, {
     id, task_key: 'upgrade-library', task_label: '自动修复资料', status,
@@ -258,17 +257,17 @@ it('做完的几批派发并成一张卡，摘要说一共处理了几项、失�
   const cards = host.querySelectorAll('[data-task-key=upgrade-repairs]');
   expect(cards).toHaveLength(1);
   const card = cards[0]!;
-  expect(card.textContent).toContain('近 3 轮');
-  expect(card.querySelector('span')?.textContent).toBe('发现问题');
+  expect(card.textContent).toContain('Last 3 runs');
+  expect(card.querySelector('span')?.textContent).toBe('Problems found');
   expect([...card.querySelectorAll(':scope > div:first-child ul > li')].map((node) => node.textContent))
-    .toEqual(['共处理 192 项', '其中 3 项失败']);
-  expect(card.querySelector('summary')?.textContent).toBe('任务明细 · 192 项');
+    .toEqual(['Processed 192 in total', '3 failed']);
+  expect(card.querySelector('summary')?.textContent).toBe('Task details · 192 items');
   expect(card.querySelector('[data-followup-key]')?.getAttribute('data-status')).toBe('failed');
 });
 
 it('派出几十条后继的几批合成一张进行中的卡，进度按计数，正在跑的排最前，排队的不给空的技术详情', async () => {
   const parent = (id: number, finished_at: string) => run({
-    id, task_key: 'upgrade-repairs', task_label: '自动修复', trigger: 'scheduled', status: 'succeeded',
+    id, task_key: 'upgrade-repairs', task_label: 'Automatic repair', trigger: 'scheduled', status: 'succeeded',
     progress_total: null, started_at: finished_at, finished_at, result_summary: { outcome: '已安排 64 项处理' } });
   const child = (id: number, parentId: number, status: string) => followup(parentId, {
     id, task_key: 'upgrade-library', task_label: '自动修复资料', status, finished_at: null,
@@ -281,19 +280,19 @@ it('派出几十条后继的几批合成一张进行中的卡，进度按计数�
     working_parents: [parent(1, '2026-10-28T09:02:00Z')],
     followup_counts: { 1: { succeeded: 60, failed: 2, running: 1, pending: 1 }, 2: { pending: 64 } },
   }));
-  expect(sections(host)).toEqual(['正在进行']);
+  expect(sections(host)).toEqual(['In progress']);
   const cards = host.querySelectorAll('[data-task-key=upgrade-repairs]');
   expect(cards).toHaveLength(1);
   const card = cards[0]!;
-  expect(card.querySelector('span')?.textContent).toBe('进行中');
-  expect(card.textContent).toContain('2 批');
-  expect(card.textContent).toContain('已处理 62 / 128 项 · 其中 2 项失败');
-  expect(card.querySelector('summary')?.textContent).toBe('任务明细 · 128 项');
-  expect(card.textContent).toContain('列出其中 2 项，正在处理的排在前面');
+  expect(card.querySelector('span')?.textContent).toBe('In progress');
+  expect(card.textContent).toContain('2 batches');
+  expect(card.textContent).toContain('Processed 62 / 128 items · 2 failed');
+  expect(card.querySelector('summary')?.textContent).toBe('Task details · 128 items');
+  expect(card.textContent).toContain('Showing 2 of them, with items being processed first');
   const rows = [...card.querySelectorAll('[data-followup-key]')];
   expect(rows.map((row) => row.getAttribute('data-status'))).toEqual(['running', 'pending']);
   expect(rows[0]!.textContent).toContain('ABC-001 · 采集缺失资料');
-  expect(rows.some((row) => row.textContent?.includes('技术详情'))).toBe(false);
+  expect(rows.some((row) => row.textContent?.includes('Technical details'))).toBe(false);
 });
 
 it('链接检查显示失效和访问失败数量，技术详情使用可复制代码块', async () => {
@@ -303,12 +302,12 @@ it('链接检查显示失效和访问失败数量，技术详情使用可复制�
   const { host } = await open(payload({ finished: [run({ task_key: 'link-check',
     task_label: '链接检查', status: 'succeeded', result_summary: summary })] }));
   const card = host.querySelector('[data-task-key=link-check]')!;
-  expect(card.querySelector('span')?.textContent).toBe('发现问题');
+  expect(card.querySelector('span')?.textContent).toBe('Problems found');
   expect([...card.querySelectorAll('ul > li')].map(node => node.textContent))
-    .toEqual(['已检查 1,218', '总数 1,218', '链接已失效 5', '链接访问失败 54']);
+    .toEqual(['Checked 1,218', 'Total 1,218', 'Links gone 5', 'Links unreachable 54']);
   await click(card.querySelector('summary')!);
   expect(card.querySelector('[data-code-block] code')?.textContent).toBe(JSON.stringify(summary, null, 2));
-  await click(buttonNamed('复制代码', host)!);
+  await click(buttonNamed('Copy code', host)!);
   expect(writeText).toHaveBeenCalledWith(JSON.stringify(summary, null, 2));
 });
 
@@ -318,17 +317,17 @@ it('含问题的定时结果单独显示，普通成功轮次仍可折叠', asyn
   const { host } = await open(payload({ finished: [hourly(4), hourly(3),
     hourly(2, { unclear_count: 1 }), hourly(1, { unclear_count: 1 })] }));
   expect(shownIds(host)).toEqual([4, 2, 1]);
-  expect(host.querySelector('[data-run-id="4"]')?.textContent).toContain('近 2 轮');
-  expect(host.querySelector('[data-run-id="2"] span')?.textContent).toBe('发现问题');
+  expect(host.querySelector('[data-run-id="4"]')?.textContent).toContain('Last 2 runs');
+  expect(host.querySelector('[data-run-id="2"] span')?.textContent).toBe('Problems found');
 });
 
 it('处理任务的成功、失败与清理结果都可读', () => {
   expect(summaryItems({ repaired: 3, failed: 2, missing_tool: 1, moved: 8, restored: 4,
     purged: 9, cache_blocked_count: 2, bytes_reclaimed: 1024 }))
-    .toEqual(['已修复 3', '失败 2', '缺少修复工具 1', '已整理文件 8', '已还原 4',
-      '已删除记录 9', '缓存清理失败 2', '已释放空间 1 KB']);
+    .toEqual(['Repaired 3', 'Failed 2', 'Repair tool missing 1', 'Files organized 8', 'Restored 4',
+      'Records deleted 9', 'Cache clearing failed 2', 'Space reclaimed 1 KB']);
   expect(summaryItems({ result: '高清封面已保存' })).toEqual(['高清封面已保存']);
-  expect(summaryItems({ incomplete: 1 })).toEqual(['资料或封面未取得 1']);
+  expect(summaryItems({ incomplete: 1 })).toEqual(['Metadata or cover not retrieved 1']);
   for (const result_summary of [{ incomplete: 1 }, { source_failed: 2 }, { failed: 3 },
     { missing: 1 }, { cache_blocked_count: 1 }, { warning_count: 1 }]) {
     const task = run({ status: 'succeeded', trigger: 'scheduled', result_summary });
@@ -338,7 +337,7 @@ it('处理任务的成功、失败与清理结果都可读', () => {
 });
 
 it('后继挂在派出它的那一轮下面，不另占一张卡', async () => {
-  const parent = run({ id: 4, status: 'succeeded', task_label: '扫描与采集',
+  const parent = run({ id: 4, status: 'succeeded', task_label: 'Scan and collection',
                        progress_total: null, finished_at: '2026-09-11T10:03:00Z',
                        result_summary: { followups: 1 } });
   const { host } = await open(payload({ finished: [parent, followup(parent.id)] }));
@@ -346,8 +345,8 @@ it('后继挂在派出它的那一轮下面，不另占一张卡', async () => {
   const row = host.querySelector('[data-followup-key]')!;
   expect(host.querySelector('[data-task-key=follow-check]')!.contains(row)).toBe(true);
   expect([...row.querySelectorAll(':scope > span')].map((node) => node.textContent))
-    .toEqual(['补全资料图片', '已完成', '涼森れむ · 已保存资料图片']);
-  expect(host.textContent).toContain('已安排 1 项补充任务');
+    .toEqual(['补全资料图片', 'Completed', '涼森れむ · Profile image saved']);
+  expect(host.textContent).toContain('Queued 1 follow-up tasks');
 });
 
 it('完成的任务明细默认收起，展开和收起不丢失后继结果', async () => {
@@ -360,7 +359,7 @@ it('完成的任务明细默认收起，展开和收起不丢失后继结果', a
   await click(trigger);
   expect(trigger.getAttribute('aria-expanded')).toBe('true');
   expect(details.open).toBe(true);
-  expect(details.textContent).toContain('涼森れむ · 已保存资料图片');
+  expect(details.textContent).toContain('涼森れむ · Profile image saved');
   await click(trigger);
   expect(trigger.getAttribute('aria-expanded')).toBe('false');
 });
@@ -377,7 +376,7 @@ it('进行中的后继明细默认展开，失败的后继明细默认收起', a
 });
 
 it('后继还在跑时，派出它的那一轮整张卡留在正在进行，那一行只说做到哪一部', async () => {
-  const parent = run({ id: 4, status: 'succeeded', task_label: '订阅源拉取',
+  const parent = run({ id: 4, status: 'succeeded', task_label: 'Feed fetch',
                        progress_total: null, finished_at: '2026-09-11T10:03:00Z',
                        result_summary: { followups: 1 } });
   const scraping = followup(parent.id, {
@@ -388,14 +387,14 @@ it('后继还在跑时，派出它的那一轮整张卡留在正在进行，那�
   expect(sections(host)).toEqual(['In progress']);
   const row = host.querySelector('[data-followup-key]')!;
   expect([...row.querySelectorAll(':scope > span')].map((node) => node.textContent))
-    .toEqual(['取新作资料', '进行中', 'MIZD-441 · 13 / 22 项']);
+    .toEqual(['取新作资料', 'In progress', 'MIZD-441 · 13 / 22 items']);
 });
 
 it('连着几轮什么也没发生的定时任务按种类各并成一张卡，有事的那一轮截断并单独摆', async () => {
   const hourly = (id: number, overrides: Partial<TaskRunPayload> = {}) => done(id, {
     trigger: 'scheduled', result_summary: { checked: 83, total: 83 }, ...overrides });
   const feed = (id: number, overrides: Partial<TaskRunPayload> = {}) => hourly(id, {
-    task_key: 'feed-check', task_label: '订阅源拉取', result_summary: { checked: 2, added: 0 }, ...overrides });
+    task_key: 'feed-check', task_label: 'Feed fetch', result_summary: { checked: 2, added: 0 }, ...overrides });
   const { host } = await open(payload({ finished: [
     hourly(9), feed(8), hourly(7), feed(6), hourly(5),
     feed(4, { result_summary: { checked: 2, added: 3 } }),
@@ -403,11 +402,11 @@ it('连着几轮什么也没发生的定时任务按种类各并成一张卡，�
   ] }));
   expect(shownIds(host)).toEqual([9, 8, 4, 3]);
   const first = host.querySelector('[data-run-id="9"]')!;
-  expect(first.textContent).toContain('定时 · 近 3 轮 · ');
-  expect([...first.querySelectorAll('ul > li')].map((node) => node.textContent)).toEqual(['已检查 83', '总数 83']);
-  expect(host.querySelector('[data-run-id="8"]')!.textContent).toContain('近 2 轮');
-  expect(host.querySelector('[data-run-id="4"]')!.textContent).toContain('新增 3');
-  expect(host.querySelector('[data-run-id="3"]')!.textContent).toContain('近 2 轮');
+  expect(first.textContent).toContain('Scheduled · Last 3 runs · ');
+  expect([...first.querySelectorAll('ul > li')].map((node) => node.textContent)).toEqual(['Checked 83', 'Total 83']);
+  expect(host.querySelector('[data-run-id="8"]')!.textContent).toContain('Last 2 runs');
+  expect(host.querySelector('[data-run-id="4"]')!.textContent).toContain('Added 3');
+  expect(host.querySelector('[data-run-id="3"]')!.textContent).toContain('Last 2 runs');
 });
 
 it('父任务不在这一屏上时，后继照常单独摆出来', async () => {
@@ -456,14 +455,14 @@ it('轮询间隔跟着内容走：有东西在跑两秒一次，全是终态十�
 
 it('一轮请求失败不擦掉上一份数据，只在页内多一条原因', async () => {
   vi.useFakeTimers();
-  const fetcher = serve(payload({ finished: [run({ id: 5, status: 'succeeded', task_label: '扫描与采集' })] }), null);
+  const fetcher = serve(payload({ finished: [run({ id: 5, status: 'succeeded', task_label: 'Scan and collection' })] }), null);
   await prefetchTasks(new AbortController().signal);
   const host = await mount(page());
 
   await tick(10_000);
   expect(fetcher).toHaveBeenCalledTimes(2);
   expect(host.querySelector('[role=alert]')?.textContent).toContain('数据库当前只能浏览');
-  expect(host.textContent, '失败一次就把上一份结果擦掉，页面比原来知道得更少').toContain('扫描与采集');
+  expect(host.textContent, '失败一次就把上一份结果擦掉，页面比原来知道得更少').toContain('Scan and collection');
 });
 
 it('卸载之后不再敲库：轮询跟着这棵根一起走', async () => {
@@ -594,7 +593,7 @@ it('时长与摘要的折算各自成立', () => {
   expect(progressText(null, null)).toBe('0 / 0');
   // 明细与「谁挡的」不进这一行：前者太长，后者已经写在错误那一句里了。
   expect(summaryText({ checked: 7, operation: 'like', rows: [1], blocked_by: 3 }))
-    .toBe('已检查 7 · 操作：标记喜欢');
+    .toBe('Checked 7 · Operation: Mark as liked');
   // 追更检查结算时带着整份状态字典，簿记字段不能漏到卡片上。
   expect(summaryText({
     status: 'complete', run_id: 351, started_at: 1790138114.86, checked: 83, total: 83,
@@ -605,10 +604,10 @@ it('时长与摘要的折算各自成立', () => {
 it('任务主摘要使用中文结果，内部字段保留给技术详情', () => {
   expect(summaryItems({ followups: 9, stage: 'finished', requested_stage: 'all',
     eta_seconds_min: 0, entity_watermark: 9936, performer_aliases: 7, auto_rejected: 0 }))
-    .toEqual(['已安排 9 项补充任务', '女优别名 7']);
+    .toEqual(['Queued 9 follow-up tasks', 'Performer aliases 7']);
   expect(followupDetail(followup(4, { task_key: 'performer-profile', task_label: '补全女优资料',
     progress_label: '补女优资料：演示人物', result_summary: { name: '演示人物', outcome: 'avwikidb 绑定；javdb 绑定' } })))
-    .toBe('演示人物 · 已关联 AVWikiDB 资料页；已关联 JavDB 资料页');
+    .toBe('演示人物 · Linked AVWikiDB profile page；Linked JavDB profile page');
 });
 
 it('报错在列表里只露一行：traceback 取最后一行，别的取第一行非空', () => {
@@ -622,13 +621,13 @@ it('报错在列表里只露一行：traceback 取最后一行，别的取第一
 it('报错摘要平时只露一行，「查看详情」展开全文、再点收起；只有一行时不给这颗键', async () => {
   const stack = 'Traceback (most recent call last):\n  File "x.py", line 1\nValueError: 坏了';
   const host = await mount(<ErrorExcerpt text={stack} />);
-  expect(host.textContent).toBe('坏了查看详情');
-  await click(buttonNamed('查看详情', host));
+  expect(host.textContent).toBe('坏了Show details');
+  await click(buttonNamed('Show details', host));
   expect(host.textContent).toContain('File "x.py", line 1');
-  expect(host.querySelector('[data-error-details] [role="region"]')?.getAttribute('aria-label')).toBe('完整错误详情');
-  expect(buttonNamed('收起详情', host)?.getAttribute('aria-expanded')).toBe('true');
-  await click(buttonNamed('收起详情', host));
-  expect(host.textContent).toBe('坏了查看详情');
+  expect(host.querySelector('[data-error-details] [role="region"]')?.getAttribute('aria-label')).toBe('Full error details');
+  expect(buttonNamed('Hide details', host)?.getAttribute('aria-expanded')).toBe('true');
+  await click(buttonNamed('Hide details', host));
+  expect(host.textContent).toBe('坏了Show details');
 
   const single = await mount(<ErrorExcerpt text="只有一行" />);
   expect(single.textContent).toBe('只有一行');
@@ -643,16 +642,16 @@ it('缺人脸模型跑完的后继标成发现问题，不是已完成', async (
   expect(hasResultProblems(followup(4, { result_summary: { face_match_unavailable: false } }))).toBe(false);
   // 结论本身没写原因时补一句，写了就不重复。
   expect(summaryItems({ outcome: '图库 2 张彼此认不出同一个人', face_match_unavailable: true }))
-    .toEqual(['图库 2 张彼此认不出同一个人', '人脸模型不可用，未做人脸核对']);
+    .toEqual(['图库 2 张彼此认不出同一个人', 'Face model unavailable; face check not performed']);
   expect(summaryItems(down)).toEqual([down.outcome]);
-  const parent = run({ id: 4, status: 'succeeded', task_label: '扫描与采集', progress_total: null,
+  const parent = run({ id: 4, status: 'succeeded', task_label: 'Scan and collection', progress_total: null,
                        finished_at: '2026-09-11T10:03:00Z', result_summary: { followups: 1 } });
   const { host } = await open(payload({ finished: [parent, settled] }));
   expect([...host.querySelectorAll('[data-followup-key] > span')].map((node) => node.textContent))
-    .toEqual(['补全资料图片', '发现问题', `涼森れむ · ${down.outcome}`]);
+    .toEqual(['补全资料图片', 'Problems found', `涼森れむ · ${down.outcome}`]);
 });
 
-it('人脸模型取不到的那一轮只记失败与原因，重试在页顶「需要处理」', async () => {
+it('人脸模型取不到的那一轮只记失败与原因，重试在页顶「Needs attention」', async () => {
   const { host } = await open(payload({ finished: [run({
     id: 9, task_key: 'face-models', task_label: '下载人脸模型', trigger: 'scheduled', status: 'failed',
     progress_total: null, progress_current: null, finished_at: '2026-09-11T10:05:00Z',

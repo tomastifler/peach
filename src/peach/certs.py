@@ -97,7 +97,7 @@ def not_after(cert: Path) -> datetime | None:
 
 
 def has_authority_key_identifier(cert: Path) -> bool:
-    """叶子证书包含严格 X.509 校验要求的颁发者密钥标识。"""
+    """The leaf certificate contains the issuer key identifier required by strict X.509 validation."""
     try:
         text = _openssl("x509", "-in", str(cert), "-noout", "-text")
     except (RuntimeError, OSError):
@@ -110,9 +110,9 @@ def reissue_reason(
 ) -> str | None:
     """需要重签就返回原因，不需要返回 None。"""
     if not files.cert.is_file() or not files.key.is_file():
-        return "服务器证书不存在"
+        return "Server certificate does not exist"
     if not has_authority_key_identifier(files.cert):
-        return "证书缺少颁发者密钥标识"
+        return "Certificate lacks an issuer key identifier"
     have_names, have_addresses = subject_alt_names(files.cert)
     missing = (names - have_names) | (addresses - have_addresses)
     if missing:

@@ -71,21 +71,21 @@ export function PushDiscoveryForm({ initial, receipt }: {
       (next) => settle(next, 'Shared secret replaced'), (cause) => setFailure(errorMessage(cause)));
   };
 
-  const ingested = `已入库 ${live.queue.ingested} 个文件`
-    + (live.queue.failed ? `，${live.queue.failed} 个入库失败` : '')
-    + (live.queue.pending ? `，队列里还有 ${live.queue.pending} 条` : '');
+  const ingested = `Imported ${live.queue.ingested} files`
+    + (live.queue.failed ? `, ${live.queue.failed} failed to import` : '')
+    + (live.queue.pending ? `, ${live.queue.pending} still in the queue` : '');
   const watching = live.local_running
     ? `Watching ${live.local_roots.join(', ')}` : live.local_message || 'Not running';
 
   return (
-    <Section id="pushDiscovery" title="自动发现新文件" onSubmit={submit}>
+    <Section id="pushDiscovery" title="Auto-discover new files" onSubmit={submit}>
       <Stack>
-        <div className="flex flex-wrap items-center gap-2"><span className="text-body-regular text-text-secondary">本机监视</span>
-          <StatusLabel tone={!live.enabled || !live.watch_local ? 'neutral' : live.local_running ? 'progress' : 'warning'}>{!live.enabled || !live.watch_local ? '未启用' : live.local_running ? '运行中' : '未运行'}</StatusLabel></div>
+        <div className="flex flex-wrap items-center gap-2"><span className="text-body-regular text-text-secondary">Local watching</span>
+          <StatusLabel tone={!live.enabled || !live.watch_local ? 'neutral' : live.local_running ? 'progress' : 'warning'}>{!live.enabled || !live.watch_local ? 'Not enabled' : live.local_running ? 'Running' : 'Not running'}</StatusLabel></div>
       </Stack>
       <Rows>
-        <SettingsRow label="发现新文件后自动入库" description={live.enabled ? ingested : undefined}>
-          <Switch aria-label="发现新文件后自动入库" isSelected={state.enabled} isDisabled={!state.available}
+        <SettingsRow label="Auto-import after discovering new files" description={live.enabled ? ingested : undefined}>
+          <Switch aria-label="Auto-import after discovering new files" isSelected={state.enabled} isDisabled={!state.available}
             onChange={(enabled) => setState({ ...state, enabled })} />
         </SettingsRow>
         <SettingsRow label="Watch local folders" description={live.enabled && live.watch_local ? watching : undefined}>
@@ -102,16 +102,16 @@ export function PushDiscoveryForm({ initial, receipt }: {
           <SettingsRow label="Webhook configuration" description={live.config_toml
             ? 'Paste into CloudDrive2 under Settings → Webhooks (membership required); paste it again after replacing the secret.'
             : live.origin
-              ? '还没有共享密钥，保存配置后生成。'
-              : '要先有 CloudDrive2 能访问的局域网地址才能生成。'}>
+              ? 'There is no shared key yet; it is generated after saving.'
+              : 'A local network address that CloudDrive2 can reach is needed before it can be generated.'}>
           </SettingsRow>
         ) : null}
       </Rows>
-      {/* 原因是服务端记下的最近一次入库异常，下一个文件入库成功时清空；漏掉的那个文件由
-          定期全量扫描补上，所以这里只报原因，不给重试。 */}
+      {/* The reason is the most recent import error recorded by the server and is cleared when the next file imports successfully; the file that was missed is picked up by
+          the periodic full scan, so only the reason is shown here with no retry. */}
       {live.enabled && live.queue.last_error ? (
         <Stack divided>
-          <Note tone="error" title="最近一次入库失败">{live.queue.last_error}</Note>
+          <Note tone="error" title="Most recent import failed">{live.queue.last_error}</Note>
         </Stack>
       ) : null}
       {live.enabled && live.cloud && live.config_toml ? (
@@ -138,7 +138,7 @@ export function PushDiscoveryForm({ initial, receipt }: {
                   <Input className="min-w-0 flex-1" aria-label={`Cloud path prefix ${index + 1}`}
                     placeholder="/115" autoComplete="off" maxLength={200} value={row.prefix}
                     onChange={(prefix) => edit(index, { prefix })} />
-                  <Select aria-label={`前缀 ${index + 1} 对应的媒体根`} prefix="对应目录" selectedKey={row.root}
+                  <Select aria-label={`Prefix ${index + 1} media root`} prefix="Maps to folder" selectedKey={row.root}
                     onSelectionChange={(key) => { if (key !== null) edit(index, { root: String(key) }); }}>
                     {roots.map((root) => <SelectItem key={root} id={root}>{root}</SelectItem>)}
                   </Select>

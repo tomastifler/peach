@@ -4,7 +4,7 @@ import { javImageUrl } from './source-picture';
 import { entityDisplayName } from '../../core/entity-names';
 import { useEntityNames } from '../use-entity-names';
 
-/** 来源头像经 `/jav-image` 取，浏览器缓存复用；进入视口才取，取图失败时保留首字。 */
+/** Source avatars are fetched through `/jav-image` and reused from the browser cache; they are only fetched once in the viewport, and on fetch failure the first character is kept. */
 export function SourceAvatar({ code, person, detail = false }: {
   code: string; person: { name: string; source_actor_id?: string }; detail?: boolean;
 }) {

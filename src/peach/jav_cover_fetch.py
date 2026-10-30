@@ -192,9 +192,9 @@ class CoverConnectError(Unavailable):
 
 
 class HostLimitedTransport:
-    """把请求间隔按主机分别计算；不同官方站点互不阻塞。
+    """Compute the request interval per host; different official sites do not block each other.
 
-    给了 `limiter` 就按它等：几个传输共用一份间隔，同时跑的任务问同一主机也不会叠在一起。
+    If `limiter` is given, wait by it: several transports share one interval, so tasks running at the same time that ask the same host do not pile up.
     """
 
     def __init__(self, inner: HttpxTransport, interval: float, *,
@@ -433,13 +433,13 @@ def official_image_candidates(url: str) -> list[Candidate]:
     return []
 
 
-#: 库外卡片经 `/cover-image` 取图时放行的主机后缀，与 `official_image_candidates` 认的两家一致；
-#: 代理跟重定向的每一跳也按它核对。
+#: Out-of-library cards, when fetching images via `/cover-image` are allowed these host suffixes, consistent with the two sites `official_image_candidates` recognizes;
+#: the proxy also checks every redirect hop against it.
 COVER_PROXY_HOSTS = ("dmm.co.jp", "dmm.com", "mgstage.com")
 
 
 def proxyable_cover_url(url: str) -> bool:
-    """能经 Peach 代理显示的封面地址：https、官方图片主机、官方图路径。"""
+    """Cover addresses that can be shown via the Peach proxy: https, official image host, official image path."""
     clean = str(url or "").strip()
     parsed = urlparse(clean)
     host = (parsed.hostname or "").casefold()
@@ -1200,7 +1200,7 @@ def _replace_log_row(rows: list[dict], code: str, replacement: dict) -> None:
 
 
 def failure_log_row(code: str, error: Exception) -> dict:
-    """批量封面的未取得记录，区分确定无图与本次未作答。"""
+    """Not-obtained record for batch covers, distinguishing a definite no-image from not answered this time."""
     return {"code": code, "result": "未取得", "source": "", "width": "", "height": "",
             "kb": "", "url": "", "note": f"{type(error).__name__}: {error}"[:80],
             "outcome": 'not_found' if isinstance(error, NotFound) else 'unavailable',
@@ -1334,7 +1334,7 @@ def run(args: argparse.Namespace, handle: TaskRunHandle | None = None) -> int:
                           f"{type(exc).__name__} {exc}", flush=True)
                 else:
                     rows.append(failure_log_row(code, exc))
-                    print(f"[{index}/{len(todo)}] 未取得 {code}："
+                    print(f"[{index}/{len(todo)}] Not obtained {code}: "
                           f"{type(exc).__name__} {exc}", flush=True)
             else:
                 if args.upgrade_existing and not candidate_improves(

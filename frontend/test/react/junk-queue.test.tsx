@@ -33,7 +33,7 @@ function props(patch: Partial<JunkQueueProps> = {}): JunkQueueProps {
   countRow.id = 'count';
   document.body.append(countRow);
   return {
-    kind: '', view: 'pending', helpers: { badgeHtml: () => '<span>本地</span>' }, actions: actions(),
+    kind: '', view: 'pending', helpers: { badgeHtml: () => '<span>Local</span>' }, actions: actions(),
     batchSize: 60, revision: 1, selectMode: false, selected: new Set(), countRow,
     skeletonHtml: () => '<div class="grid"><div class="skeletoncard"></div></div>',
     settled: vi.fn(), ...patch,
@@ -161,13 +161,13 @@ describe('计数行', () => {
     const { host } = await open(p);
     expect(p.countRow!.querySelector('[data-skeleton]')).toBeNull();
     expect(p.countRow!.querySelector('[data-collection-summary] strong')?.textContent).toBe('—');
-    expect(host.querySelector('[data-media-error] [data-note-action]')?.textContent).toBe('立即重试');
+    expect(host.querySelector('[data-media-error] [data-note-action]')?.textContent).toBe('Retry now');
     expect(cards(host)).toHaveLength(0);
   });
 });
 
 describe('一张卡', () => {
-  it('视频与图片的标题能点开，其余只是文字；没有大小写「大小未知」', async () => {
+  it('视频与图片的标题能点开，其余只是文字；没有大小写「Size unknown」', async () => {
     vi.stubGlobal('fetch', fetchMock(200, answer([
       junk(1), junk(2, { junk_kind: 'archive', name: '推广.zip', size: 0, why: '' }),
       junk(3, { junk_kind: 'image', name: '横幅.jpg' }), junk(4, { junk_kind: 'audio', name: '广告.mp3' }),
@@ -260,7 +260,7 @@ describe('一屏卡片', () => {
   it('为空时按视图说明为什么是空的', async () => {
     vi.stubGlobal('fetch', fetchMock(200, answer([])));
     const { host, update } = await open(props());
-    expect(host.querySelector('h3')?.textContent).toBe('No junk files to assess');
+    expect(host.querySelector('h3')?.textContent).toBe('No junk files to review');
     await update({ view: 'dismissed' });
     await settle();
     expect(host.querySelector('h3')?.textContent).toBe('No dismissed files');

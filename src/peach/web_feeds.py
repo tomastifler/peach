@@ -37,12 +37,12 @@ _NOT_MODIFIED = 304
 
 
 def _parse_source(kind: str, body: bytes, url: str):
-    """演员页受登录限制时返回可操作的原因。"""
+    """Return an actionable reason when the performer page is login-restricted."""
     if kind == feeds.KIND_JAVDB_ACTOR and javdb.LOGIN.search(body.decode("utf-8", "replace")):
-        raise ValueError("JavDB 返回登入页，请在「来源和凭证」为 JavDB 配置有效 Cookie 后重试")
+        raise ValueError("JavDB returned a login page; please configure a valid Cookie for JavDB in 'Sources and credentials' and retry")
     parsed = feeds.parse(kind, body, url)
     if parsed is None:
-        raise ValueError("这一页解不出任何条目")
+        raise ValueError("No entries could be parsed from this page")
     return parsed
 
 
@@ -151,7 +151,7 @@ def _backfill_solo_works(contract, transport, source, report: dict) -> None:
     try:
         response = fetch(transport, url)
         if response.status != 200:
-            raise ValueError(f"来源回了 HTTP {response.status}")
+            raise ValueError(f"Source returned HTTP {response.status}")
         parsed = _parse_source(source["kind"], response.body, url)
     except Exception as error:  # noqa: BLE001 - 主页已经落库，补拉只记原因
         report["backfill_error"] = str(error)
@@ -208,8 +208,8 @@ def _execute_check(contract, body, job_id: str) -> dict:
         if close:
             close()
     contract.cache_bust()
-    # 取资料：新发现的先排，没取到资料的旧壳留着保底名额，同一批一条后继。只缺封面的另成一批
-    # 补封面。定时那一轮只带到了重试时间的，手动点的那一轮全带；已在队里的番号都不再带。
+    # Metadata fetch: newly discovered ones go first, old shells with no metadata keep guaranteed slots, one successor per batch. Those lacking only a cover form a separate batch
+    # for cover backfill. The scheduled round carries only those that reached their retry time, and a manually triggered round carries all; codes already in the queue are never carried again.
     retry_after = feed_followup.RETRY_AFTER if body.get("automatic") else timedelta(0)
     hidden = web_settings.hidden_compilations(contract.database)
     busy = feed_followup.in_flight(contract.task_runs)
@@ -267,7 +267,7 @@ def q_feed_check(contract, args) -> dict:
 
 
 def q_feed_schedule(contract, _args) -> dict:
-    """订阅源定时拉取的档位与上次运行状态，形状与 `/api/follow/schedule` 相同。"""
+    """Tier and last-run state of the feed's scheduled fetch, with the same shape as `/api/follow/schedule`."""
     scheduler = contract.feed_scheduler
     if scheduler is None:
         return {"ok": True, "available": False, "enabled": False,
@@ -276,10 +276,10 @@ def q_feed_schedule(contract, _args) -> dict:
 
 
 def w_feed_schedule_run(contract, _body) -> dict:
-    """让订阅源定时拉取立刻跑一轮，结果照常记进调度状态。"""
+    """Run one round of the scheduled feed fetch immediately, with the result recorded into the schedule state as usual."""
     scheduler = contract.feed_scheduler
     if scheduler is None:
-        raise ValueError("订阅源拉取没有启用")
+        raise ValueError("Feed fetching is not enabled")
     return scheduler.run_now()
 
 
@@ -584,8 +584,8 @@ def q_feed_discoveries(contract, args) -> dict:
         wanted = wants.wanted_keys(connection, (normalise_code_key(row["code"]) for row in rows[:limit]))
         performers = _discovery_performers(connection, contract, rows[:limit])
     more = len(rows) > limit
-    # 最近一轮取新作资料或补新作封面里封面断在连接上的部数。只看最近这一轮：换了线路之后
-    # 下一轮取到，提示就该跟着消失，而不是让一次旧故障一直挂在页面上。
+    # The number of titles, in the latest round of fetching new-release metadata or backfilling new-release covers, whose cover failed at connecting. Only the latest round counts: after switching routes
+    # the next round succeeds and the hint should disappear with it, rather than leaving an old fault on the page.
     last = [run for task_key in (feed_followup.TASK_KEY, feed_followup.COVER_TASK_KEY)
             for run in contract.task_runs.query(status="succeeded", task_key=task_key, limit=1)]
     latest = max(last, key=lambda run: run.finished_at or "", default=None)

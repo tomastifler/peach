@@ -81,7 +81,7 @@ function playlistsFetch({ deferred = false } = {}) {
     if (!deferred) return Promise.resolve(reply(body));
     return new Promise<Reply>((resolve, reject) => {
       pending.push(() => resolve(reply(body)));
-      init?.signal?.addEventListener('abort', () => { reject(new DOMException('已中止', 'AbortError')) });
+      init?.signal?.addEventListener('abort', () => { reject(new DOMException('Aborted', 'AbortError')) });
     });
   });
   vi.stubGlobal('fetch', fetched);
@@ -211,7 +211,7 @@ const followOpen = (patch: Partial<FollowFeedProps> = {}): FollowFeedProps => ({
 /** 关注列表的一页：标题带着状态档，认得出画的是哪一次取回来的。 */
 const followPage = (status: string) => ({
   groups: [1, 2, 3].map((id) => ({
-    primary: { id, title: `更新 ${id} ${status || '全部'}`, status: 'new', provider: 'kemono', provider_label: 'Kemono',
+    primary: { id, title: `更新 ${id} ${status || 'All'}`, status: 'new', provider: 'kemono', provider_label: 'Kemono',
       source_id: 1, published_at: '2026-09-10T08:00:00Z', media_kind: 'video', playable: true, thumb_url: `/thumb/${id}`,
       tags: [] },
     variants: [], duplicates: [], stack: null,
@@ -230,7 +230,7 @@ function followFetch({ deferred = false } = {}) {
     if (!deferred) return Promise.resolve(reply(body));
     return new Promise<Reply>((resolve, reject) => {
       pending.push(() => resolve(reply(body)));
-      init?.signal?.addEventListener('abort', () => { reject(new DOMException('已中止', 'AbortError')) });
+      init?.signal?.addEventListener('abort', () => { reject(new DOMException('Aborted', 'AbortError')) });
     });
   });
   vi.stubGlobal('fetch', fetched);
@@ -294,7 +294,7 @@ it('关注页就地推筛选与代次：代次不变、不重挂，只按新键�
   await act(async () => {
     await r.openManagedRoute('/follow', open, { container: stats, isCurrent: () => true, place: revealRoutedPage });
   });
-  await until(() => Boolean(stats.textContent?.includes('更新 1 全部')), '首屏列表画上');
+  await until(() => Boolean(stats.textContent?.includes('更新 1 All')), '首屏列表画上');
   const page = stats.querySelector('.peach-react [data-follow-feed]');
   const revision = r.managedEntry(stats)?.revision;
   expect([fetch.calls('/api/follow').length, fetch.calls('/api/follow/credentials').length]).toEqual([1, 1]);

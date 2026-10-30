@@ -55,7 +55,7 @@ it('删除自定义来源的确认弹层用危险样式', async () => {
   const modal = vi.spyOn(legacyUi, 'confirmModal').mockResolvedValue({ confirmed: false });
   const host = await mount(<QueryClientProvider client={queryClient}><CustomSources receipt={vi.fn()} /></QueryClientProvider>);
   await settle();
-  await click(Array.from(host.querySelectorAll('button')).find(button => button.textContent === '删除'));
-  expect(modal.mock.calls[0]?.[0]).toMatchObject({ title: '删除自定义来源', confirmLabel: '删除来源', danger: true });
+  await click(Array.from(host.querySelectorAll('button')).find(button => button.textContent === 'Delete'));
+  expect(modal.mock.calls[0]?.[0]).toMatchObject({ title: 'Delete custom source', confirmLabel: 'Delete source', danger: true });
   modal.mockRestore();
 });

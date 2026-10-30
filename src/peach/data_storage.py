@@ -1,23 +1,23 @@
-"""Peach 数据目录的占用统计、缓存清理与整体迁移。
+"""Peach data directory usage statistics, cache cleanup and whole-directory migration.
 
-数据目录随馆藏增长：数据库与它的备份、封面头像、预览图、播放缓存，几万部片子就是几十 GB。
-Windows 安装版默认把它放在 `%LOCALAPPDATA%`，也就是系统盘。设置页的「存储空间」由这里供数：
+ The data directory grows with the library: the database and its backups, covers and avatars, preview images and the playback cache add up to tens of GB.
+Windows installs place it by default in `%LOCALAPPDATA%`, that is, the system drive. The settings page's "Storage" section is fed by this module:
 
-- **占用统计**：整棵目录走一遍，按类别累计字节，结果存进 `state/storage-usage.json`。
-  几十 GB 的小文件要走一两分钟，所以在后台线程里跑，页面轮询。
-- **清理**：只清能在本机自动重建、或者有保留规则兜底的几类：播放缓存、缩略图、旧数据库备份、
-  已归档日志。预览图要重读媒体、封面头像要重新联网，只统计不清理。
-- **迁移**：服务端只校验并写下请求；托盘停下服务、退出，交给助手进程（`apply`）整体搬家。
-  同卷直接改名，跨卷复制后逐项核对再删原目录。账本里指向数据目录的绝对路径
-  （`PATH_COLUMNS`）一起改写；默认落点与原目录各留一份 `state/data-root.txt` 指向新位置，
-  开机自启与桌面图标按新位置重写。任何一步失败都退回原目录，原目录在核对通过前不动。
+- **Usage statistics**: walk the whole tree once, accumulating bytes by category, and store the result in `state/storage-usage.json`.
+  Tens of GB of small files take a minute or two to walk, so it runs on a background thread and the page polls.
+- **Cleanup**: only the categories that can be rebuilt automatically on this machine or are covered by a retention rule: playback cache, thumbnails, old database backups,
+  and archived logs. Preview images need the media re-read and covers and avatars need the network again, so they are counted but not cleaned.
+- **Migration**: the server only validates and records the request; the tray stops the service, exits, and hands over to the helper process (`apply`) to move everything.
+  On the same volume it simply renames; across volumes it copies, verifies item by item, then deletes the original directory. Absolute paths in the ledger that point into the data directory
+  (`PATH_COLUMNS`) are rewritten together; the default location and the original directory each keep a copy of `state/data-root.txt` pointing to the new location,
+  Autostart and desktop icons are rewritten for the new location. If any step fails it falls back to the original directory, which is left untouched until verification passes.
 
-迁移要有托盘：停服务、退出、搬家、在新位置重新打开，这几步只有托盘做得了。安装版与源码运行
-（Windows、macOS）都由托盘托管，都能迁；打包版的助手是同一个可执行文件带 `HELPER_FLAG`，
-源码运行是当前解释器跑 `python -m peach.data_storage`。源码运行的默认落点是项目旁边的
-`peach-data`，原位置留下的 `state/data-root.txt` 让它和显式的 `PEACH_DATA_ROOT` 都跟到新位置。
-容器的数据目录是宿主机挂进来的卷，在容器里搬家等于搬出卷外，只能在宿主机改挂载；
-不经托盘直接跑的服务没有人接手请求，也不能迁。
+ Migration needs the tray: stopping the service, exiting, moving, and reopening at the new location are steps only the tray can do. Installed builds and source runs
+(Windows, macOS) are both hosted by the tray and can both migrate; the packaged helper is the same executable with `HELPER_FLAG`,
+ a source run uses the current interpreter to run `python -m peach.data_storage`. The default location of a source run is the
+`peach-data`, the pointer left at the original location `state/data-root.txt` makes it and an explicit `PEACH_DATA_ROOT` both follow to the new location.
+ A container's data directory is a volume mounted from the host; moving inside the container means moving out of the volume, so the mount can only be changed on the host;
+ a service run directly without the tray has nobody to take over the request, so it cannot migrate either.
 """
 from __future__ import annotations
 
@@ -44,27 +44,27 @@ from .fsutil import atomic_write_text
 USAGE_NAME = "storage-usage.json"
 REQUEST_NAME = "data-relocation-request.json"
 RESULT_NAME = "data-relocation.json"
-#: 托盘拉起迁移助手用的参数，`scripts/build_app_entry.py` 按它分发。
+#: Arguments used by the tray to launch the migration helper, `scripts/build_app_entry.py` dispatches on it.
 HELPER_FLAG = "--relocate-data"
-#: 请求写下后托盘要在这段时间里接手，过期的请求作废，避免几天后重启时突然搬家。
+#: The tray must take over within this time after the request is written; expired requests are voided, so a restart days later does not suddenly move the data.
 REQUEST_TTL = 120
-#: 跨卷迁移时目标磁盘至少要多出的余量：迁移期间日志、锁文件和数据库日志还会再写一些。
+#: Extra headroom the target disk needs for a cross-volume migration: logs, lock files and the database journal still write a little during migration.
 SPACE_MARGIN = 1 << 30
-#: 统计时多久报一次走到哪了，秒。页面 1.5 秒问一次，比这更密没有读者。
+#: How often progress is reported while measuring, in seconds. The page asks every 1.5 seconds, and polling denser than that has no reader.
 REPORT_INTERVAL = 0.5
-#: 源码运行的项目根目录（`src/peach/` 往上两级）。
+#: Project root of a source run (`src/peach/` two levels up).
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-#: 账本里保存数据目录内绝对路径的列。迁移后按新位置改写，其余路径都由目录键现算。
+#: Columns in the ledger that hold absolute paths inside the data directory. They are rewritten to the new location after migration; all other paths are computed from the directory keys.
 PATH_COLUMNS = (("asset", "snapshot_path"), ("follow_item", "evidence_path"))
-#: 整片转码缓存；同目录的 `.mp4hdr` 是重建的文件头，生成要重扫原片，不在清理范围。
+#: The whole-file transcode cache; the sibling `.mp4hdr` is a rebuilt file header, which must rescan the original to generate and is outside the cleanup scope.
 _TRANSCODE = re.compile(r"^\d+-.+\.mp4$")
 _ROTATED_LOG = re.compile(r"^(?:.+\.until-\d{8}\.log|crash-\d+\.log)$")
-#: 账本目录里归「数据库备份」的文件：`ledger.pre-*.db` 和它的 `-wal`／`-shm`。
+#: Files in the ledger directory that belong to "Database backups": `ledger.pre-*.db` and its `-wal`/`-shm`.
 _BACKUP_FILE = re.compile(r"^ledger\.pre-.+\.db(?:-wal|-shm)?$")
 
 
 def backup_directories(config) -> tuple[Path, ...]:
-    """一份 Peach 数据目录里放账本备份的全部目录：账本目录在前。"""
+    """All directories in a Peach data directory that hold ledger backups: the ledger directory first."""
     return (config.directory("database"), ledger_backups.organize_dir(config.directory("generated")))
 
 
@@ -72,41 +72,41 @@ def backup_directories(config) -> tuple[Path, ...]:
 class Category:
     key: str
     label: str
-    #: 这一类是什么。
+    #: What this category is.
     description: str
     cleanable: bool = False
-    #: 可清理的写清理之后会怎样；不能清理的写为什么不能。
+    #: For cleanable ones, what happens after cleaning; for non-cleanable ones, why they cannot be cleaned.
     note: str = ""
 
 
-#: 每一类都说清是什么；能清理的说清理后会怎样，不能清理的说为什么。
-#: 缩略图与预览图名字相近，区别在来源：缩略图由已下载的封面、头像缩小而来，本机随时能重算；
-#: 预览图从视频抽帧，重建要重新读取整部影片。
+#: Each category states what it is; cleanable ones say what happens after cleaning, non-cleanable ones say why not.
+#: Thumbnails and preview images have similar names; the difference is their source: thumbnails are shrunk from downloaded covers and avatars and can be recomputed locally at any time;
+#: preview images are extracted from video frames, and rebuilding means re-reading the entire movie.
 CATEGORIES = (
-    Category("database", "数据库", "影片、人物、标签与观看记录",
-             note="Peach 的全部资料都在这里，删除就是清空媒体库"),
-    Category("backups", "数据库备份", "升级、迁移与整理前自动留下的数据库副本", True,
-             "每处保留最近一份，更早的无法再恢复"),
-    Category("playback", "播放缓存", "浏览器不能直接播放的影片转码后的副本", True,
-             "再次播放时重新转码"),
-    Category("thumbnails", "缩略图", "封面与头像的小尺寸副本，列表和网格里显示的就是它", True,
-             "浏览时从本机已有的封面重新缩小"),
-    Category("previews", "预览图", "从视频抽帧生成的九宫格、海报与进度条预览",
-             note="重建要重新读取整部影片，网盘里的影片会重新下载，所以不在这里清理"),
-    Category("downloads", "封面与网络资料", "从资料站下载的封面、头像、厂牌标志与网页缓存",
-             note="删除后要重新联网下载，已下架的来源再也取不回来"),
-    Category("sources", "导入资料", "从其他软件导入的资料与原始记录",
-             note="Peach 无法重新生成，删除后只能重新导入"),
-    Category("records", "任务与复核记录", "断点续跑、自动修复回执、待复核清单与归档",
-             note="删除会丢失任务进度和尚未处理的复核结论"),
-    Category("tools", "媒体工具", "FFmpeg、人脸识别等播放、抽帧与识别用到的程序",
-             note="删除后播放、预览与识别不可用，需要重新安装"),
-    Category("accounts", "登录状态", "访问令牌与资料站登录用的浏览器资料",
-             note="删除后需要重新登录各个网站与设备"),
-    Category("logs", "日志", "运行日志与崩溃记录", True,
-             "只清理已归档的日志与崩溃记录，正在写入的保留"),
-    Category("other", "其他", "数据目录里不属于以上各类的文件",
-             note="Peach 无法判断它们的用途，请自行确认后手动处理"),
+    Category("database", "Database", "Movies, people, tags and watch history",
+             note="Peach all of Peach's data is here; deleting it empties the media library"),
+    Category("backups", "Database backups", "Database copies left automatically before upgrades, migrations and organizing", True,
+             "The most recent one is kept for each location; older ones can no longer be restored"),
+    Category("playback", "Playback cache", "Transcoded copies of movies the browser cannot play directly", True,
+             "Re-transcoded on next playback"),
+    Category("thumbnails", "Thumbnails", "Small copies of covers and avatars, which is what lists and grids display", True,
+             "Shrunk again from the covers already on this machine when browsing"),
+    Category("previews", "Preview images", "Contact sheets, posters and scrubber previews generated from video frames",
+             note="rebuilding means re-reading the whole movie, and movies on cloud drives would be downloaded again, so they are not cleaned here"),
+    Category("downloads", "Covers and online metadata", "Covers, avatars, studio logos and web caches downloaded from metadata sites",
+             note="after deletion they must be downloaded again, and sources that have been taken down can never be retrieved"),
+    Category("sources", "Imported data", "Data and original records imported from other software",
+             note="Peach cannot be regenerated; after deletion it can only be re-imported"),
+    Category("records", "Task and review records", "Resume checkpoints, automatic repair receipts, review queues and archives",
+             note="deleting loses task progress and review conclusions that have not been handled"),
+    Category("tools", "Media tools", "FFmpeg, face recognition and other programs used for playback, frame extraction and recognition",
+             note="after deletion playback, previews and recognition are unavailable and must be reinstalled"),
+    Category("accounts", "Login state", "Access tokens and the browser profile used for metadata site logins",
+             note="after deletion you must log in again to every site and device"),
+    Category("logs", "Logs", "Runtime logs and crash records", True,
+             "Only archived logs and crash records are cleaned; ones being written are kept"),
+    Category("other", "Other", "Files in the data directory that do not belong to any category above",
+             note="Peach cannot tell what these are for; please confirm and handle them manually"),
 )
 CATEGORY_KEYS = tuple(category.key for category in CATEGORIES)
 CLEANABLE = frozenset(category.key for category in CATEGORIES if category.cleanable)
@@ -117,7 +117,7 @@ def _key(path: Path) -> str:
 
 
 def _roots(config) -> dict[str, str]:
-    """数据目录下各子目录归哪一类；没有列名的按上一级归类，最外层归「其他」。"""
+    """Which category each subdirectory of the data directory belongs to; unlisted ones go by their parent, and the outermost level is "Other"."""
     from .previews import cover_thumb_root, entity_thumb_root
     generated = config.directory("generated")
     pairs = [
@@ -160,9 +160,9 @@ def _reclaimable(category: str, path: Path, parent_name: str) -> bool:
 
 def measure(config, *, should_stop: Callable[[], bool] = lambda: False,
             report: Callable[[int, int], None] | None = None) -> dict:
-    """走一遍数据目录，按类别统计文件数、字节与可清理字节。链接不跟随。
+    """Walk the data directory and count files, bytes and cleanable bytes by category. Links are not followed.
 
-    `report(文件数, 字节)` 报告走到哪了，最多每 `REPORT_INTERVAL` 秒一次。
+    `report(file count, bytes)` reports progress, at most once every `REPORT_INTERVAL` seconds.
     """
     root = config.data_root
     roots = _roots(config)
@@ -173,7 +173,7 @@ def measure(config, *, should_stop: Callable[[], bool] = lambda: False,
     reported = time.monotonic()
     while stack:
         if should_stop():
-            raise InterruptedError("统计已停止")
+            raise InterruptedError("Measurement stopped")
         if report is not None and time.monotonic() - reported >= REPORT_INTERVAL:
             reported = time.monotonic()
             report(files, size_seen)
@@ -214,12 +214,12 @@ def measure(config, *, should_stop: Callable[[], bool] = lambda: False,
 
 
 def _backup_plan(live: Path, directory: Path, *, apply: bool = False) -> ledger_backups.BackupPlan:
-    """手动清理每处只留最近一份，不看备份年龄；当前账本校验不过时一份都不删。"""
+    """Manual cleanup keeps only the most recent copy per location, regardless of backup age; if the current ledger fails verification, none are deleted."""
     return ledger_backups.prune(live, apply=apply, keep_recent=1, min_age=timedelta(0), directory=directory)
 
 
 def _remove(path: Path) -> tuple[int, int, int]:
-    """删一个文件或整个目录，返回 (删掉的文件数, 字节, 删不掉的文件数)。"""
+    """Delete a file or an entire directory, returning (files deleted, bytes, files that could not be deleted)."""
     removed = size = failed = 0
     if path.is_dir() and not path.is_symlink():
         for folder, _dirs, files in os.walk(path, topdown=False):
@@ -247,9 +247,9 @@ def _remove(path: Path) -> tuple[int, int, int]:
 
 
 def clean(config, category: str) -> dict:
-    """清理一类可重建的产物，返回删掉的文件数、字节和删不掉的数量。"""
+    """Clean one category of rebuildable artifacts, returning the number of files deleted, bytes, and files that could not be deleted."""
     if category not in CLEANABLE:
-        raise ValueError("这一类不能在这里清理")
+        raise ValueError("This category cannot be cleaned here")
     generated = config.directory("generated")
     targets: list[Path] = []
     if category == "backups":
@@ -258,7 +258,7 @@ def clean(config, category: str) -> dict:
         for directory in backup_directories(config):
             decided = _backup_plan(live, directory, apply=True)
             if decided.refused:
-                raise ValueError(f"数据库备份未清理：{decided.refused}")
+                raise ValueError(f"Database backups were not cleaned: {decided.refused}")
             removed += len(decided.remove) + len(decided.orphans)
             size += decided.removable_bytes
         return {"files": removed, "bytes": size, "failed": 0}
@@ -285,7 +285,7 @@ def clean(config, category: str) -> dict:
 
 
 def read_usage(config) -> dict | None:
-    """上次统计的结果；不是这个数据目录的（迁移前留下的）不算。"""
+    """Result of the last measurement; one that is not for this data directory (left over from before a migration) does not count."""
     try:
         data = json.loads((config.directory("state") / USAGE_NAME).read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -296,7 +296,7 @@ def read_usage(config) -> dict | None:
 
 
 class StorageJobs:
-    """统计与清理共用一条后台线程：同一时间只做一件事，清理完顺手重新统计。"""
+    """Measuring and cleaning share one background thread: only one thing at a time, and after cleaning it re-measures."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -312,14 +312,14 @@ class StorageJobs:
             return self._state["state"] != "idle"
 
     def start(self, config, action: str | list[str] | tuple[str, ...]) -> dict:
-        """`"measure"` 是重新统计；一个或几个类别键是依次清理它们，清理完统一统计一次。"""
+        """`"measure"` is a re-measure; one or several category keys are cleaned in turn, and a single measurement follows once cleaning is done."""
         keys = [] if action == "measure" else [action] if isinstance(action, str) else list(action)
         if action != "measure" and (not keys or any(key not in CLEANABLE for key in keys)):
-            raise ValueError("这一类不能在这里清理")
+            raise ValueError("This category cannot be cleaned here")
         keys = [key for key in CATEGORY_KEYS if key in keys]
         with self._lock:
             if self._state["state"] != "idle":
-                raise RuntimeError("正在统计或清理，请稍候")
+                raise RuntimeError("Measuring or cleaning in progress; please wait")
             self._state = {"state": "cleaning" if keys else "measuring", "category": keys[0] if keys else "",
                            "categories": keys, "message": "", **self._expected(config)}
             self._thread = threading.Thread(target=self._run, args=(config, keys),
@@ -329,7 +329,7 @@ class StorageJobs:
 
     @staticmethod
     def _expected(config) -> dict:
-        """上次统计的文件数，这一轮的进度条按它估；没统计过就只报走过多少。"""
+        """File count from the last measurement, used to estimate this round's progress bar; if never measured, only the number walked is reported."""
         usage = read_usage(config)
         return {"files": 0, "bytes": 0, "expected_files": int(usage["total_files"]) if usage else None}
 
@@ -353,16 +353,16 @@ class StorageJobs:
                     result = clean(config, key)
                     freed += result["bytes"]
                     failed += result["failed"]
-                labels = "、".join(item.label for item in CATEGORIES if item.key in keys)
-                message = f"已清理{labels}，释放 {format_size(freed)}"
+                labels = ", ".join(item.label for item in CATEGORIES if item.key in keys)
+                message = f"Cleaned {labels}, freed {format_size(freed)}"
                 if failed:
-                    message += f"；{failed} 个文件正在使用，未能删除"
+                    message += f"; {failed} files are in use and could not be deleted"
                 with self._lock:
                     self._state.update(state="measuring", category="", message=message, files=0, bytes=0)
             usage = measure(config, report=self._progress)
             atomic_write_text(config.directory("state") / USAGE_NAME, json.dumps(usage))
         except Exception as exc:
-            message = f"{message}；{exc}" if message else str(exc)
+            message = f"{message}; {exc}" if message else str(exc)
             with self._lock:
                 self._state = {"state": "idle", "message": message, "error": True}
             return
@@ -374,7 +374,7 @@ JOBS = StorageJobs()
 
 
 def format_size(size: int) -> str:
-    """与前端 `fmtSize` 同一套写法，回执里的数字和页面上对得上。"""
+    """Same notation as the frontend `fmtSize` so the numbers in the receipt match the page."""
     if size <= 0:
         return "0 B"
     if size < 1 << 20:
@@ -386,50 +386,50 @@ def format_size(size: int) -> str:
     return f"{size / (1 << 40):.2f} TB"
 
 
-# --------------------------------------------------------------------------- 迁移
+# --------------------------------------------------------------------------- Migration
 
 def availability(config) -> tuple[bool, str]:
-    """这份部署能不能在设置页迁移数据目录；不能时说清为什么、该怎么手动做。"""
+    """Whether this deployment can migrate the data directory from the settings page; if not, explain why and how to do it by hand."""
     if os.environ.get("PEACH_DISTRIBUTION") == "docker":
-        return False, ("容器的数据目录是宿主机上的数据卷，位置由 compose.yaml 的挂载决定，容器里改不了；"
-                       "在容器里搬走会离开数据卷，重建容器就丢失。请在宿主机上按下面几步迁移")
+        return False, ("The container's data directory is a data volume on the host, its location is set by the mount in compose.yaml, and it cannot be changed from inside the container; "
+                       "Moving it out inside the container would leave the data volume and be lost when the container is rebuilt. Please migrate on the host following the steps below")
     if not (distribution.standalone() or os.environ.get("PEACH_TRAY_MANAGED") == "1"
             or os.environ.get("PEACH_HEADLESS_MANAGED") == "1"):
-        return False, ("迁移要由托盘或无桌面服务（python -m peach.server）停止并重新启动 Peach，"
-                       "当前服务是直接启动的。请改用其中一种方式启动后再迁移；也可以退出 Peach，"
-                       "手动移动数据目录，再将 PEACH_DATA_ROOT 设为新位置")
+        return False, ("Migration must be done by the tray or the headless service (python -m peach.server) to stop and restart Peach, "
+                       "The current service was started directly. Please start it in one of those ways and migrate again; or quit Peach, "
+                       "move the data directory manually, then set PEACH_DATA_ROOT to the new location")
     root = config.data_root.resolve()
     for key in settings_file.DIRECTORY_KEYS:
         raw = (config.directories.get(key) or "").strip()
         directory = config.directory(key)
         if raw and (PureWindowsPath(raw).is_absolute() or Path(raw).is_absolute()):
-            return False, "部分数据设置在数据目录之外，请退出 Peach 后手动迁移"
+            return False, "Some data is set outside the data directory; please quit Peach and migrate manually"
         if directory.is_symlink() or directory.is_junction() or not directory.resolve().is_relative_to(root):
-            return False, "部分数据使用了目录链接，请退出 Peach 后手动迁移"
+            return False, "Some data uses directory links; please quit Peach and migrate manually"
     return True, ""
 
 
-#: 容器部署在宿主机上迁移数据目录的几步：每步一句说明加一条命令。命令按仓库的 compose.yaml 写，
-#: 数据卷名带 compose 项目名前缀，第一步先查出来。
+#: Steps for migrating the data directory on the host for a container deployment: each step is a one-line description plus a command. The commands follow the repository's compose.yaml,
+#: The volume name carries the compose project name prefix, so the first step looks it up.
 DOCKER_STEPS = (
-    ("查出数据卷的名字（以 _peach-data 结尾）", "docker volume ls"),
-    ("在 compose.yaml 所在目录停止 Peach", "docker compose down"),
-    ("把数据卷复制到新文件夹；新文件夹要让 UID 1000 可写",
-     "docker run --rm -v <数据卷名>:/from -v <新文件夹>:/to alpine cp -a /from/. /to/"),
-    ("把 compose.yaml 里的 peach-data:/data 改成 <新文件夹>:/data，再启动；确认一切正常前不要删除旧数据卷",
+    ("Look up the data volume's name (ending in _peach-data)", "docker volume ls"),
+    ("In the directory containing compose.yaml, stop Peach", "docker compose down"),
+    ("Copy the data volume to a new folder; the new folder must be writable by UID 1000",
+     "docker run --rm -v <data volume name>:/from -v <new folder>:/to alpine cp -a /from/. /to/"),
+    ("In compose.yaml, change peach-data:/data to <new folder>:/data, then start; do not delete the old data volume until you have confirmed everything works",
      "docker compose up -d"),
 )
 
 
 def manual_steps() -> list[dict[str, str]]:
-    """设置页不能迁移时，给出的手动步骤。目前只有容器有。"""
+    """Manual steps given when the settings page cannot migrate. Currently only containers have them."""
     if os.environ.get("PEACH_DISTRIBUTION") != "docker":
         return []
     return [{"text": text, "command": command} for text, command in DOCKER_STEPS]
 
 
 def _vacant(folder: Path) -> bool:
-    """空目录，或者只剩一份数据目录位置记录（迁走之后留下的那种）。"""
+    """An empty directory, or one with only a data-directory location record (the kind left behind after a migration)."""
     entries = list(folder.iterdir())
     if not entries:
         return True
@@ -453,26 +453,26 @@ def _same_volume(source: Path, target: Path) -> bool:
 
 
 def check_target(config, raw: object, *, program: Path | None = None) -> Path:
-    """校验新的数据目录位置，返回规范化后的绝对路径。不合适时抛 ValueError，原因写给人看。"""
+    """Validate the new data directory location and return the normalized absolute path. When unsuitable, raise ValueError, with the reason written for people."""
     if not isinstance(raw, str) or not raw.strip():
-        raise ValueError("请选择新的数据目录")
+        raise ValueError("Please choose a new data directory")
     text = raw.strip()
     if os.name == "nt":
         pure = PureWindowsPath(text)
         if not pure.drive or not pure.root or pure.drive.startswith("\\\\"):
-            raise ValueError("请选择本机磁盘上的文件夹，例如 D:\\Peach\\peach-data")
+            raise ValueError("Please choose a folder on a local disk, for example D:\\Peach\\peach-data")
     target = Path(text)
     if not target.is_absolute():
-        raise ValueError("请填写完整路径")
+        raise ValueError("Please enter a full path")
     if target.parent == target:
-        raise ValueError("请选择或新建一个专用文件夹，不要直接使用磁盘根目录")
+        raise ValueError("Please choose or create a dedicated folder; do not use a disk root directly")
     target = target.resolve()
     source = config.data_root.resolve()
     if target == source or target.is_relative_to(source) or source.is_relative_to(target):
-        raise ValueError("新位置不能与当前数据目录相同或互相包含")
+        raise ValueError("The new location cannot be the same as, or contain or be contained by, the current data directory")
     program = (program or Path(sys.executable).parent).resolve()
     if target.is_relative_to(program) or program.is_relative_to(target):
-        raise ValueError("新位置不能与程序目录重叠")
+        raise ValueError("The new location cannot overlap the program directory")
     for rows in (*config.locations.values(), *config.mounts.values()):
         for value in rows:
             media = Path(value)
@@ -480,19 +480,19 @@ def check_target(config, raw: object, *, program: Path | None = None) -> Path:
                 continue
             media = media.resolve()
             if target.is_relative_to(media) or media.is_relative_to(target):
-                raise ValueError("新位置不能与媒体目录重叠")
+                raise ValueError("The new location cannot overlap the media directory")
     if target.exists():
         if not target.is_dir():
-            raise ValueError("这个位置已有同名文件")
+            raise ValueError("A file with the same name already exists at this location")
         if not _vacant(target):
-            raise ValueError("请选择空文件夹，或新建一个文件夹")
+            raise ValueError("Please choose an empty folder, or create a new one")
     ancestor = _existing_ancestor(target)
     probe = ancestor / f".peach-write-test-{uuid.uuid4().hex}"
     try:
         probe.write_bytes(b"")
         probe.unlink()
     except OSError:
-        raise ValueError("当前用户无法写入这个位置") from None
+        raise ValueError("The current user cannot write to this location") from None
     return target
 
 
@@ -501,7 +501,7 @@ def check_space(source: Path, target: Path, needed: int) -> None:
         return
     free = shutil.disk_usage(_existing_ancestor(target)).free
     if free < needed + SPACE_MARGIN:
-        raise ValueError(f"新位置所在磁盘剩余 {format_size(free)}，迁移需要约 {format_size(needed + SPACE_MARGIN)}")
+        raise ValueError(f"Free space on the disk at the new location: {format_size(free)}, migration needs about {format_size(needed + SPACE_MARGIN)}")
 
 
 def read_result(config) -> dict | None:
@@ -521,19 +521,19 @@ def _record(root: Path, **fields) -> None:
 
 
 def request(config, raw: object) -> dict:
-    """校验并写下迁移请求，由托盘接手。返回给页面的回执。"""
+    """Validate and record the migration request for the tray to take over. Returns the receipt for the page."""
     available, message = availability(config)
     if not available:
         raise ValueError(message)
     from . import standalone_update
     if standalone_update.public().get("state") in standalone_update.ACTIVE | {"ready"}:
-        raise ValueError("更新任务尚未结束，请完成后再迁移")
+        raise ValueError("An update task has not finished; please migrate after it completes")
     if JOBS.busy():
-        raise ValueError("正在统计或清理，请完成后再迁移")
+        raise ValueError("Measuring or cleaning in progress; please migrate once it finishes")
     target = check_target(config, raw)
     usage = read_usage(config)
     if usage is None:
-        raise ValueError("请先统计占用空间")
+        raise ValueError("Please measure disk usage first")
     source = config.data_root.resolve()
     check_space(source, target, int(usage.get("total_bytes") or 0))
     path = config.directory("state") / REQUEST_NAME
@@ -542,12 +542,12 @@ def request(config, raw: object) -> dict:
                                             "requested_at": time.time()}, ensure_ascii=False))
     headless = os.environ.get("PEACH_HEADLESS_MANAGED") == "1"
     return {"accepted": True, "target": str(target),
-            "message": "正在迁移数据目录，服务会暂停，完成后自动恢复，稍后刷新页面。" if headless
-            else "正在迁移数据目录，Peach 将暂时退出，完成后自动重新打开。"}
+            "message": "Migrating the data directory; the service will pause and resume automatically when done; refresh the page shortly." if headless
+            else "Migrating the data directory, Peach will quit temporarily and reopen automatically when done."}
 
 
 def snapshot(config) -> dict:
-    """设置页「存储空间」一屏的数据。"""
+    """Data for the settings page's "Storage" screen."""
     root = config.data_root.resolve()
     try:
         disk = shutil.disk_usage(root)
@@ -578,11 +578,11 @@ def snapshot(config) -> dict:
 
 
 def poll(tray) -> None:
-    """托盘监视循环里看一眼有没有迁移请求；有就停服务、交给助手、自己退出。"""
+    """Check once in the tray monitoring loop for a migration request; if there is one, stop the service, hand over to the helper, and exit."""
     try:
         config = settings_file.load_config()
     except Exception:
-        # 首次设置没走完或设置文件坏了：这时不会有迁移请求，监视循环照常往下走。
+        # First-time setup was not finished or the settings file is broken: there can be no migration request then, so the monitoring loop carries on as usual.
         return
     path = config.directory("state") / REQUEST_NAME
     if not path.is_file() or not tray._action_lock.acquire(blocking=False):
@@ -596,30 +596,30 @@ def poll(tray) -> None:
             path.unlink()
             return
         if data["source"] != str(config.data_root.resolve()):
-            raise ValueError("数据目录已变更，请重新选择")
+            raise ValueError("The data directory has changed; please choose again")
         check_target(config, data["target"])
         token = update_tasks.reserve(database)
         update_tasks.wait_quiescent(database)
         atomic_write_text(path, json.dumps(dict(data, token=token), ensure_ascii=False))
         process = _spawn([*_program_command(), *_helper_arguments(path, os.getpid())])
         update_tasks.transfer(database, token, process.pid)
-        _notify(tray, "正在迁移数据目录，Peach 将暂时退出，完成后自动重新打开。")
+        _notify(tray, "Migrating the data directory, Peach will quit temporarily and reopen automatically when done.")
         tray.exit(reason="data-relocation")
     except Exception as exc:
         if token:
             update_tasks.release(database, token)
         path.unlink(missing_ok=True)
-        _record(config.data_root, state="error", message=f"未能开始迁移：{exc}")
-        _notify(tray, f"数据目录未能迁移：{exc}")
+        _record(config.data_root, state="error", message=f"Could not start the migration: {exc}")
+        _notify(tray, f"Could not migrate the data directory: {exc}")
     finally:
         tray._action_lock.release()
 
 
 def poll_headless(stop: Callable[[], None], restart: Callable[[dict[str, str]], None]) -> bool:
-    """无桌面服务的看守进程每轮看一眼迁移请求；有就停掉网页服务，在本进程里搬家，再拉起服务。
+    """On each round the supervisor of the headless service checks for a migration request; if there is one, it stops the web service, moves the data in this process, then restarts the service.
 
-    看守进程自己不开数据目录里的文件，不必像托盘那样退出再交给助手。`restart(环境)` 在新位置
-    （失败时是原位置）重新启动网页服务，环境里的 `PEACH_DATA_ROOT` 就是那个位置。返回是否处理了请求。
+    The supervisor does not hold files in the data directory itself, so it need not exit and hand over to a helper as the tray does. `restart(environment)` at the new location
+    (or the original location on failure) restarts the web service, and the environment's `PEACH_DATA_ROOT` is that location. Returns whether a request was handled.
     """
     try:
         config = settings_file.load_config()
@@ -637,7 +637,7 @@ def poll_headless(stop: Callable[[], None], restart: Callable[[dict[str, str]], 
             path.unlink()
             return False
         if data["source"] != str(config.data_root.resolve()):
-            raise ValueError("数据目录已变更，请重新选择")
+            raise ValueError("The data directory has changed; please choose again")
         check_target(config, data["target"])
         token = update_tasks.reserve(database)
         update_tasks.wait_quiescent(database)
@@ -646,7 +646,7 @@ def poll_headless(stop: Callable[[], None], restart: Callable[[dict[str, str]], 
         if token:
             update_tasks.release(database, token)
         path.unlink(missing_ok=True)
-        _record(config.data_root, state="error", message=f"未能开始迁移：{exc}")
+        _record(config.data_root, state="error", message=f"Could not start the migration: {exc}")
         return True
     stop()
     apply(path, None, start=lambda _program, environment: restart(environment))
@@ -654,7 +654,7 @@ def poll_headless(stop: Callable[[], None], restart: Callable[[dict[str, str]], 
 
 
 def _notify(tray, message: str) -> None:
-    """托盘气泡只是顺带告知；有的平台不支持，不能让它打断迁移流程。"""
+    """The tray balloon is only an incidental notice; some platforms do not support it, and it must not interrupt the migration flow."""
     try:
         tray.icon.notify(message, "Peach")
     except Exception:
@@ -662,12 +662,12 @@ def _notify(tray, message: str) -> None:
 
 
 def _packaged() -> bool:
-    """打包出来的 Peach（安装版，或源码检出里构建的 `dist/Peach`）：助手与托盘都是同一个可执行文件。"""
+    """A packaged Peach (installed build, or one built in a source checkout `dist/Peach`): the helper and the tray are the same executable."""
     return bool(getattr(sys, "frozen", False)) or distribution.standalone()
 
 
 def _program_command() -> list[str]:
-    """跑助手用的程序：打包版是可执行文件本身，源码运行是当前解释器跑这个模块。"""
+    """The program that runs the helper: for a packaged build it is the executable itself, for a source run it is the current interpreter running this module."""
     if _packaged():
         executable = Path(sys.executable).resolve()
         return [str(executable.parent / "Peach.exe" if sys.platform == "win32" else executable)]
@@ -679,7 +679,7 @@ def _helper_arguments(request_path: Path, wait_pid: int) -> list[str]:
 
 
 def _tray_command() -> list[str]:
-    """迁移完成后重新打开托盘的命令。源码运行优先用虚拟环境里的 `peach-tray` 入口。"""
+    """Command to reopen the tray after migration. A source run prefers the virtual environment's `peach-tray` entry point."""
     if _packaged():
         return _program_command()
     script = Path(sys.executable).with_name("peach-tray.exe" if os.name == "nt" else "peach-tray")
@@ -689,13 +689,13 @@ def _tray_command() -> list[str]:
 
 
 def _spawn(command: list[str], environment: dict[str, str] | None = None):
-    """在托盘之外起一个进程，托盘退出时不能把它一起带走。
+    """Start a process outside the tray, so it is not taken away when the tray exits.
 
-    打包版照原样起；源码运行在 Windows 上由虚拟环境启动器托着，启动器的 kill-on-close Job
-    会在托盘退出时把子进程一并结束，所以改由桌面进程承接；macOS 开新会话脱离托盘。
+    A packaged build starts as is; a source run on Windows is held by the virtual-environment launcher, whose kill-on-close Job
+    also ends child processes when the tray exits, so the desktop process takes it over instead; macOS starts a new session to detach from the tray.
     """
     environment = dict(os.environ if environment is None else environment, PYINSTALLER_RESET_ENVIRONMENT="1")
-    # 工作目录不能落在要搬走的数据目录里：源码运行固定用项目根目录。
+    # The working directory must not land inside the data directory being moved: a source run always uses the project root.
     cwd = Path(command[0]).parent if _packaged() else PROJECT_ROOT
     if sys.platform == "win32" and not _packaged():
         from .tray_detached import launch_detached
@@ -707,7 +707,7 @@ def _spawn(command: list[str], environment: dict[str, str] | None = None):
 
 
 def count_files(root: Path) -> tuple[int, int]:
-    """(文件数, 总字节)，链接不跟随；迁移前后各量一次，两边相等才算复制完整。"""
+    """(file count, total bytes), links are not followed; measured once before and once after migration, and the copy counts as complete only if both sides match."""
     files = size = 0
     stack = [root]
     while stack:
@@ -721,7 +721,7 @@ def count_files(root: Path) -> tuple[int, int]:
 
 
 def _shell_copy(source: Path, target: Path) -> None:
-    """用资源管理器的复制（`SHFileOperationW`）：自带进度、剩余时间与取消按钮。"""
+    """Copy using Explorer's copy (`SHFileOperationW`): which brings its own progress, remaining time and a cancel button."""
     import ctypes
     from ctypes import wintypes
 
@@ -733,12 +733,12 @@ def _shell_copy(source: Path, target: Path) -> None:
     copy, no_confirmation, simple_progress, no_confirm_mkdir, no_error_ui = 2, 0x10, 0x100, 0x200, 0x400
     operation = Operation(None, copy, str(source / "*") + "\0", str(target) + "\0",
                           no_confirmation | simple_progress | no_confirm_mkdir | no_error_ui,
-                          False, None, "正在迁移 Peach 数据")
+                          False, None, "Migrating Peach data")
     code = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(operation))
     if operation.fAnyOperationsAborted:
-        raise RuntimeError("迁移已取消")
+        raise RuntimeError("Migration cancelled")
     if code:
-        raise OSError(f"复制没有完成（代码 0x{code:X}）")
+        raise OSError(f"Copy did not finish (code 0x{code:X})")
 
 
 def _python_copy(source: Path, target: Path) -> None:
@@ -757,7 +757,7 @@ def _rebase(value: str, old: Path, new: Path) -> str | None:
 
 
 def rewrite_ledger_paths(database: Path, old: Path, new: Path) -> int:
-    """把账本里指向旧数据目录的绝对路径改到新位置，返回改写的行数。"""
+    """Rewrite the absolute paths in the ledger that point to the old data directory to the new location, returning the number of rows rewritten."""
     if not database.is_file():
         return 0
     changed = 0
@@ -776,17 +776,17 @@ def rewrite_ledger_paths(database: Path, old: Path, new: Path) -> int:
                         connection.execute(f"UPDATE {table} SET {column}=? WHERE rowid=?", (moved, rowid))
                         changed += 1
             if connection.execute("PRAGMA quick_check").fetchone()[0] != "ok":
-                raise RuntimeError("数据库检查未通过")
+                raise RuntimeError("Database check failed")
     finally:
         connection.close()
     return changed
 
 
 def _point(source: Path, target: Path, bootstrap: Path) -> None:
-    """默认落点和原目录都记下新位置；新位置自己不能再指向别处，否则会成环。
+    """Record the new location at both the default location and the original directory; the new location itself must not point elsewhere, or it would form a loop.
 
-    默认落点只在它就是原目录、还不存在、或只剩一份位置记录时才写：那里若是另一份在用的
-    数据目录（源码检出旁边本来就有一份 `peach-data`），写进去就把它劫持到这次的新位置。
+    The default location is written only when it is the original directory, does not exist, or holds only a location record: if it is another data
+    directory in use (a source checkout already has one beside it `peach-data`), writing into it would hijack it to this new location.
     """
     (target / "state" / settings_file.DATA_ROOT_LOCATION).unlink(missing_ok=True)
     seen = {_key(target)}
@@ -812,20 +812,20 @@ def _rename(source: Path, target: Path, *, timeout: float = 30) -> None:
 
 
 class MovedWithoutRewrite(RuntimeError):
-    """数据已经到了新位置并记下了位置，只是账本里的路径没改写成。迁移算完成，原因要告诉人。"""
+    """The data has reached the new location and the location was recorded, but the paths in the ledger were not rewritten. The migration counts as complete, and the reason must be told to the user."""
 
 
 def relocate(config, target: Path, *, bootstrap: Path,
              copy: Callable[[Path, Path], None] | None = None) -> bool:
-    """把整个数据目录搬到 `target` 并改写账本路径、记下位置。返回原目录是否还要删除（跨卷复制）。
+    """Move the whole data directory to `target` and rewrite the ledger paths, and record the location. Returns whether the original directory still needs deleting (cross-volume copy).
 
-    失败时抛出异常，原目录保持可用：同卷改名会改回去，跨卷复制会删掉新位置已复制的部分。
+    On failure raises an exception and the original directory stays usable: a same-volume rename is reverted, and a cross-volume copy deletes the part already copied to the new location.
     """
     source = config.data_root.resolve()
     database = config.directory("database").resolve().relative_to(source) / "ledger.db"
     same_volume = _same_volume(source, target)
     if target.exists():
-        # `check_target` 已确认它是空目录或只剩一份位置记录（以前从这里迁走过）。
+        # `check_target` has confirmed it is an empty directory or has only a location record (previously migrated away from here).
         if (target / "state").is_dir():
             shutil.rmtree(target / "state")
         if same_volume:
@@ -839,22 +839,22 @@ def relocate(config, target: Path, *, bootstrap: Path,
             try:
                 _rename(target, source)
             except OSError:
-                # 改不回去时数据已经整个在新位置：照样记下位置，否则下次启动会进首次设置页。
+                # When it cannot be reverted the data is already entirely at the new location: record the location anyway, otherwise the next startup would enter the first-time setup page.
                 _point(source, target, bootstrap)
-                raise MovedWithoutRewrite(f"预览图路径未能改写（{exc}），下次处理馆藏时会重新登记") from exc
+                raise MovedWithoutRewrite(f"Preview image paths could not be rewritten ({exc}), they will be re-registered the next time the library is processed") from exc
             raise
         copied = False
     else:
         expected = count_files(source)
-        # 请求时按上次统计查过一次余量；托盘退出、任务暂停之后这里按实际大小再查一次。
+        # The free space was checked once from the last measurement at request time; after the tray exits and tasks pause it is checked again here against the actual size.
         check_space(source, target, expected[1])
         target.mkdir(parents=True, exist_ok=True)
         try:
             (copy or (_shell_copy if sys.platform == "win32" else _python_copy))(source, target)
             actual = count_files(target)
             if actual != expected:
-                raise RuntimeError(f"复制结果不完整：原目录 {expected[0]} 个文件、{format_size(expected[1])}，"
-                                   f"新位置 {actual[0]} 个文件、{format_size(actual[1])}")
+                raise RuntimeError(f"Incomplete copy: original directory {expected[0]} files, {format_size(expected[1])}, "
+                                   f"new location {actual[0]} files, {format_size(actual[1])}")
             rewrite_ledger_paths(target / database, source, target)
         except BaseException:
             shutil.rmtree(target, ignore_errors=True)
@@ -865,7 +865,7 @@ def relocate(config, target: Path, *, bootstrap: Path,
 
 
 def remove_source(source: Path) -> int:
-    """删掉已复制走的原目录，只留 `state/data-root.txt`。返回删不掉的文件数。"""
+    """Delete the original directory that has been copied away, keeping only `state/data-root.txt`. Returns the number of files that could not be deleted."""
     keep = source / "state" / settings_file.DATA_ROOT_LOCATION
     failed = 0
     for child in list(source.iterdir()):
@@ -886,7 +886,7 @@ def _startup(config) -> dict | None:
 
 
 def _restore_startup(config, state: dict | None) -> str:
-    """按迁移前的开关在新位置重写开机自启与桌面图标；失败只提示，不影响迁移结果。"""
+    """Rewrite autostart and desktop icons at the new location per the pre-migration switches; failures are only reported and do not affect the migration result."""
     if not state or not (state.get("enabled") or state.get("desktop")):
         return ""
     from . import desktop_startup
@@ -894,7 +894,7 @@ def _restore_startup(config, state: dict | None) -> str:
         desktop_startup.save(config, enabled=bool(state["enabled"]), silent=bool(state["silent"]),
                              desktop=bool(state.get("desktop")))
     except Exception as exc:
-        return f"开机自启与桌面图标未能更新（{exc}），请在设置页重新打开"
+        return f"Autostart and desktop icons could not be updated ({exc}), please turn them on again in settings"
     return ""
 
 
@@ -902,9 +902,9 @@ def apply(request_path: Path, wait_pid: int | None, *, environ: dict[str, str] |
           copy: Callable[[Path, Path], None] | None = None,
           start: Callable[[Path, dict[str, str]], object] | None = None,
           wait: float = 90) -> int:
-    """迁移助手：等托盘退出，搬家，重新拉起托盘，再删原目录。退出码 0 成功，1 失败，2 请求无效。
+    """Migration helper: wait for the tray to exit, move, restart the tray, then delete the original directory. Exit code 0 means success, 1 failure, 2 invalid request.
 
-    `wait_pid` 为 None 时不等任何进程：无桌面服务的看守进程已经自己停掉了网页服务。
+    `wait_pid` being None means it waits for no process: the headless supervisor has already stopped the web service itself.
     """
     from . import update_tasks
     from .windows_restart import process_alive
@@ -915,7 +915,7 @@ def apply(request_path: Path, wait_pid: int | None, *, environ: dict[str, str] |
         target_raw = data["target"]
     except (OSError, ValueError, KeyError, TypeError):
         return 2
-    # 新位置不能和程序重叠：打包版是可执行文件所在目录，源码运行是整个项目检出。
+    # The new location must not overlap the program: for a packaged build that is the directory holding the executable, for a source run it is the whole project checkout.
     program = Path(sys.executable).resolve().parent if _packaged() else PROJECT_ROOT
     final, copied, notes = source, False, []
     old = startup = None
@@ -923,11 +923,11 @@ def apply(request_path: Path, wait_pid: int | None, *, environ: dict[str, str] |
         deadline = time.monotonic() + wait
         while wait_pid is not None and process_alive(wait_pid):
             if time.monotonic() > deadline:
-                raise TimeoutError("托盘尚未退出")
+                raise TimeoutError("The tray has not exited yet")
             time.sleep(.25)
         old = settings_file.load_config(environ=dict(environ, PEACH_DATA_ROOT=str(source)))
         if old.data_root.resolve() != source:
-            raise ValueError("数据目录已变更，请重新选择")
+            raise ValueError("The data directory has changed; please choose again")
         target = check_target(old, target_raw, program=program)
         Path(request_path).unlink(missing_ok=True)
         if data.get("token"):
@@ -947,34 +947,34 @@ def apply(request_path: Path, wait_pid: int | None, *, environ: dict[str, str] |
         if old is not None:
             notes.append(_restore_startup(old, startup))
         _record(source, state="error", source=str(source), target=str(target_raw),
-                message="；".join(filter(None, [f"数据目录未迁移，仍在原位置：{exc}", *notes])))
+                message="; ".join(filter(None, [f"Data directory was not migrated and remains at the original location: {exc}", *notes])))
         _start_tray(dict(environ, PEACH_DATA_ROOT=str(source)), start)
         return 1
     try:
         new = settings_file.load_config(environ=dict(environ, PEACH_DATA_ROOT=str(final)))
         notes.append(_restore_startup(new, startup))
     except Exception as exc:
-        notes.append(f"开机自启与桌面图标未能更新（{exc}），请在设置页重新打开")
-    message = "数据目录已迁移"
+        notes.append(f"Autostart and desktop icons could not be updated ({exc}), please turn them on again in settings")
+    message = "Data directory migrated"
     _record(final, state="done", source=str(source), target=str(final), message=message,
             notes=[note for note in notes if note], leftovers=0)
     _start_tray(dict(environ, PEACH_DATA_ROOT=str(final)), start)
     if copied:
-        # 新托盘只读新位置，原目录这时才删：删几十 GB 要几分钟，不让人对着没有托盘的桌面等。
+        # The new tray reads only the new location, and the original directory is deleted only now: deleting tens of GB takes minutes, and the user should not wait at a desktop with no tray.
         try:
             leftovers = remove_source(source)
         except OSError:
             leftovers = -1
         if leftovers:
-            notes.append(f"原位置还有文件未能删除，确认新位置一切正常后可手动删除：{source}")
+            notes.append(f"Some files at the original location could not be deleted; delete them manually after confirming everything is fine at the new location: {source}")
         _record(final, state="done", source=str(source), target=str(final), message=message,
                 notes=[note for note in notes if note], leftovers=leftovers)
     return 0
 
 
 def _bootstrap(environ: dict[str, str]) -> Path:
-    """不看 `PEACH_DATA_ROOT` 时的默认落点：安装版是用户目录下的 `Peach/peach-data`，
-    源码运行是项目旁边的 `peach-data`。"""
+    """Ignoring `PEACH_DATA_ROOT` the default location: an installed build uses, under the user directory, `Peach/peach-data`,
+    a source run uses the one beside the project `peach-data`."""
     return settings_file._bootstrap_data_root(environ={
         key: value for key, value in environ.items() if key != settings_file.DATA_ROOT_ENV})[0]
 
@@ -997,10 +997,10 @@ def _start_tray(environment: dict[str, str], start) -> None:
 
 
 def helper_main(argv: list[str]) -> int:
-    """源码运行的迁移助手入口（`python -m peach.data_storage`），与打包版入口做同样的准备。"""
+    """Migration helper entry point for source runs (`python -m peach.data_storage`), doing the same preparation as the packaged entry point."""
     if len(argv) != 3 or argv[0] != HELPER_FLAG:
         return 2
-    # 迁移助手不能在要搬走的数据目录里开着任何文件：崩溃日志改写到临时目录，也不发送统计。
+    # The migration helper must not keep any file open inside the data directory being moved: crash logs are redirected to a temp directory, and no statistics are sent.
     import tempfile
     from . import error_reporting, remote_reporting
     remote_reporting.disable_for_process()

@@ -43,7 +43,7 @@ export function WallControls({ item, playing, frame, starting, pendingGroup, gro
         {laterBusy ? <span dangerouslySetInnerHTML={{ __html:spinnerHtml() }} /> : <svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bookmark" /></svg>}
       </button>
       <span data-wall-time="">{transport.time > 0 ? fmtDur(transport.time) : '00:00'} / {duration > 0 ? fmtDur(duration) : '00:00'}</span>
-      <button type="button" aria-label="详情" title="打开详情" onClick={details}><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-info" /></svg></button>
+      <button type="button" aria-label="Details" title="Open details" onClick={details}><svg viewBox="0 0 24 24" aria-hidden="true"><use href="#i-info" /></svg></button>
     </div>
     <input data-wall-seek="" type="range" aria-label="Playback progress" min={0} max={duration || 1} step={.1} value={Math.min(transport.time, duration)}
       disabled={!playing || !transport.duration} onChange={event => transport.seek(Number(event.target.value))}

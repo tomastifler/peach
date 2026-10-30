@@ -10,7 +10,7 @@ A local-first video metadata scraper and media manager.
 [![CI pipelines](https://img.shields.io/github/actions/workflow/status/peach-mitao/peach/test.yml?branch=master&label=CI&logo=githubactions&logoColor=white)](https://github.com/peach-mitao/peach/actions/workflows/test.yml)
 [![License](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue?logo=gnu&logoColor=white)](LICENSE)
 [![Windows x64](https://img.shields.io/badge/Windows-x64-0078D4)](docs/TESTING_DESKTOP.md)
-[![macOS DMG](https://img.shields.io/badge/macOS-DMG-555555?logo=apple&logoColor=white)](docs/OPERATIONS.md#macos-独立测试包)
+[![macOS DMG](https://img.shields.io/badge/macOS-DMG-555555?logo=apple&logoColor=white)](docs/OPERATIONS.md#standalone-macos-test-build)
 [![Age restrictions](https://img.shields.io/badge/age-18%2B-555555)](#license)
 
 ## Screenshots
@@ -56,9 +56,9 @@ Movie demo data; see [asset credits and licenses](https://peach.video/en/credits
 | Windows x64 | [Installer](https://github.com/peach-mitao/peach/releases/download/v0.50.0/Peach-0.50.0-windows-x64-setup.exe) · [Portable](https://github.com/peach-mitao/peach/releases/download/v0.50.0/Peach-0.50.0-windows-x64.zip) |
 | macOS | [Apple Silicon / ARM64](https://github.com/peach-mitao/peach/releases/download/v0.50.0/Peach-0.50.0-macos-arm64.dmg) · [Intel / x86_64](https://github.com/peach-mitao/peach/releases/download/v0.50.0/Peach-0.50.0-macos-x86_64.dmg) |
 | Docker / NAS | [Deployment guide](docs/DOCKER.md) |
-| Source | [Setup instructions](docs/OPERATIONS.md#从源码运行windowsmacos); requires Git, uv and Python 3.14+ |
+| Source | [Setup instructions](docs/OPERATIONS.md#running-from-source-windows-macos); requires Git, uv and Python 3.14+ |
 
-Choose your media folders after installation, then scan to start browsing and playing. Desktop test builds are unsigned, and macOS builds are not notarized. See the [Windows](docs/TESTING_DESKTOP.md) and [macOS](docs/OPERATIONS.md#macos-独立测试包) guides.
+Choose your media folders after installation, then scan to start browsing and playing. Desktop test builds are unsigned, and macOS builds are not notarized. See the [Windows](docs/TESTING_DESKTOP.md) and [macOS](docs/OPERATIONS.md#standalone-macos-test-build) guides.
 
 ## Documentation
 

@@ -1,4 +1,4 @@
-"""只保留代码位置、异常身份与结构化错误码的异常链投影。"""
+"""Projection of the exception chain keeping only code locations, exception identity and structured error codes."""
 from pathlib import Path
 import re
 
@@ -10,7 +10,7 @@ MEDIA_MARKERS = (("Your platform doesn't support hardware accelerated AV1 decodi
 
 
 def media_details(error, fields, codes):
-    """媒体原始错误在脱敏前归类，输出只包含固定类别和退出码。"""
+    """Raw media errors are classified before redaction; the output contains only fixed categories and exit codes."""
     detail = getattr(error, 'diagnostics', {}) if error is not None else {}
     detail = detail if isinstance(detail, dict) else {}
     if type(detail.get('returncode')) is int:
@@ -29,7 +29,7 @@ def media_details(error, fields, codes):
 
 
 def structured_codes(error):
-    """本机与远程共用有限错误码，数据库名称和查询内容不进入类别。"""
+    """Local and remote share a limited set of error codes; database names and query contents do not enter the categories."""
     codes = {}
     for key in ('errno', 'winerror', 'returncode', 'sqlite_errorcode'):
         value = getattr(error, key, None)

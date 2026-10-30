@@ -2,38 +2,38 @@
 kind: reference
 ---
 
-# 已有时间轴预览
+# Existing Timeline Previews
 
-播放器进度条优先读取与视频准确配对的已有预览，其次使用 Peach 的时间轴缓存，再退回九宫格。读取已有预览只访问索引和图片，不启动 FFmpeg。时间轴采集遇到可用的已有预览时计为跳过，不重复抽帧。
+The player progress bar prefers an existing preview paired exactly with the video, then Peach's timeline cache, then falls back to the nine-grid. Reading an existing preview touches only the index and images and does not start FFmpeg. When timeline collection finds a usable existing preview, it counts as skipped and does not extract frames again.
 
-## 格式与配对
+## Formats and Pairing
 
-以 `movie.mp4` 为例，配对保留完整文件主名，包括版本和分卷后缀，不按番号合并不同视频。
+Taking `movie.mp4` as an example, pairing keeps the full file stem, including version and part suffixes, and does not merge different videos by product code.
 
-| 格式 | 视频旁的入口 | 读取范围 |
+| Format | Entry next to the video | Read scope |
 | --- | --- | --- |
-| WebVTT 图片索引 | `movie.vtt`、`movie.mp4.vtt`、`movie.thumbnails.vtt`、`movie-thumbs.vtt`、`movie.storyboard.vtt` | cue 时间范围与独立图片，或带 `#xywh=x,y,w,h` 的 JPEG、PNG、WebP 拼图；支持不等间隔和时间空隙 |
-| HLS 图片播放列表 | 同一组主名的 `.m3u8` 文件 | VOD 的 `EXT-X-IMAGES-ONLY`、`EXT-X-TILES` 与独立图片分段；主列表通过 `EXT-X-IMAGE-STREAM-INF` 指向图片列表 |
-| DASH 图片轨 | 同一组主名的 `.mpd` 文件 | 静态 MPD 的图片 AdaptationSet、`thumbnail_tile`、`SegmentTemplate`、`SegmentTimeline`、时间尺度、起始编号、时间偏移与多 Period；模板支持 `$Number$`、`$Time$`、`$RepresentationID$`、`$Bandwidth$` 与数字补零 |
-| BIF v0 | `movie.bif`、`movie-320-10.bif`、`movie-sd.bif`、`movie-hd.bif`、`movie-fhd.bif` | 读取文件内的真实时间戳、时间乘数和 JPEG 偏移；Emby、Roku 及从 Plex 导出的 BIF 共用此读取器 |
-| Jellyfin Trickplay | `movie.trickplay/320 - 10x10/0.jpg`、`1.jpg`… | 从目录读取网格，数字序号须从 0 连续；末张维持完整网格，按有效帧数限制选择范围 |
+| WebVTT image index | `movie.vtt`, `movie.mp4.vtt`, `movie.thumbnails.vtt`, `movie-thumbs.vtt`, `movie.storyboard.vtt` | Cue time ranges with separate images, or JPEG, PNG and WebP sprite sheets carrying `#xywh=x,y,w,h`; uneven intervals and time gaps are supported |
+| HLS image playlist | `.m3u8` files with the same stem | VOD `EXT-X-IMAGES-ONLY`, `EXT-X-TILES` and separate image segments; the master playlist points to the image playlist through `EXT-X-IMAGE-STREAM-INF` |
+| DASH image track | `.mpd` files with the same stem | The image AdaptationSet, `thumbnail_tile`, `SegmentTemplate`, `SegmentTimeline`, timescale, start number, time offset and multiple Periods of a static MPD; templates support `$Number$`, `$Time$`, `$RepresentationID$`, `$Bandwidth$` and zero padding |
+| BIF v0 | `movie.bif`, `movie-320-10.bif`, `movie-sd.bif`, `movie-hd.bif`, `movie-fhd.bif` | Reads the real timestamps, time multiplier and JPEG offsets inside the file; Emby, Roku and BIF exported from Plex share this reader |
+| Jellyfin Trickplay | `movie.trickplay/320 - 10x10/0.jpg`, `1.jpg`... | Reads the grids from the directory; numeric indexes must be consecutive from 0; the last sheet keeps the full grid, and the selection range is limited by the valid frame count |
 
-同一视频有多个可用格式时按表格顺序选择，缺失或损坏的候选跳过。索引引用的图片和子播放列表须留在视频所在目录及其子目录中。绝对路径、远端 URL、越目录引用、加密或字节范围 HLS、直播清单不参与本地读取。DASH 的 SegmentList、SegmentBase 和动态清单不在读取范围内。
+When a video has several usable formats, they are chosen in table order, and missing or corrupt candidates are skipped. Images and sub-playlists referenced by an index must stay in the video's directory or its subdirectories. Absolute paths, remote URLs, references escaping the directory, encrypted or byte-range HLS and live manifests do not take part in local reading. DASH SegmentList, SegmentBase and dynamic manifests are out of scope.
 
-Plex 的内部 `index-sd.bif` 需要先导出并按视频主名配对。Peach 不自动扫描 Plex 的内部元数据目录，也不凭同目录唯一视频猜测 BIF 归属。Kodi 的 `.tbn` 是单张 artwork，不带时间索引，不作为时间轴预览。
+Plex's internal `index-sd.bif` must first be exported and paired by video stem. Peach does not automatically scan Plex's internal metadata directory, and does not guess a BIF's owner from a unique video in the same directory. Kodi's `.tbn` is a single piece of artwork with no time index, and is not used as a timeline preview.
 
-## Jellyfin 的时间信息
+## Jellyfin Timing Information
 
-`320 - 10x10` 只表达单帧宽度和网格，无法记录采样间隔和末张有效帧数。Jellyfin 数据库与 API 的 TrickplayInfo 才包含 `Interval`、`ThumbnailCount` 等字段。
+`320 - 10x10` expresses only the single-frame width and the grid, and cannot record the sampling interval or the number of valid frames in the last sheet. Only the Jellyfin database and API's TrickplayInfo contain fields such as `Interval` and `ThumbnailCount`.
 
-从 Jellyfin 导出的 TrickplayInfo 可保存在分辨率目录的 `trickplay.json` 中，供 Peach 精确读取。这是 Peach 接受的导出边车，不是 Jellyfin 原生生成的文件。字段为 `Width`、`TileWidth`、`TileHeight`、`Interval`（毫秒）与 `ThumbnailCount`，须与目录尺寸和拼图数量一致。
+TrickplayInfo exported from Jellyfin can be saved as `trickplay.json` in the resolution directory, for Peach to read exactly. This is an export sidecar Peach accepts, not a file Jellyfin generates natively. The fields are `Width`, `TileWidth`, `TileHeight`, `Interval` (milliseconds) and `ThumbnailCount`, and must agree with the directory dimensions and the number of sheets.
 
-只有 JPG 时，Peach 在时长、拼图数量与默认 10 秒间隔一致的条件下提供估算预览，接口标记 `estimated: true`。自定义间隔无法从目录名可靠还原；数量不一致时不采用默认值。黑色画面可以是真实内容，不用黑色比例猜测有效帧数。
+With JPGs only, Peach offers an estimated preview when the duration, sheet count and the default 10-second interval agree, and the endpoint marks `estimated: true`. A custom interval cannot be reliably recovered from the directory name; when the counts disagree, the default is not adopted. A black frame can be real content, and the black ratio is not used to guess the valid frame count.
 
-## 接口与缓存
+## Endpoints and Cache
 
-`GET /api/timeline?id=<资产 ID>` 对已有预览返回 `source`、`frames`、`estimated`、`cues`。`cues` 中每项为 `[开始秒数, 结束秒数]`，`interval` 为 0，`columns` 和 `rows` 为 1。Peach 自有缓存继续返回固定间隔和拼图尺寸。
+`GET /api/timeline?id=<asset ID>` returns `source`, `frames`, `estimated` and `cues` for an existing preview. Each item in `cues` is `[start seconds, end seconds]`, `interval` is 0, and `columns` and `rows` are 1. Peach's own cache continues to return a fixed interval and sheet dimensions.
 
-已有预览的 `GET /timeline?id=<资产 ID>&s=<帧号>&source=<来源>` 返回裁切后的 JPEG；自有缓存的 `source` 为 `peach`，`s` 表示拼图编号。前端按索引确定编号含义。有自有缓存时，已有预览的索引还包含 `fallback`；目标时刻未覆盖或图片未取得时先读取自有缓存，再退回九宫格。图片支持 HEAD、ETag 与私有缓存复验。
+For an existing preview, `GET /timeline?id=<asset ID>&s=<frame number>&source=<source>` returns a cropped JPEG; for Peach's own cache, `source` is `peach` and `s` is the sheet number. The frontend determines the meaning of the number from the index. When Peach's own cache exists, the existing preview's index also includes `fallback`; when the target moment is not covered or the image was not obtained, Peach's own cache is read first, then the nine-grid. Images support HEAD, ETag and private-cache revalidation.
 
-索引与裁切结果使用应用内有界短时缓存，不写账本，不在磁盘展开全部 BIF 或复制拼图，原索引与图片保持只读。格式取证和依赖选择见[预览格式取证](reference-snapshots/video-preview-formats.md)。
+Indexes and crop results use a bounded short-lived in-app cache, do not write to the ledger, do not expand whole BIFs or copy sprite sheets on disk, and keep the original indexes and images read-only. For format forensics and dependency choices see [Preview format forensics](reference-snapshots/video-preview-formats.md).

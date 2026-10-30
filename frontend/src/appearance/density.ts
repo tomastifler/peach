@@ -19,15 +19,15 @@ export const currentDensity = (): Density => (localStorage.getItem(DENSITY_KEY) 
 function paintSizeGlyph(button: HTMLElement, size: string): void {
   const [big, small] = PHOTO_SIZES;
   if (!button.querySelector('[data-icon-swap]')) {
-    // 顶栏玻璃上漂移的光斑层（`[data-glass-drift]`）是这颗键的子元素，换字形时留着它。
+    // The drifting light-spot layer on the top-bar glass (`[data-glass-drift]`) is a child of this button; keep it when swapping the glyph.
     const drift = button.querySelector(':scope > [data-glass-drift]');
     button.innerHTML = iconSwapHtml(big[2], small[2], size === small[0] ? 'b' : 'a');
     if (drift) button.append(drift);
   } else setIconSwap(button, size === small[0] ? 'b' : 'a');
-  setAttribute(button, 'aria-label', size === 'big' ? '切换为小图' : '切换为大图');
+  setAttribute(button, 'aria-label', size === 'big' ? 'Switch to small' : 'Switch to large');
 }
 
-/* 同值不重写：视频墙滚动时这几处每秒被叫十几次，`<body>` 上写一次属性就是整棵树重新匹配样式。 */
+/* Do not rewrite on the same value: these places are called a dozen times a second while the video wall scrolls, and writing one attribute on `<body>` means re-matching styles for the whole tree. */
 function setAttribute(node: HTMLElement, name: string, value: string): void {
   if (node.getAttribute(name) !== value) node.setAttribute(name, value);
 }
@@ -41,7 +41,7 @@ export function applyDensity(density: Density = currentDensity()): void {
   const button = densityButton();
   if (!button) return;
   setAttribute(button, 'aria-pressed', String(density === 'dense'));
-  setAttribute(button, 'title', '当前：' + (density === 'big' ? '大图' : '密集'));
+  setAttribute(button, 'title', 'Current: ' + (density === 'big' ? 'Large' : 'Dense'));
   paintSizeGlyph(button, density === 'big' ? 'big' : 'small');
 }
 
@@ -57,6 +57,6 @@ export function paintPhotoSizeButton(size: string): void {
   const button = densityButton();
   if (!button) return;
   setAttribute(button, 'aria-pressed', String(size === 'small'));
-  setAttribute(button, 'title', '当前：' + (size === 'big' ? '大图' : '小图'));
+  setAttribute(button, 'title', 'Current: ' + (size === 'big' ? 'Large' : 'Small'));
   paintSizeGlyph(button, size);
 }

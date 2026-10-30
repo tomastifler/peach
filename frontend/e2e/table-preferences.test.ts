@@ -56,11 +56,11 @@ describe('所有数据表共用列设置', () => {
       const { page } = opened;
       try {
         await page.route('**/api/feeds', route => route.fulfill({ json: { unread: 0, sources: [{
-          id: 1, kind: 'javdb-actor', kind_label: 'JAV 订阅', name: '示例订阅', url: 'https://javdb.com/actors/example',
+          id: 1, kind: 'javdb-actor', kind_label: 'JAV subscriptions', name: '示例订阅', url: 'https://javdb.com/actors/example',
           entity_id: null, enabled: true, interval_minutes: 360, last_fetched_at: null, last_new_count: 0,
         }] } }));
         await page.reload({ waitUntil: 'load' });
-        await page.getByRole('tab', { name: '关注列表', exact: true }).waitFor();
+        await page.getByRole('tab', { name: 'Follow list', exact: true }).waitFor();
         const table = page.getByRole('grid', { name: 'JAV 订阅源', exact: true });
         await visibleSelectAll(table);
         assert.equal(await table.locator('tbody img[src="/site-mark?source=javdb"]').count(), 1);
@@ -79,13 +79,13 @@ describe('所有数据表共用列设置', () => {
           sources: [followSource(1, name, 'Kemono', name)], counts: {}, suggestions: [],
           author_aliases: [{ canonical_key: renamed ? '鈴太郎3d' : 'suzutaru3d(鈴太郎3d)', canonical_name: renamed ? '鈴太郎3D' : name,
             aliases: [{ key: 'platform', name: renamed ? name : '鈴太郎3D' }] }],
-          alias_suggestions: [{ canonical: '作者 B', alias: '平台别名 B', evidence: '来源确认' }],
+          alias_suggestions: [{ canonical: '作者 B', alias: 'Platform aliases B', evidence: '来源确认' }],
         } }));
         await page.goto(new URL('/subscriptions?tab=add', page.url()).href, { waitUntil: 'load' });
-        const pending = page.getByRole('grid', { name: '待合并创作者别名', exact: true });
-        const saved = page.getByRole('grid', { name: '已保存创作者别名', exact: true });
-        await verifyTablePreferences(page, pending, '待合并创作者别名', 'canonical', { id: 'evidence', label: '依据' });
-        await verifyTablePreferences(page, saved, '已保存创作者别名', 'canonical', { id: 'aliases', label: '平台别名' });
+        const pending = page.getByRole('grid', { name: 'Creator aliases to merge', exact: true });
+        const saved = page.getByRole('grid', { name: 'Saved creator aliases', exact: true });
+        await verifyTablePreferences(page, pending, 'Creator aliases to merge', 'canonical', { id: 'evidence', label: 'Basis' });
+        await verifyTablePreferences(page, saved, 'Saved creator aliases', 'canonical', { id: 'aliases', label: 'Platform aliases' });
         const identity = saved.locator('tbody td').nth(1);
         const inset = await identity.evaluate(node => node.querySelector('span')!.getBoundingClientRect().left - node.getBoundingClientRect().left);
         assert.ok(inset <= 16, `头像左侧间隔 ${inset}`);
@@ -93,13 +93,13 @@ describe('所有数据表共用列设置', () => {
         assert.equal(await saved.locator('tbody input').isChecked(), true);
         await identity.click({ position: { x: 260, y: 4 } });
         await saved.getByRole('button', { name: `修改 ${name} 的统一名称`, exact: true }).click();
-        const dialog = page.getByRole('dialog', { name: '修改统一名称', exact: true });
+        const dialog = page.getByRole('dialog', { name: 'Edit unified name', exact: true });
         await dialog.getByRole('button', { name: '鈴太郎3D', exact: true }).click();
         await page.route('**/api/follow/author-alias', route => {
           assert.equal(route.request().postDataJSON().action, 'rename'); renamed = true;
           return route.fulfill({ json: { ok: true } });
         });
-        await dialog.getByRole('button', { name: '修改统一名称', exact: true }).click();
+        await dialog.getByRole('button', { name: 'Edit unified name', exact: true }).click();
         await saved.getByText('鈴太郎3D', { exact: true }).waitFor();
         await noPageOverflow(page);
         await page.screenshot({ path: `../build/agent-verification/all-tables/aliases-${viewport.name}.png` });

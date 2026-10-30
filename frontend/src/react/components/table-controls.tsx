@@ -10,7 +10,7 @@ export function DataTableSort({ label, options, sorting, onChange }: {
 }) {
   const current = sorting[0];
   return <span className="flex flex-none items-center gap-2">
-    <Select aria-label={`${label}排序`} prefix="排序" selectedKey={current?.id ?? 'default'}
+    <Select aria-label={`Sort ${label}`} prefix="Sort" selectedKey={current?.id ?? 'default'}
       onSelectionChange={(key) => {
         if (key !== null) onChange(key === 'default' ? [] : [{ id: String(key), desc: current?.desc ?? false }]);
       }}>
@@ -19,13 +19,13 @@ export function DataTableSort({ label, options, sorting, onChange }: {
     </Select>
     <Button variant="secondary" iconOnly disabled={!current}
       leadingIcon={SortDirectionIcon} data-icon-state={current?.desc ? 'b' : 'a'}
-      aria-label={`${label}改为${current?.desc ? '升序' : '降序'}`}
+      aria-label={`Sort ${label} ${current?.desc ? 'ascending' : 'descending'}`}
       onClick={() => { if (current) onChange([{ ...current, desc: !current.desc }]); }} />
   </span>;
 }
 
 /** 范围、每页条数和页码沿用关注列表的同一行布局。 */
-export function DataTableFooter({ label, total, pagination, onChange, unit = '条记录', pageUnit = '条', pageSizes = [10, 20, 50, 100] }: {
+export function DataTableFooter({ label, total, pagination, onChange, unit = 'records', pageUnit = 'rows', pageSizes = [10, 20, 50, 100] }: {
   label: string; total: number; pagination: { pageIndex: number; pageSize: number };
   onChange(next: { pageIndex: number; pageSize: number }): void;
   unit?: string; pageUnit?: string;
@@ -40,9 +40,9 @@ export function DataTableFooter({ label, total, pagination, onChange, unit = '�
       {`${start.toLocaleString()}–${end.toLocaleString()} / ${total.toLocaleString()} ${unit}`}
     </span>
     <div data-toolbar-actions="">
-    <Select aria-label="每页显示数量" size="sm" selectedKey={String(pagination.pageSize)}
+    <Select aria-label="Rows per page" size="sm" selectedKey={String(pagination.pageSize)}
       onSelectionChange={(key) => { if (key !== null) onChange({ pageIndex: 0, pageSize: Number(key) }); }}>
-      {pageSizes.map((size) => <SelectItem key={size} id={String(size)}>{`每页 ${size} ${pageUnit}`}</SelectItem>)}
+      {pageSizes.map((size) => <SelectItem key={size} id={String(size)}>{`${size} ${pageUnit} per page`}</SelectItem>)}
     </Select>
     <Pagination label={`${label} pagination`} page={pageIndex + 1} pages={pages}
       onPage={(page) => onChange({ ...pagination, pageIndex: page - 1 })} />

@@ -241,7 +241,7 @@ describe('身份与标签', () => {
   it('评分：第 n 颗送 n×20，再点当前那一颗送 0', () => {
     expect([nextRating(60, 3), nextRating(60, 4), nextRating(null, 1)]).toEqual([0, 80, 20]);
     expect([nextRating(65, 3), nextRating(85, 4)]).toEqual([0, 0]);
-    expect([ratingText(60), ratingText(0), ratingText(null)]).toEqual(['3 星', '未评分', '未评分']);
+    expect([ratingText(60), ratingText(0), ratingText(null)]).toEqual(['3 stars', 'Not rated', 'Not rated']);
   });
 
   it('播放区挡在前面的说明：没挂载、在线作品反查不到、计费来源', () => {
@@ -449,7 +449,7 @@ describe('写完之后', () => {
     await click(host.querySelector('#savePreference'));
     const save = host.querySelector('#savePreference')!;
     expect(save.getAttribute('aria-busy')).toBe('true');
-    expect(save.querySelector('[role="status"]')?.getAttribute('aria-label')).toBe('Submitting reason');
+    expect(save.querySelector('[role="status"]')?.getAttribute('aria-label')).toBe('Submitting favorite reason');
     await reply.release({ liked: true, like_reason: '镜头好' });
     await settle();
     expect(save.getAttribute('aria-busy')).toBeNull();
@@ -488,7 +488,7 @@ describe('侧栏怎么读', () => {
     expect(host.querySelector('#ratioTxt')?.textContent).toBe('0%');
   });
 
-  it('没有宽高时规格行不写分辨率，大小没记下写「大小未知」', async () => {
+  it('没有宽高时规格行不写分辨率，大小没记下写「Size unknown」', async () => {
     serve();
     const { host } = await show(item(1, { width: null, height: null, size: 0 } as Partial<DetailItem>));
     expect([...host.querySelectorAll('[data-stage-meta] [data-spec-item]')].map(glyph)).toEqual(['#i-hard-drive']);
@@ -587,8 +587,8 @@ describe('侧栏怎么读', () => {
     expect(queued.host.querySelector('[data-item-related]')).toBeNull();
     const empty = await show(item(3), { relatedLimit: 12 });
     await settle();
-    expect(empty.host.querySelector('[data-item-related] [data-empty-state] h3')?.textContent).toBe('Nothing up next');
-    expect(empty.host.querySelector('[data-item-related] [data-empty-state] p')?.textContent).toBe('Go back to the list to pick something else.');
+    expect(empty.host.querySelector('[data-item-related] [data-empty-state] h3')?.textContent).toBe('Nothing to continue watching');
+    expect(empty.host.querySelector('[data-item-related] [data-empty-state] p')?.textContent).toBe('Go back to the list to pick other works.');
   });
 
   it('标签选择器：组字过程中不筛；上下键挑、回车加；Escape 收起；点外面也收起', async () => {

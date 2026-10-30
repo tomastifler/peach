@@ -27,7 +27,7 @@ export function missingPreviewIds(items: PreviewItem[], javImage: string): numbe
     && !cardArtwork(item, 'small', false, javImage).html).map(item => item.id))];
 }
 
-/** 单独一行；`className` 交给所在布局定外边距，列表页由父级间距负责。 */
+/** A line of its own; `className` is left to the surrounding layout to set margins, and on list pages the parent spacing handles it. */
 export function LibraryCompletionPrompt({ assetIds, onComplete, className = 'mb-4' }: { assetIds: number[]; onComplete?(): void; className?: string }) {
   return assetIds.length ? <Completion assetIds={assetIds} onComplete={onComplete} className={className} /> : null;
 }
@@ -59,20 +59,20 @@ function Completion({ assetIds, onComplete, className }: { assetIds: number[]; o
     void queryClient.invalidateQueries({ queryKey: ['catalog-grid'] });
     onComplete?.();
   }, [state, started, onComplete]);
-  // 运行时保留缺图数量；新范围等待当前任务结束，不隐式追加或替换。
+  // The missing-image count is kept at runtime; a new scope waits for the current job to finish and is never implicitly appended or replaced.
   const busy = start.isPending || processingActive(state);
   const problem = start.error ? errorMessage(start.error) : job.error ? DISCONNECTED_TEXT
-    : started && state?.job_id === started && state.status === 'failed' ? state.error || '补全未完成' : '';
-  const message = problem || (start.isPending ? '正在启动补全…'
-    : outcome || `这批影片中有 ${assetIds.length.toLocaleString()} 部暂无预览，${processingActive(state) ? '当前任务结束后可单独补全。' : '可补全资料与图片。'}`);
-  return <section aria-label="补全预览" aria-live="polite" data-library-completion="" className={cx('@container', className)}>
+    : started && state?.job_id === started && state.status === 'failed' ? state.error || 'Completion did not finish' : '';
+  const message = problem || (start.isPending ? 'Starting completion…'
+    : outcome || `In this batch, ${assetIds.length.toLocaleString()} videos have no preview yet. ${processingActive(state) ? 'They can be completed separately after the current job ends.' : 'Details and images can be completed.'}`);
+  return <section aria-label="Complete previews" aria-live="polite" data-library-completion="" className={cx('@container', className)}>
     <Note tone={problem ? 'warning' : 'neutral'} action={<div className="flex flex-wrap items-center gap-2"><ProcessingActions busy={busy} metadataOnly={state?.metadata_only} onRun={command => {
       if (busy) return;
       setOutcome('');
       start.mutate(command);
     }} /></div>}>
       {message}{' '}<LinkButton href="/data-cleanup#libraryProcessing" size="small" trailingIcon={RiArrowRightLine}>
-      {problem ? '打开扫描与采集' : '查看处理详情'}
+      {problem ? 'Open scan and collect' : 'View processing details'}
     </LinkButton></Note>
   </section>;
 }

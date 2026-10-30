@@ -1,4 +1,4 @@
-"""个人实体与在线标签收藏的规范身份和只读快照。"""
+"""Canonical identity and read-only snapshot of personal entity and online tag favorites."""
 from .entities import resolve_entity, resolve_entity_id
 from .profiles import read_settings
 from .online_tag_management import OnlineTagPolicy
@@ -8,7 +8,7 @@ KINDS = frozenset({"performer", "creator", "studio", "series", "agency", "tag"})
 
 
 def favorite_entry(connection, entry, online_policy=None):
-    """将实体或在线标签选择解析为当前规范身份。"""
+    """Resolve an entity or online tag selection to the current canonical identity."""
     if not isinstance(entry, dict):
         return None
     if entry.get('scope') == 'online':
@@ -52,10 +52,10 @@ def favorite_entries(connection, settings=None):
 
 
 def favorite_entities(connection, settings=None):
-    """读取已解析为馆藏实体的收藏，供实体标注和馆藏研究使用。"""
+    """Read favorites already resolved to library entities, for entity annotation and library research."""
     return [row for row in favorite_entries(connection, settings) if 'entity_id' in row]
 
 
 def online_tag_ids(connection):
-    """在线收藏以归类后的稳定来源词键匹配。"""
+    """Online favorites are matched by the classified stable source term key."""
     return {row['tag_id'] for row in favorite_entries(connection) if row.get('scope') == 'online'}

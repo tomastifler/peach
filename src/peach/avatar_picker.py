@@ -89,8 +89,8 @@ ADDRESS_CACHE = "url"
 STAND_IN_NOTE = "代表作画面，非本人"
 
 
-#: 图库索引取失败后，隔这么久才再试。头像框一天能开几十次，离线时每开一次就出网
-#: 一回只会白等超时；失败只记一行日志，不进任务中心——下次过期照样会再排。
+#: After a gallery index fetch fails, wait this long before retrying. The avatar dialog can be opened dozens of times a day, and offline every open reaches out to the network
+#: only to wait for a timeout in vain; a failure logs one line and does not enter the Task Center - it will still be queued again when it next expires.
 INDEX_RETRY_SECONDS = 15 * 60
 
 LOGGER = logging.getLogger(__name__)
@@ -101,11 +101,11 @@ class PickerError(RuntimeError):
 
 
 class IndexRefresher:
-    """图库索引缺失或过期时，在后台补一份。
+    """Fetch a copy in the background when the gallery index is missing or stale.
 
-    `request` 只排一轮、立刻返回，页面照旧读本地缓存（`gfriends.load_index`）；
-    页面按刷新状态读取新候选。同一时刻最多一轮在跑。`transport` 每轮新建、
-    用完关掉：一天取一次，用不着常驻连接池。
+    `request` queues only one round and returns immediately; the page reads the local cache as usual (`gfriends.load_index`);
+    The page reads new candidates according to the refresh state. At most one round runs at a time. `transport` is created fresh for each round,
+    closed after use: it fetches once a day and needs no persistent connection pool.
     """
 
     def __init__(self, cache_dir: Path, transport: Callable[[], HttpTransport]):
@@ -122,7 +122,7 @@ class IndexRefresher:
         return self._thread is not None and self._thread.is_alive()
 
     def ensure(self) -> bool:
-        """自动任务等待索引就绪；与页面共用单次下载和失败退避。"""
+        """Automatic tasks wait for the index to be ready; they share the single download and the failure backoff with the page."""
         with self._fetch_lock:
             if not gfriends.index_stale(self.cache_dir):
                 return True
@@ -133,7 +133,7 @@ class IndexRefresher:
             return self.refresh()
 
     def request(self) -> bool:
-        """需要的话在后台排一轮，返回是否排上了。"""
+        """Queue a round in the background if needed; return whether it was queued."""
         with self._lock:
             if not gfriends.index_stale(self.cache_dir):
                 return False
@@ -148,7 +148,7 @@ class IndexRefresher:
             return True
 
     def refresh(self) -> bool:
-        """在当前线程里取一次。失败不抛，旧缓存原样留着。"""
+        """Fetch once on the current thread. A failure does not raise; the old cache is left untouched."""
         try:
             transport = self._transport()
             try:
@@ -158,7 +158,7 @@ class IndexRefresher:
                 if close is not None:
                     close()
         except Exception as error:
-            LOGGER.warning("图库索引未取得：%s", error)
+            LOGGER.warning("Gallery index not retrieved: %s", error)
             with self._lock:
                 self._failed_at = time.monotonic()
                 self.error = str(error)
@@ -173,7 +173,7 @@ _INDEX_LOCK = threading.Lock()
 
 
 def index_refresher(contract) -> IndexRefresher:
-    """应用的自动头像任务与换头像接口共用同一份索引状态。"""
+    """The app's automatic avatar task and the avatar-change endpoint share one index state."""
     with _INDEX_LOCK:
         refresher = getattr(contract, "gfriends_index", None)
         if refresher is None:
@@ -523,14 +523,14 @@ def typed_address(url: str, providers_root: Path, fetch: Callable[[str], bytes],
     try:
         body = prepare_image(fetch(url))
     except PickerError as error:
-        raise PickerError(f"这个地址未取得可用图片：{error}") from error
+        raise PickerError(f"No usable image was retrieved from this address: {error}") from error
     AvatarCandidateCache(providers_root / ADDRESS_CACHE).store(url, body, accept_image(body))
     host = urllib.parse.urlsplit(url).hostname or url
     return framed(f"url:{url}", body, probe, source="url", label=host)
 
 
 def uploaded(body: bytes, providers_root: Path, probe: Callable[[bytes], dict | None], *, label: str) -> Choice:
-    """本机图片转换后留作预览候选；安装头像由用户确认触发。"""
+    """Convert a local image into a preview candidate; installing the avatar is triggered by user confirmation."""
     body = prepare_image(body)
     inspected = accept_image(body)
     AvatarCandidateCache(providers_root / "upload").store(f"peach:upload/{inspected.sha256}", body, inspected)
@@ -542,8 +542,8 @@ def choices(connection: sqlite3.Connection, providers_root: Path,
             cover_root: Path | None = None, *, deduplicate: bool = True) -> dict:
     """页面要展示的一切：图库同名候选、取过的历史、当前装着的是哪一张。
 
-    索引只读本地缓存，过期了由 `IndexRefresher` 在后台补——为一次点击同步拉 6 MB，
-    页面会卡在那里，而卡住的理由用户完全看不见。
+    The index reads only the local cache; when it is stale `IndexRefresher` refreshes it in the background - for one click, synchronously pulling 6 MB,
+    the page would hang there, and the user would see no reason for the hang.
     """
     index_dir = providers_root / GFRIENDS_CACHE
     names = name_chain(connection, entity_id)
@@ -703,15 +703,15 @@ def allowed_source(url: str) -> bool:
 
 
 def prepare_image(body: bytes) -> bytes:
-    """对头像各入口执行相同的格式转换与大小检查。"""
+    """Apply the same format conversion and size check at every avatar entry point."""
     if len(body) > MAX_IMAGE_BYTES:
-        raise PickerError("图片超过 16 MiB，请缩小后重新选择")
+        raise PickerError("Image exceeds 16 MiB, please shrink it and choose again")
     try:
         prepared = prepare_avatar(body)
     except AvatarImageError as error:
         raise PickerError(str(error)) from error
     if len(prepared) > MAX_IMAGE_BYTES:
-        raise PickerError("图片转换后超过 16 MiB，请缩小后重新选择")
+        raise PickerError("Converted image exceeds 16 MiB, please shrink it and choose again")
     return prepared
 
 
@@ -721,7 +721,7 @@ def accept_image(body: bytes) -> InspectedAvatar:
         raise PickerError("The image is too large")
     inspected = inspect_avatar(body)
     if inspected is None:
-        raise PickerError("图片无法完整读取，请重新选择图片")
+        raise PickerError("Image could not be read completely; please choose the image again")
     return inspected
 
 

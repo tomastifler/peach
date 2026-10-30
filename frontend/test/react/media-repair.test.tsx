@@ -1,4 +1,4 @@
-/* 数据管理页的「媒体修复」卡片：选库、确认、起停和这一趟的下场。
+/* 数据管理页的「Media repair」卡片：选库、确认、起停和这一趟的下场。
  *
  * 首屏和真实路径一样先落进共用缓存（遗留层 `prefetch` 那一步），卡片挂上去直接读。 */
 import { notifyManager, QueryClientProvider } from '@tanstack/react-query';
@@ -40,8 +40,8 @@ it('首屏一次取回任务快照和媒体库，卡片挂上去不再补取', a
   await prefetchMediaRepair(new AbortController().signal);
   const host = await card();
   expect(fetcher.mock.calls.map((call) => call[0]).sort()).toEqual(['/api/libraries', '/api/media-repair']);
-  expect(host.querySelector('section[aria-label="媒体修复"] h3')?.textContent).toBe('媒体修复');
-  expect(host.querySelector('[aria-haspopup="listbox"]')?.textContent).toBe('媒体库网盘');
+  expect(host.querySelector('section[aria-label="Media repair"] h3')?.textContent).toBe('Media repair');
+  expect(host.querySelector('[aria-haspopup="listbox"]')?.textContent).toBe('Library网盘');
 });
 
 it('下拉框里每个库都带着它的媒体库图标，选中的那个连图标一起显示在框里', async () => {
@@ -55,7 +55,7 @@ it('下拉框里每个库都带着它的媒体库图标，选中的那个连图�
     .toEqual(['#i-fixture-115', '#i-heart', '#i-hard-drive']);
   await click(options[1]);
   expect(trigger.querySelector('use')?.getAttribute('href')).toBe('#i-heart');
-  expect(trigger.textContent).toBe('媒体库PikPak');
+  expect(trigger.textContent).toBe('LibraryPikPak');
 });
 
 type Confirmation = Parameters<typeof legacyUi.confirmModal>[0];
@@ -82,7 +82,7 @@ it('开始修复先确认，确认后把选中的库发过去，随后按服务�
   await settle();
   expect(seen[0]?.title).toBe('Repair library "PikPak"');
   expect(seen[0]?.confirmLabel).toBe('Repair library');
-  expect(seen[0]?.body).toContain('every repaired video must be downloaded in full');
+  expect(seen[0]?.body).toContain('repairing each video requires pulling it in full');
   expect(fetcher.mock.calls[0]?.[0]).toBe('/api/media-repair');
   expect(sentBody(fetcher)).toEqual({ library: 'PikPak', restart: true });
   const bar = host.querySelector('[role="progressbar"]');
@@ -98,13 +98,13 @@ it('不在计费来源上的库，确认正文不提流量', async () => {
   await click(buttonNamed('Start repair', host));
   await settle();
   expect(seen[0]?.title).toBe('Repair library "网盘"');
-  expect(seen[0]?.body).toContain('the damaged original is renamed to a hidden file in the same folder');
+  expect(seen[0]?.body).toContain('the broken original is renamed to a hidden file in the same folder');
   expect(seen[0]?.body).not.toContain('downloaded in full');
 });
 
 it('修复阶段点名当前这部片，停止之后回到可以再开始的样子', async () => {
   vi.useFakeTimers();
-  const fetcher = fetchMock(200, { ...idle, status: 'complete', library: '网盘', stage: '完成', repaired: 2 });
+  const fetcher = fetchMock(200, { ...idle, status: 'complete', library: '网盘', stage: 'Done', repaired: 2 });
   vi.stubGlobal('fetch', fetcher);
   const host = await open({
     ...idle, status: 'running', library: '网盘', stage: '修复', checked: 1, total: 2, found: 2, message: 'FC2-PPV-1.mp4',
@@ -119,7 +119,7 @@ it('修复阶段点名当前这部片，停止之后回到可以再开始的样�
 
 it('进入页面不重放已完成的修复提示', async () => {
   vi.useFakeTimers();
-  const host = await open({ ...idle, status: 'complete', library: '网盘', stage: '完成' });
+  const host = await open({ ...idle, status: 'complete', library: '网盘', stage: 'Done' });
   expect(host.textContent).not.toContain('这个库里的片子都能直接播');
   expect(host.querySelector('[role="status"]')).toBeNull();
 });
@@ -128,15 +128,15 @@ it('缺索引的片子卡在没装 untrunc 上时，指明去配置页的运行�
   vi.useFakeTimers();
   confirmEverything();
   vi.stubGlobal('fetch', fetchMock(200, {
-    ...idle, status: 'complete', library: '网盘', stage: '完成', found: 2, failed: 2, missing_tool: 2,
+    ...idle, status: 'complete', library: '网盘', stage: 'Done', found: 2, failed: 2, missing_tool: 2,
   }));
   const host = await open();
-  await click(buttonNamed('开始修复', host));
+  await click(buttonNamed('Start repair', host));
   await settle();
-  expect(host.querySelector('p[role="status"]')?.textContent).toBe('修好 0 部，2 部修不了');
-  expect(host.textContent).toContain('2 部缺索引的片子要装上 untrunc 才修得了，下载入口在配置页的「运行信息」里');
-  await click(buttonNamed('关闭提示', host));
-  expect(host.textContent).not.toContain('缺少 untrunc');
+  expect(host.querySelector('p[role="status"]')?.textContent).toBe('0 repaired, 2 could not be repaired');
+  expect(host.textContent).toContain('2 videos missing an index need untrunc installed to be repaired; the download link is under "Runtime info" on the settings page.');
+  await click(buttonNamed('Dismiss notice', host));
+  expect(host.textContent).not.toContain('untrunc missing');
 });
 
 it('本次检查完成只发一次回执', async () => {
@@ -146,9 +146,9 @@ it('本次检查完成只发一次回执', async () => {
   queryClient.setQueryData(REPAIR_LIBRARIES_KEY, libraries);
   const toast = vi.fn();
   const host = await mount(<QueryClientProvider client={queryClient}><MediaRepairCard toast={toast} /></QueryClientProvider>);
-  await click(buttonNamed('开始修复', host));
+  await click(buttonNamed('Start repair', host));
   await settle();
-  expect(toast).toHaveBeenCalledExactlyOnceWith('已检查媒体库，没有需要修复的视频');
+  expect(toast).toHaveBeenCalledExactlyOnceWith('Library checked; no videos need repair');
   expect(host.textContent).not.toContain('没有要修的');
 });
 

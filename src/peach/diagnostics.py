@@ -170,7 +170,7 @@ def recent_failure(path):
     # 不公开任务 error、参数或结果原文，它们可能包含凭据和媒体路径。
     moment = str(row[1] or "")
     safe_time = moment if len(moment) <= 32 and all(c in "0123456789-:+.TZ " for c in moment) else None
-    return item("后台任务", "warning", "存在已记录的任务失败", action="在任务中心查看失败任务",
+    return item("Background tasks", "warning", "Recorded task failures exist", action="View failed tasks in the Task Center",
                 target="/tasks", details={"id": row[0], "finished_at": safe_time})
 
 

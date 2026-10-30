@@ -1,4 +1,4 @@
-"""源码检出的改字工具：定位文案与数量模板，核对文件摘要后保存。"""
+"""Copy-editing tool for source checkouts: locate copy text and count templates, check the file digest, then save."""
 from __future__ import annotations
 import ast
 from collections import Counter
@@ -23,7 +23,7 @@ def files(root: Path):
 
 
 def _template_parts(node: ast.JoinedStr):
-    """占位符只命名已有表达式，格式与求值代码由 AST 保管。"""
+    """Placeholders only name existing expressions; format and evaluation code are kept by the AST."""
     fields = {}
     parts = []
     for value in node.values:
@@ -83,20 +83,20 @@ def _python_replacement(source: str, selected: dict, replacement: str):
                 rendered.append(literal)
             if name is not None:
                 if name not in fields or spec or conversion:
-                    raise ValueError("请保留原有占位符，只修改文字")
+                    raise ValueError("Keep the original placeholders and change only the text")
                 used.append(name)
                 values.append(deepcopy(fields[name]))
                 rendered.append(selected["values"][name])
     except ValueError as error:
-        raise ValueError("请保留原有占位符，只修改文字；字面花括号写成 {{ 和 }}") from error
+        raise ValueError("Keep the original placeholders and change only the text; write literal braces as {{ and }}") from error
     if Counter(used) != Counter(fields.keys()):
-        raise ValueError("请保留全部占位符，各出现一次")
+        raise ValueError("Keep all placeholders, each appearing once")
     return ast.unparse(ast.JoinedStr(values)), "".join(rendered)
 
 
 def candidates(root: Path, original: str) -> list[dict]:
     if not isinstance(original, str) or not original.strip() or len(original) > 2000:
-        raise ValueError("请选择不超过 2000 字的文案")
+        raise ValueError("Please choose copy of at most 2000 characters")
     found = []
     for path in files(root):
         if not path.is_file() or ".test." in path.name:
@@ -126,7 +126,7 @@ def save(root: Path, body: dict) -> dict:
         raise ValueError("The edit must be an object")
     original, replacement = body.get("original", ""), body.get("replacement", "")
     if not isinstance(replacement, str) or len(replacement) > 2000:
-        raise ValueError("新文案必须是文字，且不能超过 2000 字")
+        raise ValueError("New copy must be text of at most 2000 characters")
     selected = body.get("candidate")
     if selected not in candidates(root, original):
         raise ValueError("The source file has changed; select the text again")

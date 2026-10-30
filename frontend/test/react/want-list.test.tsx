@@ -72,10 +72,10 @@ it('按待找、未发售、暂时放弃、已入库分段，段名带条数；�
   expect([note(2), note(5), note(4), note(3), note(1)]).toEqual([
     undefined, undefined, 'Releases 2026-12-01', undefined, 'Added to library 2026-09-30',
   ]);
-  expect(buttonNamed('重新查找', host.querySelector('[data-want-id="3"]')!)).not.toBeNull();
-  expect(buttonNamed('重新查找', host.querySelector('[data-want-id="2"]')!)).toBeNull();
-  expect(actionOrder(buttonNamed('重新查找', host.querySelector('[data-want-id="3"]')!)!.parentElement))
-    .toEqual(['来源页', '移除', '重新查找', '查找资源']);
+  expect(buttonNamed('Search again', host.querySelector('[data-want-id="3"]')!)).not.toBeNull();
+  expect(buttonNamed('Search again', host.querySelector('[data-want-id="2"]')!)).toBeNull();
+  expect(actionOrder(buttonNamed('Search again', host.querySelector('[data-want-id="3"]')!)!.parentElement))
+    .toEqual(['Source page', 'Remove', 'Search again', 'Find resources']);
 });
 
 it('待找与暂时放弃两段每行有查找资源，原地打开带番号与标题的云下载弹层；未发售与已入库没有', async () => {
@@ -96,7 +96,7 @@ it('待找与暂时放弃两段每行有查找资源，原地打开带番号与�
 it('一条都没有就是空态，不画空的分段', async () => {
   serve(listed([]));
   const { host } = await open();
-  expect(host.textContent).toContain('No works on the want list yet');
+  expect(host.textContent).toContain('No wanted works yet');
   expect(host.querySelector('section[data-want-phase]')).toBeNull();
 });
 

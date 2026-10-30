@@ -347,12 +347,12 @@ def _metadata_queue_rows(connection, rows: list[dict],
 
 def _attach_review_decisions(rows: list[dict], category: str, decisions: dict,
                              genre_decisions: dict) -> None:
-    """保留候选顺序，并按当前证据投影仍有效的复核决定。"""
+    """Keep the candidate order, and project the review decisions still valid under the current evidence."""
     for position, row in enumerate(rows):
         row['queue_order'] = position
         decision = decisions.get(row["item_key"], {})
         if category == "studio_logos" and row.get("content_state") == "changed":
-            # 同一厂牌的新图片仍需确认，不沿用旧图片的批准。
+            # A new image from the same label still needs confirmation, and approval of the old image is not carried over.
             decision = {}
         if category == "metadata_fields":
             decision = _metadata_decision_in_force(decision, row, genre_decisions)
@@ -361,7 +361,7 @@ def _attach_review_decisions(rows: list[dict], category: str, decisions: dict,
 
 
 def _review_rows(contract: ReviewContract, category: str, *, queue: str | None = 'pending') -> tuple[list[dict], str | None, int]:
-    # 复核卡片只需知道 /cover 能否取图，不加载全库的裁剪和人脸 sidecar。
+    # A review card only needs to know whether /cover can fetch an image, and does not load the whole library's crop and face sidecar.
     has_cover = cache(lambda code: contract.cover_path(code) is not None)
     #: 用户对来源 genre 的决定。判「这一行还有没有词等着收录」要用它，而那一步在库
     #: 连接关掉之后才跑，所以先取出来。
@@ -620,7 +620,7 @@ def _use_canonical_entity_names(connection, rows: list[dict]) -> None:
 
 
 def _review_queue(row: dict) -> str | None:
-    """人工待处理、稍后与忽略分别计数；自动否决不占人工忽略队列。"""
+    """Manual pending, later and ignored are counted separately; an automatic veto does not occupy the manual ignore queue."""
     status = row.get('decision', 'pending')
     if status == 'pending':
         return 'pending'
@@ -696,7 +696,7 @@ def q_review(contract: ReviewContract):
     for category in REVIEW_CATEGORIES:
         rows, source, dropped = _review_rows(contract, category, queue=None)
         for row in rows:
-            # 页面使用折叠后的 candidates；CSV 原文留在磁盘，批准仍从原文件核验。
+            # The page uses the folded candidates; CSV the original text stays on disk, and approval is still verified from the original file.
             row.pop('candidates_json', None)
         for key, sections in groups.items():
             sections[category] = _select_review_queue(rows, key)
@@ -895,10 +895,10 @@ def _restore_review_decision(contract: ReviewContract, category: str, item_key: 
             'SELECT status,note FROM review_decision WHERE category=? AND item_key=?',
             (category, item_key)).fetchone()
         if prior is None or prior[0] not in {'skipped', 'rejected'} or _is_automatic({'note': prior[1]}):
-            raise ValueError('只有稍后处理或已忽略的资料可以恢复，已批准的资料不会撤回')
+            raise ValueError('Only metadata set to later or ignored can be restored; approved metadata is not withdrawn')
         rows, _source, _dropped = _queue_rows(contract, category, connection)
         if item_key not in {row['item_key'] for row in rows}:
-            raise ValueError('所选资料已不在当前候选中，未恢复')
+            raise ValueError('The selected metadata is no longer among the current candidates and was not restored')
         connection.execute(
             'INSERT INTO review_decision_history'
             '(category,item_key,status,reviewer,note,decided_at,restored_at) '
@@ -948,26 +948,26 @@ def w_review_decision(contract: ReviewContract, body):
             if category == "metadata_fields":
                 candidate_key = str(body.get("candidate_key") or "").strip()
                 if not candidate_key:
-                    raise ValueError("批准资料字段时，请先选择要采用的来源")
+                    raise ValueError("When approving metadata fields, first choose the source to adopt")
                 group, candidate = _selected_metadata_candidate(contract, item_key, candidate_key)
                 applied, asset_revisions = _approve_metadata_with_receipt(
                     connection, group, candidate, now, note, expected_revision)
             elif category == "creator_tags":
-                # 权威值只能来自候选文件本身。直接采信请求体的话，「批准候选 X」
-                # 可以写入与 X 无关的创作者和标签，而 review_decision 里留痕仍写着 X 通过。
+                # Authoritative values can come only from the candidate file itself. If the request body were trusted directly, "approve candidate X"
+                # could write creators and tags unrelated to X, while the trace in review_decision would still say X passed.
                 candidates = {row["item_key"]: row
                               for row in read_candidates(category, contract.candidate_root)[0]}
                 candidate = candidates.get(item_key)
                 if candidate is None:
-                    raise ValueError("所选资料不在当前批次，无法批准")
+                    raise ValueError("The selected metadata is not in the current batch and cannot be approved")
                 if str(candidate.get("status") or "").strip() != "candidate":
-                    raise ValueError("只有 candidate 状态的复核项可以批准")
+                    raise ValueError("Only review items in candidate state can be approved")
                 creator = str(candidate.get("creator") or "").strip()
                 tags = [tag.strip() for tag in str(candidate.get("tags") or "").split("|") if tag.strip()]
                 claimed_creator = str(body.get("creator", "")).strip()
                 claimed_tags = [tag.strip() for tag in str(body.get("tags", "")).split("|") if tag.strip()]
                 if (claimed_creator and claimed_creator != creator) or (claimed_tags and claimed_tags != tags):
-                    raise ValueError("提交内容与所选资料不一致，未保存")
+                    raise ValueError("The submitted content does not match the selected metadata; nothing was saved")
                 tags = current_tags(tags)
                 if not creator or not tags:
                     raise ValueError("approved creator review requires creator and tags")
@@ -986,17 +986,17 @@ def w_review_decision(contract: ReviewContract, body):
                         raise ValueError("selected assets are outside the reviewed creator")
                     asset_ids = sorted(selected_ids)
                 else:
-                    # 没有勾选就是「整条候选通过」。这里什么都不写却照样把决定记成
-                    # approved 的话，留痕说通过、实际没写是最糟的组合。
+                    # Nothing ticked means "approve the whole candidate". Writing nothing here while still recording the decision as
+                    # approved would be the worst combination: the trace says approved while nothing was actually written.
                     asset_ids = sorted(available_ids)
                     if len(asset_ids) > REVIEW_APPLY_LIMIT:
                         raise ValueError(
-                            f"该创作者有 {len(asset_ids)} 条作品，超过单次批准上限 "
-                            f"{REVIEW_APPLY_LIMIT}，请在页面上显式勾选后再通过"
+                            f"This creator has {len(asset_ids)} works, exceeding the single-approval limit of "
+                            f"{REVIEW_APPLY_LIMIT}, please tick them explicitly on the page before approving"
                         )
                 payload = json.dumps({"review_item": item_key}, ensure_ascii=False)
                 for tag in tags:
-                    # 每种标签只解析一次，批量关系沿用同一身份与统一名称。
+                    # Each tag kind is parsed only once, and batch relationships reuse the same identity and unified name.
                     entity_id = upsert_asset_entity(connection, kind='tag', name=tag, asset_id=asset_ids[0], role='tag',
                         source='vision_creator_review', confidence=0.6, metadata={'review_item': item_key},
                         now=now, update_entity_metadata=False)

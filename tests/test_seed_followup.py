@@ -119,7 +119,7 @@ class RunTests(Case):
         self.assertEqual(row[0], "天使萌")
         self.assertEqual(json.loads(row[1])["name_preference"]["previous_name"], "天使もえ")
         self.assertEqual(summary["names"], 1)
-        self.assertIn("中文名 1", summary["outcome"])
+        self.assertIn("Chinese names 1", summary["outcome"])
 
     def test_failed_name_backup_leaves_the_ledger_unchanged(self):
         key = self.chinese_pack()

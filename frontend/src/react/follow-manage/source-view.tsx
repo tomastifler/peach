@@ -16,7 +16,7 @@ import {
   type FollowSource,
 } from './follow-manage';
 
-/** 关注来源的站标，尺寸与回退和采集来源站标同一枚；站名由旁边的文字或外层的读屏文字说。 */
+/** The site mark of a followed source, with the same size and fallback as the capture source site mark; the site name is carried by the adjacent text or by screen reader text on the outside. */
 export function SourceIcon({ provider }: { provider: string }) {
   return <MarkImage src={sourceIconUrl(provider)} />;
 }
@@ -52,10 +52,10 @@ export function StatusBadge({ source }: { source: FollowSource }) {
   return <Chip variant="caption" color={color}>{statusText(source)}</Chip>;
 }
 
-/** 来源名连到站上的原页面，名字后跟外链字形。新标签页不继承这一页的会话，来源地址也不带走 Peach 自己的地址。 */
+/** The source name links to the original page on the site, followed by an external-link glyph. The new tab does not inherit this page's session, and the source address does not carry Peach's own address away. */
 export function SourceLink({ source }: { source: FollowSource }) {
   return (
-    <a href={source.url} target="_blank" rel="noopener noreferrer" title="打开原来源"
+    <a href={source.url} target="_blank" rel="noopener noreferrer" title="Open original source"
       className="max-w-full min-w-0 self-start text-body-medium wrap-anywhere text-text-primary underline-offset-2 hover:underline">
       {source.label}
       <RiExternalLinkLine aria-hidden className="size-(--icon-inline) shrink-0" />

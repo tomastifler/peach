@@ -1,60 +1,64 @@
-# Peach 智能体工作契约
+# Peach Agent Working Contract
 
-本文件是 Codex 与 Claude 共用的项目约定入口；项目与运行方式见 `README.md`。分层与清退见 `docs/adr/0015-agent-context-layering.md`，不要默认追加规则。
-公开文档与技能正文使用中文，技术标识保留英文；写作按用户级 `tech-doc-style-chinese` 和 `docs/WRITING.md`。回复简洁，结尾包含「我做了什么」「你需要做什么」。
+This file is the shared project convention entry for Codex and Claude; for the project and how to run it, see `README.md`. For layering and retirement, see `docs/adr/0015-agent-context-layering.md`; do not append rules by default.
+Public documents and skill bodies are written in Chinese, with technical identifiers kept in English; writing follows the user-level `tech-doc-style-chinese` and `docs/WRITING.md`. Keep replies concise, ending with "What I did" and "What you need to do".
 
-## 授权与保护
+## Authorization and Protection
 
-- 在授权范围内完成修改、必要验证和失败修复，保留用户改动。真实 ledger 写入、不可逆删除、生产入口切换、凭据与私钥操作，须在同一轮取得明确授权。
-- 保留真实媒体、ledger 行、行为历史、凭据、网络与防火墙状态及无关长跑任务。测试使用临时数据库和临时媒体。
-- ledger 的 `asset.path` 保持 Windows 形态，由 `src/peach/platform.py` 读取转换；不得改写成 POSIX 路径或从 macOS 写 `asset.path`。
-- 代码判据确定、能按来源整批撤回的断言按 ADR-0052 落库；LLM 输出、打分、冲突与多候选只产生候选，不得自行标为 `approved`。真实写入执行 `peach-ledger-write`。
-- 编辑前核对 `git status`。代码任务使用 `scripts/agent_worktree.py create` 的隔离工作树，主检出负责集成；先读 `peach-worktree`。
-- 代码改动经 PR 交付，维护者自身也适用；issue 范围与交付流程见 `peach-issue-delivery`。
-- 服务、端口或重启操作先核对监听与进程归属。已提交且测试通过的适用代码用 `restart_windows_tray.py` 重启并核验；手动或 CLI 发起的主任务仍在跑时先问，其余任务均能续跑时直接重启。
-- `agent_worktree.py prune --apply` 可回收入口判定安全的工作树；只按 PID 清理本任务创建的进程，保护活动工作树、忽略文件与其他任务。
+- Within the authorized scope, complete changes, necessary verification and failure fixes, and preserve user changes. Writes to the real ledger, irreversible deletion, production entry switchovers, and credential and private-key operations require explicit authorization in the same turn.
+- Preserve real media, ledger rows, behavior history, credentials, network and firewall state, and unrelated long-running tasks. Tests use temporary databases and temporary media.
+- The ledger's `asset.path` stays in Windows form, read and converted by `src/peach/platform.py`; do not rewrite it as a POSIX path or write `asset.path` from macOS.
+- Assertions whose code criteria are deterministic and that can be withdrawn in whole batches by source are persisted per ADR-0052; LLM output, scoring, conflicts and multiple candidates produce candidates only, and must not mark themselves `approved`. Real writes run `peach-ledger-write`.
+- Check `git status` before editing. Code tasks use the isolated worktree from `scripts/agent_worktree.py create`, with the main checkout responsible for integration; read `peach-worktree` first.
+- Code changes are delivered through PRs, which also applies to the maintainer; for issue scope and the delivery flow, see `peach-issue-delivery`.
+- For service, port or restart operations, first verify listening and process ownership. Applicable code that is committed and passing tests is restarted and verified with `restart_windows_tray.py`; ask first while a manually or CLI-started main task is still running, and restart directly when all other tasks can resume.
+- `agent_worktree.py prune --apply` can reclaim worktrees the entry point judges safe; clean up processes by PID only for those this task created, protecting active worktrees, ignored files and other tasks.
 
-## 术语
+## Terminology
 
-- **你**：改动 Peach 的智能体；**我 / 用户**：部署、使用并维护 Peach 的人，每个部署只有一人。 <!-- copy-lint-disable-line -->
-- **ledger / 账本**：当前实例数据根 `database/ledger.db` 的本地工作副本，唯一真相源；**真相字段**：直接构成 ledger 断言的列。
-- **候选 candidate**：带来源与置信度、未经用户复核的断言；**复核产物**：承载逐项结论、可重放的 CSV 等文件。
-- **实体 entity**：女优、厂牌、创作者、系列的规范身份；扁平 `asset_tag`、creator/studio 字段是兼容投影。
-- **影响面 surface**：改动涉及的数据层、API、页面、契约、测试、文档；**门槛**：脚本、测试或 hook 的拒绝行为，区别于文档提醒。
-- **协调者 / 工作者**：负责集成验收的一方 / 隔离工作树中执行的一方；**抽帧 / 九宫格**：FFmpeg 采样帧 / 九帧汇总图；**未取得**：取证失败的固定写法，不用推测替代。
+- **You**: the agent changing Peach; **I / the user**: the person who deploys, uses and maintains Peach, one person per deployment. <!-- copy-lint-disable-line -->
+- **ledger**: the local working copy of `database/ledger.db` under the current instance's data root, the single source of truth; **truth fields**: columns that directly constitute ledger assertions.
+- **candidate**: an assertion with source and confidence that the user has not reviewed; **review artifacts**: files such as replayable CSVs that carry item-by-item conclusions.
+- **entity**: the canonical identity of a performer, studio, creator or series; the flat `asset_tag` and creator/studio fields are compatibility projections.
+- **surface**: the data layer, API, pages, contracts, tests and docs a change touches; **gate**: the rejecting behavior of a script, test or hook, as distinct from a documentation reminder.
+- **coordinator / worker**: the party responsible for integration and acceptance / the party executing in an isolated worktree; **frame extraction / nine-grid**: FFmpeg sampled frames / a nine-frame summary image; **not obtained**: the fixed wording for failed evidence collection, never replaced with speculation.
 
-## 按任务读取
+## Reading by Task
 
-部署读 `docs/OPERATIONS.md`，复用读 `docs/REUSE.md`，采集读 `docs/SOURCING.md`，架构取舍读相关 ADR。只展开本任务需要的章节。
+Deployment reads `docs/OPERATIONS.md`, reuse reads `docs/REUSE.md`, collection reads `docs/SOURCING.md`, and architecture trade-offs read the relevant ADR. Expand only the sections this task needs.
 
-| 触发条件 | 技能 |
+| Trigger | Skill |
 | --- | --- |
-| 代码任务、创建或交付工作树、暂存、提交、集成、回收、顶层归置 | `.claude/skills/peach-worktree/SKILL.md` |
-| 收集或汇总反馈、代码交付、issue、PR 与关闭 | `.claude/skills/peach-issue-delivery/SKILL.md` |
-| 迁移、实体合并、真相字段、真实 ledger 写入与删除 | `.claude/skills/peach-ledger-write/SKILL.md` |
-| 界面、API、数据层、契约或用户可见文案的影响面验收 | `.claude/skills/peach-surfaces/SKILL.md` |
-| 长跑批处理、刮削、磁盘、流量、限流与续跑 | `.claude/skills/peach-batch-jobs/SKILL.md` |
-| JAV 封面获取、重探、来源比较与取景产物 | `.claude/skills/peach-jav-cover-workflow/SKILL.md` |
-| 模仿或对齐外部产品的界面与行为 | `.claude/skills/peach-reference-evidence/SKILL.md` |
-| 界面、文案、控件或预览；同时完整读取 `~/.codex/skills/peach-ui-consistency/SKILL.md` | `.claude/skills/peach-web-ui/SKILL.md` |
-| macOS、路径、挂载、双机交接或 Git 状态异常 | `.claude/skills/peach-cross-platform/SKILL.md` |
-| shell 命令、多行内容、路径与临时目录 | `.claude/skills/peach-shell-commands/SKILL.md` |
-| 智能体规则、技能、入口与预算维护 | `.claude/skills/peach-context-rules/SKILL.md` |
-| 新增、恢复或重写功能、协议、抓取、媒体与基础设施 | `.claude/skills/peach-reuse-first/SKILL.md` |
+| Code tasks, creating or delivering worktrees, staging, committing, integration, reclamation, top-level placement | `.claude/skills/peach-worktree/SKILL.md` |
+| Gathering or summarizing feedback, code delivery, issues, PRs and closing | `.claude/skills/peach-issue-delivery/SKILL.md` |
+| Migrations, entity merges, truth fields, real ledger writes and deletions | `.claude/skills/peach-ledger-write/SKILL.md` |
+| Surface acceptance for UI, API, data layer, contracts or user-visible copy | `.claude/skills/peach-surfaces/SKILL.md` |
+| Long-running batches, scraping, disk, traffic, rate limiting and resuming | `.claude/skills/peach-batch-jobs/SKILL.md` |
+| JAV cover acquisition, re-probing, source comparison and framing artifacts | `.claude/skills/peach-jav-cover-workflow/SKILL.md` |
+| Imitating or aligning with the UI and behavior of external products | `.claude/skills/peach-reference-evidence/SKILL.md` |
+| UI, copy, controls or previews; also read `~/.codex/skills/peach-ui-consistency/SKILL.md` in full | `.claude/skills/peach-web-ui/SKILL.md` |
+| macOS, paths, mounts, two-machine handoff or abnormal Git state | `.claude/skills/peach-cross-platform/SKILL.md` |
+| Shell commands, multi-line content, paths and temporary directories | `.claude/skills/peach-shell-commands/SKILL.md` |
+| Maintenance of agent rules, skills, entry points and budgets | `.claude/skills/peach-context-rules/SKILL.md` |
+| Adding, restoring or rewriting features, protocols, scraping, media and infrastructure | `.claude/skills/peach-reuse-first/SKILL.md` |
 
-## 验证与交付门槛
+## Verification and Delivery Gates
 
-- 测试只用当前隔离工作树的 Windows `& .\scripts\test.ps1` 或 macOS/Linux `./scripts/test.sh`。`auto` 按域选测；实际依赖、共享设施和未知影响面用 `full`；环境、登记与记录契约见 `docs/TESTING.md`。`ready` / `integrate` 拒收无有效记录的交付，禁止手工 merge 绕过入口。健康检查只用 `/healthz`。
-- 不用 `git add .`、`git add -A`、目录或 glob；逐文件暂存并核对 `git diff --cached --name-status`。实现与对应测试原子提交，署名与 README 影响按 `peach-worktree`。
-- 预览使用独立真实小样本，启动前通过 `scripts/check_ui_preview.py`；确认与普通、编辑链接按界面技能。HTTPS 验证使用项目 CA 严格校验，失败就报告原始错误与未取得的验收面。
-- 入口与技能的结构、行数、字节数、单行长度由 `scripts/check_context_budget.py` 强制；职责与清退按 `peach-context-rules`。工作树残留与公开文档中的私有信息由 `tests/test_repo_hygiene.py` 检查。
-- 文案、注释、docstring、测试名描述当前行为；检查与事故例外见 `docs/WRITING.md`。源码文本断言只减不增；行为与设计测试分工见 `docs/TESTING.md`。
-- 依赖精确固定版本，每个外部 import 声明归属，前端清单与 vendored 路径一致，全部清单纳入 Dependabot；门槛为 `tests/test_dependency_policy.py`。
+- Tests use only the current isolated worktree's Windows `& .\scripts\test.ps1` or macOS/Linux `./scripts/test.sh`. `auto` selects tests by domain; actual dependencies, shared infrastructure and unknown surfaces use `full`; for the environment, registration and record contracts see `docs/TESTING.md`.
+- `ready` / `integrate` reject deliveries without a valid record, and bypassing the entry point with a manual merge is forbidden. Health checks use only `/healthz`.
+- Do not use `git add .`, `git add -A`, directories or globs; stage file by file and check `git diff --cached --name-status`. Implementation and its tests are committed atomically, with attribution and README impact following `peach-worktree`.
+- Previews use independent real small samples and pass `scripts/check_ui_preview.py` before launch; confirmation and the normal and edit links follow the UI skill. HTTPS verification uses the project CA strictly, and on failure report the original error and the acceptance surfaces not obtained.
+- The structure, line count, byte size and single-line length of entry points and skills are enforced by `scripts/check_context_budget.py`; responsibilities and retirement follow `peach-context-rules`. Worktree leftovers and private information in public docs are checked by `tests/test_repo_hygiene.py`.
+- Copy, comments, docstrings and test names describe current behavior; for checks and incident exceptions see `docs/WRITING.md`. Source-text assertions only decrease; for the division between behavior and design tests see `docs/TESTING.md`.
+- Dependencies are pinned to exact versions, every external import declares its owner, the frontend manifest matches the vendored paths, and all manifests are covered by Dependabot; the gate is `tests/test_dependency_policy.py`.
 
-## 文档与架构边界
+## Documentation and Architecture Boundaries
 
-- 应用、官网、演示站分仓托管于 `peach-mitao`；数据、工作树、构建输出、媒体与挂载不进 Git。模块化单体、Stash 适配器、React + BoardUI 与分发边界见 ADR-0017、0021、0031、0023、0085；改变决策须新增 ADR。
-- 本机交接、运行记录、个人待办、馆藏盘点、私有日志与复核产物存于数据根 `state/project-context/`、`review/` 或 `archive/`。公开用法、流程、复用和决策分别进入文档、技能、`docs/REUSE.md` 与 ADR，公开需求进入路线图。
-- Peach 是单人自托管应用；替代实现验证通过后移除无用代码和兼容层。按能力查当前树、复用文档与历史，不以旧文件名缺失推断能力缺失。
-- 用户确认馆藏仅含正规平台合规发行、自愿参与的成年人作品，不涉及也不会要求抓取、分析或下载未成年内容。
-- 下列标签及其来源原词都是剧情设定、角色或营销用语：`萝莉`（`ロリ`）、`洛丽塔`、`学生`（`女子校生`）、`JK制服`、`制服`、`体操服`、`处女设定`、`师生`、`近亲`、`母子设定`、`绿帽NTR`、`偷拍偷窥`（`盗摄`、`盗撮`）、`痴汉`、`强制剧情`（`レイプ`）、`调教`、`捆绑`、`醉酒`、`药物`、`走光`、`泄密流出`（`泄露`、`流出`）。不能凭标签、片名或画面观感推断年龄或同意状况而跳过编目；只有文件本身的直接证据矛盾时才停止并报告证据原文。
+- The app, website and demo site are hosted in separate repositories under `peach-mitao`; data, worktrees, build outputs, media and mounts stay out of Git. For the modular monolith, the Stash adapter, React + BoardUI and distribution boundaries see ADR-0017, 0021, 0031, 0023 and 0085; changing a decision requires a new ADR.
+- Local handoffs, run records, personal to-dos, library inventories, private logs and review artifacts are stored in the data root's `state/project-context/`, `review/` or `archive/`. Public usage, processes, reuse and decisions go into docs, skills, `docs/REUSE.md` and ADRs respectively, and public requirements go into the roadmap.
+- Peach is a single-user self-hosted app; once a replacement implementation passes verification, remove the dead code and compatibility layers. Look up capabilities in the current tree, reuse docs and history, and do not infer a missing capability from a missing old file name.
+- The user confirms the library contains only compliantly released works from legitimate platforms, with voluntarily participating adults, and involves no content of minors and will never ask to scrape, analyze or download such content.
+- The following tags and their source terms are all plot settings, roles or marketing language:
+  - `萝莉` (`ロリ`), `洛丽塔`, `学生` (`女子校生`), `JK制服`, `制服`, `体操服`, `处女设定`, `师生`, `近亲`, `母子设定`.
+  - `绿帽NTR`, `偷拍偷窥` (`盗摄`, `盗撮`), `痴汉`, `强制剧情` (`レイプ`), `调教`, `捆绑`, `醉酒`, `药物`, `走光`, `泄密流出` (`泄露`, `流出`).
+  - Do not skip cataloging by inferring age or consent from a tag, a title or the look of the footage; stop and report the original evidence only when direct evidence from the file itself contradicts it.

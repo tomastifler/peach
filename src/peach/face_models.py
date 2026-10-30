@@ -1,19 +1,19 @@
-"""人脸模型在任务中心的记录、当前状态与「立即重试」。
+"""Face model records in the Task Center, current status, and "Retry now".
 
-任务卡只记历史：取不到时留一条失败记录和原因。此刻是否可用由 `status` 回答，活动中心页顶
-「需要处理」那一行读它，「立即重试」调 `RETRY_URL`。
+ Task cards record only history: when it cannot be fetched, a failure record and its reason are left. Whether it is usable right now is answered by `status` the line at the top of the Activity Center page
+"Needs attention" row reads it, and "Retry now" calls `RETRY_URL`.
 
-YuNet 与 SFace 两个模型是全进程共用的一次性能力：完整安装包、macOS 应用与 Docker 镜像随包
-带着；没带或那份对不上时，第一次用到时联网取一次，之后一直用本地那份。取不到不让任何一轮任务停下（`avatar_face.FaceProbe`、`face_match.FaceMatcher` 都退回
-不看脸的旧判据），代价是这件事在界面上没有位置——补头像的后继照样显示跑完了。
+YuNet and SFace are two models shared by the whole process as a one-time capability: the full installer, macOS app and Docker image ship them bundled
+ ship it bundled; if it is not bundled or the copy does not match, it is fetched online once at first use and the local copy is used from then on. A failed fetch does not stop any task round (`avatar_face.FaceProbe`, `face_match.FaceMatcher` both fall back to
+ the old criteria that ignore faces), at the cost that this has no place in the UI - the avatar-backfill successor still shows as finished.
 
-这里补的就是那个位置。回报点只有一个：`face_detect.fetch_model` 每次联网取模型的结果经
-`face_detect.observer` 报到 `Reporter`，它把「从能用变成取不到」和「从取不到变回能用」两次
-转变各写成一条 `face-models` 终态记录。同一次失败反复撞上不再写：断网时每条补头像后继都会
-试一次，逐条记下来就是满屏同一张卡。
+ This fills in that place. There is only one reporting point: `face_detect.fetch_model` the result of every online model fetch goes through
+`face_detect.observer` reports to `Reporter`, it writes the two transitions "from usable to unavailable" and "from unavailable back to usable"
+ each as one `face-models` terminal record. The same failure hit repeatedly is not written again: when offline every avatar-backfill successor would
+ try once, and recording each would fill the screen with the same card.
 
-立即重试是一轮普通的 `BackgroundJob`（`WebContract.face_models_job`），它自己开的那一行
-就是记录；它在跑时回报一律跳过，免得同一件事写两行。
+ Retry now is an ordinary round of `BackgroundJob` (`WebContract.face_models_job`), the row it opens itself
+ is the record; while it runs, reports are all skipped, so the same thing is not written twice.
 """
 from __future__ import annotations
 
@@ -28,18 +28,18 @@ TASK_KEY = "face-models"
 
 
 class Reporter:
-    """`face_detect.observer` 的服务端实现：按转变写 `task_run`，不按次数写。"""
+    """`face_detect.observer` server-side implementation: writes per transition to `task_run`, not per occurrence."""
 
     def __init__(self, runs):
         self.runs = runs
-        #: 查最新一条与写下一条之间不许插进别的线程：两条后继同时取不到模型，只该留一行。
+        #: No other thread may slip in between checking the latest record and writing the next: when two successors fail to get the model at the same time, only one row should remain.
         self._lock = threading.Lock()
 
     def __call__(self, label: str, error: Exception | None) -> None:
         try:
             self._record(label, error)
-        except Exception:                       # 记录失败不能拖垮取模型的那一方
-            LOGGER.warning("人脸模型的任务记录没写进去", exc_info=True)
+        except Exception:                       # a recording failure must not drag down the side that fetches the model
+            LOGGER.warning("Face model task record was not written", exc_info=True)
 
     def _record(self, label: str, error: Exception | None) -> None:
         if not self.runs.enabled:
@@ -48,11 +48,11 @@ class Reporter:
             latest = self.runs.query(task_key=TASK_KEY, limit=1)
             last = latest[0] if latest else None
             if last is not None and last.active:
-                return                          # 立即重试那一轮自己会结算
+                return                          # the Retry now round settles itself
             if error is None:
                 if last is None or last.status != "failed":
                     return
-                status, summary, message = "succeeded", {"outcome": f"已取得{label}"}, ""
+                status, summary, message = "succeeded", {"outcome": f"Fetched {label}"}, ""
             else:
                 if last is not None and last.status == "failed":
                     return
@@ -65,33 +65,33 @@ class Reporter:
 
 
 def attach(runs) -> None:
-    """把这个进程里联网取模型的结果接进任务中心。服务装配时调一次。"""
+    """Hook the result of online model fetches in this process into the Task Center. Called once when the service is assembled."""
     face_detect.observer = Reporter(runs)
 
 
 def detach(runs) -> None:
-    """服务关停后释放属于这份账本的模型任务记录器。"""
+    """Release the model task recorder belonging to this ledger after the service shuts down."""
     observer = face_detect.observer
     if isinstance(observer, Reporter) and observer.runs is runs:
         face_detect.observer = None
 
 
-#: 「立即重试」的地址：活动中心页顶「需要处理」那一行调它，请求体 `{}`。
+#: "Retry now" address: the "Needs attention" row at the top of the Activity Center page calls it, with request body `{}`.
 RETRY_URL = "/api/face-models"
 
 
 def status(runs) -> dict:
-    """人脸模型此刻的状态，给活动中心页顶「需要处理」那一行读。不联网，读一次就是一条查询。
+    """The face model's current status, read by the "Needs attention" row at the top of the Activity Center page. It does not go online; one read is one query.
 
-    判据和任务卡同一个来源：最新那条 `face-models` 记录。`state` 取四个值：
+    Same source of truth as the task card: the latest `face-models` record. `state` takes four values:
 
-    - `downloading`：立即重试那一轮在跑。
-    - `failed`：最新一条是失败，`failed_at`／`error`／`run_id` 指向那张卡。
-    - `ready`：两个模型都在本机，随包那份或数据目录里那份。随包那份按 `bundled_model`
-      核对哈希，进程里只算一次；数据目录那份的哈希留到用的时候由 `fetch_model` 核对。
-    - `missing`：还没取过，下次用到时自动去取；这不是问题，不必提示。
+    - `downloading`: the Retry now round is running.
+    - `failed`: the latest one is a failure, `failed_at`/`error`/`run_id` point to that card.
+    - `ready`: both models are on this machine, either the bundled copy or the one in the data directory. The bundled copy's hash is verified via `bundled_model`
+      only once per process; the hash of the data-directory copy is left until use, when `fetch_model` verifies it.
+    - `missing`: not fetched yet and fetched automatically on next use; this is not a problem and needs no notice.
 
-    详细原因只在任务卡上写，这里的 `error` 供「需要处理」判断与排查，不另起一套说法。
+    The detailed reason is written only on the task card; here `error` is for the "Needs attention" row to judge and troubleshoot with, without inventing a second wording.
     """
     from . import face_match
 
@@ -118,9 +118,9 @@ def status(runs) -> dict:
 
 
 def download_all() -> dict:
-    """立即重试那一轮：两个模型各取一次，本地已有且校验对得上的直接算取到。
+    """The Retry now round: fetch each of the two models once; one already present locally and passing verification counts as fetched directly.
 
-    一个取不到不挡另一个：检出模型取到了，题材圆标的取景就能先恢复。
+    One failing does not block the other: once the detection model is fetched, the framing of genre badges can recover first.
     """
     from . import face_match
 
@@ -131,5 +131,5 @@ def download_all() -> dict:
         except face_detect.FaceModelUnavailable as error:
             failures.append(str(error))
     if failures:
-        return {"ok": False, "error": "；".join(failures)}
-    return {"ok": True, "outcome": "人脸模型已就绪"}
+        return {"ok": False, "error": "; ".join(failures)}
+    return {"ok": True, "outcome": "Face models ready"}

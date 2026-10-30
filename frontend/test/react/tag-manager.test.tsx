@@ -61,16 +61,16 @@ describe('标签管理', () => {
     expect(host.querySelectorAll('[data-tag-chip]')).toHaveLength(100);
     expect(new URL(fetcher.mock.calls[0]![0], 'http://localhost').searchParams.get('limit')).toBe('100');
     await click(host.querySelector('[data-tag-chip][data-k="tag-0"]'));
-    await click(buttonNamed('下一页', host)); await settle();
+    await click(buttonNamed('Next', host)); await settle();
     expect(host.querySelector('[data-tag-chip][data-k="tag-0"]')).toBeNull();
     await click(host.querySelector('[data-tag-chip][data-k="tag-100"]'));
-    expect(host.querySelector('[aria-label="标签管理操作"]')?.textContent).toContain('已选 2 个标签');
-    await click(buttonNamed('上一页', host)); await settle();
+    expect(host.querySelector('[aria-label="Tag management actions"]')?.textContent).toContain('Selected 2 tags');
+    await click(buttonNamed('Previous page', host)); await settle();
     expect(host.querySelector('[data-tag-chip][data-k="tag-0"]')?.getAttribute('aria-pressed')).toBe('true');
-    await click(buttonNamed('下一页', host)); await settle();
-    await click(buttonNamed('角色设定', host)); await settle();
+    await click(buttonNamed('Next', host)); await settle();
+    await click(buttonNamed('Roles', host)); await settle();
     expect(host.querySelector('[data-tag-chip][data-k="tag-120"]')).not.toBeNull();
-    expect(host.querySelector('[aria-label="标签管理操作"]')).toBeNull();
+    expect(host.querySelector('[aria-label="Tag management actions"]')).toBeNull();
     const last = new URL(fetcher.mock.calls.at(-1)![0], 'http://localhost');
     expect(last.searchParams.get('offset')).toBe('0');
     expect(last.searchParams.get('category')).toBe('role');
@@ -90,17 +90,17 @@ describe('标签管理', () => {
     const host = await mount(<QueryClientProvider client={queryClient}><TagManager scope="online" /></QueryClientProvider>);
     await settle();
     await click(host.querySelector('[data-tag-chip]'));
-    await click(buttonNamed('屏蔽内容', host)); await settle();
+    await click(buttonNamed('Block content', host)); await settle();
     expect(commands).toEqual([{ operation: 'block', ids: ['outdoors'], scope: 'online' },
       { operation: 'block', ids: ['outdoors'], scope: 'online', token: 'content-plan' }]);
     expect(host.querySelectorAll('[data-tag-chip]')).toHaveLength(0);
-    await click(buttonNamed('已隐藏', host));
+    await click(buttonNamed('Hidden', host));
     expect(host.querySelectorAll('[data-tag-chip]')).toHaveLength(0);
-    await click(buttonNamed('已屏蔽内容', host));
+    await click(buttonNamed('Blocked content', host));
     await click(host.querySelector('[data-tag-chip]'));
-    await click(buttonNamed('恢复内容', host)); await settle();
+    await click(buttonNamed('Unblock content', host)); await settle();
     expect(commands.at(-1)).toEqual({ operation: 'unblock', ids: ['outdoors'], scope: 'online', token: 'content-plan' });
-    await click(buttonNamed('使用中', host));
+    await click(buttonNamed('In use', host));
     expect(host.querySelectorAll('[data-tag-chip]')).toHaveLength(1);
   });
 
@@ -112,7 +112,7 @@ describe('标签管理', () => {
     expect(host.querySelectorAll('[data-tag-chip]')).toHaveLength(1);
     expect(host.textContent).toContain('眼镜');
     await view.rerender(<QueryClientProvider client={queryClient}><TagManager search="" /></QueryClientProvider>);
-    await click(buttonNamed('已隐藏', host));
+    await click(buttonNamed('Hidden', host));
     expect(host.querySelectorAll('[data-tag-chip]')).toHaveLength(1);
     expect(host.textContent).toContain('旧标签');
   });
@@ -128,8 +128,8 @@ describe('标签管理', () => {
     }));
     const host = await mount(<QueryClientProvider client={queryClient}><TagManager scope="online" /></QueryClientProvider>);
     await settle();
-    await click(host.querySelector('[aria-label="编辑标签 outdoors"]'));
-    await type(document.querySelector('input[aria-label="标签名称"]'), '户外');
+    await click(host.querySelector('[aria-label="Edit tag outdoors"]'));
+    await type(document.querySelector('input[aria-label="Tag name"]'), '户外');
     await submit(document.querySelector('form')); await settle();
     expect(calls).toEqual([{ operation: 'rename', scope: 'online', ids: ['outdoors'], name: '户外' },
       { operation: 'rename', scope: 'online', ids: ['outdoors'], name: '户外', token: 'online-plan' }]);
@@ -138,11 +138,11 @@ describe('标签管理', () => {
   it('重命名先预览再使用同一计划提交并刷新标签', async () => {
     const fetcher = backend(); const host = await open();
     await click(host.querySelector('[data-tag-chip][data-k="眼镜"]'));
-    await click(buttonNamed('重命名'));
-    await type(document.querySelector('input[aria-label="标签名称"]'), '我的标签');
+    await click(buttonNamed('Rename'));
+    await type(document.querySelector('input[aria-label="Tag name"]'), '我的标签');
     await submit(document.querySelector('form'));
     await settle();
-    expect(confirmModal).toHaveBeenCalledWith(expect.objectContaining({ body: expect.stringContaining('2 个资源') }));
+    expect(confirmModal).toHaveBeenCalledWith(expect.objectContaining({ body: expect.stringContaining('2 resources') }));
     const bodies = fetcher.mock.calls.filter(([, init]) => init?.body).map(([, init]) => JSON.parse(String(init?.body)));
     expect(bodies).toEqual([{ operation: 'rename', ids: [1], name: '我的标签' },
       { operation: 'rename', ids: [1], name: '我的标签', token: 'plan' }]);
@@ -152,10 +152,10 @@ describe('标签管理', () => {
   it('冲突保留输入和错误且不发送写入', async () => {
     const fetcher = backend(true); const host = await open();
     await click(host.querySelector('[data-tag-chip][data-k="眼镜"]'));
-    await click(buttonNamed('重命名'));
-    await type(document.querySelector('input[aria-label="标签名称"]'), '旅行');
+    await click(buttonNamed('Rename'));
+    await type(document.querySelector('input[aria-label="Tag name"]'), '旅行');
     await submit(document.querySelector('form')); await settle();
-    expect((document.querySelector('input[aria-label="标签名称"]') as HTMLInputElement).value).toBe('旅行');
+    expect((document.querySelector('input[aria-label="Tag name"]') as HTMLInputElement).value).toBe('旅行');
     expect(document.body.textContent).toContain('目标名称已存在');
     expect(fetcher.mock.calls.filter(([url, init]) => url === '/api/tag-management' && init?.body)).toHaveLength(0);
   });

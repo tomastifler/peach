@@ -58,7 +58,7 @@ class ReviewQueueTests(unittest.TestCase):
                      'value':'壊\ufffdれた題名','confidence':.75}
         with contextlib.closing(sqlite3.connect(self.db_path)) as connection:
             connection.row_factory = sqlite3.Row
-            with self.assertRaisesRegex(ValueError, '无法解码'):
+            with self.assertRaisesRegex(ValueError, 'undecodable'):
                 _apply_metadata_candidate(connection, group, candidate, 'now', 'review:makers')
             self.assertIsNone(connection.execute('SELECT catalog_title FROM asset WHERE id=400').fetchone()[0])
 
@@ -2868,7 +2868,7 @@ class ReviewQueueTests(unittest.TestCase):
             'field':'title','field_label':'标题','current_value':'','candidates_json':json.dumps([candidate]),
             'source_count':'1','status':'candidate','size_gb':'1','videos':'1','fetched_at':'now'}])
         self.assertEqual(self._auto()['applied'], 0)
-        with self.assertRaisesRegex(ValueError, '原文证据未取得'):
+        with self.assertRaisesRegex(ValueError, 'original-text evidence not obtained'):
             rm_review.w_review_decision(self.contract, {'category':'metadata_fields','item_key':'PCH-890:title',
                 'candidate_key':candidate['candidate_key'],'status':'approved'})
         with contextlib.closing(sqlite3.connect(self.db_path)) as connection:
@@ -3420,7 +3420,7 @@ class PerformerAvatarApplyTests(ReviewQueueTests):
                     self.assertEqual(result['applied_assets'], 0)
                     expected = ('approved',)
                 else:
-                    with self.assertRaisesRegex(ValueError, '所选.*不在当前批次'):
+                    with self.assertRaisesRegex(ValueError, 'selected (field )?metadata is not in the current batch'):
                         rm_review.w_review_decision(self.contract, payload)
                     expected = None
                 with self.contract.read_connection() as connection:

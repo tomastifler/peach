@@ -92,9 +92,9 @@ MISS_TTL_SECONDS = 7 * 24 * 3600
 #: 那条批量线仍按 5 秒跑。撞上 403 不再是盲等 24 小时——`scraping_access.FIRST_BLOCKED_PAUSE`
 #: 先停 15 分钟，连着再撞才翻倍，所以这一档收紧的代价是有限且可观测的（docs/SOURCING.md）。
 SOURCE_INTERVALS = {'javdb.com': 3.0, 'jdbstatic.com': 3.0}
-#: 按 `SOURCE_INTERVALS` 等的那一份间隔，整个进程共用。取想要的资料、取新作资料、资料处理
-#: 各起各的 provider，间隔若各算各的，几条同时跑时问同一主机的请求就叠在一起，配额照样按
-#: 出口 IP 一份算。
+#: The one interval waited per `SOURCE_INTERVALS` shared across the whole process. Fetching wanted metadata, fetching new-release metadata and metadata processing
+#: each start their own provider, if intervals were counted separately, requests to the same host from several concurrent runs would pile up, and the quota is still counted
+#: per egress IP.
 SOURCE_LIMITER = HostLimiter(SOURCE_INTERVALS, default_interval=2.0)
 SOURCE_LABELS = {'r18dev': 'r18.dev', 'dmm': 'DMM / FANZA', 'avbase': 'AVBase', 'javbus': 'JavBus', 'javdb': 'javdb',
                  'fc2': 'FC2', 'fc2cmadb': 'FC2CMADB', 'fc2ppvdb': 'FC2PPV-DB', 'javten': 'JAVten',
@@ -247,7 +247,7 @@ def describe_failure(error):
 
 
 def _source_failure_details(error, code, action, *, source=None):
-    """采集问题保留脱敏异常链和阶段，页面摘要不暴露内部错误正文。"""
+    """Collection problems keep the redacted exception chain and stage; the page summary does not expose internal error text."""
     from .error_reporting import exception_facts, scrub
     return scrub({'stage': action, 'code': code, 'source': source, **exception_facts(error)})
 #: 来源说「没有」不是待办：馆藏里本来就有大量独立资源和创作者作品，任何目录站都收不到
@@ -416,7 +416,7 @@ class LibraryMetadataProvider:
                                   else peach_proxy.client_options(self.secrets_root), direct_sites=direct_sites)
         except Exception as error:  # noqa: BLE001 - 桥没装、venv 坏了、超时：整档未取得，原因给人看
             _raise_task_failure(error)
-            return Unavailable(f'amane 桥：{str(error).strip() or describe_failure(error)}')
+            return Unavailable(f'amane bridge: {str(error).strip() or describe_failure(error)}')
         raw_sites = report.get('sites')
         raw_sites = raw_sites if isinstance(raw_sites, dict) else {}
         reports = {site: raw_sites[site] if isinstance(raw_sites.get(site), dict) else {
@@ -741,10 +741,10 @@ def state_path(config):
     return config.directory('state') / 'library-processing.json'
 
 
-#: 等着全库处理锁的前台处理有几轮。后台定向任务看到它不为零就让路。
+#: Number of foreground processing rounds waiting for the whole-library processing lock. A background targeted task yields when it sees this is nonzero.
 _waiting_foreground = 0
 _waiting_guard = threading.Lock()
-#: 前台处理等锁时多久再试一次。
+#: How long a foreground process waits for the lock before trying again.
 LOCK_RETRY_SECONDS = 0.5
 
 
@@ -762,10 +762,10 @@ def _lock_free(config) -> bool:
 
 
 class ProcessingBusy(JobDeferred):
-    """全库处理锁被占着，或者有用户发起的处理在等它；后台定向任务回到队列。"""
+    """The whole-library processing lock is held, or a user-initiated process is waiting for it; the background targeted task returns to the queue."""
 
     def __init__(self, config):
-        super().__init__('等待扫描与采集完成后继续')
+        super().__init__('Waiting for scanning and collection to finish before continuing')
         self.config = config
 
     def ready(self) -> bool:
@@ -774,11 +774,11 @@ class ProcessingBusy(JobDeferred):
 
 @contextmanager
 def _processing_lock(config, *, background, active):
-    """持有全库处理锁，返回本轮该用的 `active`。
+    """Hold the whole-library processing lock and return this round's `active`.
 
-    共享候选文件整份读改写，同一时刻只能有一轮处理在写。用户发起的处理（不带
-    `state_file`）等锁，并让在跑的后台定向任务在下一个检查点退出；后台任务碰上锁被占
-    或有人在等，就抛 `ProcessingBusy` 回到队列，凭各自的进度文件续跑。
+    The shared candidate file is read-modified-written whole, so only one processing round may write at a time. User-initiated processing (without
+    `state_file`) waits for the lock and makes the running background targeted task exit at the next checkpoint; a background task that meets a held lock
+    or someone waiting raises `ProcessingBusy` and returns to the queue, resuming from its own progress file.
     """
     global _waiting_foreground
     lock = FileLock(str(state_path(config)) + '.lock', timeout=0)
@@ -807,7 +807,7 @@ def _processing_lock(config, *, background, active):
                 break
             except Timeout:
                 if not active():
-                    raise InterruptedError('处理任务已停止') from None
+                    raise InterruptedError('Processing task stopped') from None
                 time.sleep(LOCK_RETRY_SECONDS)
         try:
             yield active
@@ -827,8 +827,8 @@ def misses_path(config):
 
 
 def _save(path, payload):
-    # 进度条轮询会在写入间隙打开这份状态，Windows 上替换被占着的目标会拒绝访问，
-    # 交给 fsutil 等读者放手。
+    # Progress-bar polling opens this state in the gaps between writes, Windows replacing a held target is denied access,
+    # leave it to fsutil to wait for readers to let go.
     atomic_write_text(path, json.dumps(payload, ensure_ascii=False))
 
 
@@ -847,7 +847,7 @@ def decorate(state, *, now=None):
                                        path=str(row.get('path') or ''), message=str(row.get('message') or ''))
                                   for row in legacy[:ISSUE_PREVIEW_LIMIT]]
         state['issues_truncated'] = len(legacy) > ISSUE_PREVIEW_LIMIT
-    # 完整走完各阶段且留有问题的历史快照仍可展示已取得的结果。
+    # A historical snapshot that went through all stages but retains problems can still show the results obtained.
     if state.get('status') == 'failed' and 'outcome' not in state:
         state['outcome'] = ('partial' if state.get('stage') == '处理结束'
                             and state.get('completed_at') and state.get('issue_count')
@@ -945,7 +945,7 @@ def snapshot(config):
                 if state.get('status') == 'running':
                     # 拿得到锁说明写入者已经不在了。结论写回文件：只改副本的话，另一个读取者
                     # 正好短暂占着锁时会读到原样的「运行中」，界面就在两种状态之间来回跳。
-                    state.update(status='failed', outcome='interrupted', error='处理被中断，可重试未完成的部分。',
+                    state.update(status='failed', outcome='interrupted', error='Processing was interrupted; the unfinished part can be retried.',
                                  completed_at=state.get('last_progress_at') or time.time())
                     _save(state_path(config), state)
         except Timeout:
@@ -1029,7 +1029,7 @@ def _read_local_posters(jobs, state, *, update, issue, generated_root=None):
                     data, size, stamp = future.result()
                     derived = generated_root is not None and target.parent == generated_root
                     if derived and stamp != artifact_rules.fingerprint(source):
-                        raise OSError('配套图片在读取时发生变化')
+                        raise OSError('Companion image changed while being read')
                 except InterruptedError:
                     raise
                 except (OSError, ValueError, subprocess.TimeoutExpired) as error:
@@ -1042,7 +1042,7 @@ def _read_local_posters(jobs, state, *, update, issue, generated_root=None):
                         install_cover(target, code, data, size)
                         if derived and not artifact_rules.remember(
                                 target, upgrade_rules.LOCAL_POSTERS, source=source, source_fingerprint=stamp):
-                            raise OSError('配套图片在保存时发生变化')
+                            raise OSError('Companion image changed while being saved')
                         state['covers'] += 1
                 done += 1
                 update(checked=done, covers=state['covers'])
@@ -1392,7 +1392,7 @@ class _MissCache:
                                          if isinstance(stamp, (int, float))}
         if ('cover' in self._entries
                 and loaded.get('cover_catalog_rules') != upgrade_rules.OFFICIAL_COVER_CATALOG_MISSES):
-            # FC2 商品图不查询官方综合目录，单站答复与这一目录判据无关。
+            # FC2 FC2 product images do not query the official aggregate catalog; a single-site reply is unrelated to this catalog criterion.
             self._entries['cover'] = {
                 code: stamp for code, stamp in self._entries.get('cover', {}).items()
                 if code.upper().startswith('FC2-PPV-')}
@@ -1441,7 +1441,7 @@ class _MetadataResults:
         except InterruptedError:
             raise
         except OSError as error:
-            raise _ProcessingPersistenceError(f'资料证据无法保存：{error}') from error
+            raise _ProcessingPersistenceError(f'Metadata evidence could not be saved: {error}') from error
 
 
 class _RemoteSession:
@@ -1454,7 +1454,7 @@ class _RemoteSession:
         self.misses = misses
         #: 用户对每种内容类型的来源链覆盖，形状见 `metadata_routes.parse_route_overrides`。
         self._routes = routes or None
-        # 定向重试或明确重采不看旧记忆；本次答复仍照记。
+        # Targeted retries or explicit re-collection ignore old memory; this round's reply is still recorded.
         self._consult = not (retrying or recheck_existing)
         self._task_evidence = {}
         self._task_absent = set()
@@ -1475,7 +1475,7 @@ class _RemoteSession:
             self._provider.close()
 
     def prepare(self, prepared, stages_of, update, *, cover_root=None, groups=None):
-        """只为本趟实际需要的来源准备工具，不消费单片查询预算。"""
+        """Prepare tools only for the sources actually needed this trip, without consuming the per-movie query budget."""
         if self._factory:
             return
         from . import metadata_amane
@@ -1514,7 +1514,7 @@ class _RemoteSession:
                 fetch_cover=True):
         """给这一行补外部资料与封面；返回 (证据条目, 新落盘的封面数)。
 
-        `missing` 为空时不问资料，`fetch_cover` 为假时不找封面：媒体库处理方式关掉的那一步不联网。
+        `missing` when empty, no metadata is requested, `fetch_cover` when false, no cover is looked for: a step the library processing mode has turned off does not go online.
 
         文件名被读成番号的创作者作品一家都不问，判据见 `catalog_rules.scrapes_as_jav`；
         本地海报在调用方那一步已经登记过，这里跳过的只是外部来源。`answered` 是在这一行
@@ -1954,7 +1954,7 @@ def _chosen_asset_paths(db_path, asset_ids):
 
 
 def _within_processing_root(path, root):
-    """按资源身份比较归属，不为逐影片筛选访问挂载目录。"""
+    """Compare ownership by resource identity, without accessing mounted directories for per-movie filtering."""
     from .platform import within_root
     from .smb_media import SmbResource
     if isinstance(path, SmbResource) or isinstance(root, SmbResource):
@@ -1975,7 +1975,7 @@ def _online_source_root(source, root, chosen_paths, *, retrying, issue):
     except InterruptedError:
         raise
     except OSError as error:
-        issue(None, f'{source} 来源目录读取失败：{error}', action='reading_local')
+        issue(None, f'{source} source directory read failed: {error}', action='reading_local')
         return None
     issue(None, f'{source} 来源离线', action='reading_local')
     return None
@@ -2044,7 +2044,7 @@ def _scan_sources(config, db_path, *, locations, asset_ids, stage, guard, update
 
 def _probe_sources(config, db_path, locations, online_roots, asset_ids, update, *, total_pending=0,
                    initial_probed=0, protected_ids=(), on_junk=lambda result: None):
-    """已登记视频按可访问来源逐项读取媒体属性；媒体库处理方式不读视频信息的根目录跳过。"""
+    """Read media properties item by item for registered videos from accessible sources; roots whose library processing mode does not read video info are skipped."""
     probed = initial_probed
     checked = initial_probed
     ffprobe = _ffprobe_path(config)
@@ -2066,7 +2066,7 @@ def _probe_sources(config, db_path, locations, online_roots, asset_ids, update, 
 
 
 def _library_stages(config):
-    """按作品账本路径查所属媒体库要做的处理步骤（ADR-0116）；不在已配置根目录下的按自动补全。"""
+    """Look up the processing steps of the owning media library by the work's ledger path (ADR-0116); paths not under a configured root use automatic completion."""
     from .platform import resolve_root
     by_root = media_identity.stages_by_root(config)
     every = frozenset(media_identity.STAGES)
@@ -2080,16 +2080,16 @@ def _library_stages(config):
 
 
 def _people_allowed(config):
-    """有没有哪个媒体库的处理方式联网补人物图片；都没有时整轮不补人物资料、不派实体后继。"""
+    """Whether any media library's processing mode goes online to fill in people images; if none does, the whole round skips people metadata and dispatches no entity successors."""
     return any('people' in stages for stages in media_identity.stages_by_root(config).values())
 
 
 def _collect_allowed(remote, traffic, row, code, missing, allowed, cover_root, covered, *,
                      update, issue, answered, received, succeeded):
-    """按这一行所属媒体库的处理方式问外部来源（ADR-0116），返回 (证据条目, 新落盘的封面数)。
+    """Query external sources according to the processing mode of the library this row belongs to (ADR-0116), returns (evidence entries, number of newly saved covers).
 
-    关掉的联网步骤不问：不补资料时不带缺失字段，不补封面时不找封面，两样都关就整行不联网。
-    不补人物图片的媒体库，这一行换上的封面不记进 `covered`，不因此派补头像后继。"""
+    Online steps that are turned off are not queried: when metadata is not filled, missing fields are not requested; when covers are not filled, no covers are looked up; if both are off the row does not go online at all.
+    For a library that does not fill in people images, a cover swapped in for this row is not recorded into `covered`, and does not dispatch an avatar-backfill successor because of it."""
     found, covers = [], 0
     if allowed & {'metadata', 'cover'}:
         traffic.start_metadata(code)
@@ -2100,7 +2100,7 @@ def _collect_allowed(remote, traffic, row, code, missing, allowed, cover_root, c
                                                fetch_cover='cover' in allowed)
         except ItemSkipped:
             remote.reset()
-            issue(row, '已跳过这部影片，可在任务结束后重试', action='skipped', retryable=True)
+            issue(row, 'This movie was skipped; you can retry after the task ends', action='skipped', retryable=True)
         finally:
             traffic.finish_work('metadata', code, successful=succeeded())
             update(current_source=None)
@@ -2110,7 +2110,7 @@ def _collect_allowed(remote, traffic, row, code, missing, allowed, cover_root, c
 
 
 def _check_processing_junk(database, locations, online_roots, asset_ids, protected_ids, state, update):
-    """只检查本趟可访问目录或显式选择，并把隔离与复核计数记进可恢复状态。"""
+    """Check only the directories accessible this trip or the explicit selection, and record quarantine and review counts into recoverable state."""
     roots = [(source, root) for source, paths in locations.items() for root in paths
              if translate_ledger_path(root) in online_roots]
     checked = junk.isolate(database, asset_ids=asset_ids, roots=roots, protected_ids=protected_ids)
@@ -2120,7 +2120,7 @@ def _check_processing_junk(database, locations, online_roots, asset_ids, protect
 
 def _prepare_processing_media(config, db_path, database, locations, sources, asset_ids,
                               protected_ids, stage, state, update):
-    """在配套资料、预览和联网采集前检查已知证据，补媒体测量后重新检查。"""
+    """Check known evidence before companion metadata, previews and online collection, and re-check after media measurements are filled in."""
     update(stage='检查垃圾文件', checked=0, total=0)
     _check_processing_junk(database, locations, sources.online_roots, asset_ids, protected_ids, state, update)
     if stage in (ALL_STAGES, COLLECT_STAGE, PREVIEWS_STAGE):
@@ -2132,7 +2132,7 @@ def _prepare_processing_media(config, db_path, database, locations, sources, ass
 
 
 def _active_prepared(database, prepared):
-    """媒体处理后的活动视频携带最新测量值，已隔离或被用户移出的条目不继续采集。"""
+    """Active videos after media processing carry the latest measurements; entries already quarantined or moved out by the user are not collected further."""
     if not prepared:
         return []
     ids = [row[0]['id'] for row in prepared]
@@ -2191,9 +2191,9 @@ def _candidate_scope(groups, asset_ids):
 
 def _finish_collection(config, database, candidate_root, cover_root, groups, remote, *,
                        asset_ids, active, update, issue, watermark, covered, people=True):
-    """结算本趟候选并补人物资料，全库任务同时推进存量后继。
+    """Settle this trip's candidates and fill in people metadata; whole-library tasks also advance backlog successors.
 
-    `people` 为假（没有哪个媒体库的处理方式联网补人物图片）时不补人物资料，也不派实体后继。"""
+    `people` being false (no media library's processing mode goes online for people images) means people metadata is not filled and no entity successors are dispatched."""
     auto_apply = _apply_finished_candidates(database, candidate_root, active, asset_ids)
     profiles = (_enrich_finished_performers(
         database, _candidate_scope(groups, asset_ids), config, candidate_root, remote, active, update, issue)
@@ -2228,7 +2228,7 @@ PREVIEW_TIMEOUT_SECONDS = 120.0
 
 
 class _ProcessingPersistenceError(RuntimeError):
-    """公共进度或检查点未保存，必须由任务层处理。"""
+    """Public progress or checkpoint was not saved and must be handled by the task layer."""
 
 
 def _raise_task_failure(error):
@@ -2317,11 +2317,11 @@ def _generate_preview(config, row, database, resolver, *, progress):
                 with atomic_path(destination) as output:
                     if not frame_capture.tile_frames(str(choice.path), str(frames / 's%02d.jpg'), 3, 3, output,
                                                      timeout=remaining(60)):
-                        raise ValueError('预览图未生成，请检查媒体文件后重试')
+                        raise ValueError('Preview image not generated; please check the media file and retry')
                     if not measure_image_file(output):
-                        raise ValueError('预览图无法读取，请重试')
+                        raise ValueError('Preview image cannot be read; please retry')
             except OSError as error:
-                raise _ProcessingPersistenceError(f'预览图无法保存：{error}') from error
+                raise _ProcessingPersistenceError(f'Preview image cannot be saved: {error}') from error
     artifact_rules.remember(destination)
     progress()
     with database.write_transaction() as connection:
@@ -2333,7 +2333,7 @@ def _generate_preview(config, row, database, resolver, *, progress):
 
 def _generate_previews(config, rows, database, *, update, issue, guard,
                        completed=(), checkpoint=lambda row: None, initial_made=0):
-    """只读本机视频；来源失败与抽帧失败各自保留可重试项目。媒体库处理方式不生成九宫格的作品跳过。"""
+    """Reads only local video; source failures and frame-extraction failures each keep retryable items. Works whose library processing mode does not generate contact sheets are skipped."""
     from .previews import PreviewUnavailable
     if database is None:
         return 0
@@ -2359,7 +2359,7 @@ def _generate_previews(config, rows, database, *, update, issue, guard,
             except InterruptedError:
                 raise
             except OSError as error:
-                raise _ProcessingPersistenceError(f'处理进度无法保存：{error}') from error
+                raise _ProcessingPersistenceError(f'Processing progress cannot be saved: {error}') from error
         progress()
         try:
             made += int(_generate_preview(config, row, database, resolver, progress=progress))
@@ -2461,9 +2461,9 @@ def _candidate_baseline(database, row, code, verify_existing):
 
 def _read_local_metadata(config, db_path, row, cover_root, listing, state, update, issue, poster_jobs,
                          code_patterns=()):
-    """读取一部影片的本地证据，返回可独立发布的资料与在线核查范围。
+    """Read the local evidence of one movie and return the metadata that can be published independently and the online verification scope.
 
-    `code_patterns` 是用户在设置里写的番号识别规则，已编译，先于内置规则试。"""
+    `code_patterns` are the code-recognition rules the user wrote in settings, compiled and tried before the built-in rules."""
     video = translate_ledger_path(row['path'])
     try:
         files = listing.files(video.parent)
@@ -2594,7 +2594,7 @@ class _LocalEvidenceCache:
         try:
             self.code_patterns = compile_code_patterns(stored)
         except ValueError:
-            # 保存时已经校验过；被手改坏的规则当没设置过，不让整轮处理失败。
+            # Already validated at save time; a hand-corrupted rule is treated as unset and must not fail the whole processing round.
             self.code_patterns = ()
 
     def read(self, row, update, issue, poster_jobs):
@@ -2626,7 +2626,7 @@ class _LocalEvidenceCache:
 
 
 class _ProcessingStateFile:
-    """按时间间隔保存任务状态，关键状态允许立即落盘。"""
+    """Save task state at time intervals, with critical states allowed to hit disk immediately."""
 
     def __init__(self, path, state):
         self.path, self.state = path, state
@@ -2639,7 +2639,7 @@ class _ProcessingStateFile:
 
 
 class _ProcessingIssues:
-    """将带资产身份的问题写入日志，并同步任务进度。"""
+    """Write problems carrying an asset identity to the log and sync task progress."""
 
     def __init__(self, state, log_path, flush_state, report):
         self.state, self.log_path = state, log_path
@@ -2659,7 +2659,7 @@ class _ProcessingIssues:
 
 
 def _initial_processing_scope(db_path, selected_ids, retry_ids, incremental, resume_state):
-    """区分待发现范围与首次预估范围；增量恢复沿用已冻结的影片集合。"""
+    """Distinguish the range to be discovered from the first estimated range; incremental recovery keeps the already frozen movie set."""
     if incremental:
         from .library_new_assets import pending
         previous = (resume_state or {}).get('incremental_ids')
@@ -2688,8 +2688,8 @@ def process_library(config, db_path, candidate_root, cover_root, *, location='co
     `asset_ids` 指定仍在馆藏中的视频，不扫描来源目录；空选择无效。
 
     `database` 是调用方已经在用的 `LedgerDatabase`。给了它才做收尾的自动落库与人物
-    资料补齐与本地预览登记，并且与调用方共用同一把进程内写锁。所有模式都会按范围
-    检查垃圾并隔离到回收站；不给 `database` 时外部资料只采集候选。
+    metadata completion and local preview registration, sharing the same in-process write lock with the caller. All modes check by scope
+    for junk and quarantine it to the recycle bin; without `database` external metadata is only collected as candidates.
 
     `route_overrides` 覆盖某几种内容类型的来源链，形状与判据见
     `metadata_routes.parse_route_overrides`；不给就用内建那张表。
@@ -2716,7 +2716,7 @@ def process_library(config, db_path, candidate_root, cover_root, *, location='co
         flush_state(force=True)
         report(dict(state))
     from .update_tasks import activity
-    # 后台任务要让路时，`as active` 换上的那个会转为假；后面的检查点与闭包都读这一个。
+    # When a background task has to yield, `as active` the one swapped in turns false; later checkpoints and closures all read this one.
     with (activity(Path(db_path), 'library-processing'), traffic.bind(),
           _processing_lock(config, background=state_file is not None, active=active) as active,
           bind_control(control, identity, publish=control_report, active=active, db_path=Path(db_path),
@@ -2925,7 +2925,7 @@ def process_library(config, db_path, candidate_root, cover_root, *, location='co
             try:
                 remote.prepare(prepared, stages_of, update, cover_root=cover_root, groups=groups)
             except PreparationError as error:
-                message = f'采集工具准备失败：{error}'
+                message = f'Collection tool preparation failed: {error}'
                 issue(None, message, action='preparing_sources')
                 blocked = set(error.asset_ids)
                 state['retryable_asset_ids'] = sorted(set(state['retryable_asset_ids'])
@@ -2967,7 +2967,7 @@ def process_library(config, db_path, candidate_root, cover_root, *, location='co
             finish_step('collect')
             _settle_collection_state(state, summary, rows, update)
         except Exception:
-            state.update(status='failed', outcome='interrupted', error='处理被中断。核对媒体目录后重试。', completed_at=time.time())
+            state.update(status='failed', outcome='interrupted', error='Processing was interrupted. Check the media directory and retry.', completed_at=time.time())
             state.update(interrupted_state(control))
             state['traffic'] = traffic.snapshot(finished=state.get('status') in ('failed', 'cancelled'))
             _save(path, state)

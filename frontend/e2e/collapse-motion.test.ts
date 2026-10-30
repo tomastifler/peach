@@ -74,7 +74,7 @@ describe('折叠正文与箭头共用动画', () => {
       const opened = await visit(browser, '/', viewport, async page => {
         await page.route('**/api/library-processing', route => route.fulfill({ json: {
           status: 'running', job_id: 'motion', total: 100, checked: 12, speed_mode: 'standard',
-          steps: [{ id: 'sources', label: '扫描文件', status: 'current' }],
+          steps: [{ id: 'sources', label: 'Scanning files', status: 'current' }],
         } }));
       });
       try {

@@ -228,7 +228,7 @@ def local_players(request: Request, args=Depends(require_auth)):
     from . import local_playback
     players = []
     if local_playback.available() and _local_playback_client(request):
-        players = [{'id': 'default', 'label': '系统默认播放器'}, *[
+        players = [{'id': 'default', 'label': 'System default player'}, *[
             {'id': key, 'label': value[0]} for key, value in local_playback.installed().items()]]
     return JSONResponse({'players': players}, headers={'Cache-Control': 'no-store'})
 
@@ -247,7 +247,7 @@ def local_playback(request: Request, id: int, player: str = 'default', args=Depe
     import subprocess
     same_origin(request)
     if not launcher.available() or not _local_playback_client(request):
-        raise HTTPException(403, '请使用网络播放地址或 M3U 播放列表在此设备打开')
+        raise HTTPException(403, 'Please use a network playback URL or an M3U playlist to open on this device')
     asset = request.app.state.media_engine.asset(id)
     path = request.app.state.media_engine.filesystem.file_for(asset, thumbnail=False)
     try:
@@ -255,9 +255,9 @@ def local_playback(request: Request, id: int, player: str = 'default', args=Depe
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from None
     except (OSError, subprocess.SubprocessError) as exc:
-        LOGGER.warning('本地播放器启动失败：player=%s type=%s errno=%s winerror=%s',
+        LOGGER.warning('Local player failed to start: player=%s type=%s errno=%s winerror=%s',
                        player, type(exc).__name__, getattr(exc, 'errno', None), getattr(exc, 'winerror', None))
-        raise HTTPException(503, '无法打开播放器，请检查系统文件关联或选择其他播放器') from None
+        raise HTTPException(503, 'Cannot open the player; please check the system file association or choose another player') from None
     return {'opened': True}
 
 
@@ -312,7 +312,7 @@ def stream(request: Request, id: int, session: str = "", args: dict[str, str] = 
             path, header, session=session, registry=state.stream_sessions,
         )
     try:
-        # 不带会话的只有卡片悬停预览：取消不了，也看不到浏览器断开，不能为它起整片转码。
+        # Only card hover previews come without a session: they cannot be cancelled and the browser disconnecting cannot be seen, so no whole-film transcode must be started for them.
         path, transcoded = state.transcode_service.browser_path(
             id, path, session=session, registry=state.stream_sessions, convert=bool(session),
         )
@@ -401,7 +401,7 @@ def _record_stream_plan(state, asset_id: int, source: Path, plan: dict) -> dict:
                     media_profile=state.transcode_service.diagnostic_profile(source),
                     hardware=state.transcode_service.hardware.diagnostic_snapshot())
     except Exception:
-        LOGGER.debug('播放诊断未取得', exc_info=True)
+        LOGGER.debug('Playback diagnostics not obtained', exc_info=True)
     return plan
 
 
@@ -535,7 +535,7 @@ def _subtitle_rows(state, asset_id: int):
 def _subtitle_path(state, asset, row) -> Path | None:
     """字幕文件在本机的位置；逃出正片所在目录或授权根一律拒绝。
 
-    路径来自账本或同目录发现，这一层仍核对当前媒体授权根。
+    Paths come from the ledger or same-directory discovery, and this layer still checks against the currently authorized media roots.
     """
     if not asset.path:
         return None
@@ -580,7 +580,7 @@ def _subtitle_note(state, asset, row) -> str:
 def asset_subtitles(request: Request, id: int, args: dict[str, str] = Depends(require_auth)):
     """这个资产有哪些字幕轨，以及每一条能不能播。
 
-    返回的 src 通过 track 参数绑定文件身份，序号用于无参数的按序读取。
+    The returned src binds file identity through the track parameter, and the index is used for parameterless sequential reads.
     不能播的也列出来并说明原因：界面上「有三条字幕、只挂上两条」要能解释得清。
     """
     state = request.app.state
@@ -644,9 +644,9 @@ def photo(request: Request, id: int, args: dict[str, str] = Depends(require_auth
 
 @router.api_route("/photo-thumb", methods=["GET", "HEAD"])
 def photo_thumb(request: Request, id: int, args: dict[str, str] = Depends(require_auth)):
-    """图片墙的缩略图。缓存复用前核对源文件代际。
+    """Thumbnails for the image wall. The source file generation is verified before cache reuse.
 
-    本地文件用保存的来源签名检查；网络资源由媒体层解析后核对。来源发生变化时生成对应缩略图。
+    Local files are checked with the saved source signature; network resources are resolved by the media layer and then verified. When the source changes, the corresponding thumbnail is regenerated.
     """
     state = request.app.state
     path = state.photo_service.cached(id)
@@ -744,9 +744,9 @@ def cover(request: Request, code: str = "", thumb: int = 0,
           args: dict[str, str] = Depends(require_auth)):
     """官方封套原图。存原图不裁：4:3 与 16:9 两种版式在界面上按比例取景。
 
-    `thumb` 是派生档的档次：`1` 是长边 1600 那一档（`COVER_THUMB_EDGE`），`2` 是卡片网格
-    的起始档、长边 800（`COVER_SMALL_THUMB_EDGE`）；不带就是原件，详情与裁切取原件。
-    档次而不是像素数，理由同 `/entity-image`：尺寸由服务端定死，页面只挑档。
+    `thumb` is the tier of the derived size: `1` is the tier with a long edge of 1600 (`COVER_THUMB_EDGE`), `2` is the card grid
+    starting tier, long edge 800 (`COVER_SMALL_THUMB_EDGE`); omitted means the original; detail and crop use the original.
+    A tier rather than a pixel count, for the same reason as `/entity-image`: sizes are fixed by the server and the page only picks a tier.
     """
     path = request.app.state.web_contract.cover_path(code)
     if path is None:
@@ -891,7 +891,7 @@ def follow_avatar(request: Request, service: str = "", id: str = "",
 
 @router.api_route("/source-icon", methods=["GET", "HEAD"])
 def source_icon(request: Request, provider: str = "", args: dict[str, str] = Depends(require_auth)):
-    """来源站标优先取应用资源，缓存未取得时显示地球；未知来源返回 404。"""
+    """Source site logos prefer app resources and show a globe when the cache is not obtained; unknown sources return 404."""
     state = request.app.state
     if provider in follow_assets.SOURCE_ICON_URLS:
         bundled = PROJECT_ROOT / 'resources' / 'site-marks' / f'{provider}.png'
@@ -912,8 +912,8 @@ def source_icon(request: Request, provider: str = "", args: dict[str, str] = Dep
 
 
 #: 人脸探针，题材头像与换头像按番号取的封面共用。YuNet 的模型是个 232 KB 的 ONNX，
-#: 首次用到时才去取；取不到时回 None，圆标退回样式表里的默认取景、封面退回正封取景
-#: ——没网不该等于这一排一张图都没有。取不到之后隔 `avatar_face.RETRY_SECONDS` 再试。
+#: Fetched only on first use; when it cannot be fetched, returns None, badges fall back to the default framing in the stylesheet and covers fall back to front-cover framing
+#: - no network must not mean a whole row with no images. After a failed fetch, wait `avatar_face.RETRY_SECONDS` before retrying.
 _WORK_FACE_PROBE = avatar_face.FaceProbe()
 
 
@@ -1057,7 +1057,7 @@ def work_icon(request: Request, work: str = "",
 
 def _report_follow_media_failure(item, error: Exception, *, operation: str, phase: str,
                                  media_index: int | None = None) -> None:
-    """媒体失败按来源、资源来源和操作定位；地址与凭据交给统一脱敏入口。"""
+    """Media failures are located by source, resource origin and operation; addresses and credentials go through the unified redaction entry."""
     rows = web_follow._raw_media_items(item)
     index = media_index if media_index is not None else 0
     resource_provider = item.provider
@@ -1212,9 +1212,9 @@ def follow_image(request: Request, id: int, media: int | None = None,
 
 @router.api_route("/cover-image", methods=["GET", "HEAD"])
 def cover_image(request: Request, code: str, args: dict[str, str] = Depends(require_auth)):
-    """库外作品的官方封面：按番号在服务端查地址，经 Peach 的出网设置取图并落盘缓存。
+    """Official cover of an out-of-library work: look up the address by code on the server, fetch the image through Peach's outbound settings and cache it on disk.
 
-    取不到一律回 404 且不缓存：卡片按 `data-drop` 换成占位，网络恢复后下一次加载重取。
+    A failed fetch always returns 404 and is not cached: per `data-drop` the card is swapped for a placeholder, and the next load re-fetches once the network recovers.
     """
     from .jav_cover_fetch import COVER_PROXY_HOSTS, candidate_for
     from .web_jav_detail import detail_code, stored_cover_url
@@ -1222,7 +1222,7 @@ def cover_image(request: Request, code: str, args: dict[str, str] = Depends(requ
     try:
         url = stored_cover_url(state.web_contract, detail_code({"code": code}))
         if not url:
-            raise ValueError("封面未取得")
+            raise ValueError("Cover not obtained")
         cache = cache_for(state.web_contract)
         key = f"cover:{url}"
         hit = cache.response(key, request)
@@ -1235,16 +1235,16 @@ def cover_image(request: Request, code: str, args: dict[str, str] = Depends(requ
         return Response(status_code=404, headers={"cache-control": "no-store"})
 
 
-#: 来源图片只按位图回给浏览器：同源下发 SVG 等于让来源在 Peach 的源里跑脚本。
+#: Source images are returned to the browser only as bitmaps: serving SVG from the same origin would let the source run scripts in Peach's origin.
 _JAV_IMAGE_TYPES = frozenset({"image/jpeg", "image/png", "image/gif", "image/webp", "image/avif"})
 
 
 @router.api_route("/jav-image", methods=["GET", "HEAD"])
 def jav_image(request: Request, code: str, image: str = "cover", args: dict[str, str] = Depends(require_auth)):
-    """库外作品的来源图片（样张、来源封面、来源头像），以图片本身回给 `<img>`。
+    """Source images of out-of-library works (sample images, source covers, source avatars), returned as the image itself to `<img>`.
 
-    字节来自远程媒体缓存，取过一次不再出网；带内容摘要的 ETag 与 `private, max-age`，
-    再开同一部作品由浏览器缓存直接给。取不到回 404 且不缓存，页面换成「未取得」并可重试。
+    The bytes come from the remote media cache and, once fetched, do not go online again; an ETag with a content digest and `private, max-age`,
+    so reopening the same work is served straight from the browser cache. A failed fetch returns 404 and is not cached, and the page switches to "Not obtained" and can retry.
     """
     import hashlib
     from .follow_assets import sniff
@@ -1359,9 +1359,9 @@ def _site_mark_response(state, url: str, root: Path):
     地址一律由服务端自己从某张表或账本解析，函数本身不判断来路——但它是唯一会
     真的去连对方站点的地方，所以每个调用方都得先说清自己的地址从哪来。
 
-    取不到时留一个 `.failed` 标记，`follow_assets.RETRY_SECONDS` 内不再出网：一次
-    取图要试首页、manifest 和几个候选，各等 8 秒，断网时资料页每枚外链都重跑一遍，
-    图标区就一直卡着。标记期间有旧图发旧图，没有就 404 露出地球图标。
+    When it cannot be fetched, leave a `.failed` marker, `follow_assets.RETRY_SECONDS` within which there is no more network access: one
+    fetching an image tries the homepage, manifest and several candidates, waiting 8 seconds each, and when offline every external link on a metadata page would rerun this,
+    the icon area would stay stuck. While the marker is in place an old image is served if one exists, otherwise 404 shows the globe icon.
     """
     # 存档链接按快照保存的原站找图标，缓存也按原站存：缓存键只看主机，按存档地址存，
     # 所有存档链接就共用 web.archive.org 那一枚。
@@ -1399,7 +1399,7 @@ def _site_mark_response(state, url: str, root: Path):
         else:
             marker.write_bytes(b"")
     if not cached.exists():
-        # 取不到就让前端露出下面的地球图标，不要留一个空白圆。
+        # When it cannot be fetched, let the frontend show the globe icon below rather than leaving an empty circle.
         return JSONResponse({"error": "unavailable"}, status_code=404)
     result = FileResponse(cached, media_type="image/png")
     result.headers["Cache-Control"] = "public, no-cache"
@@ -1511,9 +1511,9 @@ _INDEX_REFRESHER_LOCK = threading.Lock()
 
 
 def _index_refresher(app) -> avatar_picker.IndexRefresher:
-    """这个应用的图库索引刷新器，第一次用到时建，之后一直是同一个。
+    """This app's gallery index refresher, built on first use and the same one thereafter.
 
-    出网走采集统一出口：Peach 代理设置与按站冷却都在那里。
+    Outbound traffic goes through the unified collection exit: Peach proxy settings and per-site cooldown are both there.
     """
     with _INDEX_REFRESHER_LOCK:
         refresher = getattr(app.state, "gfriends_index", None)
@@ -1614,9 +1614,9 @@ def _picker_online(request: Request, connection, entity_id: int):
 @router.get("/api/avatar-choices")
 def avatar_choices(request: Request, kind: str = "performer", id: int = 0,
                    args: dict[str, str] = Depends(require_auth)):
-    """这个人还能换成哪些图。只读本地缓存，不等联网。
+    """What other images this person can be switched to. Reads only the local cache and does not wait for the network.
 
-    图库索引缺失或过期时在后台刷新，返回刷新状态供当前窗口读取新候选。
+    When the gallery index is missing or stale it is refreshed in the background, and the refresh status is returned so the current window can read new candidates.
     """
     state = request.app.state.web_contract
     providers_root, avatar_root = _picker_roots(state)
@@ -1701,7 +1701,7 @@ async def avatar_frame(request: Request, args: dict[str, str] = Depends(require_
     - `ref`：候选网格里的那一格。图库图还没取过就像预览那样取一次、留进缓存
     - `url`：手填的地址。过公网判据后取一次、按地址留进缓存，交回一格 `url:` 候选，
       框选、确认都读这一份
-    - 请求体直接是图片字节：本机图片转换后留作预览候选，确认时浏览器提交原字节
+    - The request body is the image bytes directly: the local image is converted and kept as a preview candidate, and on confirmation the browser submits the original bytes
     """
     state = request.app.state.web_contract
     providers_root, _ = _picker_roots(state)
@@ -1771,7 +1771,7 @@ async def avatar_pick(request: Request, args: dict[str, str] = Depends(require_a
     def confirm():
         entity_id = _picker_entity(state, payload)
         if entity_id <= 0:
-            raise avatar_picker.PickerError('缺少实体 id')
+            raise avatar_picker.PickerError('Missing entity id')
         selected = body
         if ref:
             with state.read_connection() as connection:
@@ -1787,7 +1787,7 @@ async def avatar_pick(request: Request, args: dict[str, str] = Depends(require_a
             origin = {"source": "avatar picker", "provider": "upload",
                       "external_id": str(payload.get("name") or "")}
         else:
-            raise avatar_picker.PickerError('没有可用的图片')
+            raise avatar_picker.PickerError('No usable image')
         if box not in (None, ""):
             selected, cropped = avatar_picker.crop(selected, box)
             origin = {**origin, **cropped}

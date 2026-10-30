@@ -1,6 +1,6 @@
 """导入实体种子后继：扫描结算后把私有种子包补进账本（ADR-0075、ADR-0111）。
 
-种子包位于应用资源的 `resources/seed/entities.json`（`seed_pack.DEFAULT_PACK`），导入只给本机已有实体填空、换掉种子
+ The seed pack lives in the app resources at `resources/seed/entities.json` (`seed_pack.DEFAULT_PACK`), import only fills blanks in entities the machine already has and replaces seeds
 自己写过的旧行（`seed_pack.land`）。这条后继由扫描与采集在结算时声明（ADR-0040 第一条），
 派的条件是两个里有一个：这一轮登记了新的女优、厂牌或事务所，或这个版本的包还没有成功导入过。
 同一版本因此会跑多次；`land` 幂等，多跑一次只是没有东西可补。
@@ -22,8 +22,8 @@ TASK_LABEL = "Import seed data"
 REVIEW_FILE = "seed-landing.csv"
 FIELDS = ("kind", "entity", "field", "ours", "source", "theirs", "detail", "batch", "withdrawal_id", "evidence")
 #: 活动页摘要里的计数键与它们的中文名，按这个顺序拼结论。
-SUMMARY_LABELS = (("aliases", "别名"), ("refs", "编号"), ("links", "链接"), ("profiles", "资料"),
-                  ("memberships", "归属"), ("makers", "片商"), ("refreshed", "换新"), ("withdrawn", "撤销"), ("names", "中文名"))
+SUMMARY_LABELS = (("aliases", "Aliases"), ("refs", "Codes"), ("links", "Links"), ("profiles", "Profiles"),
+                  ("memberships", "Memberships"), ("makers", "Makers"), ("refreshed", "Refreshed"), ("withdrawn", "Withdrawn"), ("names", "Chinese names"))
 
 
 def followup_key(version: str, content_hash: str = "") -> str:
@@ -101,7 +101,7 @@ def outcome(report: dict) -> str:
 
 
 def run(contract, key: str, handle) -> dict:
-    """将随应用分发的种子包补进账本；测试使用临时种子包。"""
+    """Fill the seed pack distributed with the app into the ledger; tests use a temporary seed pack."""
     pack = seed_pack.load(seed_pack.DEFAULT_PACK)
     if key != followup_key(pack["version"], seed_validation.digest(pack)):
         raise ValueError("Seed content does not match the queued task's digest; dispatch again")

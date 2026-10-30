@@ -1,7 +1,7 @@
-/* 主界面构建：Application、路由、常驻组件、首屏页面与共享状态打进入口 peach-app.js。
- * 入口用固定文件名，由 index.html 引用；服务端以 ETag 校验内容并要求每次重新验证缓存。
- * 低频页面由路由的 `routeChunk` 动态导入，拆成带内容哈希的 `peach-app.<名字>-<哈希>.js`，服务端按长期不变缓存
- * （ADR-0118）。首屏用得到的模块留在入口，chunk 从入口导入它们，同一模块只有一份实例。
+/* Main UI build: the Application, routes, resident components, first-screen pages and shared state are bundled into the entry peach-app.js.
+ * The entry uses a fixed file name and is referenced by index.html; the server validates content with an ETag and requires the cache to be revalidated every time.
+ * Low-frequency pages are dynamically imported by the route's `routeChunk` and split into chunks with a content hash, `peach-app.<name>-<hash>.js`, which the server caches as long-lived immutable files
+ * (ADR-0118). Modules the first screen needs stay in the entry, and chunks import them from the entry, so each module has only one instance.
  * 模块别名直接指向唯一源码，浏览器仅在启用开发取证时请求独立的 agentation 模块。 */
 import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
@@ -26,14 +26,14 @@ export default defineConfig({
   define: { 'process.env.NODE_ENV': JSON.stringify('production') },
   build: {
     outDir: browserArtifacts,
-    // 私有目录保留 JavaScript 与 source maps；发布插件只把 JS 与 CSS 复制到 `web/dist/`。
+    // The private directory keeps JavaScript and source maps; the publish plugin copies only JS and CSS to `web/dist/`.
     emptyOutDir: true,
     target: 'es2022',
     cssTarget: ['chrome111','edge111','firefox128','safari16.4','ios16.4'],
     // Vite 8 的内核是 rolldown，压缩走 oxc；写 'esbuild' 会落到已废弃的转译插件上。
     minify: 'oxc',
     sourcemap: 'hidden',
-    // 样式仍是一份 peach-app.css：层叠顺序与旧样式表的先后由 index.html 决定，不随页面装载变化。
+    // Styles are still a single peach-app.css: the cascade order relative to the old stylesheets is decided by index.html and does not change with page loading.
     cssCodeSplit: false,
     lib: {
       entry: 'src/react/bootstrap.tsx',
@@ -42,15 +42,15 @@ export default defineConfig({
     },
     rollupOptions: {
       external: ['/dev/agentation.js'],
-      // 库模式默认 `strict`：入口不许多出导出，入口与 chunk 共用的模块只能另拆成几十份公共 chunk，
-      // 首屏变成一串瀑布请求。放开扩展后共用模块留在入口，chunk 从入口导入。
+      // Library mode defaults to `strict`: the entry may not have extra exports, so modules shared by the entry and chunks would have to be split into dozens of common chunks,
+      // turning the first screen into a waterfall of requests. With extension allowed, shared modules stay in the entry and chunks import from the entry.
       preserveEntrySignatures: 'allow-extension',
       output: {
-        // chunk 与入口同前缀、平铺在 `web/dist/`：服务端只认这一种形态，名字里没有路径分隔符。
+        // Chunks share the entry's prefix and are laid flat in `web/dist/`: the server recognizes only this form, with no path separator in the name.
         chunkFileNames: 'peach-app.[name]-[hash].js',
         codeSplitting: { groups: [{ name: 'main', tags: ['$initial'] }] },
-        // 入口给 chunk 的导出用源码里的名字：压缩成单字母的话，入口里任何改动都会让导出名整体错位，
-        // 每个 chunk 的内容与哈希跟着变，一次小改动换掉 `web/dist/` 里全部 chunk。
+        // The entry's exports for chunks use the names in the source: if they were minified to single letters, any change in the entry would shift all export names,
+        // and every chunk's content and hash would change with it, so one small change would replace all chunks in `web/dist/`.
         minifyInternalExports: false,
         assetFileNames: 'peach-app.[ext]',
       },

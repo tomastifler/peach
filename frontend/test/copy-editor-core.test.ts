@@ -10,7 +10,7 @@ const core = (globalThis as unknown as { PeachCopyEditorCore: {
 describe('原位改字核心', () => {
   it('读取 JSON 成功结果与服务端失败原因', async () => {
     await expect(core.readJson(new Response('{"ok":true,"text":""}'))).resolves.toEqual({ ok: true, text: '' });
-    await expect(core.readJson(new Response('{"error":"保存失败"}', { status: 500 }))).rejects.toThrow('保存失败');
+    await expect(core.readJson(new Response('{"error":"Save failed"}', { status: 500 }))).rejects.toThrow('Save failed');
   });
   it('成功响应缺少 JSON 时保留未确认状态', async () => {
     await expect(core.readJson(new Response(''))).rejects.toMatchObject({ unconfirmed: true });

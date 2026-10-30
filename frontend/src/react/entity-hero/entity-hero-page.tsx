@@ -83,7 +83,7 @@ export function EntityHeroPage({ kind, name, entity, feedNew, feedHost, actions,
               <div className="flex min-w-0 flex-wrap gap-2 text-caption-1-regular text-text-secondary">
                 {/* 账号名常是一长串无空格的英文，窄屏下得能在任意处折行。 */}
                 {entity.related_identities.map((identity) => {
-                  const text = `${identity.relation === 'same_person' ? '同一人' : '关联账号'}：${entityDisplayName(identity.kind, identity.canonical_name, identity.id)}`;
+                  const text = `${identity.relation === 'same_person' ? 'Same person' : 'Linked account'}: ${entityDisplayName(identity.kind, identity.canonical_name, identity.id)}`;
                   return (
                     <button type="button" key={identity.id} title={text}
                       className="min-w-0 max-w-full text-text-primary underline wrap-anywhere"
@@ -181,7 +181,7 @@ function AliasLine({ kind, entity, actions }: { kind: string; entity: EntityHero
         {line ? (
           <div data-meta-item="names">
             <Glyph name="id-card" />
-            <span data-alias-names="" title="别名">{line.names.map((one, at) => <span key={at} lang={textLang(one)}>{one}</span>)}</span>
+            <span data-alias-names="" title="Aliases">{line.names.map((one, at) => <span key={at} lang={textLang(one)}>{one}</span>)}</span>
             {line.rest > 0 ? (
               <MorePop id="entityAliasPop" hook="alias" rest={line.rest} label={`${line.rest.toLocaleString()} more aliases`}
                 heading={`${line.total.toLocaleString()} aliases`}>
@@ -269,9 +269,9 @@ function HeldAuthors({ follow, displayName, actions }: {
       {follow.held.map((group) => (
         <Note key={group.key} tone="info" title={`A follow has an author with the same name: ${group.name}`}
           action={<Button size="small" {...busyProps(busy === group.key)}
-            onClick={() => { void confirm(group.key, group.name) }}>是同一个人</Button>}>
-          {[group.providers.join(' · '), `${group.n.toLocaleString()} 项更新`].filter(Boolean).join(' · ')}
-          。和 {displayName} 是同一个人吗？
+            onClick={() => { void confirm(group.key, group.name) }}>Same person</Button>}>
+          {[group.providers.join(' · '), `${group.n.toLocaleString()} updates`].filter(Boolean).join(' · ')}
+          . Is it the same person as {displayName}?
         </Note>
       ))}
     </div>

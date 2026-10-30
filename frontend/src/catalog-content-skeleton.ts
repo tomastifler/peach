@@ -4,15 +4,15 @@ import { catalogTableSnapshot } from './react/catalog-grid/catalog-table-columns
 import { esc } from './core';
 import { COMPLETION_ROW_SKELETON_HTML, completionRowRemembered } from './react/library-processing/completion-row';
 
-/** 列表骨架一格的内容，壳与列表岛共用：名称格是缩略图、头像和标题署名两行，其余列一条短条。 */
+/** Content of one cell of the list skeleton, shared by the shell and the list island: the name cell is a thumbnail, an avatar and two lines of title and byline, and the other columns are one short bar. */
 export function catalogListSkeletonCellHtml(column: string): string {
   return column === 'name'
     ? '<span data-list-skeleton-name><i class="skeleton-sheen"></i><b class="skeleton-sheen"></b><span><i class="skeleton-sheen"></i><i class="skeleton-sheen"></i></span></span>'
     : '<i data-list-skeleton-bar class="skeleton-sheen"></i>';
 }
 
-/* 壳的列表骨架直接套真实表格的外框与 `bui-table` 类：工具栏一行、表头写真实列名、列宽按本机列偏好，
- * 列表岛接管后在真实表格里画同样的骨架行，数据到之前不换结构。 */
+/* The shell's list skeleton directly wraps the real table's frame and `bui-table` classes: one toolbar row, real column names in the header, and column widths per this machine's column preferences;
+ * after the list island takes over, it draws the same skeleton rows in the real table, so the structure does not change before the data arrives. */
 function catalogListSkeletonHtml(label: string): string {
   const columns = catalogTableSnapshot();
   const flexible = columns.some(column => column.width === null);
@@ -28,7 +28,7 @@ function catalogListSkeletonHtml(label: string): string {
     + `<colgroup>${cols}</colgroup><thead><tr>${head}</tr></thead><tbody>${row.repeat(6)}</tbody></table></div></div></div></div>`;
 }
 
-/** 馆藏与资料页按当前列表偏好使用同一份作品等待态。 */
+/** The library and profile pages use the same work waiting state per the current list preferences. */
 export function catalogContentSkeletonHtml(label: string, cardRatio: number): string {
   if (catalogView() === 'list') return catalogListSkeletonHtml(label);
   return skeletonHtml(label, { variant: 'cards', className: 'catalog-skeleton postercard-skeleton', cardRatio });

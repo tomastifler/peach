@@ -380,7 +380,7 @@ class ProcessingControlTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             _processing_request(contract,self.config,{}, {'scope':'new','retry':[]})
         remember(db,completed=[3])
-        with self.assertRaisesRegex(ValueError,'暂无'):
+        with self.assertRaisesRegex(ValueError,'No newly imported movies'):
             _processing_request(contract,self.config,{}, {'scope':'new'})
 
     def test_new_asset_range_imports_a_legacy_scan_checkpoint(self):
@@ -418,7 +418,7 @@ class ProcessingControlTests(unittest.TestCase):
             self.assertEqual(first['rows']+last['rows'],state['issues'])
             state['issues'].append({'asset_id':None,'message':'恢复后新增的问题'})
             _save(state_path(self.config),state)
-            with self.assertRaisesRegex(ValueError,'变化'):
+            with self.assertRaisesRegex(ValueError,'changed'):
                 q_library_processing_issues(contract,{'job_id':'legacy','offset':200,'revision':first['revision']})
 
     def test_retry_set_removes_retired_assets_without_testing_mount_availability(self):
@@ -778,7 +778,7 @@ class ProcessingControlTests(unittest.TestCase):
                                    issue=lambda row, message, **values: issues.append((message, values)))
         self.assertEqual((result.scanned, result.scanned_bytes), (3, 12))
         self.assertEqual(len(issues), 1)
-        self.assertIn('记录 1、2', issues[0][0])
+        self.assertIn('records 1, 2', issues[0][0])
         self.assertEqual(issues[0][1]['action'], 'scanning_files')
         with closing(sqlite3.connect(self.db)) as connection:
             self.assertEqual(connection.execute('SELECT count(*) FROM asset').fetchone()[0], 4)

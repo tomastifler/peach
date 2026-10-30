@@ -1,4 +1,4 @@
-"""通过系统文件关联或已安装的播放器打开已授权媒体。"""
+"""Open authorized media through the system file association or an installed player."""
 from __future__ import annotations
 
 import os
@@ -15,7 +15,7 @@ def available() -> bool:
 
 
 def installed() -> dict[str, tuple[str, str]]:
-    """固定播放器名单；路径只来自系统与已知安装目录。"""
+    """Fixed player list; paths come only from the system and known install directories."""
     if not available():
         return {}
     result = {}
@@ -44,16 +44,16 @@ def installed() -> dict[str, tuple[str, str]]:
 
 def open_media(path: Path, player: str = 'default') -> None:
     if not available():
-        raise ValueError('此部署请使用网络播放地址或 M3U 播放列表')
+        raise ValueError('For this deployment, use the network playback URL or an M3U playlist')
     path = normalized_path(path)
     if not path.is_file() or path.suffix.lower() not in {
         '.mp4', '.m4v', '.mkv', '.webm', '.avi', '.mov', '.wmv', '.flv', '.ts', '.mts', '.m2ts',
         '.mpg', '.mpeg', '.vob', '.iso', '.mp3', '.m4a', '.flac', '.wav', '.ogg', '.opus',
     }:
-        raise ValueError('此文件请使用网络播放地址或 M3U 播放列表')
+        raise ValueError('For this file, use the network playback URL or an M3U playlist')
     chosen = installed().get(player) if player != 'default' else None
     if player != 'default' and chosen is None:
-        raise ValueError('播放器未安装，请重新选择')
+        raise ValueError('Player not installed; please choose again')
     if sys.platform == 'darwin':
         command = ['/usr/bin/open']
         if chosen:

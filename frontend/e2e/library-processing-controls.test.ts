@@ -28,7 +28,7 @@ describe('扫描与采集控制', () => {
     const { page } = opened;
     try {
       const dock = page.locator('[data-processing-dock]');
-      await dock.getByRole('button', { name: '跳过这部', exact: true }).waitFor();
+      await dock.getByRole('button', { name: 'Skip this one', exact: true }).waitFor();
       assert.equal(await dock.locator('xpath=ancestor::*[@data-sonner-toast]').getAttribute('data-dismissible'), 'false');
       const row = page.locator('[data-note-layout]').filter({ hasText: 'JavDB 迟迟没有返回资料' }).first();
       const boxes = await row.evaluate(node => ({ text: node.firstElementChild!.getBoundingClientRect().toJSON(),
@@ -41,10 +41,10 @@ describe('扫描与采集控制', () => {
       await page.mouse.move(box.x - 60, box.y + 20);
       await page.mouse.up();
       assert.ok(await dock.isVisible());
-      await dock.getByRole('button', { name: '跳过这部', exact: true }).click();
+      await dock.getByRole('button', { name: 'Skip this one', exact: true }).click();
       await dock.getByText(/作品乙/).waitFor();
       assert.ok(await dock.isVisible());
-      assert.equal(await dock.getByRole('button', { name: '跳过这部', exact: true }).count(), 0);
+      assert.equal(await dock.getByRole('button', { name: 'Skip this one', exact: true }).count(), 0);
       assert.ok((await layout(page)).scrollWidth <= viewport.width);
     } finally { await opened.close() }
   });
@@ -62,7 +62,7 @@ describe('扫描与采集控制', () => {
       const dock = page.locator('[data-processing-dock]');
       const restore = page.getByRole('button', { name: '显示进度浮窗', exact: true });
       try {
-        await dock.getByRole('button', { name: '隐藏任务提示', exact: true }).click();
+        await dock.getByRole('button', { name: 'Hide job notice', exact: true }).click();
         await dock.waitFor({ state: 'hidden' });
         await restore.waitFor();
         state = { ...state, status: 'paused', checked: 5 };
@@ -71,8 +71,8 @@ describe('扫描与采集控制', () => {
         assert.equal(await dock.count(), 0);
         await restore.click();
         await dock.waitFor();
-        await dock.getByText('扫描与采集已暂停', { exact: true }).waitFor();
-        await dock.getByRole('button', { name: '隐藏任务提示', exact: true }).click();
+        await dock.getByText('Scan and collect paused', { exact: true }).waitFor();
+        await dock.getByRole('button', { name: 'Hide job notice', exact: true }).click();
         await dock.waitFor({ state: 'hidden' });
         state = { ...state, status: 'running', job_id: 'visibility-next' };
         await dock.waitFor();
@@ -84,7 +84,7 @@ describe('扫描与采集控制', () => {
 
     it(`${viewport.name}：资源提示、粗估、模式切换与暂停继续`, async () => {
       let state = { status: 'idle', job_id: '', checked: 0, total: 100, speed_mode: 'standard',
-        steps: [{ id: 'sources', label: '扫描文件', status: 'complete' },
+        steps: [{ id: 'sources', label: 'Scanning files', status: 'complete' },
           { id: 'collect', label: '采集外部资料与封面', status: 'current' }],
         current_asset_name: '', current_action: '', stage: '',
         stalled: false, waited_seconds: 0,
@@ -137,39 +137,39 @@ describe('扫描与采集控制', () => {
         await card.waitFor();
         await settle(page);
         assert.equal(await card.locator('[data-processing-controls]').count(), 0);
-        assert.equal(await card.getByRole('button', { name: '同步新增文件', exact: true }).locator('svg').count(), 0);
-        await card.getByRole('button', { name: '更多同步方式', exact: true }).click();
-        const menu = page.getByRole('dialog', { name: '同步方式', exact: true });
+        assert.equal(await card.getByRole('button', { name: 'Sync new files', exact: true }).locator('svg').count(), 0);
+        await card.getByRole('button', { name: 'More sync options', exact: true }).click();
+        const menu = page.getByRole('dialog', { name: 'Sync options', exact: true });
         assert.equal(await menu.locator('svg').count(), 0);
         assert.equal(await menu.getByRole('button').count(), 7);
-        assert.equal(await menu.getByRole('group', { name: '日常同步', exact: true }).getByRole('button').count(), 2);
-        assert.equal(await menu.getByRole('group', { name: '全库维护', exact: true }).getByRole('button').count(), 5);
-        for (const label of ['仅发现新增文件', '补全待处理影片', '同步整个媒体库', '仅扫描文件', '补全资料与预览', '仅补全影片资料', '仅补全预览图']) {
+        assert.equal(await menu.getByRole('group', { name: 'Daily sync', exact: true }).getByRole('button').count(), 2);
+        assert.equal(await menu.getByRole('group', { name: 'Whole-library maintenance', exact: true }).getByRole('button').count(), 5);
+        for (const label of ['Discover new files only', 'Complete pending videos', 'Sync the whole library', 'Scan files only', 'Complete details and previews', 'Complete video details only', 'Complete preview images only']) {
           await menu.getByText(label, { exact: true }).waitFor();
         }
-        await menu.getByText('为已入库的本地视频生成九宫格', { exact: true }).waitFor();
+        await menu.getByText('Generate contact sheets for local videos already in the library', { exact: true }).waitFor();
         await menu.screenshot({ path: path.join(artifacts, `${viewport.name}-processing-menu.png`) });
         await menu.press('Escape');
-        await card.getByRole('button', { name: '同步新增文件', exact: true }).click();
-        const dialog = page.getByRole('dialog', { name: '同步新增文件', exact: true });
+        await card.getByRole('button', { name: 'Sync new files', exact: true }).click();
+        const dialog = page.getByRole('dialog', { name: 'Sync new files', exact: true });
         await dialog.waitFor();
-        await dialog.getByRole('region', { name: '磁盘预估' }).waitFor();
-        const columns = await dialog.locator('[aria-label="流量预估"], [aria-label="磁盘预估"]').evaluateAll(elements =>
+        await dialog.getByRole('region', { name: 'Disk estimate' }).waitFor();
+        const columns = await dialog.locator('[aria-label="Traffic estimate"], [aria-label="Disk estimate"]').evaluateAll(elements =>
           elements.map(element => { const r = element.getBoundingClientRect(); return { top:r.top,left:r.left,right:r.right } }));
         assert.equal(columns.length, 2);
         assert.ok(Math.abs(columns[0].top - columns[1].top) < 1, JSON.stringify(columns));
         assert.ok(columns[1].left >= columns[0].right, JSON.stringify(columns));
-        await dialog.getByText('网盘缓存占用待确认', { exact: true }).waitFor();
+        await dialog.getByText('Cloud drive cache usage to be confirmed', { exact: true }).waitFor();
         assert.match(await dialog.innerText(), /空间不足，还差/);
         assert.match(await dialog.innerText(), /可能让电脑变慢/);
         assert.equal(writes.length, 0);
         const modalLayout = await layout(page);
         assert.ok(modalLayout.scrollWidth <= modalLayout.viewportWidth, JSON.stringify(modalLayout));
         assert.deepEqual(modalLayout.offenders, []);
-        await dialog.getByText('正在发现新增文件，数量和预估仍会变化…', { exact: true }).waitFor();
-        assert.equal(await dialog.getByRole('button', { name: '同步新增文件', exact: true }).isEnabled(), true);
+        await dialog.getByText('Discovering new files; counts and estimates may still change…', { exact: true }).waitFor();
+        assert.equal(await dialog.getByRole('button', { name: 'Sync new files', exact: true }).isEnabled(), true);
         await dialog.getByText('已发现视频 10 个', { exact: true }).waitFor();
-        const libraryLink = dialog.getByRole('link', { name: '管理媒体库', exact: true });
+        const libraryLink = dialog.getByRole('link', { name: 'Manage libraries', exact: true });
         assert.equal(await libraryLink.getAttribute('href'), '/settings/library');
         const footerOrder = await dialog.locator('.geist-modal-footer').evaluate(el => {
           const link = el.querySelector('a')!.getBoundingClientRect();
@@ -179,17 +179,17 @@ describe('扫描与采集控制', () => {
         assert.equal(footerOrder, true, '管理媒体库与主按钮在右下同排居中');
         await libraryLink.click();
         await page.waitForURL('**/settings/library');
-        assert.equal(await page.getByRole('dialog', { name: '同步新增文件', exact: true }).count(), 0);
+        assert.equal(await page.getByRole('dialog', { name: 'Sync new files', exact: true }).count(), 0);
         const inventoryAtClose = inventoryReads;
         await page.waitForTimeout(600);
         assert.equal(inventoryReads, inventoryAtClose);
         assert.equal(writes.length, 0);
         await page.goto(new URL('/data-cleanup', page.url()).href);
         await card.waitFor();
-        await card.getByRole('button', { name: '同步新增文件', exact: true }).click();
-        await dialog.getByText('正在发现新增文件，数量和预估仍会变化…', { exact: true }).waitFor();
+        await card.getByRole('button', { name: 'Sync new files', exact: true }).click();
+        await dialog.getByText('Discovering new files; counts and estimates may still change…', { exact: true }).waitFor();
         inventoryComplete = true;
-        await dialog.getByText('预计流量', { exact: true }).waitFor();
+        await dialog.getByText('Estimated traffic', { exact: true }).waitFor();
         await dialog.getByText('JAV 文件 60 个 · 不同番号 40 个', { exact: true }).waitFor();
         const centering = await dialog.locator('.processing-effort-panel').evaluate(el => {
           const panel = el.getBoundingClientRect();
@@ -204,7 +204,7 @@ describe('扫描与采集控制', () => {
         assert.equal(await disclosure.getAttribute('aria-expanded'), 'false');
         assert.equal(await disclosure.locator('svg').count(), 1);
         await page.emulateMedia({ reducedMotion: 'no-preference' });
-        await dialog.getByText('查看明细', { exact: true }).click();
+        await dialog.getByText('View details', { exact: true }).click();
         assert.equal(await disclosure.getAttribute('aria-expanded'), 'true');
         const sources = dialog.locator('[data-processing-traffic] li');
         assert.match(await sources.nth(0).innerText(), /示例网盘 A[\s\S]*代理/);
@@ -234,7 +234,7 @@ describe('扫描与采集控制', () => {
         await dialog.screenshot({ path: path.join(artifacts, `${viewport.name}-high-startup.png`) });
         await startupSlider.press('Home');
         await dialog.screenshot({ path: path.join(artifacts, `${viewport.name}-startup.png`) });
-        await dialog.getByRole('button', { name: '同步新增文件', exact: true }).click();
+        await dialog.getByRole('button', { name: 'Sync new files', exact: true }).click();
         await card.getByText('预计剩余约 20–40 分钟（粗估）', { exact: true }).waitFor();
         assert.deepEqual(writes[0], { incremental: true, speed_mode: 'low' });
         const dock = page.locator('#toasts [data-processing-dock]');
@@ -243,7 +243,7 @@ describe('扫描与采集控制', () => {
           estimated_min_bytes: 2097152, metered_estimated_min_bytes: 1048576, unknown_files: false,
           sources: state.traffic.sources.map(source => ({ ...source, used_bytes: 1048576, estimated_min_bytes: 1048576 })) };
         await dock.getByText('约 2MB', { exact: true }).waitFor();
-        const pause = dock.getByRole('button', { name: '暂停', exact: true });
+        const pause = dock.getByRole('button', { name: 'Pause', exact: true });
         assert.equal(await pause.innerText(), '');
         assert.equal(await pause.locator('svg').count(), 1);
         await dock.getByRole('button', { name: 'Pause', exact: true }).click();
@@ -253,7 +253,7 @@ describe('扫描与采集控制', () => {
         await resume.waitFor();
         assert.equal(await resume.innerText(), '');
         assert.equal(await resume.locator('svg').count(), 1);
-        assert.equal(await card.getByRole('button', { name: '同步新增文件', exact: true }).getAttribute('aria-disabled'), 'true');
+        assert.equal(await card.getByRole('button', { name: 'Sync new files', exact: true }).getAttribute('aria-disabled'), 'true');
         await page.reload();
         await resume.waitFor();
         const lowSpeed = dock.getByRole('button', { name: 'Processing speed: Low usage' });
@@ -297,7 +297,7 @@ describe('扫描与采集控制', () => {
         assert.ok(writes.some(body => body.action === 'resume' && body.job_id === 'controlled'));
         assert.ok(writes.some(body => body.action === 'set_speed' && body.speed_mode === 'standard'));
         // 同步入口在后台任务期间保持忙态；这里只等待有限的控制请求结束。
-        await settle(page, 'section[aria-label="扫描与采集"] [data-processing-traffic]');
+        await settle(page, 'section[aria-label="Scan and collection"] [data-processing-traffic]');
         const measured = await layout(page);
         assert.ok(measured.scrollWidth <= measured.viewportWidth, JSON.stringify(measured));
         assert.deepEqual(measured.offenders, []);
@@ -311,17 +311,17 @@ describe('扫描与采集控制', () => {
         await page.goto(new URL('/', page.url()).href);
         const completion = page.locator('[data-library-completion]');
         await completion.getByText(/1 部暂无预览，当前任务结束后可单独补全/).waitFor();
-        const complete = completion.getByRole('button', { name: '同步这些影片', exact: true });
+        const complete = completion.getByRole('button', { name: 'Sync these videos', exact: true });
         assert.equal(await complete.getAttribute('aria-disabled'), 'true');
         const writesBefore = writes.length;
         await complete.dispatchEvent('click');
-        await completion.getByRole('button', { name: '更多同步方式', exact: true }).dispatchEvent('click');
-        assert.equal(await completion.getByRole('button', { name: '更多同步方式', exact: true }).getAttribute('aria-expanded'), 'false');
+        await completion.getByRole('button', { name: 'More sync options', exact: true }).dispatchEvent('click');
+        assert.equal(await completion.getByRole('button', { name: 'More sync options', exact: true }).getAttribute('aria-expanded'), 'false');
         assert.equal(writes.length, writesBefore, '运行期间不能追加或替换补全任务');
-        await dock.getByRole('button', { name: '暂停', exact: true }).waitFor();
+        await dock.getByRole('button', { name: 'Pause', exact: true }).waitFor();
         await page.emulateMedia({ reducedMotion: 'no-preference' });
-        await dock.getByText('查看明细', { exact: true }).click();
-        assert.equal(await dock.getByRole('button', { name: '收起明细', exact: true }).getAttribute('aria-expanded'), 'true');
+        await dock.getByText('View details', { exact: true }).click();
+        assert.equal(await dock.getByRole('button', { name: 'Hide details', exact: true }).getAttribute('aria-expanded'), 'true');
         const expandedHeight = (await dock.boundingBox())!.height;
         const noticeMotion = await dock.evaluate(el => ({
           frame: getComputedStyle(el.querySelector('[data-processing-body]')!).transitionProperty,
@@ -331,12 +331,12 @@ describe('扫描与采集控制', () => {
         assert.ok(noticeMotion.frame.includes('height'));
         assert.equal(noticeMotion.arrow, 'transform');
         assert.notEqual(noticeMotion.arrowDuration, '0s');
-        await dock.getByRole('button', { name: '收起任务详情' }).click();
-        assert.equal(await dock.getByRole('button', { name: '查看明细', exact: true }).getAttribute('aria-expanded'), 'false');
+        await dock.getByRole('button', { name: 'Collapse job details' }).click();
+        assert.equal(await dock.getByRole('button', { name: 'View details', exact: true }).getAttribute('aria-expanded'), 'false');
         assert.ok((await dock.boundingBox())!.height < expandedHeight);
-        await dock.getByRole('button', { name: '展开任务详情' }).click();
-        assert.equal(await dock.getByRole('button', { name: '查看明细', exact: true }).getAttribute('aria-expanded'), 'false');
-        await dock.getByRole('button', { name: '收起任务详情' }).click();
+        await dock.getByRole('button', { name: 'Expand job details' }).click();
+        assert.equal(await dock.getByRole('button', { name: 'View details', exact: true }).getAttribute('aria-expanded'), 'false');
+        await dock.getByRole('button', { name: 'Collapse job details' }).click();
         assert.equal(await dock.locator('[data-processing-toggle] > svg').evaluate(el => {
           el.getAnimations().forEach(animation => animation.finish());
           return getComputedStyle(el).transform;
@@ -413,7 +413,7 @@ describe('扫描与采集控制', () => {
         await dock.getByRole('button', { name: 'Expand task details' }).waitFor();
         assert.equal(await dock.count(), 1, '换页保留同一张任务卡');
         await dock.getByRole('button', { name: 'Expand task details' }).click();
-        assert.equal(await dock.locator('[data-processing-step="complete"] s').innerText(), '扫描文件');
+        assert.equal(await dock.locator('[data-processing-step="complete"] s').innerText(), 'Scanning files');
         assert.equal(await dock.locator('[aria-current="step"] s').count(), 0);
         await page.evaluate(async () => {
           const entry = '/dist/peach-app.js', ui = await import(entry);
@@ -442,13 +442,13 @@ describe('扫描与采集控制', () => {
           current_asset_name: '2026-07-15 创作者合集 多机位完整版.mp4',
           waited_seconds: 33,
           eta_seconds_min: 63, eta_seconds_max: 94 };
-        await dock.getByText('等待当前文件响应，剩余时间待更新', { exact: true }).waitFor();
+        await dock.getByText('Waiting for the current file to respond; remaining time to be updated', { exact: true }).waitFor();
         await page.waitForFunction(() => document.querySelector('[data-processing-dock]')?.textContent?.includes('已等待 33 秒'));
         await page.waitForFunction(() => {
           const elapsed = document.querySelector('[data-processing-dock]')?.textContent?.match(/已等待 (\d+) 秒/);
           return elapsed && Number(elapsed[1]) >= 34;
         }, undefined, { timeout: 5000 });
-        assert.match(await dock.innerText(), /读取配套图片/);
+        assert.match(await dock.innerText(), /Reading companion images/);
         assert.doesNotMatch(await dock.innerText(), /预计剩余/);
         const stalledLayout = await layout(page);
         assert.ok(stalledLayout.scrollWidth <= stalledLayout.viewportWidth, JSON.stringify(stalledLayout));

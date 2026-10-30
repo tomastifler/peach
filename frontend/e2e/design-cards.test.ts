@@ -270,7 +270,7 @@ describe('设计决定：作品卡、管理页与复核', () => {
       const lede = document.querySelector<HTMLElement>('[data-manage-lede]');
       const card = document.querySelector('#grid .catalog-skeleton .skeletoncard')
         || document.querySelector('#grid [data-media-card][data-variant="resource"]');
-      /* 读数与「清空回收站」各自的竖直中线：两者说的是同一批文件，同在说明行一行里。 */
+      /* 读数与「Empty trash」各自的竖直中线：两者说的是同一批文件，同在说明行一行里。 */
       const middle = (element: Element | null | undefined) => {
         if (!element) return null;
         const rect = element.getBoundingClientRect();
@@ -385,7 +385,7 @@ describe('设计决定：作品卡、管理页与复核', () => {
       assert.equal(read.count, await tokenColor(page, 'body', '--ink-2'), '批量条的计数不是次级墨色');
       assert.match(read.tokens[0], /^linear-gradient/, `--board-red 没解析成渐变：${read.tokens[0]}`);
       assert.deepEqual(read.batch, read.tokens, `批量条「彻底删除」的红不是 --board-red 那一组：${JSON.stringify(read)}`);
-      assert.deepEqual(read.empty, read.tokens, `「清空回收站」的红不是 --board-red 那一组：${JSON.stringify(read)}`);
+      assert.deepEqual(read.empty, read.tokens, `「Empty trash」的红不是 --board-red 那一组：${JSON.stringify(read)}`);
     } finally {
       await opened.close();
     }
@@ -711,7 +711,7 @@ describe('设计决定：作品卡、管理页与复核', () => {
             footerInside: footer.top >= box.top && footer.bottom <= box.bottom + 1,
             overflow: node.scrollWidth > node.clientWidth,
             pageOverflow: document.documentElement.scrollWidth > innerWidth,
-            currentInBody: body.contains(node.querySelector('[aria-label="当前信息"]')),
+            currentInBody: body.contains(node.querySelector('[aria-label="Current info"]')),
             sourceOverflow: [...node.querySelectorAll('label:has(input[type="radio"])')]
               .some(label => label.scrollWidth > label.clientWidth + 1) };
         });
@@ -726,7 +726,7 @@ describe('设计决定：作品卡、管理页与复核', () => {
         unmapped_genres: ['アクメ・オーガズム', '美少女電影'] }] };
       const opened = await openReview(browser, [row], viewport);
       try {
-        const group = opened.page.getByRole('group', { name: '未收录 genre', exact: true });
+        const group = opened.page.getByRole('group', { name: 'Unlisted genre', exact: true });
         const rows = group.getByRole('listitem');
         assert.equal(await rows.count(), 2);
         const dividers = await rows.evaluateAll(nodes => nodes.map(node => {
@@ -865,7 +865,7 @@ describe('设计决定：作品卡、管理页与复核', () => {
       await opened.page.waitForFunction(() => !document.querySelector('[data-review-key] .ui-can-scroll-bottom'));
       await scroller.locator('[data-scroll-test]').evaluate((node) => node.remove());
       await opened.page.waitForFunction(() => !document.querySelector('[data-review-key] [data-scroll-edges]'));
-      const current = await card.getByRole('region', { name: '当前信息' }).evaluate((node) => {
+      const current = await card.getByRole('region', { name: 'Current info' }).evaluate((node) => {
         const style = getComputedStyle(node);
         return { inBody: !!node.closest('[data-overlay-scrollbar]'), overflow: style.overflowY,
           areas: node.closest('section[data-review-key]')!.querySelectorAll('[data-overlay-scrollbar]').length };
@@ -1130,7 +1130,7 @@ describe('设计决定：作品卡、管理页与复核', () => {
     try {
       const page = opened.page;
       const controls = {
-        检查全部: page.locator('button[aria-label="Check all"]'),
+        'Check all': page.locator('button[aria-label="Check all"]'),
         // 两枚图标键拼成一组，对齐的是整组的外框，不是组里单个键。
         版式开关: page.locator('[aria-label="Follow list layout"]'),
         排序框: page.locator('button[aria-label="Follow list sort"]'),
@@ -1150,7 +1150,7 @@ describe('设计决定：作品卡、管理页与复核', () => {
   for (const viewport of [DESKTOP, MOBILE]) {
     it(`关注列表骨架的偏好控件和接管后同一副长相，等数据的操作键是禁用态（${viewport.name}）`, { timeout: 60_000 }, async () => {
       /* 骨架与真页面各量一遍。版式、排序和方向是这台浏览器的偏好，骨架里就是最终那一档；
-         检查全部、全部收起和行尾的移除键要等名单，骨架里是禁用态，只有尺寸与接管后一致。
+         Check all、全部收起和行尾的移除键要等名单，骨架里是禁用态，只有尺寸与接管后一致。
          窄屏上工具行收成纯图标，两边按同一条线收，尺寸也要对得上。 */
       const opened = await visit(browser, '/subscriptions', viewport);
       try {
@@ -1161,12 +1161,12 @@ describe('设计决定：作品卡、管理页与复核', () => {
         await page.locator('[data-skeleton="board/subscriptions"] .ui-follow-skeleton-toolbar').waitFor({ timeout: 15_000 });
         const toolbar = '[data-skeleton] .ui-follow-skeleton-toolbar';
         const skeleton = await controlFaces(page, {
-          检查全部: `${toolbar} [data-follow-toolbar-actions] > button:nth-of-type(1)`,
+          'Check all': `${toolbar} [data-follow-toolbar-actions] > button:nth-of-type(1)`,
           默认视图: `${toolbar} [data-button-group] > button:first-child`,
           表格视图: `${toolbar} [data-button-group] > button:last-child`,
           排序框: `${toolbar} button[aria-haspopup="listbox"]`,
           方向键: `${toolbar} [data-follow-toolbar-controls] > span:last-of-type > button:last-child`,
-          全部收起: `${toolbar} [data-follow-toolbar-controls] > button`,
+          'Collapse all': `${toolbar} [data-follow-toolbar-controls] > button`,
           移除来源: '[data-skeleton] .follow-skeleton-source [data-follow-source-controls] > span:last-child > button:last-child',
         });
         const expected = await disabledTokens(page);
@@ -1177,15 +1177,15 @@ describe('设计决定：作品卡、管理页与复核', () => {
         await page.locator('section[aria-label="Followed sources of kou"]').waitFor({ timeout: 15_000 });
         await settle(page);
         const final = await controlFaces(page, {
-          检查全部: 'button[aria-label="Check all"]',
+          'Check all': 'button[aria-label="Check all"]',
           默认视图: '[aria-label="Follow list layout"] > button:first-child',
           表格视图: '[aria-label="Follow list layout"] > button:last-child',
           排序框: 'button[aria-label="Follow list sort"]',
           方向键: 'button[aria-label^="Sort by Last checked"]',
-          全部收起: 'button[aria-label="Collapse all"]',
+          'Collapse all': 'button[aria-label="Collapse all"]',
           移除来源: '[data-source-divider] [data-follow-source-controls] > span:last-child > button:last-child',
         });
-        const waitsForData = new Set(['检查全部', '全部收起', '移除来源']);
+        const waitsForData = new Set(['Check all', 'Collapse all', '移除来源']);
         for (const name of Object.keys(final)) {
           assert.ok(final[name], `接管后找不到 ${name}`);
           if (waitsForData.has(name)) {

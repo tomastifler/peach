@@ -64,7 +64,7 @@ it('从想要分区返回馆藏时打开 JAV 目录', async () => {
 
 it('发现按范围读取，清除文字和标签恢复列表，卡片打开对应详情', async () => {
   const navigate = vi.fn();
-  const common = { title: '示例作品', performers: '女优', studio: '厂牌', has_cover: false,
+  const common = { title: '示例作品', performers: '女优', studio: 'Studios', has_cover: false,
     release_date: '2010-01-01', wanted: false, reasons: ['常看的厂牌：厂牌'] };
   const fetcher = vi.fn(async (url: string) => ({ ok: true, status: 200, json: async () => ({
     items: url.includes('scope=library') ? [{ ...common, id: 22, asset_id: 22, code: 'ABC-022', tags: ['恋足'] }]
@@ -75,7 +75,7 @@ it('发现按范围读取，清除文字和标签恢复列表，卡片打开对�
   const host = await mount(<QueryClientProvider client={queryClient}><JavPage tab="discover" readOnly navigate={navigate} receipt={vi.fn()} /></QueryClientProvider>);
   await settle();
   expect(host.querySelectorAll('[data-jav-card]')).toHaveLength(2);
-  expect(actionOrder(host.querySelector('[data-jav-card] [data-jav-actions]'))).toEqual(['作品来源', '想要', '查找资源']);
+  expect(actionOrder(host.querySelector('[data-jav-card] [data-jav-actions]'))).toEqual(['Work source', 'Want', 'Find resources']);
   expect(host.querySelector('[data-jav-card] h3')?.textContent).toContain('ABC-001');
   await click(host.querySelector('[data-jav-card] [data-media-tag]'));
   expect(host.querySelectorAll('[data-jav-card]')).toHaveLength(1);
@@ -99,7 +99,7 @@ it('没有推荐时空态的查看口味在左，主入口在右', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ items: [] }) })));
   const host = await mount(<QueryClientProvider client={queryClient}><JavPage tab="discover" readOnly navigate={vi.fn()} receipt={vi.fn()} /></QueryClientProvider>);
   await settle();
-  expect(actionOrder(host.querySelector('[data-empty-state]'))).toEqual(['查看口味', '浏览馆藏']);
-  const main = [...host.querySelectorAll('[data-empty-state] a')].find((link) => link.textContent === '浏览馆藏');
+  expect(actionOrder(host.querySelector('[data-empty-state]'))).toEqual(['View taste', 'Browse library']);
+  const main = [...host.querySelectorAll('[data-empty-state] a')].find((link) => link.textContent === 'Browse library');
   expect(main?.className).toContain('bg-button-primary');
 });

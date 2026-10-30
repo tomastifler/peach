@@ -254,7 +254,7 @@ class ResourceJunkQueueTests(unittest.TestCase):
         by_id = {item["id"]: item for item in result["items"]}
         self.assertIn("URL shortcut", by_id[3]["why"])
         self.assertEqual(by_id[3]["junk_kind"], "url")
-        self.assertIn("The whole name is promotional text", by_id[2]["why"])
+        self.assertIn("The whole name is promo text", by_id[2]["why"])
         self.assertNotIn(6, by_id)
         self.assertNotIn(7, by_id)
         self.assertTrue(all("path" not in item for item in result["items"]))
@@ -287,7 +287,7 @@ class ResourceJunkQueueTests(unittest.TestCase):
             "海贼王3D版 成人欲海狂潮 黄 游", "附件甲", "附件乙", "附件丙", "附件丁", "附件戊"))
         items = q_ads(self.contract)["items"]
         self.assertEqual({row["id"] for row in items}, set(range(301, 307)))
-        self.assertTrue(all("6 条极短小附件" in row["why"] for row in items))
+        self.assertTrue(all("6 very short, small attachments" in row["why"] for row in items))
         self.assertTrue(all(web_batch.JUNK_REVIEW_SCORE <= row["score"] < web_batch.AUTO_TRASH_SCORE
                             for row in items))
         self.assertEqual(junk.isolate(self.db_path, asset_ids=[row['id'] for row in items])['isolated'], 0)
@@ -336,7 +336,7 @@ class ResourceJunkQueueTests(unittest.TestCase):
             connection.commit()
         items = q_ads(self.contract)["items"]
         self.assertEqual({row["id"] for row in items}, {601, 611, 621})
-        self.assertTrue(all("3 个发行目录" in row["why"] for row in items))
+        self.assertTrue(all("3 release directories" in row["why"] for row in items))
         self.assertEqual(junk.isolate(self.db_path, asset_ids=[row['id'] for row in items])['isolated'], 0)
 
     def test_cross_release_spread_requires_full_matching_measurements(self):
@@ -455,8 +455,8 @@ class ResourceJunkQueueTests(unittest.TestCase):
         self.assertNotIn(51, {item["id"] for item in result["items"]})
         by_id = {item["id"]: item for item in result["items"]}
         # 游戏名有六个字，单看名字只够中间档；同目录另外九个同类推广名补齐证据。
-        self.assertIn("9 more promotional names of the same kind in the same directory", by_id[38]["why"])
-        self.assertIn("The whole name is promotional text", by_id[30]["why"])
+        self.assertIn("The same directory has another 9 similar promo names", by_id[38]["why"])
+        self.assertIn("The whole name is promo text", by_id[30]["why"])
 
     def test_bundled_photo_set_is_a_resource_not_an_ad(self):
         """域名+序号是打包渠道给整包起的名；几十上百张成套的图是资源。"""
@@ -541,9 +541,9 @@ class ResourceJunkQueueTests(unittest.TestCase):
             {102, 103, 104, 105, 106},
         )
         by_id = {item["id"]: item for item in result["items"]}
-        self.assertIn("Small decorative image", by_id[102]["why"])
-        self.assertIn("Promotional brand name", by_id[103]["why"])
-        self.assertIn("web page", by_id[104]["why"])
+        self.assertIn("Small decorative-symbol image", by_id[102]["why"])
+        self.assertIn("Promo brand name", by_id[103]["why"])
+        self.assertIn("Web archive", by_id[104]["why"])
 
     def test_brand_word_in_a_video_title_is_not_promo_by_itself(self):
         """`麻豆传媒` 一类品牌词也可以是正片标题的一部分，视频单独命中不算证据。"""
@@ -584,9 +584,9 @@ class ResourceJunkQueueTests(unittest.TestCase):
             db.commit()
         items = q_ads(self.contract, limit=200)['items']
         self.assertEqual([item['id'] for item in items], [201])
-        self.assertIn('导航图片', items[0]['why'])
+        self.assertIn('navigation image', items[0]['why'])
         self.assertEqual(junk._attachment_junk_reason('.gif', page + r'\1.gif', 974),
-                         '推广网页存档的横幅、标志或导航图片')
+                         'Banner, logo or navigation image of a promo web archive')
         self.assertEqual(junk._attachment_junk_reason('.gif', page + r'\1.gif', 6000), '')
         self.assertTrue(junk._attachment_junk_reason('.gif', page + r'\1000x90yunding.gif', 97843))
 

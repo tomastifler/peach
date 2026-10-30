@@ -13,7 +13,7 @@ web/vendor/videojs/** -text
 resources/marks/** -text
 resources/browser-icons/** -text
 
-# 构建产物与第三方自托管文件标成生成文件：GitHub 的 PR 与提交页默认折叠它们的 diff，
-# 评审先看到源码。只影响 GitHub 展示，本地 `git diff` 照常显示，dist 与源码不一致时仍看得见。
+# Build outputs and third-party self-hosted files are marked as generated: GitHub's PR and commit pages collapse their diffs by default,
+# so reviewers see the source first. This affects only GitHub's display; local `git diff` shows them as usual, and a mismatch between dist and source is still visible.
 web/dist/** linguist-generated=true
 web/vendor/** linguist-generated=true

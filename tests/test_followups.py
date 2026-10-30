@@ -222,7 +222,7 @@ class RunnerTests(LedgerTestCase):
         def busy_until_clear(_contract, key, _handle):
             attempts.append(key)
             if not clear.is_set():
-                raise Blocked("等待扫描与采集完成后继续")
+                raise Blocked("Waiting for scanning and collection to finish before continuing")
             return {"outcome": key}
 
         parent = self.parent()
@@ -237,7 +237,7 @@ class RunnerTests(LedgerTestCase):
             time.sleep(0.05)
             waiting = self.store.get(child)
             self.assertEqual(waiting.status, "pending")
-            self.assertEqual(waiting.progress_label, "等待扫描与采集完成后继续")
+            self.assertEqual(waiting.progress_label, "Waiting for scanning and collection to finish before continuing")
             self.assertEqual(attempts, ["ledger-a:1"])
             clear.set()
             self.wait_until_settled(parent.id)
@@ -250,7 +250,7 @@ class RunnerTests(LedgerTestCase):
 
         def busy(_contract, key, _handle):
             attempts.append(key)
-            raise JobDeferred("等待扫描与采集完成后继续")
+            raise JobDeferred("Waiting for scanning and collection to finish before continuing")
 
         parent = self.parent()
         with registered(echo_type("ledger-a", run=busy)):
@@ -633,7 +633,7 @@ class CoverFaceFollowupTests(LedgerTestCase):
     def test_no_face_on_any_cover_installs_nothing(self):
         self.work(1, "FC2-PPV-1", (1800, 1000))
         summary = self.run_followup()
-        self.assertEqual(summary["outcome"], "图库里没有这个名字，封面上没有能截的脸")
+        self.assertEqual(summary["outcome"], "图库里没有这个名字, no face could be cropped from the cover")
         self.assertFalse((self.avatars / f"performer-{self.person}.img").exists())
 
     def test_a_missing_face_model_is_flagged_and_not_recorded_as_tried(self):
@@ -648,7 +648,7 @@ class CoverFaceFollowupTests(LedgerTestCase):
 
         with mock.patch("peach.avatar_face.FaceProbe", Down):
             summary = self.run_followup()
-        self.assertEqual(summary["outcome"], "图库里没有这个名字，人脸模型不可用：取人脸模型失败：断网")
+        self.assertEqual(summary["outcome"], "图库里没有这个名字, face model unavailable: 取人脸模型失败：断网")
         self.assertIs(summary["face_match_unavailable"], True)
         from peach.followups import attempts_root
         self.assertFalse(any(attempts_root(self.root / "generated").glob("*")))
@@ -979,7 +979,7 @@ class FaceMatchFollowupTests(FaceStubCase):
         self.candidate("1-S1", (400, 600), self.HER)
         self.candidate("2-Ideapocket", (400, 600), self.HER)
         summary = self.run_followup()
-        self.assertEqual(summary["outcome"], "图库 2 张彼此认不出同一个人，封面上没有能截的脸")
+        self.assertEqual(summary["outcome"], "图库 2 张彼此认不出同一个人, no face could be cropped from the cover")
         self.assertFalse((self.avatars / f"performer-{self.person}.img").exists())
 
     def test_a_pair_among_strangers_is_a_minority_and_installs_nothing(self):
@@ -989,14 +989,14 @@ class FaceMatchFollowupTests(FaceStubCase):
         self.candidate("3-Moodyz", (400, 600), self.STRANGER)
         self.candidate("4-Fitch", (400, 600), self.HER_AGAIN)
         summary = self.run_followup()
-        self.assertEqual(summary["outcome"], "图库 4 张彼此认不出同一个人，封面上没有能截的脸")
+        self.assertEqual(summary["outcome"], "图库 4 张彼此认不出同一个人, no face could be cropped from the cover")
         self.assertFalse((self.avatars / f"performer-{self.person}.img").exists())
 
     def test_one_picture_alone_is_still_not_enough_without_a_cover(self):
         self.candidate("1-S1", (400, 600), self.HER)
         self.candidate("2-Ideapocket", (400, 600), self.BLANK)
         summary = self.run_followup()
-        self.assertEqual(summary["outcome"], "图库 2 张认不准，封面上没有能截的脸")
+        self.assertEqual(summary["outcome"], "图库 2 张认不准, no face could be cropped from the cover")
         self.assertFalse((self.avatars / f"performer-{self.person}.img").exists())
 
     def test_no_match_falls_back_to_the_cover_face(self):
@@ -1312,7 +1312,7 @@ class OffsiteCoverFaceTests(FaceStubCase):
     def test_without_an_avwikidb_id_nothing_is_fetched(self):
         self.listed("ABF-001", "118abf00001", self.HER)
         summary = self.run_followup()
-        self.assertEqual(summary["outcome"], "图库里没有这个名字，封面上没有能截的脸")
+        self.assertEqual(summary["outcome"], "图库里没有这个名字, no face could be cropped from the cover")
         self.assertEqual(self.fetched, [])
 
     def test_a_blocked_site_is_tried_again_next_round(self):
@@ -1601,7 +1601,7 @@ class ProcessLibraryTests(LedgerTestCase):
                         '种子导入跑完留下复核产物，哪怕这一轮没有可看的项')
         done = self.store.get(queued[1])
         self.assertEqual(done.status, 'succeeded')
-        self.assertEqual(done.result_summary['outcome'], '图库里没有这个名字，封面上没有能截的脸')
+        self.assertEqual(done.result_summary['outcome'], '图库里没有这个名字, no face could be cropped from the cover')
         self.assertEqual(self.store.get(queued[2]).result_summary['outcome'], '未取得')
         self.assertEqual(self.store.get(queued[3]).status, 'succeeded')
         self.assertFalse((self.root / 'generated' / 'avatars'

@@ -438,7 +438,7 @@ class SourceTransport:
         读的人要据以决定的是「现在重跑一遍」，不是去查哪里还有配额。"""
         source = source_for(request.url)
         if source == "javbus":
-            # 中文作品解析与连接检查共用语言偏好，封面请求也遵循来源策略。
+            # Chinese work parsing and connection checks share the language preference, and cover requests also follow the source policy.
             headers = {key: value for key, value in request.headers.items() if key.lower() != "accept-language"}
             request = HttpRequest(request.method, request.url,
                                   {**headers, "Accept-Language": "zh-CN,zh;q=0.9"}, request.body)

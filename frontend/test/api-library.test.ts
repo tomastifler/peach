@@ -51,7 +51,7 @@ describe('响应体读取期间取消请求', () => {
   for (const method of ['GET', 'POST'] as const) {
     it(`${method} 保留取消原因`, async () => {
       const controller = new AbortController();
-      const cancelled = new DOMException('已中止', 'AbortError');
+      const cancelled = new DOMException('Aborted', 'AbortError');
       let rejectBody!: (reason: unknown) => void;
       const body = new Promise<never>((_resolve, reject) => { rejectBody = reject });
       vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: () => body })));

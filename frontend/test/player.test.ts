@@ -236,9 +236,9 @@ it('画中画入口保持占位，媒体就绪后启用，浏览器不支持时�
   ready = 4; video.dispatchEvent(new Event('loadedmetadata'));
   expect(pip.disabled).toBe(false);
   await (pip.activate as (media: unknown) => Promise<unknown>)({});
-  expect(failure).toHaveBeenCalledWith('当前浏览器不支持画中画');
+  expect(failure).toHaveBeenCalledWith('This browser does not support picture-in-picture');
   expect(pip.disabled).toBe(true);
-  expect(pip.getAttribute('label')).toBe('当前浏览器不支持画中画');
+  expect(pip.getAttribute('label')).toBe('This browser does not support picture-in-picture');
   fire('dispose');
   expect(pip.activate).toBe(original);
 });

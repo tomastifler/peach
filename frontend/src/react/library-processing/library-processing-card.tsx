@@ -49,17 +49,17 @@ const profileText = (state: LibraryProcessingData) => {
   const conflicts = state.performer_profile_conflicts || 0;
   const failed = state.performer_profile_failed || 0;
   if (!aliases && !avatars && !conflicts && !failed) return '';
-  const parts = [`补齐女优资料：别名 ${aliases} 个，头像 ${avatars} 张`];
-  if (conflicts) parts.push(`${conflicts} 项同名人物资料需要确认是否为同一人`);
-  if (failed) parts.push(`${failed} 张头像未取得`);
-  return `${parts.join('，')}。`;
+  const parts = [`Filled in actress profiles: ${aliases} aliases, ${avatars} avatars`];
+  if (conflicts) parts.push(`${conflicts} same-name person profiles need confirmation as to whether they are the same person`);
+  if (failed) parts.push(`${failed} avatars unavailable`);
+  return `${parts.join(', ')}.`;
 };
 
 const receiptText = (state: LibraryProcessingData) =>
-  state.requested_stage === 'previews' ? `已生成 ${state.previews || 0} 部视频预览。`
-  : `已扫描 ${state.scanned || 0} 个文件，识别 ${state.identified || 0} 个番号，`
-  + `取得 ${state.candidates || 0} 组作品资料，自动保存 ${state.auto_applied || 0} 条。`
-  + (state.previews ? `已生成 ${state.previews} 部视频预览。` : '')
+  state.requested_stage === 'previews' ? `Generated ${state.previews || 0} video previews.`
+  : `Scanned ${state.scanned || 0} files, identified ${state.identified || 0} codes,`
+  + `obtained ${state.candidates || 0} sets of work details, auto-saved ${state.auto_applied || 0}.`
+  + (state.previews ? `Generated ${state.previews} video previews.` : '')
   + profileText(state);
 
 /** 卡片外面那一块：这一趟怎么了。逐条明细要展开才读，完整清单在状态给出的日志文件里。 */
@@ -77,7 +77,7 @@ function Outcome(
   const notes = notesLine(state.notes || {});
   const failed = !!problem || (!state.archived && state.status === 'failed');
   const partial = !problem && !state.archived && processingHasPartialResult(state);
-  /* 同一份日志只印一处：失败提示带着问题清单时归清单，跑完只剩「7 天内不再问」时归那条提示。 */
+  /* The same log is printed in only one place: with the issue list when a failure notice carries one, and with that notice when only "Don't ask again for 7 days" remains after a run. */
   const logInList = failed && !!details?.log;
   const slow = slowItem(state);
   /* 清单是这一页唯一自己滚的块，原生滚动条在这儿就是一条系统灰柱子。 */
@@ -88,17 +88,17 @@ function Outcome(
       {slow
         ? <SlowItemNote state={state} slow={slow} />
         : state.status === 'running' && state.stalled
-        ? <Note tone="warning" title="处理较慢">{STALLED_TEXT}</Note>
+        ? <Note tone="warning" title="Processing is slow">{STALLED_TEXT}</Note>
         : null}
       {failed
         ? <Note tone={partial ? 'warning' : 'error'} className="gap-0 p-3"
-            title={partial ? '处理已结束，部分项目需处理' : '处理未完成'}
+            title={partial ? 'Processing finished; some items need attention' : 'Processing did not finish'}
             action={<div className="flex flex-wrap items-center gap-2">
-              {partial ? <LinkButton href={ALL_CONTENT_URL} size="small" trailingIcon={RiArrowRightLine}>查看全部内容</LinkButton> : null}
-              {retryable ? <Button variant="secondary" size="small" aria-label="立即重试未完成项" onClick={onRetry}>立即重试</Button> : null}
+              {partial ? <LinkButton href={ALL_CONTENT_URL} size="small" trailingIcon={RiArrowRightLine}>View all content</LinkButton> : null}
+              {retryable ? <Button variant="secondary" size="small" aria-label="Retry unfinished items" onClick={onRetry}>Retry</Button> : null}
             </div>}
             extra={details
-              /* 三层东西叠在同一块提示里：一句结论、一份清单、一条日志地址。各自之间
+              /* Three things are stacked in one notice: a conclusion, a list and a log path. Between them
                  横一条自己颜色的发丝线，读的人才看得出哪一段结束了——只靠间距的话，
                  几十条同样长短的明细会连成一片。 */
               ? <div className="mt-3 border-t border-current/20 pt-3">
@@ -122,45 +122,45 @@ function Outcome(
                       </ul>
                     </div>
                     {details.log
-                      /* 日志地址与分隔线使用次级文字色。 */
+                      /* The log path and the divider use the secondary text color. */
                       ? <div className="mt-3 border-t border-current/20 pt-3 text-text-secondary">
-                          <PathLine path={details.log} prefix="完整记录：" className="text-caption-1-regular"
+                          <PathLine path={details.log} prefix="Full log: " className="text-caption-1-regular"
                             onRevealed={toast} />
                         </div>
                       : null}
                   </Disclosure>
                 </div>
               : null}>
-            {problem || state.error || '处理未完成，请重试'}
+            {problem || state.error || 'Processing did not finish; try again'}
             {partial ? `\n${PARTIAL_RESULT_TEXT}` : null}
           </Note>
         : null}
       {settled?.status === 'complete'
         ? <Note tone="success" title="Processing complete">{receiptText(settled)}</Note>
         : null}
-      {settled?.status === 'cancelled' ? <Note tone="neutral" title="任务已停止">
-        已取得的资料和预览已保留，不会自动继续这趟任务。
+      {settled?.status === 'cancelled' ? <Note tone="neutral" title="Job stopped">
+        Details and previews already obtained are kept, and this run will not continue automatically.
       </Note> : null}
-      {state.archived ? <Note tone="neutral">上一趟的问题提示已归档，历史记录仍保留。</Note> : null}
+      {state.archived ? <Note tone="neutral">The previous run's issue notice has been archived; the history is still kept.</Note> : null}
       {!processingActive(state) && (state.issue_count || state.status === 'failed') ? <div className="flex flex-wrap items-center gap-2">
         {state.issue_count ? <Button variant="secondary" size="small" {...busyProps(!!exporter.busy)} onClick={() => void exporter.run('export',
           signal => exportProcessingIssues(state,signal), contents => {
-            downloadIssueList(state.job_id!,contents); toast('已导出问题清单');
-          })}>导出完整问题清单</Button> : null}
+            downloadIssueList(state.job_id!,contents); toast('Issue list exported');
+          })}>Export full issue list</Button> : null}
         {!state.archived ? <Button variant="secondary" size="small" {...busyProps(!!archive.busy)}
           onClick={() => void archive.run('archive',signal => apiSend<LibraryProcessingData>(LIBRARY_PROCESSING_URL,
             {action:'archive',job_id:state.job_id},'POST',signal), next => {
-              queryClient.setQueryData(LIBRARY_PROCESSING_KEY,next); toast('已归档问题提示');
-            })}>归档提示</Button> : null}
+              queryClient.setQueryData(LIBRARY_PROCESSING_KEY,next); toast('Issue notice archived');
+            })}>Archive notice</Button> : null}
       </div> : null}
       {exporter.error || archive.error ? <Note tone="warning">{exporter.error || archive.error}</Note> : null}
       {!processingActive(state) && notes
-        /* 内边距与分隔节奏和上面的失败提示同一组：两块常常叠着出现，留白不一样一眼就看得出。 */
+        /* Padding and divider rhythm belong to the same group as the failure notice above: the two blocks often appear stacked, and any difference in spacing is obvious at a glance. */
         ? <Note tone="neutral" className="gap-0 p-3"
             extra={state.issues_log && !logInList
               /* 中性提示的分隔线跟随次级文字色。 */
               ? <div className="mt-3 border-t border-current/20 pt-3 text-text-secondary">
-                  <PathLine path={state.issues_log} prefix="完整记录：" className="text-caption-1-regular"
+                  <PathLine path={state.issues_log} prefix="Full log: " className="text-caption-1-regular"
                     onRevealed={toast} />
                 </div>
               : null}>
@@ -209,12 +209,12 @@ export function LibraryProcessingCard(props: LibraryProcessingProps) {
     <div className="flex flex-col gap-4">
       <Fieldset layout="stack" label="Scan and collect" footer={
         <>
-          <LinkButton href="/sources" size="small" trailingIcon={RiArrowRightLine}>来源和凭证</LinkButton>
-          <LinkButton href="/settings/diagnostics" size="small" trailingIcon={RiArrowRightLine}>诊断与日志</LinkButton>
+          <LinkButton href="/sources" size="small" trailingIcon={RiArrowRightLine}>Sources and credentials</LinkButton>
+          <LinkButton href="/settings/diagnostics" size="small" trailingIcon={RiArrowRightLine}>Diagnostics and logs</LinkButton>
           {state.candidates
             ? <LinkButton href="/review" size="small" trailingIcon={RiArrowRightLine}>Review metadata</LinkButton>
             : null}
-          {/* 日常同步保留独立入口，原任务的定向重试只处理该任务的失败项。 */}
+          {/* Daily sync keeps its own entry point, and a targeted retry of the original job only handles that job's failed items. */}
           <ProcessingActions scan busy={busy} metadataOnly={state?.metadata_only} speedMode={state.speed_mode}
             pendingCount={state.new_asset_count} onRun={run} />
         </>
@@ -222,19 +222,19 @@ export function LibraryProcessingCard(props: LibraryProcessingProps) {
         <div className="flex flex-col gap-2">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              <FieldsetTitle>扫描与采集</FieldsetTitle>
+              <FieldsetTitle>Scan and collect</FieldsetTitle>
               {state.new_asset_count ? <Chip variant="caption" color="blue">
-                <span className="tabular-nums">{state.new_asset_count.toLocaleString()} 部待补全</span>
+                <span className="tabular-nums">{state.new_asset_count.toLocaleString()} to complete</span>
               </Chip> : null}
             </div>
             {hidden && (processingActive(state) || state.status === 'failed' || job.isError)
               ? <Button variant="secondary" size="small" onClick={() => setProcessingNoticeVisible(noticeKey, true)}>
-                  显示进度浮窗
+                  Show progress popup
                 </Button> : null}
           </div>
           <p className="text-body-2-regular text-text-secondary">{SCAN_CARD_TEXT}</p>
           {state.status === 'paused' && !state.total
-            ? <span className="self-start"><StatusLabel>已暂停</StatusLabel></span>
+            ? <span className="self-start"><StatusLabel>Paused</StatusLabel></span>
             : processingActive(state)
             ? <ProcessingProgress state={state} />
             : null}

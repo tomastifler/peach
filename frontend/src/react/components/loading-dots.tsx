@@ -2,7 +2,7 @@
  *
  * 不用 Spinner：Spinner 只反馈用户刚刚点下的那一下。也不画没有分母的进度条。
  * 三颗点的错相由 `../styles.css` 的 `dot-wave-*` 给，减少动效时全局规则关掉动画。
- * 点已经在动，`label` 不带省略号。 */
+ * the dots are already moving, so `label` carries no ellipsis. */
 
 export function LoadingDots({ label }: { label: string }) {
   return (

@@ -119,7 +119,7 @@ export const purgeCount = (scan: ResourceScanState) =>
 
 /** 标为已消失那一档的那一句；没有这一档时是空串。 */
 const vanishText = (scan: ResourceScanState) => (scan.vanish
-  ? `${count(scan.vanish)} 条作品记录的文件已丢失，个人记录保留，可在「文件已丢失的记录」中转移个人记录或删除记录。`
+  ? `${count(scan.vanish)} work records have missing files; their personal records are kept and can be moved or deleted under "Records with missing files".`
   : '');
 
 /** 不可撤销那一句：有标为已消失那一档时，只说删除的这几样。 */
@@ -137,10 +137,10 @@ export const applyConfirmText = (scan: ResourceScanState) =>
 
 /** 一个来源那张读数卡的脚注。 */
 export const sourceMeta = (source: ResourceSource) => (source.online
-  ? [`找不到文件 · 共 ${count(source.total)} 项`,
-    source.vanish ? `${count(source.vanish)} 项带个人记录` : '',
-    source.empty ? `空文件夹 ${count(source.empty)} 个` : ''].filter(Boolean).join(' · ')
-  : `馆藏中有 ${count(source.total)} 项`);
+  ? [`Files not found · ${count(source.total)} items`,
+    source.vanish ? `${count(source.vanish)} with personal records` : '',
+    source.empty ? `${count(source.empty)} empty folders` : ''].filter(Boolean).join(' · ')
+  : `${count(source.total)} items in the library`);
 
 /** 执行结束后留在原地的那几样：文件其实还在、目录这会儿读不了、缓存正被占用。 */
 export function applyLeftovers(out: ResourceApplyState) {
@@ -162,9 +162,9 @@ export function applyLeftovers(out: ResourceApplyState) {
 /** 执行结果那一句。有没处理的几样时接在后面，说重新检查后可再试。 */
 export const applyText = (out: ResourceApplyState, formatSize: (bytes: number) => string) => {
   const { rest } = applyLeftovers(out);
-  const summary = `已永久删除 ${count(out.purged)} 条失效记录和 ${count(out.dirs_removed)} 个空文件夹，`
-    + `清理 ${count(out.cache_removed)} 个缓存，释放 ${formatSize(out.bytes_reclaimed || 0)}。`
-    + (out.vanished ? `${count(out.vanished)} 条作品记录已标为文件丢失，可在「文件已丢失的记录」中处理。` : '')
-    + (out.reattached ? `${count(out.reattached)} 条的记录已接到库里的另一个版本。` : '');
-  return rest ? `${summary}${rest}，重新检查后可再试。` : summary;
+  const summary = `Permanently deleted ${count(out.purged)} dead records and ${count(out.dirs_removed)} empty folders, `
+    + `cleaned ${count(out.cache_removed)} caches, freeing ${formatSize(out.bytes_reclaimed || 0)}. `
+    + (out.vanished ? `${count(out.vanished)} work records were marked as file missing and can be handled under "Records with missing files". ` : '')
+    + (out.reattached ? `${count(out.reattached)} records were attached to another version in the library.` : '');
+  return rest ? `${summary} ${rest}; check again and retry.` : summary;
 };

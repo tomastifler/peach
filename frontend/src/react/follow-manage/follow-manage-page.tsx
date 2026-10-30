@@ -78,7 +78,7 @@ export function FollowManagePage(props: FollowManageProps) {
   const credentials = useQuery({
     queryKey: FOLLOW_CREDENTIALS_KEY, queryFn: ({ signal }) => fetchCredentials(signal),
   });
-  /* 读数与 JAV 订阅表格共用一次读取。 */
+  /* Readouts and the JAV subscription table share a single read. */
   const feeds = useQuery({ queryKey: FEEDS_KEY, queryFn: ({ signal }) => fetchFeeds(signal) });
   const data: FollowData = follow.data || { sources: [] };
   const creds: CredentialData = credentials.data || { root: '', providers: [] };
@@ -120,7 +120,7 @@ export function FollowManagePage(props: FollowManageProps) {
         <Note tone="warning" title="Browse-only on this device"
           extra={writerUrl
             ? <p className="text-body-2-regular">
-                <ExternalLink href={writerUrl}>前往写入端管理关注</ExternalLink>
+                <ExternalLink href={writerUrl}>Manage follows on the writer</ExternalLink>
               </p>
             : undefined}>
           {readOnlyMessage}
@@ -145,7 +145,7 @@ export function FollowManagePage(props: FollowManageProps) {
         setTab(next);
         go({ tab: next });
       }} className="flex flex-col gap-6">
-        <PillAriaTabList aria-label="关注管理区域" data-section-nav data-section-items
+        <PillAriaTabList aria-label="Follow management sections" data-section-nav data-section-items
           className="flex max-w-full flex-nowrap overflow-x-auto">
           {TABS.map(([key, name]) => (
             <Tab key={key} id={key} data-pill-selected={tab === key ? '' : undefined} data-pill-variant="gray"
@@ -196,7 +196,7 @@ export function FollowManagePage(props: FollowManageProps) {
         </TabPanel>
 
       </Tabs>
-      <div><ButtonLink variant="secondary" href="/settings/subscriptions">来源与订阅设置{pending ? `（${pending}）` : ''}</ButtonLink></div>
+      <div><ButtonLink variant="secondary" href="/settings/subscriptions">Source and subscription settings{pending ? ` (${pending})` : ''}</ButtonLink></div>
     </Page>
   );
 }

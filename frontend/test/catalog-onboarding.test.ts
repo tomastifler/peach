@@ -28,8 +28,8 @@ describe('馆藏与资料空状态', () => {
     expect(catalogEmptyHtml({ configurable: true }).match(/class="geist-button primary"/g)).toHaveLength(1);
   });
   it('JAV 与筛选无结果可查看未筛选内容', () => {
-    expect(catalogEmptyHtml({ jav: true })).toContain('尚未补充发行资料');
-    expect(catalogEmptyHtml({ filtered: true })).toContain('清除筛选');
+    expect(catalogEmptyHtml({ jav: true })).toContain('have no release info yet');
+    expect(catalogEmptyHtml({ filtered: true })).toContain('Clear filters');
     const page = document.createElement('div');
     page.innerHTML = catalogEmptyHtml({ jav: true, filtered: true });
     expect([...page.querySelectorAll('a')].map(link => link.getAttribute('href')))

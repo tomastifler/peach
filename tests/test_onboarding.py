@@ -713,13 +713,13 @@ class SetupJsonContractTests(_SetupHttpCase):
         self.assertEqual([item["key"] for item in questions], [question.key for question in asked])
         self.assertEqual([item["default"] for item in questions],
                          ["" if question.key == "media_dir" else question.default for question in asked])
-        self.assertEqual([item["label"] for item in questions], ["数据目录", "媒体目录", "谁可以访问", "端口", "局域网访问地址"])
+        self.assertEqual([item["label"] for item in questions], ["Data directory", "Media directory", "Who can access", "Port", "LAN access address"])
         by_key = {item["key"]: item for item in questions}
         self.assertEqual([key for key, item in by_key.items() if not item["required"]], ["host"])
         self.assertEqual([key for key, item in by_key.items() if not item["advanced"]], ["data_root", "media_dir", "host"])
         self.assertEqual(by_key["data_root"]["input"], "folder")
-        self.assertEqual(by_key["host"]["options"], [{"value": "2", "label": "同一局域网的设备"},
-                                                     {"value": "1", "label": "只有这台电脑"}])
+        self.assertEqual(by_key["host"]["options"], [{"value": "2", "label": "Devices on the same local network"},
+                                                     {"value": "1", "label": "This computer only"}])
         self.assertEqual((by_key["port"]["input"], by_key["port"]["prefix"]), ("number", "localhost:"))
         self.assertEqual((by_key["mdns_name"]["prefix"], by_key["mdns_name"]["suffix"]), ("https://", ".local"))
         self.assertEqual(by_key["mdns_name"]["visible_when"], {"host": "2"})
@@ -735,7 +735,7 @@ class SetupJsonContractTests(_SetupHttpCase):
         else:
             self.assertIsNone(data["media_root"])
             self.assertEqual(by_key["media_dir"]["help"][-1],
-                             "填写这台设备实际读取媒体的文件夹；Docker 部署填写容器内目录，例如 /media。")
+                             "Enter the folder this device actually reads media from; for Docker deployments, enter the directory inside the container, for example /media.")
         self.assertEqual(data["cloud"]["link"]["url"], "https://www.clouddrive2.com/help.html")
         # 默认对局域网开放，所以访问密码开关第一次出现就开着；扫描默认勾上，导入历史默认不勾。
         self.assertEqual((data["access_enabled"], data["scan_now"], data["history_guide"]), (True, True, False))
@@ -1286,14 +1286,14 @@ class StandaloneConfigurationTests(_Case):
                                        db_path=self.config.data_root / "database" / "ledger.db"))
 
         def refuse(status: int):
-            raise HTTPException(status, {403: "Open settings on the computer running Peach", 409: "请先完成首次设置"}
+            raise HTTPException(status, {403: "Open settings on the computer running Peach", 409: "Please complete first-time setup first"}
                                 .get(status, "服务出错"))
         # 页面 catch-all 排在最后会吃掉一切路径，测试路由要插到它前面。
         app.add_api_route("/refuse/{status}", refuse, methods=["GET"])
         app.router.routes.insert(0, app.router.routes.pop())
         html = {"Accept": "text/html,application/xhtml+xml"}
         with TestClient(app, base_url="http://localhost") as client:
-            for status, detail in ((403, "Open settings on the computer running Peach"), (409, "请先完成首次设置"),
+            for status, detail in ((403, "Open settings on the computer running Peach"), (409, "Please complete first-time setup first"),
                                    (400, "服务出错")):
                 with self.subTest(status):
                     page = client.get(f"/refuse/{status}", headers=html)
@@ -1309,7 +1309,7 @@ class StandaloneConfigurationTests(_Case):
             self.assertIn('data-page="error" data-status="404" data-detail="这个地址下没有页面。"', missing.text)
             data = client.get("/refuse/409", headers={"Accept": "application/json"})
             self.assertEqual(data.status_code, 409)
-            self.assertEqual(data.json(), {"error": "请先完成首次设置"})
+            self.assertEqual(data.json(), {"error": "Please complete first-time setup first"})
             api = client.get("/api/configuration", headers={"Accept": "text/html"})
             self.assertEqual(api.status_code, 401)
             self.assertEqual(api.headers["content-type"], "application/json")
@@ -1332,11 +1332,11 @@ class StandaloneConfigurationTests(_Case):
                 self.assertEqual(client.post("/api/pick-folder", headers=headers, json={}).status_code, 403)
             self.assertEqual(picker.call_count, 1)
         with mock.patch("peach.folder_picker.pick_folder",
-                        side_effect=folder_picker.PickerUnavailable("这个系统上没有可用的文件夹对话框")):
+                        side_effect=folder_picker.PickerUnavailable("No folder dialog is available on this system")):
             with self.client() as client:
                 response = client.post("/api/pick-folder", headers=headers, json={})
         self.assertEqual(response.status_code, 501)
-        self.assertEqual(response.json()["error"], "这个系统上没有可用的文件夹对话框")
+        self.assertEqual(response.json()["error"], "No folder dialog is available on this system")
         busy = folder_picker.PickerBusy("已经有一个选择文件夹的窗口开着")
         with mock.patch("peach.folder_picker.pick_folder", side_effect=busy):
             with self.client() as client:

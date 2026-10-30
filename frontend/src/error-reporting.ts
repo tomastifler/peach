@@ -2,7 +2,7 @@
 import { browserDiagnostics, detailedBrowserDiagnostics, playbackDiagnostics } from './browser-diagnostics';
 let installed = false;
 const errorNames = new Set(['Error', 'TypeError', 'RangeError', 'ReferenceError', 'SyntaxError', 'URIError', 'EvalError', 'AggregateError', 'DOMException']);
-/* 正式包的文件名：主包入口、页面包与主包按页拆出的 chunk（ADR-0118），与服务端 `diagnostic_browser.SHIPPED` 同一口径。 */
+/* Filenames of the production bundles: the main bundle entry, the page bundle, and the chunks the main bundle splits out per page (ADR-0118), the same scope as the server's `diagnostic_browser.SHIPPED`. */
 const shippedName = /^(?:peach-pages\.js|peach-app(?:\.[A-Za-z0-9_-]+)?\.js)$/;
 const shippedInStack = /(?:^|[/\\])(peach-pages\.js|peach-app(?:\.[A-Za-z0-9_-]+)?\.js)(?=[:?#)\s]|$)/m;
 const debugIdPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -10,7 +10,7 @@ const debugIdPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9
 function bundleDebugIds(): Record<string, string> {
   const globals = globalThis as typeof globalThis & { _sentryDebugIds?: Record<string, unknown> };
   const ids: Record<string, string> = {};
-  // 官方注入的 stack 只在本机用于识别文件名；请求不携带这份 stack 或其中的 URL。最上面那一帧就是注入它的文件。
+  // The officially injected stack is only used locally to identify the filename; the request carries neither this stack nor any URL in it. The topmost frame is the file that injected it.
   for (const [stack, id] of Object.entries(globals._sentryDebugIds ?? {})) {
     if (typeof id !== 'string' || !debugIdPattern.test(id)) continue;
     const name = stack.match(shippedInStack)?.[1];
@@ -25,7 +25,7 @@ export function installErrorReporting(): void {
   if (!/^\/(?:login|setup)(?:\/|$)/.test(location.pathname)) {
     void detailedBrowserDiagnostics().then(browser => fetch('/api/diagnostics/client-error', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-      body: JSON.stringify({ kind: 'context', message: '浏览器环境快照', browser }),
+      body: JSON.stringify({ kind: 'context', message: 'Browser environment snapshot', browser }),
     })).catch(() => {});
   }
   let start = Date.now();
@@ -55,7 +55,7 @@ export function installErrorReporting(): void {
     }).catch(() => {});
   };
   window.addEventListener('error', event => send('error', event.error, event.message, event));
-  window.addEventListener('unhandledrejection', event => send('unhandledrejection', event.reason, 'Promise 未处理的异常'));
+  window.addEventListener('unhandledrejection', event => send('unhandledrejection', event.reason, 'Unhandled Promise rejection'));
   document.addEventListener('error', event => {
     const target = event.target;
     const video = target instanceof HTMLMediaElement ? target
@@ -63,6 +63,6 @@ export function installErrorReporting(): void {
     const failure = (target as (HTMLElement & { error?: unknown }) | null)?.error || (event as ErrorEvent).error;
     if (!video || !failure) return;
     const evidence = playbackDiagnostics(video, failure);
-    send('media', `媒体播放失败（${evidence.code}）`, '', undefined, evidence);
+    send('media', `Media playback failed (${evidence.code})`, '', undefined, evidence);
   }, true);
 }

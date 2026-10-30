@@ -50,7 +50,7 @@ it('系统口令可直接转为可选密码且关闭需要明确提交', async (
   expect(host.querySelector('button[type="submit"]')?.textContent).toBe('Save settings');
   await click(checkbox(host));
   expect(newPasswords(host)).toHaveLength(0);
-  expect(host.querySelector('[role="note"]')?.textContent).toContain('直接访问馆藏');
+  expect(host.querySelector('[role="note"]')?.textContent).toContain('will open the library directly');
   expect(fetcher).not.toHaveBeenCalled();
   await submit(host);
   expect(sentBody(fetcher)).toMatchObject({ action: 'disable', confirm_disable: true });

@@ -29,20 +29,20 @@ export function SetupDoneView({ done }: { done: SetupDone }) {
   return (
     <SetupShell step="done">
     <section data-setup-form-panel="" aria-labelledby="auth-card-title">
-      <div data-setup-top=""><span className="text-body-2-regular text-text-secondary">设置完成</span></div>
+      <div data-setup-top=""><span className="text-body-2-regular text-text-secondary">Setup complete</span></div>
       <div data-setup-step-scroll=""><div data-setup-step-content="">
       <header data-setup-step-heading="">
-        <h1 id="auth-card-title" className="text-title-1-semibold text-text-primary">可以开始使用了</h1>
-        <p className="text-body-regular text-text-secondary">你的 Peach 已准备就绪。</p>
+        <h1 id="auth-card-title" className="text-title-1-semibold text-text-primary">You're ready to go</h1>
+        <p className="text-body-regular text-text-secondary">Your Peach is ready.</p>
       </header>
       <div>
       <p className="text-body-regular text-text-primary">
-        {done.restored ? '已连接已有数据目录。' : done.skip_media
-          ? '可在「媒体库与入库」添加媒体目录并开始扫描。' : done.scan_requested
-          ? '首次扫描已排队，在后台整理媒体库，期间可以照常使用 Peach。'
-          : '稍后在配置页开始扫描媒体库。'}
+        {done.restored ? 'Connected to an existing data folder.' : done.skip_media
+          ? 'You can add a media folder under "Library & import" and start scanning.' : done.scan_requested
+          ? 'The first scan is queued and organizes the library in the background; you can keep using Peach meanwhile.'
+          : 'Start scanning the library later on the settings page.'}
       </p>
-      <Disclosure summary="运行信息">
+      <Disclosure summary="Runtime info">
         <FactList>
           {done.facts.map((fact) => (
             <Fact key={fact.term} term={fact.term}>
@@ -56,7 +56,7 @@ export function SetupDoneView({ done }: { done: SetupDone }) {
       </Disclosure>
       </div></div></div>
       <footer data-setup-footer="" data-setup-footer-end="" data-copy-interact>
-        <ButtonLink ref={entry} href={done.url}>{done.history_guide ? '导入浏览器历史记录' : '进入 Peach'}</ButtonLink>
+        <ButtonLink ref={entry} href={done.url}>{done.history_guide ? 'Import browser history' : 'Open Peach'}</ButtonLink>
       </footer>
     </section>
     </SetupShell>

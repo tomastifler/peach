@@ -80,7 +80,7 @@ function ManageBar({ host: at, pressed: key, menu }: Pick<ManageHeaderProps, 'me
   }, [key, menu]);
 
   return (
-    <nav data-manage-bar="" aria-label="管理">
+    <nav data-manage-bar="" aria-label="Manage">
       <PillTabList ref={row} data-manage-menu="" data-pill-nav="">
         {menu.map(([entry, label, glyph]) => {
           const on = entry === key;
@@ -107,7 +107,7 @@ function Crumb({ host: at, label }: { host: ManageHeaderHost; label: string }) {
     at.openDataCleanup();
   };
   return (
-    <nav data-manage-crumb="" aria-label="当前位置">
+    <nav data-manage-crumb="" aria-label="Current location">
       <ol>
         <li><a href="/data-cleanup" onClick={follow}>Data management</a><Icon name="chevron-right" /></li>
         <li aria-current="true"><span>{label}</span></li>

@@ -1,30 +1,30 @@
 # External Players and VR
 
-## 本地播放器
+## Local Players
 
-Windows 或 macOS 上，在运行 Peach 的电脑打开作品详情，在详情上方选择「系统默认播放器」或检测到的播放器，再点同一行的「打开」。Windows 检测 PATH 和常见安装目录中的 PotPlayer、VLC、mpv；macOS 检测系统与用户应用目录中的 IINA、VLC、mpv。选择保存在当前浏览器；播放器接收原始媒体文件，网页播放在请求成功后暂停。
+On Windows or macOS, open the work's detail on the computer running Peach, choose "System default player" or a detected player above the detail, and click "Open" on the same row. On Windows, PotPlayer, VLC and mpv are detected in PATH and common install directories; on macOS, IINA, VLC and mpv are detected in the system and user application directories. The choice is saved in the current browser; the player receives the original media file, and web playback pauses once the request succeeds.
 
-播放器菜单只列出当前部署支持且检测到已安装的程序，以及系统默认播放器。同一选择器还提供网络播放地址和 M3U 播放列表，供 Docker 和远程访问使用。在 Windows 上下载 M3U 后，可用系统默认播放器打开，或通过系统的「打开方式」选择播放器。播放器需要支持对应媒体格式、网络地址及 Peach 证书。
+The player menu lists only programs that the current deployment supports and that are detected as installed, plus the system default player. The same selector also offers a network playback address and an M3U playlist, for Docker and remote access. On Windows, after downloading the M3U, you can open it with the system default player, or choose a player through the system's "Open with". The player must support the media format, the network address and Peach's certificate.
 
-本地打开接口只对本机直接连接开放，拒绝转发请求；Docker 和无桌面部署不启动宿主机或容器中的应用。接口接受账本资产 ID 和固定播放器 ID，经媒体根目录授权后打开文件，不接受客户端指定程序或文件路径。STRM 使用网络播放地址或 M3U。
+The local-open endpoint is open only to direct local connections and rejects forwarded requests; Docker and desktop-less deployments do not launch apps on the host or in the container. The endpoint accepts a ledger asset ID and a fixed player ID, opens the file after authorization through the media root, and does not accept a client-specified program or file path. STRM uses the network playback address or M3U.
 
-## 网页画面旋转
+## Web Video Rotation
 
-播放器「设置 → 画面旋转」提供 0°、90°、180°、270°；0° 恢复原始方向。画面保持比例并适配播放器，控制条保持正向。切换清晰度、影院模式和全屏时继续适配。旋转只影响网页画面，不修改媒体文件或外部播放器设置。
+The player's "Settings → Rotate video" offers 0°, 90°, 180° and 270°; 0° restores the original orientation. The picture keeps its ratio and fits the player, and the control bar stays upright. Fitting continues when switching quality, theater mode and fullscreen. Rotation affects only the web picture and does not modify media files or external player settings.
 
-旋转、播放速度、字幕选择与字幕外观按视频保存到服务端同一份记忆文件，详情、小窗和沉浸播放共用；刷新、重新打开或更换浏览器后恢复。设置 0°、正常速度或关闭字幕同样会保存，各部视频互不影响。WebVTT 内容与记忆文件放在数据目录的 `state/player-subtitles/<视频标识>/`，清单为 `subtitles.json`。Windows、macOS 和 Docker 共用此存储；Docker 需要持久挂载数据目录。已有字幕内容与选择直接沿用，浏览器已保存的字幕外观作为尚无外观记录的视频的初始值。播放记忆接口为 `GET/PUT /api/player/memory?video=…`，字幕接口共用同一份清单；更新仅合并提交的字段，不修改 ledger。
+Rotation, playback speed, subtitle selection and subtitle appearance are saved per video in the same server-side memory file, shared by the detail view, the mini window and immersive playback; they are restored after a refresh, reopening or switching browsers. Setting 0°, normal speed or turning subtitles off is saved as well, and videos do not affect each other. WebVTT content and the memory file are placed in the data directory under `state/player-subtitles/<video id>/`, with the manifest `subtitles.json`. Windows, macOS and Docker share this storage; Docker needs the data directory mounted persistently. Existing subtitle content and selections carry over directly, and the subtitle appearance already saved in the browser serves as the initial value for videos that have no appearance record yet. The playback memory endpoint is `GET/PUT /api/player/memory?video=…`, the subtitle endpoint shares the same manifest, and an update merges only the submitted fields and does not modify the ledger.
 
-画中画入口在支持该 API 的浏览器中固定占位，媒体加载期间禁用。浏览器明确拒绝画中画时，入口保留不可用原因。浏览器声明 API 可用不能保证系统窗口可创建，限制及异常见 [Picture-in-Picture API](https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement/requestPictureInPicture)。
+The picture-in-picture entry holds a fixed place in browsers that support the API, and is disabled while media loads. When the browser explicitly refuses picture-in-picture, the entry keeps the reason it is unavailable. A browser declaring the API available does not guarantee a system window can be created; for limits and exceptions see the [Picture-in-Picture API](https://developer.mozilla.org/en-US/docs/Web/API/HTMLVideoElement/requestPictureInPicture).
 
-## 网络播放
+## Network Playback
 
-本地或已挂载视频的作品详情共用一行播放器选择和「打开」按钮。选择网络播放方式后点击「打开」，
-即可生成限时链接并下载 M3U。选择「网络播放地址 / VR」时，只显示可复制的地址。
+The work detail for local or mounted videos shares one row for the player selector and the "Open" button. After choosing a network playback method, click "Open",
+and a time-limited link is generated and an M3U is downloaded. When "Network playback address / VR" is chosen, only a copyable address is shown.
 
 | Option | How to use |
 | --- | --- |
-| M3U 播放列表 | 用支持网络地址的外部播放器打开下载的 `.m3u` |
-| 网络播放地址 / VR | 生成地址并显示，供 VR 等播放器使用 |
+| M3U playlist | Open the downloaded `.m3u` with an external player that supports network addresses |
+| Network playback address / VR | Generate and display the address, for players such as VR |
 
 The player choice is saved only in the current browser. Another device must be able to reach the current Peach address; a URL generated on the computer with `localhost`
 cannot be used from a phone. When HTTPS uses the project certificate, external devices also need to trust that certificate.
@@ -40,11 +40,11 @@ a single-asset time-limited ticket signed with an in-process key, and every read
 The origin of the playback URL is signed too: the page Origin that passed the same-origin check is preferred; clients without an Origin use the configured
 tunnel entry or the current service address. The M3U uses this signed address, so a local Host forwarded by a proxy does not rewrite the public entry in the playlist.
 
-播放器实现不进入 Peach，无新增依赖。自动化验证覆盖票据、Range、
-M3U 内容和页面交互，不替代真实设备的解码验收。
+The player implementations do not enter Peach, and no dependencies are added. Automated verification covers tickets, Range,
+M3U content and page interaction, and does not replace decoding acceptance on real devices.
 
-Windows 原生验证使用现有 ffplay、临时 HTTPS 服务与专用测试证书，播放 M3U 中的签名网络地址。
-两秒 H.264 合成测试画面在关闭音频、隐藏输出时正常播放并退出，ffprobe 确认解码 20 帧；
-TLS 校验保持开启。该验证不覆盖本机播放器唤起或 VR 投影。
+Windows native verification uses the existing ffplay, a temporary HTTPS service and a dedicated test certificate, playing the signed network address in the M3U.
+A two-second H.264 synthetic test picture plays and exits normally with audio off and output hidden, and ffprobe confirms 20 decoded frames;
+TLS verification stays on. This verification does not cover launching a local player or VR projection.
 
-本地打开复用 Python 标准库的 [Windows 文件关联](https://docs.python.org/3/library/os.html#os.startfile) 和 macOS 的 [`open`](https://support.apple.com/guide/terminal/apdb66b5242-0d18-49fc-9c47-a2498b7c91d5/mac)。进程参数以数组传递，不经 shell。跨平台自动化覆盖调用参数和权限边界；系统关联、应用唤起及真实媒体解码需要在对应桌面系统验证。
+Local opening reuses Python's standard library [Windows file association](https://docs.python.org/3/library/os.html#os.startfile) and macOS's [`open`](https://support.apple.com/guide/terminal/apdb66b5242-0d18-49fc-9c47-a2498b7c91d5/mac). Process arguments are passed as an array, not through a shell. Cross-platform automation covers the invocation arguments and permission boundaries; system associations, app launching and real media decoding need verification on the corresponding desktop systems.

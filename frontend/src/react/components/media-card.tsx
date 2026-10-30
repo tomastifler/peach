@@ -100,8 +100,8 @@ export interface MediaCardProps {
   actions: MediaCardActions;
   /** 点这张卡打开什么。竖屏带点进沉浸模式，回收站里的资源按类型分流，其余打开详情。 */
   onOpen(item: MediaItem, anchor: HTMLElement): void;
-  /** 这张卡代表整组分卷或版本（「合并分卷与版本」开着）。关着时一卷一张卡，卡面只写这一个文件的
-   *  名字、时长与大小，不标整组卷数；打开时照旧按条目上的分组进分卷或版本队列。默认开。 */
+  /** This card represents a whole group of volumes or editions ("Merge volumes and editions" is on). When off, each volume gets its own card, and the card face only shows this one file's
+   *  name, duration and size, without the group's volume count; when on, the item's grouping still decides the volume or edition queue. On by default. */
   grouped?: boolean;
 }
 
@@ -115,7 +115,7 @@ export function identityParts(item: MediaItem): { avatar: ReactNode; who: ReactN
       <div data-media-avatars="" style={{ '--media-avatar-count': Math.min(5, performers.length) } as CSSProperties}>
         {performers.slice(0, 5).map((nm, index) => (
           <button key={`${nm}:${index}`} type="button" data-media-avatar="" data-entity-kind="performer"
-            data-entity-name={nm} title={`打开${label}页：${entityDisplayName('performer', nm, refs[index]?.id)}`}
+            data-entity-name={nm} title={`Open ${label} page: ${entityDisplayName('performer', nm, refs[index]?.id)}`}
             style={{ '--media-avatar-index': index } as CSSProperties}
             dangerouslySetInnerHTML={{ __html: entityAvatar(nm, refs[index] ?? null, 'performer') }} />
         ))}
@@ -134,7 +134,7 @@ export function identityParts(item: MediaItem): { avatar: ReactNode; who: ReactN
     ? (
       <>
         <button type="button" data-media-who="" data-entity-kind="performer" data-entity-name={performer} title={entityDisplayName('performer', performer)}><Icon name="user-round" /><span>{entityDisplayName('performer', performer)}</span></button>
-        <span data-media-who-more="">{`等 ${total} 人`}</span>
+        <span data-media-who-more="">{`+${total} total`}</span>
       </>
     )
     : kind
@@ -176,17 +176,17 @@ function LaterButton({ item, actions, on, onChange }: {
   );
 }
 
-/** 推荐理由独占内容行，完整文本可由键盘或触屏打开。 */
+/** The recommendation reason takes its own content row; the full text can be opened by keyboard or touch. */
 function RecommendationReason({ reason }: { reason: string }) {
   const trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   return <>
     <button ref={trigger} type="button" data-media-next-reason="" title={reason}
-      aria-label={`查看推荐理由：${reason}`} aria-haspopup="dialog" aria-expanded={open}
+      aria-label={`View recommendation reason: ${reason}`} aria-haspopup="dialog" aria-expanded={open}
       onClick={event => { event.stopPropagation(); setOpen(true) }}>{reason}</button>
     <Popover triggerRef={trigger} isOpen={open} onOpenChange={setOpen} placement="top" offset={8}
       containerPadding={12} className={MENU_POPOVER_SURFACE}>
-      <Dialog data-media-reason-dialog="" aria-label="推荐理由"
+      <Dialog data-media-reason-dialog="" aria-label="Recommendation reason"
         className="w-64 max-w-full p-2 text-body-regular whitespace-normal break-words text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring">
         {reason}
       </Dialog>
@@ -209,7 +209,7 @@ function VideoCard({ item, variant, layout, selected, selectMode, seekSeconds, h
   const later = written?.id === item.id ? written.on : !!item.watch_later;
   const tints = useLibraryTints();
   const library = item.library_id && tints.get(item.library_id)?.color ? item.library_id : undefined;
-  const flaggedBy = [Number(item.liked) > 0 ? '喜欢' : '', Number(item.o_count) > 0 ? '有高潮记录' : ''].filter(Boolean);
+  const flaggedBy = [Number(item.liked) > 0 ? 'Liked' : '', Number(item.o_count) > 0 ? 'Has O records' : ''].filter(Boolean);
   const latest = useRef(item);
   latest.current = item;
   /* 悬停预览只接一次：`wireHover` 往卡上挂监听，ref 回调换了身份 React 就会先卸后挂，
@@ -221,17 +221,17 @@ function VideoCard({ item, variant, layout, selected, selectMode, seekSeconds, h
     if (el && (!current.medium || current.medium === 'video')) wireHover(el, current);
   }, []);
 
-  /* 按画幅筛的列表里，接口只算同画幅的卷与版本，组可能只剩一卷或一个版本：那张卡就是这一个
-     文件自己，不叠纸边、不标卷数或版本数。 */
+  /* In a list filtered by aspect ratio, the API only counts volumes and editions of the same aspect ratio, so a group may be left with one volume or one edition: that card is this one
+     file itself, with no stacked paper edge and no volume or edition count. */
   const parts = grouped && Number(item.part_group?.count) > 1 ? item.part_group || null : null;
   const editions = grouped && Number(item.edition_group?.count) > 1 ? item.edition_group || null : null;
   const stacked = !!(parts || editions);
   const jav = layout.active && !!item.is_jav;
   const ratio = cardRatio(item, variant, layout);
   const size = jav ? layout.size : 'small';
-  /* 竖屏格（竖屏带与筛竖屏的网格）只展示竖屏比例的视频，卡面只用视频自己的帧图；番号作品也
-     不走官方封面，「JAV 默认封面」设置在这里不起作用：那张封面是整部作品的宣传图，多是横图，
-     和这一卷竖屏视频不是同一个画面。没有帧图就是「无预览」。 */
+  /* Portrait cells (the portrait strip and portrait-filtered grids) only show videos in portrait ratio, and the card face only uses the video's own frame image; works with a product code
+     also skip the official cover, so the "JAV default cover" setting has no effect here: that cover is the whole work's promo image, mostly landscape,
+     and not the same picture as this portrait video volume. With no frame image it is "No preview". */
   const frameOnly = ratio === PORTRAIT_RATIO && !!item.is_jav;
   const artwork = frameOnly ? frameArtwork(item, false) : cardArtwork(item, size, false, layout.javImage);
   const identity = frameOnly || size === 'small' ? artwork.html : cardArtwork(item, 'small', false, layout.javImage).html;
@@ -301,9 +301,9 @@ function VideoCard({ item, variant, layout, selected, selectMode, seekSeconds, h
       {later || flaggedBy.length
         ? (
           <div data-media-status="">
-            {later ? <span data-status="later" title="稍后看" aria-label="稍后看"><Icon name="bookmark" /></span> : null}
+            {later ? <span data-status="later" title="Watch later" aria-label="Watch later"><Icon name="bookmark" /></span> : null}
             {flaggedBy.length
-              ? <span data-status="flagged" title={`已标记：${flaggedBy.join('、')}`} aria-label={`已标记：${flaggedBy.join('、')}`}><Icon name="heart" /></span>
+              ? <span data-status="flagged" title={`Flagged: ${flaggedBy.join(', ')}`} aria-label={`Flagged: ${flaggedBy.join(', ')}`}><Icon name="heart" /></span>
               : null}
           </div>
         )
@@ -341,7 +341,7 @@ function VideoCard({ item, variant, layout, selected, selectMode, seekSeconds, h
             {item.why && variant !== 'next' ? <span data-media-why="" title={item.why}>{item.why}</span> : null}
             <span data-media-facts="">
               {item.is_jav && item.release_date ? <time data-media-release="" dateTime={item.release_date} title={item.release_date}><Icon name="calendar" />{item.release_date}</time> : null}
-              <span data-media-size=""><Icon name="hard-drive" />{Number(shownSize) > 0 ? fmtSize(Number(shownSize)) : '大小未知'}</span>
+              <span data-media-size=""><Icon name="hard-drive" />{Number(shownSize) > 0 ? fmtSize(Number(shownSize)) : 'Size unknown'}</span>
             </span>
           </div>
           {variant === 'next' ? (item.why ? <RecommendationReason reason={item.why} /> : null) : tags.length || item.disposal === 'trash'

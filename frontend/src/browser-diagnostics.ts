@@ -1,4 +1,4 @@
-/* 本机诊断使用浏览器原生能力快照；不请求媒体、不读取浏览历史。 */
+/* Local diagnostics use a snapshot of the browser's native capabilities; no media is requested and no browsing history is read. */
 const codecs = {
   h264: 'video/mp4; codecs="avc1.42E01E"', h264High: 'video/mp4; codecs="avc1.640028"',
   hevc: 'video/mp4; codecs="hvc1.1.6.L93.B0"', av1: 'video/mp4; codecs="av01.0.05M.08"',
@@ -41,7 +41,7 @@ function graphicsDiagnostics() {
     const extension = context.getExtension('WEBGL_debug_renderer_info');
     graphics = { status: 'available', vendor: String(context.getParameter(extension?.UNMASKED_VENDOR_WEBGL ?? context.VENDOR)),
       renderer: String(context.getParameter(extension?.UNMASKED_RENDERER_WEBGL ?? context.RENDERER)) };
-  } catch { /* 图形信息不可读时保留未取得状态 */ }
+  } catch { /* keep the unavailable state when graphics info is unreadable */ }
   finally { attempt(() => context.getExtension('WEBGL_lose_context')?.loseContext()) }
   return graphics;
 }

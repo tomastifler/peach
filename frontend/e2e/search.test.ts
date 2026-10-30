@@ -21,7 +21,7 @@ const SUGGEST = {
     { kind: 'performer', label: '女优', total: 1, items: [
       { value: '七海ひな', n: 12, matched: '', entity_id: 90_001, has_image: false, rep: null, agency: '', works: [] },
     ] },
-    { kind: 'tag', label: '标签', total: 1, items: [{ value: '七海の夏', n: 3, matched: '' }] },
+    { kind: 'tag', label: 'Tags', total: 1, items: [{ value: '七海の夏', n: 3, matched: '' }] },
   ],
 };
 
@@ -176,7 +176,7 @@ describe('顶栏搜索', () => {
         ] } }));
         await page.route(/\/api\/follow\?/, route => route.fulfill({ json: {
           sources: [{ id: 1, author_key: 'name:作者', label: '作者', ref: '作者', provider: 'pixiv', official_avatar_url: '/poster?id=11' }],
-          groups: [{ primary: { id: 901, source_id: 1, title: '关注作品', thumb_url: '/poster?id=11', media_kind: 'video', status: 'saved' },
+          groups: [{ primary: { id: 901, source_id: 1, title: 'Followed works', thumb_url: '/poster?id=11', media_kind: 'video', status: 'saved' },
             variants: [{ id: 902, source_id: 1, title: '图片作品', thumb_url: '/poster?id=12', media_kind: 'image', status: 'seen',
               media_items: [{ index: 2, media_kind: 'image', thumb_url: '/poster?id=13' }] }], duplicates: [] }],
         } }));
@@ -263,7 +263,7 @@ describe('顶栏搜索', () => {
       const { page, suggest } = opened;
       await typeQuery(opened);
       assert.deepEqual(suggest.map((url) => url.searchParams.get('q')), [SUGGEST.q], '连敲两个字发了不止一次补全');
-      assert.deepEqual(await page.locator(`${MENU} [data-search-group] > h3`).allTextContents(), ['女优', '标签']);
+      assert.deepEqual(await page.locator(`${MENU} [data-search-group] > h3`).allTextContents(), ['女优', 'Tags']);
       assert.deepEqual(await values(page), ['七海ひな', '七海の夏']);
       assert.equal(query(opened.page), null, '只是敲字，不该提交');
     } finally {

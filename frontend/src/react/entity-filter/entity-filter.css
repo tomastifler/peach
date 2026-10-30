@@ -138,7 +138,7 @@
 }
 .peach-react [data-entity-tags]::-webkit-scrollbar { display: none; }
 
-/* 标签取紧凑档（32px）、13px 字，没加上去时一圈 `--glass-low` 实线，悬停线换 `--field-ring`、字提到
+/* Tags take the compact tier (32px) with 13px text; when not yet added, a solid `--glass-low` ring surrounds them, on hover the line changes to `--field-ring` and the text is raised to
  * `--ink`；加上去之后是浮层上「这一项已生效」那块料。计数是附注，11px 等宽、降一档字色。 */
 .peach-react [data-entity-tag] {
   gap: 0;
@@ -181,7 +181,7 @@
 }
 
 /* ── 下排：内容区头 ──
- * 读数照首页那条 `10,471 个符合` 写：12px、常规字重、比标签低一档。排序键取紧凑档（32px）、12px 字、
+ * The readout is written like the one on the home page, `10,471 matching`: 12px, regular weight, one tier below the label. The sort button takes the compact tier (32px) and 12px text,
  * 7px 圆角；生效那枚回到满字色加半档字重，其余退到六成。换一批是动作不是参数，走蓝色强调档。 */
 .peach-react [data-entity-readout] {
   flex: 0 0 auto;
@@ -193,7 +193,7 @@
   letter-spacing: normal;
   white-space: nowrap;
 }
-/* 读数与操作保持完整，空间不足时整行横滚；最左侧读数和最右侧排序都能到达。 */
+/* The readout and actions stay complete, and when space is short the whole row scrolls horizontally; both the leftmost readout and the rightmost sort can be reached. */
 .peach-react :is([data-entity-filter-glass], [data-catalog-frame]) > [data-filter-row="bottom"] {
   flex-wrap: nowrap;
   overflow-x: auto;
@@ -213,7 +213,7 @@
   width: max-content;
   margin-left: auto;
   /* 横滚容器会把里面东西的落影从上下两边裁掉：分段器滑块最远那层影落在 14px 外。上下各留出
-     这 14px 再用负外边距收回，排在行里还是紧凑档的高度。 */
+     this 14px is pulled back with a negative margin, so in the row it still has the height of the compact tier. */
   margin-block: -14px;
   padding: 14px 2px;
   overflow: visible;
@@ -286,7 +286,7 @@
 .peach-react [data-entity-srctools] > * { flex: none; margin: 0; }
 .peach-react [data-entity-srctools] [aria-live] { flex: none; }
 
-/* 手机操作行使用紧凑间距。 */
+/* The mobile action row uses compact spacing. */
 @media (max-width: 760px) {
   .peach-react :is([data-entity-filter-glass], [data-catalog-frame]) > [data-filter-row="bottom"] {
     gap: 10px;

@@ -449,7 +449,7 @@ describe('关闭', () => {
   });
 });
 
-it('面板第二行的口径：本地图缺来源写「来源未知」、缺大小写「大小未知」，一千字节以下也写 1 KB', () => {
+it('面板第二行的口径：本地图缺来源写「来源未知」、缺大小写「Size unknown」，一千字节以下也写 1 KB', () => {
   expect(photoMeta({ src: '', thumb: '', asset: { id: 1 } }, undefined)).toBe('Unknown source · Unknown size');
   expect(photoMeta({ src: '', thumb: '', asset: { id: 1, location: 'pikpak', size: 10 } }, undefined)).toBe('PikPak · 1\u00a0KB');
 });

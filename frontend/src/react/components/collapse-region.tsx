@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, type HTMLAttributes, type PropsWithChildren } 
 import { setCollapseRegionOpen } from '../../ui-kit/collapse';
 import './collapse-region.css';
 
-/** 内容内边距放在子层，折叠高度才能收至零；正文保持挂载并在收起时退出焦点顺序。 */
+/** Content padding goes on the child layer so the collapsed height can reach zero; the body stays mounted and leaves the focus order when collapsed. */
 export function CollapseRegion({ open, children, ...props }: PropsWithChildren<{ open: boolean } & HTMLAttributes<HTMLDivElement>>) {
   const body = useRef<HTMLDivElement>(null), primed = useRef(false);
   useLayoutEffect(() => {
@@ -16,7 +16,7 @@ export function CollapseRegion({ open, children, ...props }: PropsWithChildren<{
   return <div {...props} ref={body}>{children}</div>;
 }
 
-/** 保留同一枚箭头，开合状态由触发器 aria-expanded 驱动。 */
+/** Keep the same arrow; the open/closed state is driven by the trigger's aria-expanded. */
 export function CollapseChevron(props: { className?: string; 'aria-hidden'?: boolean | 'true' | 'false' }) {
   return <svg {...props} aria-hidden data-collapse-chevron="" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><use href="#i-chevron-down" /></svg>;

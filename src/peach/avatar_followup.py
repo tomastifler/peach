@@ -276,7 +276,7 @@ def run(contract, key: str, handle) -> dict:
     if (_kind == "performer" and refresher is not None and refresher.error
             and gfriends.index_age(refresher.cache_dir) is None):
         summary["source_unavailable"] = True
-        summary["outcome"] = "图库索引未取得；" + summary["outcome"]
+        summary["outcome"] = "Gallery index not retrieved; " + summary["outcome"]
     if (summary.get("face_match_unavailable") or summary.get("source_unavailable")
             or summary.get("outcome") == NO_IDENTITY):
         return summary
@@ -317,7 +317,7 @@ def _run(contract, key: str, handle) -> dict:
             return _install_account_face(contract, connection, providers_root, avatar_root,
                                          entity_id, name, cropped_px)
         avatar_picker.index_refresher(contract).ensure()
-        # 自动任务等待索引准备完成，再按本地缓存列候选。
+        # Automatic tasks wait for the index to finish preparing, then list candidates from the local cache.
         listing = avatar_picker.choices(connection, providers_root, avatar_root,
                                         kind, entity_id, deduplicate=False)
         found = [choice for choice in listing["choices"]
@@ -688,9 +688,9 @@ def _install_cover_face(contract, providers_root, avatar_root, kind: str,
     summary = {"name": name, "matched": matched}
     if not found:
         if probe.unavailable:
-            return {**summary, "outcome": f"{gallery}，人脸模型不可用：{probe.unavailable}",
+            return {**summary, "outcome": f"{gallery}, face model unavailable: {probe.unavailable}",
                     "face_match_unavailable": True}
-        return {**summary, "outcome": f"{gallery}，封面上没有能截的脸"}
+        return {**summary, "outcome": f"{gallery}, no face could be cropped from the cover"}
     face = found[0]
     # 装的只有脸最宽那一张；其余几张也截好留进候选缓存，挑图弹层里一点就能换，
     # 不必再去整张封面上手框。
@@ -787,7 +787,7 @@ def _install_account_face(contract, connection, providers_root, avatar_root, ent
     faces = avatar_cover_face.sheet_faces(connection, contract.cover_root, entity_id, probe,
                                           contract.snapshot_file)
     if probe.unavailable:
-        return {**summary, "outcome": f"人脸模型不可用：{probe.unavailable}",
+        return {**summary, "outcome": f"face model unavailable: {probe.unavailable}",
                 "face_match_unavailable": True}
     if not faces:
         return {**summary, "outcome": "作品画面上没有能截的脸"}

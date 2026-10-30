@@ -141,17 +141,17 @@ def _validated_paths(row: dict, *, windows: bool) -> tuple[PureWindowsPath, Pure
     text = str(row.get("path", "")).strip()
     from .smb_media import is_address, canonical
     if row.get('transport') == 'smb' and not is_address(text):
-        raise ValueError('请填写 smb://服务器/共享/目录')
+        raise ValueError('Please enter smb://server/share/directory')
     if is_address(text):
         text = canonical(text)
         row['path'] = text
         if any(not isinstance(row.get(key, ''), str) for key in ('smb_username', 'smb_password')):
-            raise ValueError('SMB 账号和密码必须是文字')
+            raise ValueError('SMB account and password must be text')
         if any(key in row and not isinstance(row[key], bool) for key in ('smb_encrypt', 'smb_clear')):
-            raise ValueError('SMB 连接选项无效')
+            raise ValueError('SMB connection options invalid')
         root = str(row.get('root', ''))
         if not platform.is_windows_path(root) or '..' in PureWindowsPath(root).parts:
-            raise ValueError('SMB 目录的内部路径无效')
+            raise ValueError('SMB internal path of the directory invalid')
         return PureWindowsPath(root), PurePosixPath(text)
     root = str(row.get("root") or text).strip() if windows else str(row.get("root", "")).strip()
     if any(ord(char) < 32 for char in text + root):

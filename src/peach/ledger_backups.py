@@ -10,11 +10,11 @@
 主文件删掉而边车没删掉的那一刻，这几个文件就再没有人会看它们一眼：下一轮列不到，只会
 一直留在账本目录里。2026-09-13 在真实数据目录数到 20 个，最早的来自 08-21。
 
-整理（下载后整理与手动整理）的备份放在 `<generated>/organize-backups/`，由
-`organize_backup` 写出并在同一处清退，只认 `ORGANIZE_PATTERN` 两种文件名。下载一波能在
-一小时里整理四十个文件，按年龄保留在这里等于不设上限，所以这一类只按份数留
-（`ORGANIZE_KEEP_RECENT`，`ORGANIZE_MIN_AGE` 为零）；整理进行中的那份由 `holding`
-登记，同一进程里的清退都不碰它。登记不跨进程：手动脚本给 `--keep 0` 时只靠份数保护。
+ Backups of organizing (post-download organizing and manual organizing) are placed in `<generated>/organize-backups/`, written by
+`organize_backup` written and purged in the same place, recognizing only the `ORGANIZE_PATTERN` two file name forms. A download wave can
+ organize forty files within an hour, so keeping by age here would amount to no limit; this category is therefore kept only by count
+(`ORGANIZE_KEEP_RECENT`, `ORGANIZE_MIN_AGE` is zero); the copy in use while organizing runs is `holding`
+ registered, and no purge in the same process touches it. Registration does not span processes: when a manual script is given `--keep 0` it is protected by count alone.
 """
 from __future__ import annotations
 
@@ -42,8 +42,8 @@ ORGANIZE_PATTERN = re.compile(r"^ledger\.pre-(?:download|organize)-.+\.db$")
 ORGANIZE_KEEP_RECENT = 5
 ORGANIZE_MIN_AGE = timedelta(0)
 
-#: 本进程里正在被一轮写入引用的备份。下载后整理与手动整理都在 Web 服务进程的线程里跑，
-#: 一方清退时要看得见另一方手上的那份。
+#: Backups currently referenced by a write round in this process. Both post-download organizing and manual organizing run on threads of the web service process,
+#: when one side purges it must see the copy the other side holds.
 _held: set[Path] = set()
 _held_lock = threading.Lock()
 
@@ -59,7 +59,7 @@ class BackupPlan:
 
 @contextmanager
 def holding(path: Path) -> Iterator[Path]:
-    """登记一份正在使用的备份；登记期间本进程里的清退都把它留下。"""
+    """Register a backup in use; while registered, purges in this process keep it."""
     key = path.resolve()
     with _held_lock:
         _held.add(key)
@@ -81,12 +81,12 @@ def organize_dir(generated_root: Path | str) -> Path:
 
 @contextmanager
 def organize_backup(live: Path, generated_root: Path | str, name: str) -> Iterator[Path]:
-    """整理前写一份整库备份，整理期间持有它，并清退同目录里超出保留份数的旧备份。
+    """Write a whole-database backup before organizing, hold it during organizing, and purge old backups in the same directory beyond the retention count.
 
-    清退失败只记日志：少删几份旧备份不能让这次整理失败。
+    A purge failure is only logged: deleting a few fewer old backups must not make this organizing fail.
     """
     if not ORGANIZE_PATTERN.match(name):
-        raise ValueError(f"整理备份文件名不合规则：{name}")
+        raise ValueError(f"Organize backup file name does not follow the pattern: {name}")
     backup = organize_dir(generated_root) / name
     sqlite_backup(live, backup)
     with holding(backup):
@@ -94,7 +94,7 @@ def organize_backup(live: Path, generated_root: Path | str, name: str) -> Iterat
             prune(live, apply=True, directory=backup.parent, pattern=ORGANIZE_PATTERN,
                   keep_recent=ORGANIZE_KEEP_RECENT, min_age=ORGANIZE_MIN_AGE)
         except Exception:
-            log.warning("整理备份清退失败", exc_info=True)
+            log.warning("Organize backup purge failed", exc_info=True)
         yield backup
 
 
@@ -109,7 +109,7 @@ def _size_with_sidecars(path: Path) -> int:
 
 
 def list_backups(directory: Path, pattern: re.Pattern[str] = BACKUP_PATTERN) -> list[Path]:
-    """目录下所有备份，按修改时间从旧到新。"""
+    """All backups in the directory, from oldest to newest modification time."""
     if not directory.is_dir():
         return []
     found = [
@@ -165,7 +165,7 @@ def plan(
     min_age: timedelta = MIN_AGE,
     now: datetime | None = None,
 ) -> BackupPlan:
-    """`directory` 缺省是账本所在目录；完整性检查总是针对 `live`。"""
+    """`directory` defaults to the ledger's directory; the integrity check always targets `live`."""
     folder = directory if directory is not None else live.parent
     backups = list_backups(folder, pattern)
     orphans = tuple(orphan_sidecars(folder, pattern))

@@ -4,9 +4,9 @@ import { spriteGlyph } from '../components/sprite-glyph';
 
 const SearchGlyph = spriteGlyph('search');
 
-/* 只读筛选不配提交按钮：停手 300ms 就查，回车是「别等了，现在就查」。中文输入法选字过程中
-   一样发 input，拿还没定型的拼音去筛，筛的是「zhon」这种半截输入；组完字由 compositionend
-   接手，组字过程中的回车是在定字，也放过去。 */
+/* A read-only filter has no submit button: it searches 300ms after typing stops, and Enter means "don't wait, search now". While a Chinese input method is composing,
+   input still fires, so filtering would use unfinished pinyin such as "zhon"; once composition completes, compositionend
+   takes over, and Enter during composition only confirms the characters, so let it through. */
 export function IndexSearch({ label, value, onQuery }: { label: string; value: string; onQuery(q: string): void }) {
   const [text, setText] = useState(value);
   const composing = useRef(false);

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { manageHeaderSkeletonHtml, manageHeaderView, type ManageEntry, type ManageHeaderProps } from '../src/manage-header';
 
 const SECTIONS: ManageEntry[] = [
-  ['stats', '统计', 'chart'], ['cleanup', '数据管理', 'database'], ['trash', '回收站', 'trash'],
+  ['stats', '统计', 'chart'], ['cleanup', 'Data management', 'database'], ['trash', 'Trash', 'trash'],
   ['configuration', 'Peach 配置', 'settings'],
 ];
 const MENU = SECTIONS.filter(([key]) => key !== 'trash');
@@ -25,9 +25,9 @@ describe('页头判据', () => {
   it('数据管理之下的子页画面包屑，标题取子页的名字；hub 自己与别的管理区不画', () => {
     expect(manageHeaderView(props('cleanup', '/junk-files'))).toMatchObject({ title: 'Junk files', crumb: 'Junk files' });
     expect(manageHeaderView(props('cleanup', '/sources'))).toMatchObject({ title: 'Sources & credentials', crumb: 'Sources & credentials' });
-    expect(manageHeaderView(props('cleanup', '/data-cleanup'))).toMatchObject({ title: '数据管理', crumb: '' });
+    expect(manageHeaderView(props('cleanup', '/data-cleanup'))).toMatchObject({ title: 'Data management', crumb: '' });
     expect(manageHeaderView(props('stats', '/stats'))).toMatchObject({ title: '统计', crumb: '' });
-    expect(manageHeaderView(props('trash', '/trash'))).toMatchObject({ title: '回收站', crumb: 'Trash' });
+    expect(manageHeaderView(props('trash', '/trash'))).toMatchObject({ title: 'Trash', crumb: 'Trash' });
   });
 
   it('窄屏标题收一档的只有数据管理 hub、来源和凭证与配置', () => {

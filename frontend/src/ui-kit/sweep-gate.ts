@@ -1,10 +1,10 @@
-/* 骨架微光只在看得见的时候扫。
+/* The skeleton shimmer sweeps only while it is visible.
  *
- * 微光是 `::after` 上一条 `transform` 动画（`web/css/09-skeleton.css` 的 `skeleton-sweep`）。
- * 懒加载的图在屏幕外一直不来，框上的微光就一直扫：首页横条、人物索引、关注页一屏外的
- * 几十格，每帧都有一次动画样式失效。这里用一个共用的交叉观察器把框标成 `data-sweep`：
- * 不在视口里是 `idle`（样式表暂停动画），露面后在视口里等满 `SWEEP_STALL_MS` 图还没到就是
- * `stalled`（样式表撤掉动画、只铺静止的占位面）。图到手或取不到时调用方 `releaseSweep`。 */
+ * The shimmer is a `::after` animation on `transform` (`web/css/09-skeleton.css` in `skeleton-sweep`).
+ * A lazy-loaded image that stays off-screen never arrives, so the shimmer on its frame keeps sweeping: the home strip, the people index and the dozens of cells beyond one screen on the follow page
+ * each invalidate animation styles every frame. Here a shared intersection observer marks the frame as `data-sweep`:
+ * not in the viewport is `idle` (the stylesheet pauses the animation), and once visible it waits in the viewport for a full `SWEEP_STALL_MS` and if the image has still not arrived it is
+ * `stalled` (the stylesheet removes the animation and lays only a static placeholder surface). When the image arrives or cannot be fetched the caller calls `releaseSweep`. */
 
 export const SWEEP_STALL_MS = 10_000;
 
@@ -24,7 +24,7 @@ function observer(): IntersectionObserver | null {
         continue;
       }
       delete box.dataset.sweep;
-      // 露面才开始计时：屏幕外排队的懒加载图还没开始下载，不能算它超时。
+      // Timing starts only once it is visible: a lazy-loaded image queued off-screen has not started downloading, so it cannot count as timed out.
       if (!stallTimers.has(box)) stallTimers.set(box, setTimeout(() => {
         stallTimers.delete(box);
         if (box.isConnected) box.dataset.sweep = 'stalled';
@@ -34,12 +34,12 @@ function observer(): IntersectionObserver | null {
   return sight;
 }
 
-/** 开始照看一个带微光的框：屏幕外暂停，露面后等太久换成静止占位。 */
+/** Start watching a frame with a shimmer: paused off-screen, and swapped for a static placeholder if it waits too long after becoming visible. */
 export function gateSweep(box: Element): void {
   observer()?.observe(box);
 }
 
-/** 框里的内容到了或确定取不到：停止照看并撤掉标记。 */
+/** The frame's content arrived or is confirmed unavailable: stop watching and remove the marker. */
 export function releaseSweep(box: Element): void {
   sight?.unobserve(box);
   clearTimeout(stallTimers.get(box));

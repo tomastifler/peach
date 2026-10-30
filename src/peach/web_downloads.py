@@ -80,16 +80,16 @@ def q_downloads(contract, args) -> dict:
     try:
         before_id = int(before) if before is not None else None
     except (TypeError, ValueError):
-        raise ValueError("下载任务分页位置无效") from None
+        raise ValueError("Invalid download task page position") from None
     if before_id is not None and before_id < 1:
-        raise ValueError("下载任务分页位置无效")
+        raise ValueError("Invalid download task page position")
     snapshot = _service(contract).snapshot(limit, before_id=before_id)
     _attach_library_artwork(contract, snapshot["tasks"])
     return snapshot
 
 
 def _attach_library_artwork(contract, tasks: list[dict]) -> None:
-    """已入库任务复用本机馆藏封面与人物资料；不发起远端取图。"""
+    """Imported tasks reuse the local library's covers and person metadata; no remote image fetch is initiated."""
     from .catalog_rules import same_release_code
     from .web_catalog import attach_artwork_fields, attach_card_performers
 
@@ -145,12 +145,12 @@ def settings_payload(service: DownloadService, declared_roots) -> dict:
         pikpak = account(_values(credentials, PIKPAK_CREDENTIAL))
     except DownloadError:
         pikpak = account(None)
-        problems.append("PikPak 登录信息无法读取，请重新登录。")
+        problems.append("PikPak login information cannot be read; please log in again.")
     try:
         token_set = "token" in credentials.describe(CLOUDDRIVE_CREDENTIAL)["fields"]
     except CredentialError:
         token_set = False
-        problems.append("CloudDrive2 令牌无法读取，请重新填写。")
+        problems.append("CloudDrive2 token cannot be read; please re-enter it.")
     login = _browser_login(service)
     channels = service.channel_snapshot()
     return {

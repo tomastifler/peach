@@ -8,7 +8,7 @@ export type SelectionAction = { label: string; disabled?: boolean } & (
   { onPress(): void; href?: never } | { href: string; onPress?: never }
 );
 
-/** 短操作并排，长操作各占整行；文字保持一行。 */
+/** Short actions sit side by side, long actions take a whole row each; text stays on one line. */
 export function SelectionActions({ actions, layout = 'inline', prefix, onNavigate }: {
   actions: readonly SelectionAction[];
   layout?: 'inline' | 'fullWidth';

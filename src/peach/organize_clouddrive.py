@@ -103,7 +103,7 @@ DownloadRequest, DownloadReply, ListRequest, ListReply, RenameRequest, MoveReque
 
 @dataclass(frozen=True)
 class PikPakPaths:
-    """已声明媒体根、CloudDrive 前缀和账号内 WebDAV 目录的对应关系。"""
+    """Declared media roots, CloudDrive prefixes and the mapping to WebDAV directories within the account."""
 
     root: str
     remote: str
@@ -112,24 +112,24 @@ class PikPakPaths:
     def __post_init__(self):
         root = PureWindowsPath(self.root)
         if not root.is_absolute() or root.drive.startswith('\\\\') or '..' in root.parts:
-            raise ValueError('PikPak 媒体根必须是已声明的 Windows 格式绝对路径')
+            raise ValueError('PikPak media root must be a declared absolute path in Windows format')
         for path in (self.remote, self.dav_root):
             if path and (not path.startswith('/') or any(
                     part in ('.', '..') or '\\' in part or ':' in part
                     or any(ord(char) < 32 for char in part) for part in path.split('/'))):
-                raise ValueError('PikPak 云端目录格式无效')
+                raise ValueError('PikPak cloud directory format is invalid')
         if normalise_prefix(self.remote) == '/':
-            raise ValueError('PikPak 云端前缀不能是 CloudDrive 总根目录')
+            raise ValueError('PikPak cloud prefix cannot be the CloudDrive root')
 
     def relative(self, path: str) -> tuple[str, ...]:
         item = PureWindowsPath(path)
         if not item.is_absolute() or '..' in item.parts or any(
                 ':' in part or any(ord(char) < 32 for char in part) for part in item.parts[1:]):
-            raise ValueError('路径越出已声明的 PikPak 来源')
+            raise ValueError('Path escapes the declared PikPak source')
         try:
             return item.relative_to(PureWindowsPath(self.root)).parts
         except ValueError:
-            raise ValueError('路径越出已声明的 PikPak 来源') from None
+            raise ValueError('Path escapes the declared PikPak source') from None
 
     def cloud_path(self, path: str) -> str:
         return normalise_prefix(self.remote) + ''.join('/' + part for part in self.relative(path))
@@ -139,23 +139,23 @@ class PikPakPaths:
 
 
 def _configured_paths(sample_path: str, roots, prefixes) -> PikPakPaths:
-    """从当前 PikPak 媒体根选取样本所属的唯一云端映射。"""
+    """Select, from the current PikPak media root, the unique cloud mapping that the sample belongs to."""
     sample = PureWindowsPath(sample_path)
     candidates = [PureWindowsPath(root) for root in roots.get('pikpak', ())
                   if sample.is_relative_to(PureWindowsPath(root))]
     if not candidates:
-        raise ValueError('认证样本不属于已声明的 PikPak 媒体根')
+        raise ValueError('The authentication sample does not belong to the declared PikPak media root')
     root = max(candidates, key=lambda item: len(item.parts))
     matches = [entry for entry in prefixes if PureWindowsPath(entry.root) == root]
     if len(matches) != 1:
-        raise ValueError('请在推送发现中为该 PikPak 媒体根配置唯一的 CloudDrive 路径前缀')
+        raise ValueError('Please configure a unique CloudDrive path prefix for this PikPak media root in push discovery')
     mapping = PikPakPaths(str(root), matches[0].prefix)
     mapping.relative(sample_path)
     return mapping
 
 
 class PikPakDav:
-    """已声明 PikPak 目录的一次移动：官方接口提交一次，官方完整目录确认结果。
+    """One move within a declared PikPak directory: submitted once through the official API, with the result confirmed by the official full directory.
 
     `listing(path)` 返回官方目录的完整成员；`rename`／`move_remote` 提交同父改名与保留名称的
     跨目录移动，回 `ACCEPTED`、`REJECTED` 或 `None`。
@@ -296,12 +296,12 @@ def _cloud_listing(cloud, path, mapping):
     """逐层完整读取官方目录元数据并校验来源、父目录与重名。"""
     relative = mapping.relative(path)
     if len(relative) > 32:
-        raise ValueError('官方目录路径超过层级预算')
+        raise ValueError('Official directory path exceeds the depth budget')
     previous = None
     for depth in range(len(relative) + 1):
         parent = PureWindowsPath(mapping.root, *relative[:depth])
         if previous is not None and not any(PureWindowsPath(row['path']) == parent and row['directory'] for row in previous):
-            raise FileNotFoundError('官方父目录未列出所需目录')
+            raise FileNotFoundError('The official parent directory does not list the required directory')
         request = ListRequest(path=mapping.cloud_path(str(parent)), forceRefresh=True)
         call = cloud.channel.unary_stream(SERVICE + 'GetSubFiles',
             request_serializer=ListRequest.SerializeToString, response_deserializer=ListReply.FromString)
@@ -341,7 +341,7 @@ def _move_remote(cloud, source, target, mapping):
     old_remote, new_remote = mapping.cloud_path(source), mapping.cloud_path(target)
     if (old.name != new.name or old.parent == new.parent
             or PureWindowsPath(mapping.root) in (old, new)):
-        raise ValueError('官方移动来源、父目录或文件名不符')
+        raise ValueError('Official move source, parent directory or file name does not match')
     request = MoveRequest(theFilePaths=[old_remote],
                           destPath=str(PurePosixPath(new_remote).parent),
                           conflictPolicy=2, moveAcrossClouds=False, handleConflictRecursively=False)
@@ -361,7 +361,7 @@ def _rename_remote(cloud, source, target, mapping):
     old_remote = mapping.cloud_path(source)
     mapping.relative(target)
     if old.parent != new.parent or PureWindowsPath(mapping.root) in (old, new):
-        raise ValueError('官方改名只支持已声明来源内的同父目录')
+        raise ValueError('Official rename supports only the same parent directory within a declared source')
     stub = cloud.channel.unary_unary(SERVICE + 'RenameFile',
         request_serializer=RenameRequest.SerializeToString, response_deserializer=pb.FileOperationResult.FromString)
     try:
@@ -373,7 +373,7 @@ def _rename_remote(cloud, source, target, mapping):
 
 
 def _refresh_listing(cloud, path, mapping):
-    """使已声明目录的缓存过期，再按完整祖先链读取实际成员。"""
+    """Expire the cache of the declared directory, then read the actual members along the full ancestor chain."""
     from . import downloads_clouddrive_pb2 as pb
     remote = mapping.cloud_path(path)
     stub = cloud.channel.unary_unary(SERVICE + 'ForceExpireDirCache',
@@ -383,7 +383,7 @@ def _refresh_listing(cloud, path, mapping):
              timeout=15, metadata=(('authorization', 'Bearer ' + cloud.token),))
     except grpc.RpcError as error:
         if error.code() != grpc.StatusCode.NOT_FOUND:
-            raise OSError('目录缓存刷新未取得：' + error.code().name) from None
+            raise OSError('Directory cache refresh not obtained: ' + error.code().name) from None
     return _cloud_listing(cloud, path, mapping)
 
 
@@ -429,16 +429,16 @@ def pikpak_renames(sample_path: str, roots):
     with CloudDriveClient(address, credential.values['token'], timeout=15) as cloud:
         info = cloud.find(mapping.remote)
         if info is None or info.CloudAPI.name.casefold() != 'webdav':
-            raise ValueError('既有 PikPak WebDAV 来源未取得')
+            raise ValueError('The existing PikPak WebDAV source was not obtained')
         account_root = info.CloudAPI.path if info.CloudAPI.HasField('path') else ''
         if not account_root and info.isCloudRoot:
             account_root = mapping.remote
         if not account_root:
-            raise ValueError('CloudDrive 未返回 WebDAV 账号根目录')
+            raise ValueError('CloudDrive did not return a WebDAV account root')
         try:
             tail = PurePosixPath(mapping.remote).relative_to(PurePosixPath(account_root))
         except ValueError:
-            raise ValueError('CloudDrive 路径前缀不属于返回的账号根目录') from None
+            raise ValueError('CloudDrive path prefix does not belong to the returned account root') from None
         mapping = PikPakPaths(mapping.root, mapping.remote, '/' + '/'.join(tail.parts))
         headers = _download_headers(cloud, sample_path, mapping)
         with http_client(root=SECRETS_DIR, headers=headers, timeout=20, follow_redirects=False) as http:

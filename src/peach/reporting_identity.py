@@ -1,4 +1,4 @@
-"""远程事件的有限用途、运行环境、分发方式与构建身份。"""
+"""Limited purpose, runtime environment, distribution method and build identity of a remote event."""
 from __future__ import annotations
 
 import math
@@ -13,12 +13,12 @@ from . import __version__
 from .buildinfo import frozen_build
 
 PURPOSES = {"usage": "version-statistics", "errors": "technical-diagnostics", "research": "population-research"}
-# 内存按常见容量取最近一档，只说明机器量级，不上报精确字节数。
+# Memory is reported as the nearest common capacity tier, indicating only the machine's scale and not the exact byte count.
 MEMORY_BUCKETS_GB = (2, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256)
 
 
 def distribution():
-    """安装来源：桌面应用、Docker 镜像、wheel 安装或源码检出。"""
+    """Install source: desktop app, Docker image, wheel install or source checkout."""
     if getattr(sys, "frozen", False):
         return {"Windows": "windows-app", "Darwin": "macos-app"}.get(platform.system(), "packaged")
     if os.environ.get("PEACH_DISTRIBUTION") == "docker":
@@ -51,7 +51,7 @@ def memory_bucket(total):
 
 
 def machine_facts():
-    """版本统计附带的本机量级信息；Docker 内的系统版本是宿主内核。"""
+    """Machine-scale information attached to version statistics; Docker the system version inside is the host kernel."""
     system = platform.system()
     version = (platform.mac_ver()[0] if system == "Darwin"
                else platform.version() if system == "Windows" else platform.release())

@@ -82,7 +82,7 @@ def stop(program: Path, *, timeout: float = 60) -> bool:
     """
     from .windows_restart import find_tray_windows, post_stop
     windows = find_tray_windows(program / "Peach.exe")
-    # 每个窗口都投递一次；一条都没投出去、窗口又还在，托盘收不到停止消息，等也不会退。
+    # Posted once to each window; if none was posted and a window is still there, the tray receives no stop message and waiting will not make it exit.
     sent = [post_stop(window.handle) for window in windows]
     if windows and not any(sent) and find_tray_windows(program / "Peach.exe"):
         return False

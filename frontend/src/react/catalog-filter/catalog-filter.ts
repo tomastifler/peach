@@ -89,7 +89,7 @@ export interface CatalogFilterHelpers {
 export interface CatalogFilterProps {
   /** 两排头像。首屏还在等两个聚合查询时为空：两排与标签条摆占位加一道微光，四枚视图与下排照常。 */
   tiers: CatalogTiers | null;
-  /** 壳正有一趟头像取数在路上：只有这时两排挂忙态。不取头像的页面 `tiers` 一直为空，不算在等。 */
+  /** The shell has an avatar fetch on its way: only then do the two rows get the busy state. For pages that do not fetch avatars `tiers` stays empty, which does not count as waiting. */
   tiersPending: boolean;
   /** 空馆藏：两排与标签条摆一行占位，说的是「这里将来会有东西」。 */
   empty: boolean;
@@ -127,8 +127,8 @@ export const ROW_AHEAD = 320;
 /** 空馆藏占位每排摆多少格，由容器裁到可用宽度。 */
 export const EMPTY_SLOTS = 64;
 
-/** 两排各画没画。取回之前的占位照本机上次画好时的这份排：没人的那排取回后会收起，先画出来
- *  就是一整排的位移。没有记录或记录坏了时两排都画。 */
+/** Whether each of the two rows is drawn. The placeholder before the fetch returns is laid out like the last one this machine drew: a row with nobody in it collapses after the fetch returns, and drawing
+ *  it first would shift a whole row. When there is no record or the record is corrupt, both rows are drawn. */
 export interface TiersShape { performers: boolean; studios: boolean }
 
 export const TIERS_SHAPE_KEY = 'peach.catalog.tiers.v1';
@@ -144,5 +144,5 @@ export function rememberTiers(shape: TiersShape): void {
   try {
     const value = JSON.stringify({ performers: shape.performers, studios: shape.studios });
     if (localStorage.getItem(TIERS_SHAPE_KEY) !== value) localStorage.setItem(TIERS_SHAPE_KEY, value);
-  } catch { /* 下次两排都画。 */ }
+  } catch { /* next time, draw both rows. */ }
 }

@@ -9,11 +9,11 @@ import { setProcessingNoticeVisible, useProcessingNoticeVisibility } from './pro
 
 const TASK_TOAST = 'peach-library-processing';
 
-/** 路由根持续观察，任务浮层不随换页卸载；普通回执使用有独立目标的栈。
+/** Observed continuously at the route root, so the job popup is not unmounted on page changes; ordinary receipts use a stack with its own target.
  *
- *  只收自己画出来、还在栈里的那一张。Sonner 的收起分两步送达：先登记，下一帧再由栈把这个 id
- *  标成删除。页面刚打开、任务状态还没回来时若对一张不存在的卡发收起，栈那一帧在主线程忙时会
- *  落在随后画出任务卡的那次更新之后，把刚出现的任务卡一起收走，状态不变就再也不出来。 */
+ *  Only dismiss the one it drew itself that is still in the stack. Sonner delivers a dismiss in two steps: it registers first, and on the next frame the stack marks this id
+ *  as removed. If a dismiss is sent for a card that does not exist when the page has just opened and the job state has not returned, then when the main thread is busy the stack's frame will
+ *  land after the update that later draws the job card, sweeping away the just-appeared job card with it, and with no state change it never comes back. */
 export function LibraryProcessingDock({ toast: receipt }: Pick<LibraryProcessingProps, 'toast'>) {
   const { job, settled } = useLibraryProcessingJob({ toast: receipt, mode: 'notice' });
   const shown = useRef(false);

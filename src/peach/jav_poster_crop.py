@@ -614,7 +614,7 @@ def read_sidecar(image_path: Path | str) -> dict | None:
 
 
 def write_sidecar(image_path: Path | str, record: dict) -> Path:
-    """先写临时文件再换名：服务的封面索引只认目录修改时间，原地覆写不会让它重读。"""
+    """Write a temp file first and then rename: the service's cover index only watches directory modification time, and overwriting in place would not make it re-read."""
     return atomic_write_text(sidecar_path(image_path), json.dumps(record, ensure_ascii=False))
 
 

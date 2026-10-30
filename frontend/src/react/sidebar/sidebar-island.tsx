@@ -112,8 +112,8 @@ function Navigation({ host: at, epoch, version }: { host: SidebarHost; epoch: nu
     const head = scroll.querySelector<HTMLElement>(':scope > [data-sidebar-head]');
     const resize = new ResizeObserver(() => sync());
     [drawer, scroll, head].forEach((node) => { if (node) resize.observe(node) });
-    /* 开合事件在点击回调里同步发出，那一刻整页样式刚因开合类名变脏，当场量就是一次整树重算；
-       挪到下一帧和尺寸观察器一起量。 */
+    /* The open/close event is emitted synchronously in the click callback, when the whole page's styles have just been dirtied by the open/close class name, so measuring on the spot forces a whole-tree recalculation;
+       move it to the next frame and measure together with the size observer. */
     let frame = 0;
     const later = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; sync() }) };
     document.addEventListener('board:sidebar', later);
@@ -237,12 +237,12 @@ function catalogGroups(
       ? { title: 'Duration', kind: 'meta', active: false, body: <Duration host={at} filters={filters} /> }
       : null,
     /* 产地紧挨着来源：两者回答的都是「这批片打哪来」，一个说存储，一个说发行体系。可多选。 */
-    spec('产地', 'general', facets.regions, 'region', true),
-    spec('发行年份', 'meta', facets.years || [], 'year', true),
-    spec('画幅', 'meta', facets.orientations, 'orient', false),
-    spec('创作者', 'artist', facets.creators, 'creator', false, 'creator'),
-    spec('内容标签', 'general', facets.tags, 'tag', false, 'tag'),
-    spec('影片属性', 'meta', facets.tech, 'tag', false, 'tech'),
+    spec('Region', 'general', facets.regions, 'region', true),
+    spec('Release year', 'meta', facets.years || [], 'year', true),
+    spec('Orientation', 'meta', facets.orientations, 'orient', false),
+    spec('Creator', 'artist', facets.creators, 'creator', false, 'creator'),
+    spec('Content tags', 'general', facets.tags, 'tag', false, 'tag'),
+    spec('Video attributes', 'meta', facets.tech, 'tag', false, 'tech'),
     facets.followTags.length ? {
       title: 'Followed tags', kind: 'online', active: false,
       body: <FollowChips rows={facets.followTags} host={at} selected={null} badges />,

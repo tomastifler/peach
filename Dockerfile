@@ -14,11 +14,11 @@ COPY resources ./resources
 COPY tools/amane-bridge ./tools/amane-bridge
 COPY scripts/write_reporting_config.py ./scripts/
 COPY scripts/build_amane_runtime.py scripts/amane_bridge.spec ./scripts/
-# vision 带上 OpenCV：镜像里随附的人脸模型要靠它才能检出与比对。
+# The vision extra brings in OpenCV: the face models bundled in the image need it to detect and match faces.
 RUN uv sync --locked --no-dev --no-editable --extra vision
 RUN .venv/bin/python -X utf8 scripts/build_amane_runtime.py --kind python \
     --destination /app/amane-runtime --work /app/build/amane-runtime
-# 公开 DSN 写进 wheel 的资源目录；发行流水线传 PEACH_REQUIRE_REPORTING=1，缺失时构建失败。
+# The public DSN is written into the wheel's resources directory; the release pipeline passes PEACH_REQUIRE_REPORTING=1, and the build fails if it is missing.
 ARG PEACH_SENTRY_DSN="" PEACH_LIBRARY_SENTRY_DSN="" PEACH_REQUIRE_REPORTING=""
 RUN target="$(.venv/bin/python -c 'import pathlib, peach; print(pathlib.Path(peach.__file__).parent / "_resources" / "sentry.json")')" \
     && .venv/bin/python scripts/write_reporting_config.py --output "$target" ${PEACH_REQUIRE_REPORTING:+--require}
@@ -27,12 +27,12 @@ FROM python:3.15.1-slim-trixie
 LABEL org.opencontainers.image.title="Peach" \
       org.opencontainers.image.source="https://github.com/peach-mitao/peach" \
       org.opencontainers.image.licenses="AGPL-3.0-or-later"
-# amane 独立环境在构建阶段准备，空数据卷可直接调用。
+# The standalone amane environment is prepared at build time, so an empty data volume can call it directly.
 RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg openssl ca-certificates mesa-va-drivers vainfo \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --gid 1000 peach && useradd --uid 1000 --gid 1000 --create-home peach \
     && mkdir /data && chown peach:peach /data
-# 人脸模型与许可证随镜像分发，地址与哈希同 scripts/fetch_face_models.py，运行时经 PEACH_FACE_MODELS 读取。
+# Face models and licenses ship with the image; URLs and hashes match scripts/fetch_face_models.py, and the runtime reads them through PEACH_FACE_MODELS.
 ADD --chmod=a+rX --checksum=sha256:8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4 \
     https://media.githubusercontent.com/media/opencv/opencv_zoo/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/face_detection_yunet/face_detection_yunet_2023mar.onnx \
     /app/tools/face-models/face_detection_yunet_2023mar.onnx

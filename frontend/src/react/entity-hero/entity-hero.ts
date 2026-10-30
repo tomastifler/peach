@@ -164,7 +164,7 @@ export const entityFeedTip = (on: boolean) => on
   ? 'Subscribed to new releases; click to unsubscribe'
   : 'Subscribe to new releases';
 
-/** 当前语言的可选艺名，统称只保留一项；值仍指向已登记的名称。 */
+/** The selectable stage names in the current language, with only one kept for the collective name; the value still points to a registered name. */
 export function nameChoices(entity: EntityHeroData, language: 'zh-CN' | 'ja' = 'zh-CN'): { value: string; label: string }[] {
   if (entity.name_display) return entity.name_display.choices[language];
   return [entity.canonical_name, ...(entity.aliases || [])]

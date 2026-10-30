@@ -69,9 +69,9 @@ def directory_index(connection, config, *, locations: str = '', library: str = '
             chain.append(add(location, str(current), chain[-1]['id'], root_key))
         return chain
 
-    # 同一目录下的文件走出来的是同一条链。七八万行逐行构造路径对象要好几秒，按目录前缀
-    # 记下第一条算出的链，其余文件只累加计数。末段为空或 `.`、没有分隔符、UNC 形态的
-    # 前缀不保证同前缀同父目录，逐行照算。
+    # Files under the same directory yield the same chain. Constructing path objects row by row for seventy or eighty thousand rows takes several seconds, so by directory prefix
+    # the first computed chain is remembered, and the other files only accumulate counts. A prefix whose last segment is empty or `.`, has no separator, or is of, UNC form
+    # does not guarantee the same parent directory for the same prefix, so it is computed row by row.
     chains: dict[tuple[str, str], list | None] = {}
     rows = connection.execute(
         "SELECT location,path,medium FROM asset WHERE path IS NOT NULL AND path<>'' "

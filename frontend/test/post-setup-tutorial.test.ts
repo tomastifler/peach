@@ -104,5 +104,5 @@ it('取不到清单时关闭在左、立即重试在右', () => {
   const host = document.createElement('div');
   host.innerHTML = postSetupTutorialErrorHtml('');
   expect([...host.querySelectorAll('.post-setup-error-actions button')].map((button) => button.textContent))
-    .toEqual(['关闭', '立即重试']);
+    .toEqual(['Close', 'Retry now']);
 });

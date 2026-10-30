@@ -1,4 +1,4 @@
-/* 三种处理方式对比表：步骤一列，三档各一列，做与不做用符号，不靠颜色单独分辨。 */
+/* Comparison table of the three processing modes: one column for steps and one for each mode, with symbols for done and not done, not distinguished by color alone. */
 .peach-react [data-policy-matrix] { width: 100%; max-width: 560px; margin-top: 4px; border-collapse: collapse; color: var(--ink-2); }
 .peach-react [data-policy-matrix] :is(th, td) { padding: 6px 8px; border-bottom: 1px solid var(--line-soft); text-align: center; font-weight: 400; }
 .peach-react [data-policy-matrix] thead th { color: var(--muted); }
@@ -6,9 +6,9 @@
 .peach-react [data-policy-matrix] [data-policy-cell="on"] { color: var(--ink); }
 .peach-react [data-policy-matrix] [data-policy-cell="off"] { color: var(--muted); }
 .peach-react [data-policy-matrix] tr:last-child > * { border-bottom: 0; }
-/* 「媒体库与目录」按媒体库分组，照关注页「作者卡 → 来源行」的结构：一个媒体库一张白卡，标题行在上、
- * 下面一道分隔线；同一库的文件夹在卡里一行一行排，行与行之间是通栏细线，「添加文件夹」在最后一行。
- * 分隔线取 button border：Peach 暗色 primary 与 separator 同为 neutral-800，用 separator 会看不见。 */
+/* "Libraries and folders" is grouped by library, following the follow page's "creator card → source row" structure: one white card per library, with the title row on top
+ * and a divider below; the folders of one library are listed row by row in the card with full-width thin lines between rows, and "Add folder" is in the last row.
+ * The divider uses button border: in Peach dark, primary and separator are both neutral-800, so using separator would be invisible. */
 .peach-react [data-library-head] {
   display: flex;
   flex-wrap: wrap;
@@ -27,8 +27,8 @@
 .peach-react [data-library-folders] > * + * { border-top: 1px solid var(--color-border-button-default); }
 .peach-react [data-library-folders] > [data-folder-row] { border-width: 0; border-radius: 0; background: none; }
 .peach-react [data-library-folders] > [data-folder-row] + * { border-top-width: 1px; }
-/* 来源色的触发键：一颗当前色的球加色名；「无颜色」是一颗中性球加一道斜线。 */
-/* 和同一行的图标键、下拉框同档：36px 高、同样的边框与圆角。 */
+/* The source color trigger: a ball in the current color plus the color name; "No color" is a neutral ball with a diagonal slash. */
+/* Same tier as the icon button and dropdown on the same row: 36px tall with the same border and corner radius. */
 .peach-react [data-library-color-trigger] {
   display: inline-flex; width: auto; height: 36px; gap: 8px; padding: 0 10px 0 7px;
   border: 1px solid var(--color-border-button-default); border-radius: 10px;

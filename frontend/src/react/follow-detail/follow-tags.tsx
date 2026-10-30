@@ -1,4 +1,4 @@
-/* 在线标签复用本地详情的标签行、选择器和名称编辑。 */
+/* Online tags reuse the local details' tag row, picker and name editing. */
 import { apiSend } from '../../api';
 import { collectionItems, replaceFollowItem, type FollowGroup } from '../follow-feed/follow-feed';
 import { DetailTags } from '../components/detail-tags';
@@ -27,14 +27,14 @@ export function FollowTags({ item, label, actions }: { item: FollowDetailItem; l
   }, () => {
     if (operation === 'add') rememberTag(tag);
     const inverse = operation === 'add' ? 'remove' : item.custom_tags?.includes(tag) ? 'add' : 'restore';
-    actions.toast(operation === 'add' ? `已添加标签「${label(tag)}」` : `已删除标签「${label(tag)}」`, {
+    actions.toast(operation === 'add' ? `Added tag "${label(tag)}"` : `Deleted tag "${label(tag)}"`, {
       undo: async () => {
         const result = await apiSend<{ item: FollowDetailItem; group: FollowGroup }>('/api/follow/tag', { id: item.id, operation: inverse, tag });
         apply(result); await refresh();
       },
     });
   }) };
-  return <section aria-label="内容标签" data-follow-tag-editor="" data-follow-detail-tags="">
+  return <section aria-label="Content tags" data-follow-tag-editor="" data-follow-detail-tags="">
     <DetailTags tags={detailTags(item, label).map(k => ({ k, cat: tagCategory(item, k) }))} scope="online" adding={!!action.busy}
       candidates={[]}
       label={label} onOpen={actions.openTag} onAdd={tag => write('add', tag)} onRemove={tag => write('remove', tag.k)}

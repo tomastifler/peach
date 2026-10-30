@@ -33,7 +33,7 @@
 /* 骨架里的版式开关是接管后那枚 BoardUI 分段器的替身：每格 28px 见方、图标 16px，整枚宽度对得上。 */
 .index .ihead .iconswitch>label{width:28px;height:28px}
 .index .ihead .iconswitch svg{width:16px;height:16px}
-/* 标题、动作和过滤框共用一行；过滤框按剩余宽度收缩，名册读数独占窄屏次行。 */
+/* Title, actions and filter box share one row; the filter box shrinks to the remaining width, and the roster readout takes its own second row on narrow screens. */
 @media (max-width:760px){
   .index .ihead{flex-wrap:wrap;column-gap:8px}
   .indexheading,#indexCount{white-space:nowrap}

@@ -23,7 +23,7 @@ export function ReportingChoices({ value, onChange, busy = false }: {
           onChange={(enabled) => onChange({ ...value, usage: enabled, errors: enabled })} {...busyProps(busy)} />
       </SettingsRow>
     </Rows>
-    {!value.available ? <Stack divided><span className="self-start"><StatusLabel>上传服务未配置</StatusLabel></span></Stack> : null}
+    {!value.available ? <Stack divided><span className="self-start"><StatusLabel>Upload service not configured</StatusLabel></span></Stack> : null}
   </>;
 }
 

@@ -27,8 +27,8 @@ it('外部播放器只在用户请求后签发链接，并保留网络地址供 
   const host = await mount(<ExternalPlayback id={1} />);
   await settle();
   expect(fetcher.mock.calls.map(([url]) => url)).toEqual(['/api/local-players']);
-  await choose(host.querySelector('[aria-label="外部播放器"]'), '网络播放地址 / VR');
-  await click(host.querySelector('[aria-label="使用外部播放器打开"]'));
+  await choose(host.querySelector('[aria-label="External player"]'), 'Network playback URL / VR');
+  await click(host.querySelector('[aria-label="Open with external player"]'));
   await settle();
   expect(fetcher.mock.calls).toHaveLength(2);
   expect(host.querySelectorAll('[data-local-playback-row]')).toHaveLength(1);
@@ -44,9 +44,9 @@ it('播放器菜单只列检测到的程序和通用网络播放方式', async (
   const host = await mount(<ExternalPlayback id={3} />);
   await settle();
   expect(host.querySelector('[data-select-trigger]')?.textContent?.trim()).toBe('系统默认播放器');
-  await click(host.querySelector('[aria-label="外部播放器"]'));
+  await click(host.querySelector('[aria-label="External player"]'));
   expect([...document.querySelectorAll('[role="option"]')].map(node => node.textContent?.trim())).toEqual([
-    '系统默认播放器', 'PotPlayer', 'M3U 播放列表', '网络播放地址 / VR',
+    '系统默认播放器', 'PotPlayer', 'M3U playlist', 'Network playback URL / VR',
   ]);
 });
 
@@ -58,11 +58,11 @@ it('本机可选择已安装播放器并在打开成功后回执，失败保留�
   const host = await mount(<ExternalPlayback id={7} onOpened={opened} />);
   await settle();
   expect(host.textContent).toContain('系统默认播放器');
-  await click(host.querySelector('[aria-label="使用外部播放器打开"]'));
+  await click(host.querySelector('[aria-label="Open with external player"]'));
   expect(fetcher).toHaveBeenLastCalledWith('/api/local-playback?id=7&player=default', expect.objectContaining({ method: 'POST' }));
   expect(opened).toHaveBeenCalledOnce();
   fetcher.mockImplementation(async () => new Response(JSON.stringify({ detail: '无法打开播放器' }), { status: 503 }));
-  await click(host.querySelector('[aria-label="使用外部播放器打开"]'));
+  await click(host.querySelector('[aria-label="Open with external player"]'));
   expect(host.textContent).toContain('无法打开播放器');
   expect(opened).toHaveBeenCalledOnce();
 });
@@ -78,14 +78,14 @@ it('M3U 与本机播放器共用打开入口，切换方式时清除网络地址
   });
   const host = await mount(<ExternalPlayback id={9} />);
   await settle();
-  await choose(host.querySelector('[aria-label="外部播放器"]'), 'M3U 播放列表');
+  await choose(host.querySelector('[aria-label="External player"]'), 'M3U playlist');
   expect(localStorage.getItem('peach.playback-target.v1')).toBe('m3u');
-  await click(host.querySelector('[aria-label="使用外部播放器打开"]'));
+  await click(host.querySelector('[aria-label="Open with external player"]'));
   expect(fetcher).toHaveBeenLastCalledWith('/api/external-playback?id=9', expect.objectContaining({ method: 'POST' }));
   expect(download).toHaveBeenCalledOnce();
   expect(downloadUrl).toContain('/external-playlist/9.m3u?ticket=short');
   expect(host.querySelector('input')?.value).toContain('/external-stream/9?ticket=short');
-  await choose(host.querySelector('[aria-label="外部播放器"]'), '系统默认播放器');
+  await choose(host.querySelector('[aria-label="External player"]'), '系统默认播放器');
   expect(host.querySelector('input')).toBeNull();
 });
 
@@ -99,11 +99,11 @@ it('本机检测失败时保留网络方式，重新检测后可以选择本机�
   }));
   const host = await mount(<ExternalPlayback id={5} />);
   await settle();
-  expect(host.querySelector('[aria-label="使用外部播放器打开"]')?.hasAttribute('disabled')).toBe(false);
+  expect(host.querySelector('[aria-label="Open with external player"]')?.hasAttribute('disabled')).toBe(false);
   expect(host.textContent).toContain('检测暂不可用');
-  await click([...host.querySelectorAll('button')].find(node => node.textContent === '重新检测播放器'));
+  await click([...host.querySelectorAll('button')].find(node => node.textContent === 'Detect players again'));
   await settle();
-  await choose(host.querySelector('[aria-label="外部播放器"]'), 'PotPlayer');
+  await choose(host.querySelector('[aria-label="External player"]'), 'PotPlayer');
   expect(localStorage.getItem('peach.playback-target.v1')).toBe('local:potplayer');
   expect(host.textContent).not.toContain('检测暂不可用');
 });

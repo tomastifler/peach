@@ -348,8 +348,8 @@ function SettingsPanel({ host: current, view: shown }: { host: SettingsPanelHost
         <div data-settings-scroll="" ref={scroll}>
           <Group index={0} tab={shown.tab} cards>
             <div data-setting-card="">
-            <Row title="主题">
-              <IconSwitch id="themeSetting" name="theme" legend="主题" options={current.themeOptions} value={settings.theme}
+            <Row title="Theme">
+              <IconSwitch id="themeSetting" name="theme" legend="Theme" options={current.themeOptions} value={settings.theme}
                 attr="data-theme-choice" variant="themeswitch" epoch={epoch}
                 onChoose={(choice) => { settings.theme = choice; save(); current.changed('theme') }} />
             </Row>
@@ -365,7 +365,7 @@ function SettingsPanel({ host: current, view: shown }: { host: SettingsPanelHost
             </div>
             <GlowSettings host={current} />
             <section data-setting-block="" aria-labelledby="sidebarOrderTitle">
-              <h4 data-settings-subheading="" id="sidebarOrderTitle">导航入口与顺序</h4>
+              <h4 data-settings-subheading="" id="sidebarOrderTitle">Navigation entries and order</h4>
               <div data-setting-card="">
                 <section data-sidebar-setting=""><SidebarOrder host={current} /></section>
               </div>
@@ -410,8 +410,8 @@ function decorateDirection(field: HTMLElement, ascending: boolean): void {
   if (label) label.textContent = ascending ? 'Ascending' : 'Descending';
 }
 
-/* 「浏览与播放」分两段：作品列表（网格、排序、卡片与悬停）在前，播放在后。转码方式写的是运行 Peach
-   那台电脑的配置，在 Peach 配置「应用与维护 → 视频播放」，不在这里（ADR-0103）。 */
+/* "Browsing and playback" has two parts: the work list (grid, sort, cards and hover) first, then playback. The transcoding method is the configuration of the computer running Peach,
+   set in Peach settings under "App & maintenance → Video playback", not here (ADR-0103). */
 function BrowseGroup({ host: current, tab, epoch }: GroupProps) {
   const settings = current.store.value;
   const save = () => current.store.save();
@@ -419,8 +419,8 @@ function BrowseGroup({ host: current, tab, epoch }: GroupProps) {
   const ascending = settings.defaultSortDirection === 'asc';
   return (
     <Group index={1} tab={tab}>
-      <h4 data-settings-subheading="">作品列表</h4>
-      <Row title="每批加载作品">
+      <h4 data-settings-subheading="">Work list</h4>
+      <Row title="Works loaded per batch">
         <div id="batchSizeSetting">
           <NumberSetting key={epoch} id="batchSizeSetting" label="Titles per batch" value={settings.batchSize}
             onApply={(value) => { settings.batchSize = value || 60; save(); current.changed('batchSize') }} />
@@ -441,19 +441,19 @@ function BrowseGroup({ host: current, tab, epoch }: GroupProps) {
           value={current.videoLayout()} attr="data-video-layout" variant="javimageswitch" text epoch={epoch}
           onChoose={(layout) => current.setVideoLayout(layout)} />
       </Row>
-      <label data-setting-row=""><span><b>合并分卷与版本</b></span>
+      <label data-setting-row=""><span><b>Merge parts and versions</b></span>
         <input type="checkbox" id="groupCollapseSetting" data-toggle="" role="switch" checked={settings.groupCollapse}
           onChange={(event) => { settings.groupCollapse = event.target.checked; save(); current.changed('groupCollapse') }} />
       </label>
-      <Row title="悬停预览延迟">
+      <Row title="Hover preview delay">
         <div id="hoverDelaySetting">
-          <NumberSetting key={epoch} id="hoverDelaySetting" label="悬停预览延迟" value={settings.hoverDelaySeconds}
+          <NumberSetting key={epoch} id="hoverDelaySetting" label="Hover preview delay" value={settings.hoverDelaySeconds}
             onApply={(value) => {
               settings.hoverDelaySeconds = boundedPreference(value, 0, 60, 5); save(); current.changed('hoverDelay');
             }} />
         </div>
       </Row>
-      <h4 data-settings-subheading="">播放</h4>
+      <h4 data-settings-subheading="">Playback</h4>
       <PlaybackRows host={current} epoch={epoch} />
     </Group>
   );
@@ -464,21 +464,21 @@ function JavGroup({ host: current, tab, epoch }: GroupProps) {
   const save = () => current.store.save();
   return (
     <Group index={2} tab={tab}>
-      <h4 data-settings-subheading="">作品显示</h4>
+      <h4 data-settings-subheading="">Work display</h4>
       <NameLanguageSetting host={current} epoch={epoch} />
-      <Row title="默认图片">
-        <IconSwitch id="javImageSetting" name="jav-image" legend="默认图片" options={JAV_IMAGE_OPTIONS}
+      <Row title="Default image">
+        <IconSwitch id="javImageSetting" name="jav-image" legend="Default image" options={JAV_IMAGE_OPTIONS}
           value={settings.javImage} attr="data-jav-image-choice" variant="javimageswitch" text epoch={epoch}
           onChoose={(choice) => { settings.javImage = normalizeJavImage(choice); save(); current.changed('javImage') }} />
       </Row>
-      <h4 data-settings-subheading="">新作显示</h4>
-      <Row title="显示数量">
+      <h4 data-settings-subheading="">New releases display</h4>
+      <Row title="Display count">
         <div id="feedLimitSetting">
-          <NumberSetting key={epoch} id="feedLimitSetting" label="新作显示数量" value={settings.feedLimit}
+          <NumberSetting key={epoch} id="feedLimitSetting" label="New releases display count" value={settings.feedLimit}
             onApply={(value) => { settings.feedLimit = boundedPreference(value, 1, 100, 12); save(); current.changed('feedLimit') }} />
         </div>
       </Row>
-      <ToggleRow id="feedAutoScrollSetting" title="自动滚动" checked={settings.feedAutoScroll}
+      <ToggleRow id="feedAutoScrollSetting" title="Auto-scroll" checked={settings.feedAutoScroll}
         onToggle={(on) => { settings.feedAutoScroll = on; save(); current.changed('feedAutoScroll') }} />
       {FEED_COMPILATIONS.map(([id, key, label, title]) => (
         <CompilationToggle key={id} host={current} id={id} settingKey={key} label={label} title={title} />
@@ -492,22 +492,22 @@ function NameLanguageSetting({ host: current, epoch }: { host: SettingsPanelHost
   const [pending, setPending] = useState<'zh-CN' | 'ja' | null>(null);
   const language = query.data?.performerNameLanguage;
   return <>
-    <Row title="女优名称" description={<small data-copy-key="performer-name-language-help">名称与别名只显示所选语言的写法；缺少对应时保留当前名称。偏好保存在数据库，其他设备读取同一份设置。</small>}>
-      <SelectField id="performerNameLanguageSetting" label="女优名称" epoch={epoch}
-        options={[["zh-CN", "中文"], ["ja", "日文原文"]]}
+    <Row title="Actress name" description={<small data-copy-key="performer-name-language-help">Names and aliases show only the chosen language's spelling; when there is no match the current name is kept. The preference is saved in the database and other devices read the same setting.</small>}>
+      <SelectField id="performerNameLanguageSetting" label="Actress name" epoch={epoch}
+        options={[["zh-CN", "Chinese"], ["ja", "Japanese original"]]}
         value={pending ?? language ?? current.store.value.performerNameLanguage}
         disabled={query.isPending || query.isError || save.isPending || !language} busy={save.isPending}
         onPick={(value) => {
           if (save.isPending || (value !== 'zh-CN' && value !== 'ja') || value === language) return;
           setPending(value);
           save.mutate({ performerNameLanguage: value }, {
-            onSuccess: (saved) => { current.syncRemote(saved); current.receipt('已保存名称显示偏好') },
-            onError: (error) => current.failure('保存名称显示偏好', error),
+            onSuccess: (saved) => { current.syncRemote(saved); current.receipt('Name display preference saved') },
+            onError: (error) => current.failure('Save name display preference', error),
             onSettled: () => setPending(null),
           });
         }} />
     </Row>
-    {query.isError ? <Note tone="error">未取得数据库中的名称偏好，请重新打开设置。</Note> : null}
+    {query.isError ? <Note tone="error">Could not get the name preference from the database; reopen settings.</Note> : null}
   </>;
 }
 /* 合集开关由服务端判，列表、未读数和补封面排队都跟着它，所以先存到服务端再重画；往返期间开关
@@ -547,7 +547,7 @@ function PlaybackRows({ host: current, epoch }: Omit<GroupProps, 'tab'>) {
   const save = () => current.store.save();
   return (
     <>
-      <ToggleRow id="detailAutoplaySetting" title="打开详情自动播放" checked={settings.detailAutoplay}
+      <ToggleRow id="detailAutoplaySetting" title="Autoplay when opening details" checked={settings.detailAutoplay}
         onToggle={(on) => { settings.detailAutoplay = on; save() }} />
       <ToggleRow id="miniplayerSetting" title="Miniplayer after leaving details" checked={settings.miniplayer}
         onToggle={(on) => { settings.miniplayer = on; save(); current.changed('miniplayer') }} />

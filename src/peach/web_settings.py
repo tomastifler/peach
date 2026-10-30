@@ -6,7 +6,7 @@
 侧栏不一样。左侧导航放哪些入口、什么顺序，是长出来的使用习惯；在 Windows 上排好，
 到 Mac 上又是默认顺序，那不叫两台设备，叫两个应用。所以它跟着账本走。
 
-名称显示语言也随用户走，落在现有的 `profile.settings_json` 中，不需要新增表或迁移。
+ The name display language also follows the user and lives in the existing `profile.settings_json` so no new table or migration is needed.
 
 写入受 ledger 只读闸门约束：reader（只读端）改不了顺序，但读到的是 writer 的那份，
 这正是「同一份习惯」的意思。
@@ -51,7 +51,7 @@ SEARCH_HISTORY_LIMIT_MAX = 50
 #: 整理模板（ADR-0039）同理：它是「我要我的库长什么样」，不是这台设备上的顺手。
 #: 新作那一行收不收合集（`feeds.compilation_kind`）同样是服务端行为：列表、未读数和
 #: 替哪些壳补封面都按它算，所以跟着账本走。
-#: 番号识别规则描述的是这套馆藏的命名，处理任务按它往账本里写番号，同样跟着账本走。
+#: The code-recognition rules describe this library's naming, and processing tasks write codes into the ledger by them, so they too follow the ledger.
 SYNCED_SETTING_KEYS = frozenset({
     "sidebarOrder", "followInitialDays", "postSetupTutorialDone",
     "organizeTemplates", "feedHideGroupCompilations", "feedHideSoloCompilations",
@@ -151,17 +151,17 @@ def organize_templates(contract: SettingsContract) -> dict:
 
 
 def normalise_code_patterns(raw) -> list[str]:
-    """收敛番号识别规则：一组正则，去掉空行。
+    """Normalize the code-recognition rules: a set of regexes, with blank lines removed.
 
-    存之前就编译一遍：写错的规则在保存那一刻报给用户（`ValueError`，API 翻成 400），
-    不等到下一次处理时才在后台悄悄失效。
+    Compile before saving: a faulty rule is reported to the user at the moment of saving (`ValueError`, API turns it into 400),
+    rather than silently becoming invalid in the background at the next processing run.
     """
     compile_code_patterns(raw)
     return [str(rule).strip() for rule in raw or () if str(rule or "").strip()]
 
 
 def _stored_code_patterns(payload: dict) -> list[str]:
-    """存进去之后又被手改坏的规则当没设置过：页面照常打开，处理也不因此中断。"""
+    """A rule that is hand-corrupted after being saved is treated as unset: the page opens as usual and processing is not interrupted by it."""
     try:
         return normalise_code_patterns(payload.get("codePatterns"))
     except (TypeError, ValueError):
@@ -230,7 +230,7 @@ def w_settings(contract: SettingsContract, body) -> dict:
     if "performerNameLanguage" in body:
         language = body["performerNameLanguage"]
         if language not in ("zh-CN", "ja"):
-            raise ValueError("performerNameLanguage 只收 zh-CN 或 ja")
+            raise ValueError("performerNameLanguage accepts only zh-CN or ja")
         merged["performerNameLanguage"] = language
     if "sidebarOrder" in body:
         merged["sidebarOrder"] = normalise_sidebar_order(body["sidebarOrder"])

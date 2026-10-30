@@ -57,11 +57,11 @@ class AvatarProviderTests(unittest.TestCase):
         for body in (jpeg, bytes(png)):
             with self.subTest(signature=body[:8]):
                 self.assertIsNone(inspect_avatar(body))
-                with self.assertRaisesRegex(AvatarImageError, "数据不完整或无法解码"):
+                with self.assertRaisesRegex(AvatarImageError, "Image data is incomplete or cannot be decoded"):
                     prepare_avatar(body)
 
     def test_unknown_content_has_an_image_error(self):
-        with self.assertRaisesRegex(AvatarImageError, "无法识别图片内容"):
+        with self.assertRaisesRegex(AvatarImageError, "Cannot recognize the image content"):
             prepare_avatar(b"<html>not an image</html>")
 
     def test_cache_is_content_addressed_and_provenance_is_stable(self):

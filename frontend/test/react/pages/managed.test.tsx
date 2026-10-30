@@ -94,7 +94,7 @@ function serve(bodies: Record<string, unknown>, deferred: string[] = []) {
     const path = input.split('?')[0]!;
     if (init?.signal) signals.set(path, init.signal);
     return new Promise<Reply>((resolve, reject) => {
-      init?.signal?.addEventListener('abort', () => { reject(new DOMException('已中止', 'AbortError')) });
+      init?.signal?.addEventListener('abort', () => { reject(new DOMException('Aborted', 'AbortError')) });
       if (!Object.hasOwn(bodies, path)) return;
       if (deferred.includes(path)) pending.push(() => resolve(reply(bodies[path])));
       else resolve(reply(bodies[path]));

@@ -53,7 +53,7 @@ const FLOW_FILL = [
 ];
 
 /** 口味维度两张图的系列：一个维度下命中的标签次数。颜色跟着口味页读数卡的 `chart-4`。 */
-const DIMENSION_CONFIG = { value: { label: '标签出现次数', colors: tone(CHART_COLORS[3]) } };
+const DIMENSION_CONFIG = { value: { label: 'Tag occurrences', colors: tone(CHART_COLORS[3]) } };
 
 /** 排行条的最低高度按条数给，一条一格 32：窄屏里排行条独占一行、或维度不足三个画不出雷达时，
  *  它就是这么高。旁边有雷达时整块跟着雷达那一栏拉到等高，多出来的高度拉开条与条的间距。

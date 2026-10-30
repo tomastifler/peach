@@ -41,7 +41,7 @@ describe('关注域地址与会话控制', () => {
 
   it('默认地址精简，中文、空格与斜杠可往返，随机地址保留种子', () => {
     expect(followViewPath(view())).toBe('/follow');
-    const target = view({ author: '甲 / 乙', tags: ['中文', 'a b'], work: 'set:1', media: 'images', status: 'saved',
+    const target = view({ author: '甲 / 乙', tags: ['Chinese', 'a b'], work: 'set:1', media: 'images', status: 'saved',
       durMin: 30, sort: 'rand', seed: 91, dir: 'asc' });
     expect(readFollowView(followViewPath(target).split('?')[1]!, 0, () => 1)).toEqual(target);
   });

@@ -52,11 +52,11 @@ function ConfigurationIssues({ data, sections, reload, refreshing }: {
   return <>{sections.map(key => {
     const issue = data.section_errors?.[key];
     return issue ? <Note key={key} tone="error" title={issue.title}
-      action={<Button variant="secondary" size="small" onClick={reload} {...busyProps(refreshing)}>重新读取</Button>}>{issue.message}</Note> : null;
+      action={<Button variant="secondary" size="small" onClick={reload} {...busyProps(refreshing)}>Reload</Button>}>{issue.message}</Note> : null;
   })}</>;
 }
 
-interface Group { title: string; label: string; body(panel: ConfigurationPanel): ReactElement }
+interface Group { title: string; body(panel: ConfigurationPanel): ReactElement }
 
 /* 页签与面板的 id 前缀按页签条计数：每画出一条新的页签条领一个号。 */
 let tabSequence = 0;
@@ -73,7 +73,7 @@ function ConfigurationGroups(
   const workspace = useRef<HTMLDivElement>(null);
   const previous = useRef(chosen);
   useEffect(() => { setChosen(section) }, [section]);
-  /* 下载渠道、网络与访问、应用与维护随这份配置一次画齐：记下结构，下次整页骨架照它排。 */
+  /* Download channels, Network & access, and App & maintenance are drawn together with this configuration: the structure is recorded, and the next full-page skeleton follows it. */
   useEffect(() => {
     const downloads = downloadsShape(data);
     if (downloads) rememberShape('downloads', downloads);
@@ -111,20 +111,20 @@ function ConfigurationGroups(
     || networkKeys.some(key => data.section_errors?.[key]));
   const downloads = data.downloads;
   const groups: Group[] = [
-    { title: '媒体库与入库', body: (panel) => <div {...groupRoot(panel)}>
+    { title: 'Library & import', body: (panel) => <div {...groupRoot(panel)}>
       {issues(['media_sources', 'library_count', 'mount_dependencies'])}
       {!data.section_errors?.media_sources && !data.section_errors?.library_count ? <MediaSettings {...group} /> : null}
       <CodePatternSettings receipt={receipt} />
       <MediaProcessingSettings receipt={receipt} />
     </div> },
-    { title: '来源与订阅', body: (panel) => <SourceSettings {...group} panel={panel} issues={issues(['entry_links'])} /> },
+    { title: 'Sources & subscriptions', body: (panel) => <SourceSettings {...group} panel={panel} issues={issues(['entry_links'])} /> },
     ...(downloads || data.section_errors?.downloads ? [{
-      title: '下载渠道',
+      title: 'Download channels',
       body: (panel: ConfigurationPanel) => <DownloadGroup initial={downloads} receipt={receipt} panel={panel} issues={issues(['downloads'])} />,
     }] : []),
-    ...(network ? [{ title: '网络与访问', body: (panel: ConfigurationPanel) => <NetworkSettings {...group} panel={panel} issues={issues(networkKeys)} /> }] : []),
+    ...(network ? [{ title: 'Network & access', body: (panel: ConfigurationPanel) => <NetworkSettings {...group} panel={panel} issues={issues(networkKeys)} /> }] : []),
     {
-      title: 'App & maintenance', label: 'App & maintenance',
+      title: 'App & maintenance',
       body: (panel) => <div {...groupRoot(panel)}>
         {issues(['startup', 'uninstall', 'storage', 'remote_reporting', 'library_sharing', 'updates', 'update_job', 'automatic_updates', 'facts'])}
         <GeneralSettings {...group} />
@@ -132,7 +132,7 @@ function ConfigurationGroups(
         <MaintenanceSettings {...group} reopenTutorial={reopenTutorial} />
       </div>,
     },
-    { title: 'System diagnostics', label: 'System diagnostics', body: panel => <div {...groupRoot(panel)}>{panel.active ? diagnostics : null}</div> },
+    { title: 'System diagnostics', body: panel => <div {...groupRoot(panel)}>{panel.active ? diagnostics : null}</div> },
   ];
   const at = Math.max(0, groups.findIndex((item) => item.title === chosen));
   const move = (event: KeyboardEvent<HTMLButtonElement>, from: number) => {
@@ -149,20 +149,20 @@ function ConfigurationGroups(
   };
   return (
     <div ref={workspace} className="ui-configpage">
-      <PillTabList className="ui-board-local-nav" role="tablist" aria-label="配置分区" data-section-nav="" data-section-items="" data-pill-nav=""
+      <PillTabList className="ui-board-local-nav" role="tablist" aria-label="Settings sections" data-section-nav="" data-section-items="" data-pill-nav=""
         aria-orientation={narrow ? 'horizontal' : 'vertical'}>
-        {groups.map(({ title, label }, i) => (
+        {groups.map(({ title }, i) => (
           <button key={title} ref={(node) => { buttons.current[i] = node }} type="button" role="tab"
             id={`${prefix}-tab-${i}`} aria-controls={`${prefix}-panel-${i}-0`} aria-selected={i === at}
             data-pill-selected={i === at ? '' : undefined} data-pill-variant="gray"
             tabIndex={i === at ? 0 : -1} onClick={() => choose(title)} onKeyDown={(event) => move(event, i)}>
-            {label}
+            {title}
           </button>
         ))}
       </PillTabList>
       {groups.map(({ title, body }, i) => (
         <Fragment key={title}>
-          <h2 className="ui-configgroup">{label}</h2>
+          <h2 className="ui-configgroup">{title}</h2>
           {body({ index: i, id: `${prefix}-panel-${i}-0`, labelledBy: `${prefix}-tab-${i}`, active: i === at })}
         </Fragment>
       ))}

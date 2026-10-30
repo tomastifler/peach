@@ -99,7 +99,7 @@ def diagnostic_export_start(request: Request, body: dict = Body(default_factory=
     same_origin(request)
     kind, codes = body.get('kind'), body.get('codes', '')
     if not isinstance(codes, str):
-        raise HTTPException(400, '请填写有效番号')
+        raise HTTPException(400, 'Please enter a valid code')
     browser = diagnostic_context.browser_header(request.headers.get('x-peach-browser-diagnostics', ''),
                                                  user_agent=request.headers.get('user-agent', ''))
     try:
@@ -143,12 +143,12 @@ def _client_error_budget(request: Request) -> None:
         while recent and now - recent[0] >= 60:
             recent.popleft()
         if len(recent) >= 20:
-            raise HTTPException(429, '错误记录过于频繁')
+            raise HTTPException(429, 'Error records are too frequent')
         recent.append(now)
 
 
 def _record_browser_context(request: Request, context: dict) -> bool:
-    """同一份环境每分钟保留一次，环境快照独立于错误记录预算。"""
+    """The environment is kept once per minute; the environment snapshot is independent of the error record budget."""
     from .error_reporting import local_event
     key = hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
     with _CLIENT_ERROR_LOCK:
@@ -160,14 +160,14 @@ def _record_browser_context(request: Request, context: dict) -> bool:
         if any(saved == key for _, saved in recent):
             return False
         if local_event('browser-context', **context) is None:
-            raise HTTPException(503, '错误日志无法写入')
+            raise HTTPException(503, 'Error log cannot be written')
         recent.append((now, key))
     return True
 
 
 @router.post("/api/diagnostics/client-error")
 async def client_error(request: Request):
-    """浏览器错误取证；本机首启与登录页允许上报，远程须登录。"""
+    """Browser error evidence; local first start and the login page may report, remote requires login."""
     from . import error_reporting
     same_origin(request)
     if not local_client(request):
@@ -205,7 +205,7 @@ async def client_error(request: Request):
         recorded = error_reporting.event('browser', **fields)
         error_reporting.local_event('browser-context', **context)
     if recorded is None:
-        raise HTTPException(503, "错误日志无法写入")
+        raise HTTPException(503, "Error log cannot be written")
     return {"recorded": True}
 
 
@@ -218,17 +218,17 @@ def configurable(request: Request) -> bool:
 
 
 def _read_section(result: dict, key: str, title: str, reader) -> None:
-    """各配置区域独立读取；故障留痕并提供重试信息。"""
+    """Each configuration section is read independently; failures are logged and retry information is provided."""
     try:
         result[key] = reader()
     except Exception as error:
         error_id = uuid.uuid4().hex
         result.setdefault("section_errors", {})[key] = {
-            "title": f"{title}未取得", "message": "请重新读取；持续失败时导出诊断报告。",
+            "title": f"{title} not obtained", "message": "Please read again; if it keeps failing, export a diagnostic report.",
             "error_id": error_id,
         }
         error_reporting.event("logging", error, logger=__name__, level="ERROR",
-                              message=f"配置区域 {key} 读取失败", section=key, error_id=error_id)
+                              message=f"Configuration section {key} failed to read", section=key, error_id=error_id)
 
 
 def snapshot(config) -> dict[str, Any]:
@@ -241,7 +241,7 @@ def snapshot(config) -> dict[str, Any]:
         "notice": "" if editable else FILE_MANAGED_NOTICE,
         "revision": revision(config),
         "media_dirs": list(media),
-        # 媒体库按持久身份计数，与侧栏切换器和 `/api/libraries` 共用分组。
+        # Media libraries are counted by persistent identity, in the same grouping as the sidebar switcher and `/api/libraries`.
         "library_count": 0,
         "windows": os.name == "nt",
         "port": config.server.port,
@@ -249,20 +249,20 @@ def snapshot(config) -> dict[str, Any]:
         "facts": [],
     }
     readers = (
-        ("remote_reporting", "错误诊断设置", lambda: remote_reporting.snapshot(config)),
-        ("library_sharing", "馆藏上传设置", lambda: library_sharing.snapshot(config)),
-        ("startup", "开机启动设置", lambda: desktop_startup.snapshot(config)),
-        ("uninstall", "卸载信息", lambda: desktop_uninstall.snapshot(config)),
-        ("storage", "存储空间", lambda: data_storage.snapshot(config)),
-        ("peach_proxy", "Peach 代理", lambda: peach_proxy.describe(config.directory("secrets"))),
-        ("entry_links", "外部入口", lambda: entry_links.snapshot(config.directory("state"))),
-        ("updates", "版本更新", release_updates.snapshot),
-        ("update_job", "更新任务", standalone_update.public),
-        ("access", "访问设置", lambda: access.public(access.load(config.directory("secrets") / "access.json"))),
-        ("media_sources", "媒体目录", lambda: media_configuration.rows(config, windows=os.name == "nt", probe=True)),
-        ("library_count", "媒体库状态", lambda: len(media_libraries.libraries(config))),
-        ("mount_dependencies", "挂载依赖", media_configuration.mount_dependencies),
-        ("facts", "运行信息", lambda: runtime_fact_entries(config)),
+        ("remote_reporting", "Error diagnostics settings", lambda: remote_reporting.snapshot(config)),
+        ("library_sharing", "Library upload settings", lambda: library_sharing.snapshot(config)),
+        ("startup", "Startup settings", lambda: desktop_startup.snapshot(config)),
+        ("uninstall", "Uninstall information", lambda: desktop_uninstall.snapshot(config)),
+        ("storage", "Storage", lambda: data_storage.snapshot(config)),
+        ("peach_proxy", "Peach proxy", lambda: peach_proxy.describe(config.directory("secrets"))),
+        ("entry_links", "External entry points", lambda: entry_links.snapshot(config.directory("state"))),
+        ("updates", "Version updates", release_updates.snapshot),
+        ("update_job", "Update task", standalone_update.public),
+        ("access", "Access settings", lambda: access.public(access.load(config.directory("secrets") / "access.json"))),
+        ("media_sources", "Media directories", lambda: media_configuration.rows(config, windows=os.name == "nt", probe=True)),
+        ("library_count", "Media library status", lambda: len(media_libraries.libraries(config))),
+        ("mount_dependencies", "Mount dependencies", media_configuration.mount_dependencies),
+        ("facts", "Runtime information", lambda: runtime_fact_entries(config)),
     )
     for key, title, reader in readers:
         _read_section(result, key, title, reader)
@@ -298,8 +298,8 @@ def push_discovery_payload(request: Request, payload: dict[str, Any] | None = No
 
     地址不取这次请求的 origin：配置页多半是从回环地址打开的，而 TLS 那条服务只绑在
     局域网地址上，把 `127.0.0.1` 抄过去 CloudDrive2 连不上。取这台机器对外公布的那个
-    地址，也就是 mDNS 登记的同一个。协议与端口取实际应用服务的设置；独立版的局域网
-    服务使用 HTTP，启用 TLS 的服务使用 HTTPS。不知道自己的地址时给空串。
+    address, the same one registered by mDNS. The protocol and port come from the actual app service's settings; the standalone build's LAN
+    service uses HTTP, a service with TLS enabled uses HTTPS. An empty string is given when it does not know its own address.
     """
     if payload is None:
         payload = request.app.state.push_discovery.snapshot(reveal=True)
@@ -317,7 +317,7 @@ def push_discovery_payload(request: Request, payload: dict[str, Any] | None = No
 
 
 def network_payload(request: Request, config) -> dict[str, Any]:
-    """连接地址来自实际监听信息，编辑值来自托盘配置。"""
+    """The connection address comes from the actual listening info, and the editable values come from the tray configuration."""
     settings = request.app.state.settings
     standalone = distribution.standalone()
     try:
@@ -352,15 +352,15 @@ def read_configuration(request: Request, _args=Depends(require_auth)):
     if not config.present:
         raise HTTPException(409, "Complete first-run setup first")
     result = snapshot(config)
-    _read_section(result, 'network', '访问地址', lambda: network_payload(request, config))
+    _read_section(result, 'network', 'Access address', lambda: network_payload(request, config))
     sync = getattr(request.app.state, "sync", None)
     result["ledger_read_only"] = bool(sync is not None and sync.read_only)
-    _read_section(result, "tunnel", "公网入口", lambda: tunnel_payload(
+    _read_section(result, "tunnel", "Public entrance", lambda: tunnel_payload(
         config, request.app.state.tunnel.snapshot(), config.tunnel.enabled))
-    _read_section(result, "automatic_updates", "自动更新", lambda: request.app.state.automatic_updates.snapshot())
+    _read_section(result, "automatic_updates", "Automatic updates", lambda: request.app.state.automatic_updates.snapshot())
     # 这一路已经过了 `local_only`，密钥可以给出来：用户要把它抄进 CloudDrive2。
-    _read_section(result, "push_discovery", "推送发现", lambda: push_discovery_payload(request))
-    _read_section(result, "downloads", "下载设置", lambda: web_downloads.settings_payload(*_downloads(request)))
+    _read_section(result, "push_discovery", "Push discovery", lambda: push_discovery_payload(request))
+    _read_section(result, "downloads", "Download settings", lambda: web_downloads.settings_payload(*_downloads(request)))
     if result.get("automatic_updates", {}).get("result"):
         result["updates"] = result["automatic_updates"]["result"]
     return result
@@ -427,9 +427,9 @@ def save_peach_proxy(request: Request, body: dict = Body(...), _args=Depends(req
 
 @router.get("/api/network-status")
 def network_status(request: Request, _args=Depends(require_auth)):
-    """外网连通的后台快照；探测按 Peach 代理设置出网，请求本身不出网。
+    """Background snapshot of external connectivity; probes go out per the Peach proxy settings, and the request itself does not go online.
 
-    探测线程在第一次有页面来读时才启动：没人打开界面的实例不出这份流量。
+    The probe thread starts only the first time a page comes to read: an instance nobody opens the UI on produces none of this traffic.
     """
     monitor = request.app.state.network_reachability
     monitor.start()
@@ -438,7 +438,7 @@ def network_status(request: Request, _args=Depends(require_auth)):
 
 @router.post("/api/network-status/check")
 def network_status_check(request: Request, _args=Depends(require_auth)):
-    """当场再探一次外网，回探完的快照。任务中心「网络不通」那一行的「立即重试」走这里。"""
+    """Probe the external network once more on the spot and return the snapshot after probing. The "Retry now" of the Task Center's "Network unreachable" row goes through here."""
     monitor = request.app.state.network_reachability
     monitor.start()
     monitor.tick()
@@ -490,7 +490,7 @@ def read_cloud_proxies(request: Request, _args=Depends(require_auth)):
     try:
         result = clouddrive_proxy.read(settings_file.load_config())
     except DownloadError:
-        raise HTTPException(502, "无法读取 CloudDrive2 代理配置，请检查连接和令牌权限") from None
+        raise HTTPException(502, "Cannot read the CloudDrive2 proxy configuration; please check the connection and token permissions") from None
     except (ValueError, OSError) as error:
         raise HTTPException(400, str(error)) from None
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
@@ -507,7 +507,7 @@ def save_cloud_proxies(request: Request, body: dict = Body(...), _args=Depends(r
     except clouddrive_proxy.ProxyConflict as error:
         raise HTTPException(409, str(error)) from None
     except DownloadError:
-        raise HTTPException(502, "未能确认 CloudDrive2 已保存，请重新读取配置后核对") from None
+        raise HTTPException(502, "Could not confirm that CloudDrive2 saved it; please re-read the configuration and verify") from None
     except (ValueError, OSError) as error:
         raise HTTPException(400, str(error)) from None
     return JSONResponse(result, headers={"Cache-Control": "no-store"})
@@ -662,13 +662,13 @@ def uninstall(request: Request, body: dict = Body(...), _args=Depends(require_au
 def _storage_config():
     config = settings_file.load_config()
     if not config.present:
-        raise HTTPException(409, "请先完成首次设置")
+        raise HTTPException(409, "Please complete first-time setup first")
     return config
 
 
 @router.get("/api/configuration/storage")
 def read_storage(request: Request, _args=Depends(require_auth)):
-    """「存储空间」：数据目录位置、磁盘余量、上次统计的分类占用与迁移状态。"""
+    """The "Storage" screen: data directory location, free disk space, per-category usage from the last measurement and migration status."""
     local_only(request)
     return data_storage.snapshot(_storage_config())
 
@@ -691,11 +691,11 @@ def clean_storage(request: Request, body: dict[str, Any] = Body(default_factory=
     local_only(request)
     same_origin(request)
     config = _storage_config()
-    # 勾选几类一起清理时传 `categories`；单清一类的旧写法 `category` 照收。
+    # Sent when several categories are ticked for cleanup together `categories`; the old single-category form `category` is still accepted.
     raw = body.get("categories", [body.get("category")])
     categories = raw if isinstance(raw, list) else []
     if not categories or any(not isinstance(key, str) or key not in data_storage.CLEANABLE for key in categories):
-        raise HTTPException(400, "这一类不能在这里清理")
+        raise HTTPException(400, "This category cannot be cleaned here")
     try:
         data_storage.JOBS.start(config, categories)
     except RuntimeError as exc:
@@ -706,16 +706,16 @@ def clean_storage(request: Request, body: dict[str, Any] = Body(default_factory=
 @router.post("/api/configuration/storage/relocate")
 def relocate_storage(request: Request, body: dict[str, Any] = Body(default_factory=dict),
                      _args=Depends(require_auth)):
-    """校验新位置并写下迁移请求；托盘接手后停服务、退出，由迁移助手搬家并重新打开。"""
+    """Validate the new location and record the migration request; after the tray takes over it stops the service and exits, and the migration helper moves the data and reopens."""
     local_only(request)
     same_origin(request)
     config = _storage_config()
     try:
         return data_storage.request(config, body.get("target"))
     except ValueError as exc:
-        raise HTTPException(400, {"message": "无法迁移到这个位置", "errors": {"target": str(exc)}}) from exc
+        raise HTTPException(400, {"message": "Cannot migrate to this location", "errors": {"target": str(exc)}}) from exc
     except Timeout as exc:
-        raise HTTPException(409, "迁移请求正在处理") from exc
+        raise HTTPException(409, "A migration request is being processed") from exc
 
 
 @router.get("/api/configuration/updates")
@@ -743,7 +743,7 @@ async def retry_upgrade_repairs(request: Request, _args=Depends(require_auth)):
     same_origin(request)
     try:
         if await asyncio.to_thread(_installation_in_progress, request.app.state.settings.db_path):
-            raise ValueError('正在安装更新，请稍后重试')
+            raise ValueError('An update is being installed; please retry later')
         service = request.app.state.upgrade_repairs
         activation = getattr(request.app.state, 'ledger_activation', None)
         if activation is not None and not request.app.state.ledger_background_ready:
@@ -761,7 +761,7 @@ def upgrade_repairs_review(request: Request, _args=Depends(require_auth)):
     service = request.app.state.upgrade_repairs
     path = service.root / 'catalog-review.json'
     if not path.is_file():
-        raise HTTPException(404, '暂无升级复核记录')
+        raise HTTPException(404, 'No upgrade review records yet')
     return Response(path.read_bytes(), media_type='application/json',
                     headers={'Content-Disposition': 'attachment; filename="upgrade-review.json"'})
 
@@ -809,7 +809,7 @@ def test_smb_connection(request: Request, body: dict[str, Any] = Body(default_fa
         username = body.get('smb_username', values.get('username', ''))
         password = body.get('smb_password') or (values.get('password', '') if username == values.get('username', '') else '')
         if not isinstance(username, str) or not isinstance(password, str):
-            raise ValueError('SMB 账号和密码必须是文字')
+            raise ValueError('SMB account and password must be text')
         transport = SmbTransport(SmbConnection(host, share, username=username, password=password, port=port,
                                              encrypt=body.get('smb_encrypt') is True, timeout=8))
         try:
@@ -820,9 +820,9 @@ def test_smb_connection(request: Request, body: dict[str, Any] = Body(default_fa
     except ValueError as error:
         raise HTTPException(400, str(error)) from None
     except PermissionError:
-        raise HTTPException(403, 'SMB 登录失败或没有读取权限，请检查账号、密码和共享权限') from None
+        raise HTTPException(403, 'SMB login failed or no read permission; please check the account, password and share permissions') from None
     except OSError:
-        raise HTTPException(502, 'SMB 共享无法读取，请检查地址、共享名和网络连接') from None
+        raise HTTPException(502, 'SMB share cannot be read; please check the address, share name and network connection') from None
 
 
 def _validate(body: dict[str, Any], config) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -891,7 +891,7 @@ def _validate(body: dict[str, Any], config) -> tuple[dict[str, Any], dict[str, A
 
 
 def _validate_server(body, config):
-    """端口、监听范围和局域网名称按运行方式校验。"""
+    """Port, listening scope and LAN name are validated by run mode."""
     errors, validated = {}, {}
     try:
         port = onboarding.validate_port(str(body.get("port", config.server.port)))
@@ -907,10 +907,10 @@ def _validate_server(body, config):
             continue
         try:
             if not isinstance(body[field], str):
-                raise ValueError('请选择访问范围' if field == 'host' else '请填写局域网名称')
+                raise ValueError('Please choose an access scope' if field == 'host' else 'Please enter a LAN name')
             value = validator(body[field])
             if not distribution.standalone() and value != getattr(config.server, field):
-                raise ValueError('访问范围与名称由服务启动配置管理')
+                raise ValueError('Access scope and name are managed by the service startup configuration')
             validated[field] = value
         except ValueError as exc:
             errors[field] = str(exc)

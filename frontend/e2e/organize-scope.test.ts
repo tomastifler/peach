@@ -21,9 +21,9 @@ describe('整理目录范围', () => {
         await page.route('**/api/pick-folder', (route) => route.fulfill({ json: { path: 'R:\\media\\合集' } }));
         await page.reload({ waitUntil: 'load' });
         const scope = page.locator('[data-organize-scope]');
-        const input = page.getByRole('textbox', { name: '整理路径', exact: true });
+        const input = page.getByRole('textbox', { name: 'Organize path', exact: true });
         await input.waitFor();
-        await page.getByRole('button', { name: '选择整理路径', exact: true }).click();
+        await page.getByRole('button', { name: 'Choose organize path', exact: true }).click();
         await page.waitForFunction(() => document.querySelector<HTMLInputElement>('input[name="organize-path"]')?.value === 'R:\\media\\合集');
         await input.fill('R:\\media\\' + '长目录名称'.repeat(40));
         for (const dark of [false, true]) {

@@ -28,7 +28,7 @@ describe('实体页冷启动等待态', () => {
             if (!root || root === previous) return;
             previous = root;
             seen.push({ facts: !!root.querySelector('[data-entity-facts]'),
-              costars: !!root.querySelector('[data-entity-foot]'), jav: !!root.querySelector('[aria-label="JAV 卡片版式"]') });
+              costars: !!root.querySelector('[data-entity-foot]'), jav: !!root.querySelector('[aria-label="JAV card layout"]') });
           }).observe(document, { childList: true, subtree: true });
         }, { theme, view });
         const page = await context.newPage();
@@ -61,8 +61,8 @@ describe('实体页冷启动等待态', () => {
             getComputedStyle(node).borderTopLeftRadius), '50%', '艺人头像等待态形状不准确');
           assert.equal(await root.locator('[data-entity-facts]').count() > 0, jav, '首次等待态资料栏不准确');
           assert.equal(await root.locator('[data-entity-foot]').count() > 0, jav, '首次等待态相关艺人不准确');
-          assert.equal(await root.locator('[aria-label="JAV 卡片版式"]').count() > 0, jav && view === 'cards', '首次等待态卡片版式不准确');
-          assert.equal(await root.locator('[aria-label="馆藏显示方式"]').count(), 1);
+          assert.equal(await root.locator('[aria-label="JAV card layout"]').count() > 0, jav && view === 'cards', '首次等待态卡片版式不准确');
+          assert.equal(await root.locator('[aria-label="Library view"]').count(), 1);
           assert.equal(await root.locator('[data-folder-mode-toggle]').count(), 1);
           await page.waitForFunction(() => !document.querySelector('[data-skeleton="entity/performer"] .skeleton-awaiting'));
           const visibility = await root.evaluate(node => {

@@ -1,4 +1,4 @@
-/* 重复文件页：每组留谁、批量保留、回收与撤销。
+/* 重复文件页：每组留谁、Bulk keep、回收与撤销。
  *
  * 首屏和真实路径一样先落进共用缓存（遗留层 `prefetch` 那一步），页面挂上去直接读。 */
 import { notifyManager, QueryClientProvider } from '@tanstack/react-query';

@@ -222,7 +222,7 @@ class _WebSocket:
 
 
 def _targets(port: int) -> list[dict]:
-    # 回环 DevTools 端口不经任何代理；裸 urlopen 读系统代理，绕过名单没列 127.0.0.1 时会被代理接走。
+    # The loopback DevTools port bypasses any proxy; a bare urlopen reads the system proxy, and when the bypass list does not include 127.0.0.1 it gets taken by the proxy.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     with opener.open(f"http://127.0.0.1:{port}/json", timeout=10) as response:
         return json.load(response)
@@ -422,7 +422,7 @@ class BrowserTransport:
 
     def __call__(self, request: HttpRequest, timeout: float, max_bytes: int) -> HttpResponse:
         from .processing_traffic import unobserved
-        unobserved('浏览器采集流量未观测')
+        unobserved('Browser capture traffic not observed')
         if request.method.upper() != "GET":
             raise BrowserUnavailable("Browser transport only sends GET")
         with self._lock:

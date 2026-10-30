@@ -60,7 +60,7 @@ def context_fields(width: int, height: int, duration: float) -> tuple[str | None
 def probe_file(ffprobe: str, path: str, timeout: float = TIMEOUT_SECONDS) -> tuple:
     from .processing_traffic import CURRENT as TRAFFIC, media_statistics
     if skip_background_read(path):
-        raise ValueError('STRM 和 ISO 不执行视频探测')
+        raise ValueError('STRM and ISO are not probed as video')
     from .smb_media import input_url
     path = input_url(path)
     result = subprocess.run(

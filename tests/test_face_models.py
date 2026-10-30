@@ -60,7 +60,7 @@ class ReporterTests(FaceModelsCase):
         self.report("人脸模型", None)
         latest, failed = self.rows()
         self.assertEqual((latest.status, failed.status), ("succeeded", "failed"))
-        self.assertEqual(latest.result_summary["outcome"], "已取得人脸模型")
+        self.assertEqual(latest.result_summary["outcome"], "Fetched 人脸模型")
         # 恢复之后再断，是新的一次失败。
         self.report("人脸模型", DOWN)
         self.assertEqual([run.status for run in self.rows()], ["failed", "succeeded", "failed"])
@@ -115,7 +115,7 @@ class FetchObserverTests(FaceModelsCase):
         with mock.patch.object(face_detect, "read_url", return_value=b"half"), \
                 self.assertRaises(face_detect.FaceModelUnavailable):
             self.fetch("0" * 64)
-        self.assertIn("校验不符", str(self.seen[0][1]))
+        self.assertIn("checksum mismatch", str(self.seen[0][1]))
 
     def test_a_download_is_reported_and_counted_and_a_local_hit_is_not(self):
         payload = b"onnx"
@@ -159,8 +159,8 @@ class RetryEndpointTests(ModelFilesCase):
         self.retry(side_effect=OSError("断网"))
         [run] = self.rows()
         self.assertEqual((run.status, run.trigger), ("failed", "manual"))
-        self.assertIn("取人脸模型失败", run.error)
-        self.assertIn("取人脸比对模型失败", run.error)
+        self.assertIn("Fetching face model failed", run.error)
+        self.assertIn("Fetching face matching model failed", run.error)
 
     def test_a_successful_retry_is_one_succeeded_row(self):
         self.retry(side_effect=OSError("断网"))
@@ -220,9 +220,9 @@ class StatusTests(ModelFilesCase):
 
 class LabelTests(unittest.TestCase):
     def test_every_task_written_by_the_service_has_a_chinese_name(self):
-        self.assertEqual(task_label("face-models"), "下载人脸模型")
-        self.assertEqual(task_label("amane-bridge"), "重建 amane 桥")
-        self.assertEqual(task_label("follow-creator"), "关注作者建档")
+        self.assertEqual(task_label("face-models"), "Download face models")
+        self.assertEqual(task_label("amane-bridge"), "Rebuild the amane bridge")
+        self.assertEqual(task_label("follow-creator"), "Create follow creator profile")
 
 
 if __name__ == "__main__":

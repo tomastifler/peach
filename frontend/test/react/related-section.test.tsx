@@ -10,7 +10,7 @@ describe('接着看状态', () => {
     expect(host.querySelector('[data-skeleton]')).not.toBeNull();
     expect(host.querySelector('[data-empty-state]')).toBeNull();
     await rerender(<RelatedSection wireDrag={wireDrag} empty />);
-    expect(host.querySelector('[data-empty-state] h3')?.textContent).toBe('Nothing up next');
+    expect(host.querySelector('[data-empty-state] h3')?.textContent).toBe('Nothing to continue watching');
     expect(host.querySelector('[data-related-row]')).toBeNull();
     expect(host.querySelector('a')?.getAttribute('href')).toBe('/');
     await rerender(<RelatedSection wireDrag={wireDrag} online empty />);

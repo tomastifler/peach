@@ -9,7 +9,7 @@ interface WebkitVideo extends HTMLVideoElement {
   webkitPresentationMode?: string;
 }
 
-/** 保留官方画中画动作，补齐稳定占位、就绪状态与失败反馈。 */
+/** Keep the official picture-in-picture action, adding a stable placeholder, ready state and failure feedback. */
 export function mountPlayerPipControl(player: VjsPlayer, button: HTMLElement | null,
   label: (text: string) => void, failure: (text: string) => void): void {
   const video = player.el().querySelector<WebkitVideo>('video');
@@ -26,7 +26,7 @@ export function mountPlayerPipControl(player: VjsPlayer, button: HTMLElement | n
     pip.disabled = !supported || !!unavailable || (!ready && !active);
     pip.setAttribute('aria-disabled', String(pip.disabled));
     pip.setAttribute('aria-pressed', String(active));
-    setLabel(unavailable || (active ? '退出画中画' : ready ? '画中画' : '画中画（视频加载中）'));
+    setLabel(unavailable || (active ? 'Exit picture-in-picture' : ready ? 'Picture-in-picture' : 'Picture-in-picture (video loading)'));
   };
   const activate = pip.activate;
   pip.activate = async media => {
@@ -35,10 +35,10 @@ export function mountPlayerPipControl(player: VjsPlayer, button: HTMLElement | n
     } catch (cause) {
       if (player.isDisposed()) return;
       const name = cause instanceof DOMException ? cause.name : '';
-      const message = name === 'InvalidStateError' ? '视频尚未就绪，请稍后开启画中画'
-        : name === 'NotAllowedError' ? '浏览器未允许画中画，请再次点击开启'
-          : name === 'NotSupportedError' || name === 'SecurityError' ? '当前浏览器不支持画中画'
-            : '当前浏览器无法打开画中画';
+      const message = name === 'InvalidStateError' ? 'The video is not ready yet; try picture-in-picture again shortly'
+        : name === 'NotAllowedError' ? 'The browser did not allow picture-in-picture; click again to turn it on'
+          : name === 'NotSupportedError' || name === 'SecurityError' ? 'This browser does not support picture-in-picture'
+            : 'This browser cannot open picture-in-picture';
       if (name === 'NotSupportedError' || name === 'SecurityError') { unavailable = message; sync() }
       else setLabel(message);
       failure(message);

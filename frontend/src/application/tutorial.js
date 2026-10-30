@@ -54,7 +54,7 @@ export async function syncPostSetupTutorial(){
       const collapsed=card.dataset.collapsed!=='true';
       card.dataset.collapsed=String(collapsed);setPostSetupTutorialCollapsed(collapsed);
       collapse.setAttribute('aria-expanded',String(!collapsed));
-      collapse.setAttribute('aria-label',collapsed?'展开安装教程':'折叠安装教程');
+      collapse.setAttribute('aria-label',collapsed?'Expand the setup guide':'Collapse the setup guide');
       setCollapseRegionOpen(body,!collapsed);
     });
     root.querySelectorAll('[data-tutorial-skip]').forEach(button=>applicationEffects.handler(button, 'onclick', ()=>{
@@ -160,14 +160,14 @@ tutorialState.postSetupTutorialHtml = (tasks,skippedCount,totalCount)=>{
   return `<article class="post-setup-notification" data-collapsed="${collapsed}">
       <header class="post-setup-notification-head">
         <span class="post-setup-notification-icon" aria-hidden="true">${icon('compass')}</span>
-        <div><h2>完成 Peach 的安装教程</h2>
-        <p>已处理 ${completeCount}/${totalCount} 项。</p></div>
+        <div><h2>Finish the Peach setup guide</h2>
+        <p>${completeCount}/${totalCount} done.</p></div>
         <button class="post-setup-collapse" type="button" data-tutorial-collapse aria-controls="postSetupCollapseBody" aria-expanded="${!collapsed}"
-          aria-label="${collapsed?'展开安装教程':'折叠安装教程'}">${icon('chevron-down')}</button>
+          aria-label="${collapsed?'Expand the setup guide':'Collapse the setup guide'}">${icon('chevron-down')}</button>
       </header>
       <div class="post-setup-collapse-body ui-fcollapse" id="postSetupCollapseBody"${collapsed?' hidden':''}>
       <ol class="post-setup-task-list" id="postSetupTaskList">${rows}</ol>
-      <footer><button class="geist-button" type="button" data-tutorial-action="next">继续：${next.label}</button></footer>
+      <footer><button class="geist-button" type="button" data-tutorial-action="next">Next: ${next.label}</button></footer>
       </div>
     </article>`;
 };

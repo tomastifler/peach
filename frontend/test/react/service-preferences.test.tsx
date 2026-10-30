@@ -23,7 +23,7 @@ function server() {
   };
   const posts: { url: string; body: Record<string, unknown> }[] = [];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-    // 「立即重试」回来的是同一份调度状态，服务端已把它标成运行中。
+    // 「Retry now」回来的是同一份调度状态，服务端已把它标成运行中。
     const rerun = url.endsWith('/run');
     const data = routes[rerun ? url.slice(0, -'/run'.length) : url];
     if (!data) throw new Error(`没有登记的地址：${url}`);
@@ -46,8 +46,8 @@ const mountFollowRows = async () => {
 it('订阅源拉取读出间隔，没有失败时两个调度都不出提示', async () => {
   server();
   const host = await mountFollowRows();
-  expect(host.textContent).toContain('订阅源拉取');
-  expect(host.textContent).toContain('每 6 小时');
+  expect(host.textContent).toContain('Feed fetching');
+  expect(host.textContent).toContain('Every 6 hours');
   expect(host.querySelector('[role="alert"]')).toBeNull();
 });
 
@@ -57,9 +57,9 @@ it('关注检查失败时在它那一行下面写出原因与连续失败次数'
   const host = await mountFollowRows();
   const alerts = [...host.querySelectorAll('[role="alert"]')].map((node) => node.textContent);
   expect(alerts).toHaveLength(1);
-  expect(alerts[0]).toContain('上次自动检查失败');
+  expect(alerts[0]).toContain('Last automatic check failed');
   expect(alerts[0]).toContain('3 个来源检查失败');
-  expect(alerts[0]).toContain('已连续失败 2 次');
+  expect(alerts[0]).toContain('Failed 2 times in a row');
 });
 
 it('订阅源拉取失败时写出原因；正在跑的一轮与关闭的调度不显示旧原因', async () => {
@@ -68,26 +68,26 @@ it('订阅源拉取失败时写出原因；正在跑的一轮与关闭的调度�
   const failing = await mountFollowRows();
   const alerts = [...failing.querySelectorAll('[role="alert"]')].map((node) => node.textContent);
   expect(alerts).toHaveLength(1);
-  expect(alerts[0]).toContain('上次自动拉取失败');
+  expect(alerts[0]).toContain('Last automatic fetch failed');
   expect(alerts[0]).toContain('JavDB 返回 429');
-  expect(alerts[0]).not.toContain('连续失败');
+  expect(alerts[0]).not.toContain('in a row');
   queryClient.clear();
 
   Object.assign(schedule, { last_error: '1 个来源检查失败', running: true });
   Object.assign(feedSchedule, { enabled: false });
   const quiet = await mountFollowRows();
   expect(quiet.querySelector('[role="alert"]')).toBeNull();
-  expect(quiet.textContent).toContain('已关闭');
+  expect(quiet.textContent).toContain('Off');
 });
 
 it.each([
-  ['follow', '/api/follow/schedule/run', '正在检查来源更新…'],
-  ['feed', '/api/feeds/schedule/run', '正在拉取订阅源…'],
+  ['follow', '/api/follow/schedule/run', 'Checking source updates…'],
+  ['feed', '/api/feeds/schedule/run', 'Fetching feeds…'],
 ] as const)('%s 调度失败后立即重试走调度自己的重跑接口，跑起来后原因收起', async (kind, url, running) => {
   const { posts, schedule, feedSchedule } = server();
   Object.assign(kind === 'follow' ? schedule : feedSchedule, { last_error: '上游断了', consecutive_failures: 1 });
   const host = await mountFollowRows();
-  await click(buttonNamed('立即重试', host.querySelector('[role="alert"]')!));
+  await click(buttonNamed('Retry', host.querySelector('[role="alert"]')!));
   await settle();
   expect(posts).toEqual([{ url, body: {} }]);
   expect(host.querySelector('[role="alert"]')).toBeNull();
@@ -124,7 +124,7 @@ it('自动检查间隔拒绝范围外值，只在有效提交时写入原接口'
   const { posts } = server();
   const host = await mount(<QueryClientProvider client={queryClient}><FollowPreferenceRows receipt={vi.fn()} /></QueryClientProvider>);
   await settle();
-  const input = host.querySelector<HTMLInputElement>('input[aria-label="Automatic check interval"]')!;
+  const input = host.querySelector<HTMLInputElement>('input[aria-label="Auto-check interval"]')!;
   await type(input, '2');
   await act(async () => input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
   expect(posts).toEqual([]);
@@ -160,20 +160,20 @@ it('服务设置重新进入时读取最新状态，关闭自动检查后保留�
     { url: '/api/follow/schedule', body: { enabled: false, interval_minutes: 60 } },
     { url: '/api/follow/schedule', body: { enabled: true, interval_minutes: 180 } },
   ]);
-  expect(second.querySelector<HTMLInputElement>('input[aria-label="Automatic check interval"]')?.value).toBe('180');
+  expect(second.querySelector<HTMLInputElement>('input[aria-label="Auto-check interval"]')?.value).toBe('180');
 });
 
-it('首次读取时「关注采集」就是五行，与配置页整页骨架同一组行；读回之后行数不变', async () => {
+it('首次读取时「Follow collection」就是五行，与配置页整页骨架同一组行；读回之后行数不变', async () => {
   const hold = pending<unknown>();
   vi.stubGlobal('fetch', vi.fn(() => hold.answer));
   const host = await mount(<QueryClientProvider client={queryClient}><FollowPreferenceRows receipt={vi.fn()} /></QueryClientProvider>);
-  const labels = (root: ParentNode) => [...root.querySelectorAll('section[aria-label="关注采集"] p.text-body-regular')].map((node) => node.textContent);
+  const labels = (root: ParentNode) => [...root.querySelectorAll('section[aria-label="Follow collection"] p.text-body-regular')].map((node) => node.textContent);
   const page = document.createElement('div');
-  page.innerHTML = configurationContentSkeleton('来源与订阅');
+  page.innerHTML = configurationContentSkeleton('Sources & subscriptions');
   const waiting = labels(host);
-  expect(waiting).toEqual(['自动检查更新', '订阅源拉取', '首次采集范围', '头像刷新', 'favicon 刷新']);
+  expect(waiting).toEqual(['Auto-check for updates', 'Feed fetching', 'First collection scope', 'Avatar refresh', 'Favicon refresh']);
   expect(labels(page), '整页骨架画的也是这五行').toEqual(waiting);
-  expect(host.querySelector('[data-skeleton][aria-label="正在读取订阅源拉取间隔"]')).not.toBeNull();
+  expect(host.querySelector('[data-skeleton][aria-label="Loading feed fetch interval"]')).not.toBeNull();
   server();
   await hold.release({ ok: true, status: 200, json: async () => ({ available: true, enabled: true, interval_minutes: 360 }) });
   await settle();

@@ -28,10 +28,10 @@ import {
   type OrganizeCommand, type OrganizeData, type OrganizeJob, type OrganizePlan,
 } from './organize';
 
-const APPLY_BODY = (name: string, path: string) => `将整理「${name}」${path ? `的「${path}」及其子目录` : '上的文件名与目录'}，清理特殊符号与乱码，并按已填模板改名或移动。目标已存在的行会整行跳过。`
-  + '这一批可以从「回滚上一批」整批退回。';
-const ROLLBACK_BODY = '将把上一批整理动过的文件退回整理前的名字与位置，数据库路径跟着退回。'
-  + '退回后这一批不再出现在这里。';
+const APPLY_BODY = (name: string, path: string) => `Will organize "${name}"${path ? ` ("${path}" and its subfolders)` : ' (file names and folders)'}, clean up special symbols and garbled text, and rename or move per the templates filled in. Rows whose target already exists are skipped entirely.`
+  + 'This batch can be undone as a whole with "Roll back last batch".';
+const ROLLBACK_BODY = 'This will restore the files touched by the last batch to their previous names and locations, and database paths are restored with them.'
+  + 'After rolling back, this batch no longer appears here.';
 /** 预览只列前 8 行：这里是给人扫一眼方向对不对，完整计划在 CSV 里。 */
 const PLAN_ROWS = 8;
 
@@ -49,7 +49,7 @@ function PlanRows({ plan }: { plan: OrganizePlan }) {
         ))}
       </ol>
       {plan.truncated || plan.rows.length > PLAN_ROWS
-        ? <p className="text-caption-1-regular text-text-secondary">只列出前 8 行，完整计划在计划 CSV 里。</p>
+        ? <p className="text-caption-1-regular text-text-secondary">Only the first 8 rows are listed; the full plan is in the plan CSV.</p>
         : null}
     </>
   );
@@ -125,7 +125,7 @@ export function OrganizeCard(
       void queryClient.invalidateQueries({ queryKey: ORGANIZE_KEY, exact: true });
       if (finished.status !== 'complete') return;
       const { text, failed } = organizeOutcome(finished);
-      if (failed) failure('整理文件', new Error(`${failed} 行未能处理`));
+      if (failed) failure('Organize files', new Error(`${failed} rows could not be processed`));
       else toast(text.replace(/。$/, ''));
     },
   });
@@ -158,8 +158,8 @@ export function OrganizeCard(
     const sent = preview.variables;
     if (!sent || !plan || !changes) return;
     void confirmModal({
-      title: '整理文件', body: APPLY_BODY(name, sent.path), confirmLabel: '整理文件',
-      /* 确认执行时保存该来源的模板。 */
+      title: 'Organize files', body: APPLY_BODY(name, sent.path), confirmLabel: 'Organize files',
+      /* On confirm, save this source's template. */
       onConfirm: async () => {
         await job.start.mutateAsync({ kind: 'apply', request: sent });
         void rememberTemplates({
@@ -179,7 +179,7 @@ export function OrganizeCard(
   const current = job.job;
   const outcome = job.outcome;
   if (current?.status === 'running') {
-    const line = current.message || current.stage || '正在整理文件';
+    const line = current.message || current.stage || 'Organizing files';
     state = <TaskProgress embedded label={line} value={Math.min(current.checked || 0, current.total || 0)} total={current.total} />;
   } else if (outcome?.status === 'failed') {
     state = <Note tone="error" title="File organizing incomplete">{outcome.error || 'Check the task log to verify which files were processed.'}</Note>;
@@ -189,9 +189,9 @@ export function OrganizeCard(
   } else if (job.start.isError) {
     state = <Note tone="error" title="Organizing failed">{errorMessage(job.start.error)}</Note>;
   } else if (preview.isPending) {
-    state = <TaskProgress embedded label="正在核对整理计划" />;
+    state = <TaskProgress embedded label="Checking the organize plan" />;
   } else if (preview.isError && previewMatches) {
-    state = <Note tone="error" title="整理预览失败">{errorMessage(preview.error)}</Note>;
+    state = <Note tone="error" title="Organize preview failed">{errorMessage(preview.error)}</Note>;
   } else if (plan) {
     state = <><Note tone="neutral" title="Preview result">{planSummary(plan)}</Note>{changes ? <PlanRows plan={plan} /> : null}</>;
   }
@@ -205,13 +205,13 @@ export function OrganizeCard(
             ? <Button variant="secondary" {...busyProps(running)} onClick={runRollback}>Roll back last batch</Button>
             : null}
           <Button variant={applicable ? 'secondary' : 'primary'} disabled={!locations.length || running}
-            {...busyProps(preview.isPending)} onClick={runPreview}>预览</Button>
-          {applicable ? <Button variant="primary" onClick={runApply}>执行整理</Button> : null}
+            {...busyProps(preview.isPending)} onClick={runPreview}>Preview</Button>
+          {applicable ? <Button variant="primary" onClick={runApply}>Run organize</Button> : null}
         </>
       }>
       <FieldsetTitle id="cleanup-organize-title" gap="medium">Organize</FieldsetTitle>
       <p className="text-body-regular text-text-secondary">
-        清理文件名中的特殊符号与乱码，也可按模板改名并归入目录。先预览，确认后执行；执行过的一批可以整批退回。
+        Clean up special symbols and garbled text in file names, or rename and sort into folders with templates. Preview first, then run after confirming; a batch that has run can be rolled back as a whole.
       </p>
       {organize.isError
         ? <div className="mt-3"><Note tone="error" title="Could not load organize settings">{errorMessage(organize.error)}</Note></div>
@@ -219,7 +219,7 @@ export function OrganizeCard(
       <div className="mt-3 flex flex-col gap-3">
         <div data-organize-scope className="flex min-w-0 flex-wrap items-start gap-2">
         {locations.length
-          ? <Select aria-label="整理哪个来源" prefix="来源" className="w-fit min-w-25" selectedKey={location || null}
+          ? <Select aria-label="Source to organize" prefix="Source" className="w-fit min-w-25" selectedKey={location || null}
               onSelectionChange={(key) => {
                 if (key === null) return;
                 setChosen(String(key)); setScope({ location: String(key), path: '' });
@@ -233,27 +233,27 @@ export function OrganizeCard(
             </Select>
           : null}
           <div className="flex min-w-0 basis-64 flex-1 items-start gap-2">
-            <Input aria-label="整理路径" className="min-w-0 flex-1" placeholder="留空整理整个来源"
+            <Input aria-label="Organize path" className="min-w-0 flex-1" placeholder="Leave empty to organize the whole source"
               name="organize-path" autoComplete="off" spellCheck="false" value={path} ref={pathInput}
               isInvalid={invalid === 'path'}
               onChange={(value) => { setScope({ location, path: value }); setInvalid(null); preview.reset(); picker.reset() }} />
-            <IconButton icon={FolderSearchIcon} aria-label="选择整理路径" {...busyProps(picker.isPending)}
+            <IconButton icon={FolderSearchIcon} aria-label="Choose organize path" {...busyProps(picker.isPending)}
               onClick={() => picker.mutate({ initial: path || locations.find((row) => row.location === location)?.roots[0] || '', location, path })} />
           </div>
         </div>
-        <p className="text-caption-1-regular text-text-secondary">指定路径时包含子目录，目录模板以该路径为起点。模板均留空时只清理文件名。</p>
-        {picker.isError ? <Note tone="error" title="目录选择失败">{errorMessage(picker.error)}；也可直接输入路径。</Note> : null}
-        <Input label="文件名模板" placeholder="{code}[ {title}]" value={fields.file} ref={fileInput}
+        <p className="text-caption-1-regular text-text-secondary">A specified path includes its subfolders, and the folder template starts from that path. When both templates are empty, only file names are cleaned up.</p>
+        {picker.isError ? <Note tone="error" title="Folder selection failed">{errorMessage(picker.error)}; you can also type the path directly.</Note> : null}
+        <Input label="File name template" placeholder="{code}[ {title}]" value={fields.file} ref={fileInput}
           spellCheck="false" isInvalid={invalid === 'file'}
           onFocus={() => { setTarget('file'); focused.current = true }}
           onChange={(value) => changeTemplates({ file: value })} />
-        <Input label="目录模板" placeholder="留空表示原地改名" value={fields.dir} ref={dirInput}
+        <Input label="Folder template" placeholder="Leave empty to rename in place" value={fields.dir} ref={dirInput}
           spellCheck="false" isInvalid={invalid === 'dir'}
           onFocus={() => { setTarget('dir'); focused.current = true }}
           onChange={(value) => changeTemplates({ dir: value })} />
         {data?.presets?.length
-          ? <div className="flex flex-col gap-2" role="group" aria-label="套用模板">
-              <p className="text-caption-1-medium text-text-secondary">套用模板</p>
+          ? <div className="flex flex-col gap-2" role="group" aria-label="Apply template">
+              <p className="text-caption-1-medium text-text-secondary">Apply template</p>
               <div className="flex flex-wrap gap-2">
               {data.presets.map((preset) => (
                 <Button key={preset.label} variant="secondary" size="small" title={preset.example || preset.label}
@@ -267,12 +267,12 @@ export function OrganizeCard(
           : null}
         <p aria-live="polite" aria-busy={example.isFetching} data-organize-example=""
           className="text-caption-1-regular text-text-secondary">
-          路径示例：<code className="wrap-anywhere">{example.data?.example || example.data?.error
-            || (example.isError ? errorMessage(example.error) : '正在预览…')}</code>
+          Path example: <code className="wrap-anywhere">{example.data?.example || example.data?.error
+            || (example.isError ? errorMessage(example.error) : 'Previewing…')}</code>
         </p>
-        {data?.placeholders?.length ? <div className="flex flex-col gap-2" role="group" aria-label="插入参数">
+        {data?.placeholders?.length ? <div className="flex flex-col gap-2" role="group" aria-label="Insert placeholder">
           <p className="text-caption-1-regular text-text-secondary" aria-live="polite">
-            <strong className="text-caption-1-semibold text-text-primary">插入参数</strong>（到{target === 'file' ? '文件名模板' : '目录模板'}）
+            <strong className="text-caption-1-semibold text-text-primary">Insert placeholder</strong>(into the {target === 'file' ? 'file name template' : 'folder template'})
           </p>
           <div className="flex flex-wrap gap-1">
             {data.placeholders.map((item) => <Button key={item.key} variant="ghost" size="small"
@@ -284,7 +284,7 @@ export function OrganizeCard(
           </div>
         </div> : null}
         <p className="text-caption-1-regular leading-4.5 text-text-secondary">
-          点击参数插入光标处，选中文字可替换。方括号里的内容在字段为空时整段省略。
+          Click a placeholder to insert it at the cursor; select text to replace it. Content in square brackets is omitted entirely when the field is empty.
         </p>
       </div>
       <div aria-live="polite" className="mt-3 flex flex-col gap-2 empty:hidden">{state}</div>

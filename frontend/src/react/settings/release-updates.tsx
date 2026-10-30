@@ -17,8 +17,11 @@ import { busyProps, useAction } from './use-action';
 const ACTIVE = new Set(['downloading', 'verifying', 'extracting', 'preparing', 'restarting', 'installing']);
 const STOPS = [65, 75, 90];
 const MAX_FAILURES = 120;
-/** 服务端没给发布页时的去处；检查到新版本后服务端给的是那一版自己的发布页。 */
+/** Where to go when the server gives no release page; once a new version is found, the server gives that version's own release page. */
 const RELEASES_URL = 'https://github.com/peach-mitao/peach/releases';
+
+/* The backend reports the standalone build under its original Chinese name; accept the English label too. */
+const isStandalone = (installation: unknown) => installation === '独立测试包' || installation === 'Standalone test build';
 
 export function ReleaseUpdates({ initial, initialJob }: { initial: ReleaseState; initialJob?: UpdateJob | undefined }) {
   const [data, setData] = useState(initial);
@@ -89,21 +92,21 @@ export function ReleaseUpdates({ initial, initialJob }: { initial: ReleaseState;
     ? `${((job.downloaded || 0) / 1048576).toFixed(1)} / ${(job.total / 1048576).toFixed(1)} MB`
     : `${job.progress}%`;
   return (
-    <Section id="releaseUpdates" title="检查更新" aside={<StatusLabel tone={error || data.state === 'error' || job.state === 'error' ? 'error' : running ? 'progress' : data.state === 'available' ? 'warning' : data.state === 'unchecked' ? 'neutral' : 'success'}>
-      {error || data.state === 'error' || job.state === 'error' ? '检查未完成' : running ? '准备更新中' : job.state === 'ready' ? '可安装' : data.state === 'available' ? '有可用更新' : data.state === 'unchecked' ? '尚未检查' : '检查完成'}</StatusLabel>}>
+    <Section id="releaseUpdates" title="Check for updates" aside={<StatusLabel tone={error || data.state === 'error' || job.state === 'error' ? 'error' : running ? 'progress' : data.state === 'available' ? 'warning' : data.state === 'unchecked' ? 'neutral' : 'success'}>
+      {error || data.state === 'error' || job.state === 'error' ? 'Check did not finish' : running ? 'Preparing update' : job.state === 'ready' ? 'Ready to install' : data.state === 'available' ? 'Update available' : data.state === 'unchecked' ? 'Not checked yet' : 'Check complete'}</StatusLabel>}>
       <FactList>
-        <Fact term="当前版本">{data.current_version}</Fact>
-        <Fact term="安装方式">{data.installation}</Fact>
-        <Fact term="更新通道">{data.channel}</Fact>
-        <Fact term="最新版本">{data.latest_version || '未取得'}</Fact>
-        {data.package_kind ? <Fact term="下载内容">
-          {data.package_kind === 'update' ? '应用更新包' : '应用与工具'}
+        <Fact term="Current version">{data.current_version}</Fact>
+        <Fact term="Installation type">{data.installation}</Fact>
+        <Fact term="Update channel">{data.channel}</Fact>
+        <Fact term="Latest version">{data.latest_version || 'Unavailable'}</Fact>
+        {data.package_kind ? <Fact term="Download contents">
+          {data.package_kind === 'update' ? 'App update package' : 'App and tools'}
           {data.asset_size ? ` · ${(data.asset_size / 1048576).toFixed(1)} MB` : ''}
         </Fact> : null}
       </FactList>
       {data.package_kind === 'update'
-        ? <Help>应用更新包复用已安装工具；工具缺失、损坏或版本变化时会另行下载所需工具包。</Help>
-        : data.package_kind === 'full' ? <Help>本次更新包含媒体工具。</Help> : null}
+        ? <Help>The app update package reuses installed tools; if a tool is missing, damaged or changed in version, the required tool package is downloaded separately.</Help>
+        : data.package_kind === 'full' ? <Help>This update includes media tools.</Help> : null}
       {data.state === 'unchecked' && !data.checked_at && !error && job.state === 'idle' ? null : <Stack divided>
         {data.checked_at ? <Help>Checked at {new Date(data.checked_at * 1000).toLocaleString()}</Help> : null}
         {data.state === 'available' && !error
@@ -121,16 +124,16 @@ export function ReleaseUpdates({ initial, initialJob }: { initial: ReleaseState;
         ) : null}
       </Stack>}
       <Footer status={<div className="flex flex-wrap items-center gap-3">
-        <ExternalLink href="https://peach.video/#download">官网</ExternalLink>
+        <ExternalLink href="https://peach.video/#download">Website</ExternalLink>
         <ExternalLink href="https://github.com/peach-mitao/peach">GitHub</ExternalLink>
-        <ExternalLink href={data.release_url || RELEASES_URL}>查看发布页</ExternalLink>
+        <ExternalLink href={data.release_url || RELEASES_URL}>View release page</ExternalLink>
       </div>}>
-        <Button variant={job.state === 'ready' || (data.state === 'available' && data.installation === '独立测试包') ? 'secondary' : 'primary'}
-          disabled={running} onClick={check} {...busyProps(action.busy === 'check')}>检查更新</Button>
-        {data.state === 'available' && data.installation === '独立测试包' && job.state !== 'ready'
-          ? <Button variant="primary" onClick={download} {...busyProps(running || action.busy === 'download')}>下载并安装</Button>
+        <Button variant={job.state === 'ready' || (data.state === 'available' && isStandalone(data.installation)) ? 'secondary' : 'primary'}
+          disabled={running} onClick={check} {...busyProps(action.busy === 'check')}>Check for updates</Button>
+        {data.state === 'available' && isStandalone(data.installation) && job.state !== 'ready'
+          ? <Button variant="primary" onClick={download} {...busyProps(running || action.busy === 'download')}>Download and install</Button>
           : null}
-        {job.state === 'ready' ? <Button variant="primary" onClick={confirmRestart}>重启安装</Button> : null}
+        {job.state === 'ready' ? <Button variant="primary" onClick={confirmRestart}>Restart to install</Button> : null}
       </Footer>
     </Section>
   );

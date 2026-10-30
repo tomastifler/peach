@@ -96,8 +96,8 @@ describe('设计决定：设置、口味、统计与筛选玻璃', () => {
     const opened = await openTaste(browser, DESKTOP);
     try {
       const page = opened.page;
-      await page.getByRole('tablist', { name: '口味分析的数据来源' }).getByRole('tab', { name: 'Peach 观看与评价' }).click();
-      for (const name of ['女优', '创作者']) {
+      await page.getByRole('tablist', { name: 'Taste analysis data source' }).getByRole('tab', { name: 'Peach viewing and ratings' }).click();
+      for (const name of ['女优', 'Creator']) {
         await page.getByRole('tablist', { name: 'Peach 口味维度' }).getByRole('tab', { name }).click();
         const img = page.getByRole('tabpanel', { name }).locator('img[data-facebox]').first();
         await img.scrollIntoViewIfNeeded();
@@ -274,7 +274,7 @@ describe('设计决定：设置、口味、统计与筛选玻璃', () => {
     }
   });
 
-  /* ADR-0050：设置弹层只放一行一个值、改完就生效的控件；带「保存配置」的表单在配置页，
+  /* ADR-0050：设置弹层只放一行一个值、改完就生效的控件；带「Save settings」的表单在配置页，
      要确认、要看进度的长任务在数据管理页，订阅源在关注管理页。 */
   /* 设置面板：盖住整页的弹层与作品详情浮窗同一档遮罩、同一组进出场；遮罩不带模糊，值只来自 `--scrim`。
      动效要真跑起来才读得到关键帧名，这一条自建不减动态的上下文。 */
@@ -460,7 +460,7 @@ describe('设计决定：设置、口味、统计与筛选玻璃', () => {
         await openPanel(opened.page);
         for (const section of ['外观与导航', '浏览与播放', 'JAV 与新作', '搜索与推荐', '内容显示']) {
           await opened.page.locator(PANEL).getByRole('tab', { name: section, exact: true }).click();
-          const subheadings = ({ '浏览与播放': ['作品列表', '播放'], 'JAV 与新作': ['作品显示', '新作显示'] } as
+          const subheadings = ({ '浏览与播放': ['Work list', 'Playback'], 'JAV 与新作': ['Work display', 'New releases display'] } as
             Record<string, string[] | undefined>)[section];
           if (subheadings) {
             const headings = await opened.page.locator(`${PANEL} [data-setting-group]:not([hidden]) [data-settings-subheading]`)
@@ -612,7 +612,7 @@ describe('设计决定：设置、口味、统计与筛选玻璃', () => {
         assert.equal(shown.right, 0);
         assert.ok(shown.left);
         assert.equal(shown.overflow, false, `${viewport.name}：参数块被内容顶宽`);
-        assert.deepEqual(shown.headings, ['光晕配色', '自定义颜色']);
+        assert.deepEqual(shown.headings, ['Glow palette', 'Custom colors']);
         assert.equal(shown.cards.length, 2);
         for (const card of shown.cards) {
           assert.equal(card.radius, '16px');

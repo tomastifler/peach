@@ -125,7 +125,7 @@ function panelHost() {
   const host: SettingsPanelHost = {
     store, changed, sound: () => {},
     navCatalog: [['', '首页', 'house']],
-    themeOptions: [['system', '跟随系统', 'monitor'], ['light', '浅色', 'sun'], ['dark', '深色', 'moon']],
+    themeOptions: [['system', 'Follow system', 'monitor'], ['light', '浅色', 'sun'], ['dark', '深色', 'moon']],
     videoLayouts: [['small', '小'], ['large', '大']],
     followInitialRanges: FOLLOW_INITIAL_RANGE_OPTIONS,
     videoLayout: () => 'small', setVideoLayout: () => {},
@@ -198,7 +198,7 @@ describe('设置面板与壳的接缝', () => {
     expect(names.nameLanguage()).toBe('zh-CN');
     expect(current.value.performerNameLanguage).toBe('zh-CN');
     await answer.release({ ok: success, status: success ? 200 : 500,
-      json: async () => success ? { performerNameLanguage: 'ja' } : { error: '保存失败' } });
+      json: async () => success ? { performerNameLanguage: 'ja' } : { error: 'Save failed' } });
     await settle();
     expect(names.nameLanguage()).toBe(success ? 'ja' : 'zh-CN');
     expect(current.value.performerNameLanguage).toBe(success ? 'ja' : 'zh-CN');
@@ -222,7 +222,7 @@ describe('设置面板与壳的接缝', () => {
       .toEqual(['settings-group-1', 'settings-group-1', 'settings-group-2']);
     const headings = (index: number) => [...panel.querySelectorAll(`#settings-group-${index} [data-settings-subheading]`)]
       .map((node) => node.textContent);
-    expect([headings(1), headings(2)]).toEqual([['作品列表', '播放'], ['作品显示', '新作显示']]);
+    expect([headings(1), headings(2)]).toEqual([['Work list', 'Playback'], ['Work display', 'New releases display']]);
     /* 转码方式是运行 Peach 那台电脑的服务配置，在 Peach 配置里，弹窗里没有这一行（ADR-0103）。 */
     expect(panel.querySelector('#playbackAccelerationSetting')).toBeNull();
     const entry = panel.querySelector<HTMLButtonElement>('[data-settings-service] button')!;

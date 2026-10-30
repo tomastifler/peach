@@ -1,9 +1,9 @@
 /* 活动页：任务中心那张表的唯一界面。
  *
  * 这一屏要回答三个问题，顺序就是它们的紧迫程度：现在有什么在跑、有哪一轮被挡下了、
- * 刚跑完的那些怎么样。三段共用 `/api/tasks` 一次请求的结果。最前面的「需要处理」是后台服务
- * 此刻的问题，末尾的「云下载」段是网盘离线任务，两者各自取数与轮询（`background-issues.tsx`、
- * `downloads-panel.tsx`），和这三段互不牵连。
+ * how the ones that just finished went. The three sections share the result of a single `/api/tasks` request. The first one, "Needs attention", is the background service's
+ * current problems; the last, "Cloud downloads", is cloud-drive offline tasks. Those two each fetch and poll on their own (`background-issues.tsx`,
+ * `downloads-panel.tsx`) and are independent of these three sections.
  *
  * 轮询交给 Query 的 `refetchInterval`：间隔按上一次拿到的内容算，有东西在跑两秒一次，
  * 全是终态十秒一次。它是后台刷新，不写 `aria-busy`——页面上的内容一直是完整的，写了
@@ -40,12 +40,12 @@ import {
   statusLabel, summaryItems, taskIssues, TASKS_KEY, TRIGGER_LABELS, type FollowupCounts, type TaskRunPayload,
 } from './tasks';
 
-/** 一张卡里最多列多少条后继。几批合成一张卡时会有上千条，全画出来一屏都是同一句。 */
+/** The most follow-ups listed in one card. When several batches are merged into one card there can be thousands, and drawing them all would fill the screen with the same sentence. */
 const FOLLOWUP_ROWS = 50;
-/** 自己只负责派发后继的任务：一轮只是「安排了几项」，要看的是那几项的结果。 */
+/** A task that only dispatches follow-ups: one round only "queued some items", and what matters is how those items turned out. */
 const DISPATCHERS = new Set(['upgrade-repairs']);
 
-/* 完成绿、失败红、进行中蓝、意外中断黄，主动取消和排队为中性。 */
+/* Completed green, failed red, in progress blue, unexpectedly interrupted yellow; manually cancelled and queued are neutral. */
 const BADGE_COLORS: Record<string, 'lime' | 'rose' | 'yellow' | 'blue' | 'neutral'> = {
   succeeded: 'lime', failed: 'rose', cancelled: 'neutral', interrupted: 'yellow', running: 'blue', pending: 'neutral',
 };
@@ -55,7 +55,7 @@ function StatusBadge({ run }: { run: TaskRunPayload }) {
     && run.result_summary?.outcome === 'partial';
   const problems = partial || run.status === 'succeeded' && hasResultProblems(run);
   return <Chip color={problems ? 'yellow' : BADGE_COLORS[run.status] ?? 'neutral'}>
-    {partial ? '部分项目需处理' : problems ? '发现问题' : statusLabel(run.status)}
+    {partial ? 'Some items need attention' : problems ? 'Problems found' : statusLabel(run.status)}
   </Chip>;
 }
 
@@ -79,12 +79,12 @@ function FollowupList({ rows }: { rows: TaskRunPayload[] }) {
             {detail
               ? <span className="min-w-0 break-words text-caption-1-regular text-text-secondary">{detail}</span>
               : null}
-            {/* 排队中的那些还没有结果：空的「技术详情」展开只有一对花括号。 */}
+            {/* Queued items have no result yet: an empty "Technical details" expansion would only hold a pair of braces. */}
             {Object.keys(row.result_summary || {}).length
               ? <div className="w-full min-w-0">
-                  <Disclosure summary="技术详情" contentClassName="pb-2.5">
+                  <Disclosure summary="Technical details" contentClassName="pb-2.5">
                     <CodeBlock code={JSON.stringify(row.result_summary, null, 2)} language="json"
-                      label={`${row.task_label}技术详情`} />
+                      label={`${row.task_label}technical details`} />
                   </Disclosure>
                 </div>
               : null}
@@ -102,8 +102,8 @@ function RunCard(
   { run: TaskRunPayload; meta: string; children?: ReactNode; footer?: string;
     followups?: TaskRunPayload[]; followupTotal?: number; badge?: ReactNode },
 ) {
-  /* 一轮派出上千条后继时只下发最近几十条，合并的几批又可能各带几十条：标题写全数，
-     列表先列在跑与排队的、再列最近结束的，最多 `FOLLOWUP_ROWS` 条，并说清只列了其中几条。 */
+  /* When a round dispatches thousands of follow-ups, only the latest few dozen are sent down, and the merged batches may each carry a few dozen more: the title states the full count,
+     the list shows running and queued ones first, then the most recently finished, at most `FOLLOWUP_ROWS` rows, and says clearly that only some of them are listed. */
   const rank = (row: TaskRunPayload) => (row.status === 'running' ? 3 : row.status === 'pending' ? 2
     : row.status === 'failed' || row.status === 'interrupted' ? 1 : 0);
   const listed = followups ? [...followups].sort((a, b) =>
@@ -111,14 +111,14 @@ function RunCard(
   const shown = listed.length;
   const total = Math.max(followups?.length || 0, followupTotal);
   return (
-    // `id` 让「需要处理」那一行的「查看失败记录」能直接滚到这张卡。
+    // `id` lets the "View failure records" link on the "Needs attention" row scroll straight to this card.
     <li id={`run-${run.id}`} data-status={run.status} data-task-key={run.task_key} data-run-id={run.id}
       className={cardClass({
         padding: 'none',
         bordered: 'line',
         className: run.status === 'failed' ? 'flex flex-col border-border-error-default' : 'flex flex-col',
       })}>
-      {/* 卡片标题比分段标题（「正在进行」）低一档，标题、时间与摘要之间同一个行距。 */}
+      {/* Card titles are one step below section titles ("In progress"), with the same line spacing between title, time and summary. */}
       <div className="flex flex-col gap-2 px-5 py-4">
         <div className="flex flex-wrap items-center gap-2">
           <strong className="min-w-0 break-words text-title-3-medium text-text-primary">{run.task_label}</strong>
@@ -128,19 +128,19 @@ function RunCard(
         {children}
       </div>
       {shown ? <div className="border-t border-separator-border px-5 py-2.5">
-        <Disclosure summary={`任务明细 · ${total.toLocaleString()} 项`}
+        <Disclosure summary={`Task details · ${total.toLocaleString()} items`}
           contentClassName="pb-2.5"
           defaultOpen={listed.some((row) => isActive(row))}>
           {shown < total
-            ? <p className="text-caption-1-regular text-text-secondary">列出其中 {shown.toLocaleString()} 项，正在处理的排在前面</p>
+            ? <p className="text-caption-1-regular text-text-secondary">Showing {shown.toLocaleString()} of them, with items being processed first</p>
             : null}
           <FollowupList rows={listed} />
         </Disclosure>
       </div> : null}
       {Object.keys(run.result_summary || {}).length ? <div className="border-t border-separator-border px-5 py-2.5">
-        <Disclosure summary="技术详情" contentClassName="pb-2.5">
+        <Disclosure summary="Technical details" contentClassName="pb-2.5">
           <CodeBlock code={JSON.stringify(run.result_summary, null, 2)} language="json"
-            label={`${run.task_label}技术详情`} />
+            label={`${run.task_label}technical details`} />
         </Disclosure>
       </div> : null}
       {footer
@@ -172,19 +172,19 @@ function RunningRun({ run, followups }: { run: TaskRunPayload; followups?: TaskR
 }
 
 /** 跑完的一轮。`runs` 多于一条时是折叠起来的几轮例行任务：时间写成从最早到最新那一段，
- *  摘要取最新那一轮——例行轮次的摘要本来就一样，逐条列出来只是同一行抄 N 遍。
- *  任务卡只记这一轮的历史：此刻还没解决的问题和「立即重试」在页顶「需要处理」那一块。
- *  `latest` 说它是不是同一种任务最新的那一轮：有些任务只有那一轮还有处理入口。 */
+ *  The summary takes the latest round - routine rounds have identical summaries anyway, and listing them one by one would just copy the same line N times.
+ *  A task card only records this round's history: problems still unresolved and "Retry now" are in the "Needs attention" block at the top of the page.
+ *  `latest` says whether this is the latest round of the same kind of task: for some tasks only that round still has a handling entry. */
 function SettledRun(
   { run, followups, runs, latest, followupTotal, followupFailed = 0 }:
   { run: TaskRunPayload; followups?: TaskRunPayload[]; runs?: TaskRunPayload[]; latest: boolean;
     followupTotal?: number; followupFailed?: number },
 ) {
-  /* 几批派发并成一张时，最新那一批的「已安排 64 项」说不清整件事：改说一共处理了几项、失败几项，
-     有失败时徽章写发现问题，失败的那几条在任务明细里排在前面。 */
+  /* When several dispatched batches are merged into one card, the latest batch's "Queued 64 items" cannot describe the whole picture: say how many were processed in total and how many failed instead,
+     and when there are failures the badge reads "Problems found", with the failed ones listed first in the task details. */
   const batches = Boolean(runs && runs.length > 1 && followupTotal);
   const summary = batches
-    ? [`共处理 ${followupTotal!.toLocaleString()} 项`, followupFailed ? `其中 ${followupFailed.toLocaleString()} 项失败` : '']
+    ? [`Processed ${followupTotal!.toLocaleString()} in total`, followupFailed ? `${followupFailed.toLocaleString()} failed` : '']
         .filter(Boolean)
     : summaryItems(run.result_summary).filter((line) => line !== run.error);
   const issues = taskIssues(run);
@@ -198,15 +198,15 @@ function SettledRun(
        elapsed && `Took ${elapsed}`]).filter(Boolean).join(' · ');
   return (
     <RunCard run={run} meta={meta} footer={run.error} followups={followups} followupTotal={followupTotal}
-      badge={batches && followupFailed ? <Chip color="yellow">发现问题</Chip> : undefined}>
-      {/* 只有一句摘要时不加项目符号：单独一个圆点读起来像漏了下文。 */}
+      badge={batches && followupFailed ? <Chip color="yellow">Problems found</Chip> : undefined}>
+      {/* Do not add a bullet when there is only one summary line: a lone dot reads as if the rest is missing. */}
       {summary.length === 1
         ? <p className="text-caption-1-regular text-text-secondary wrap-anywhere">{summary[0]}</p>
         : summary.length ? <ul className="flex list-disc flex-col gap-1 pl-5 text-caption-1-regular text-text-secondary wrap-anywhere">
             {summary.map((line, index) => <li key={index}>{line}</li>)}
           </ul> : null}
-      {issues.length ? <Disclosure summary={`问题详情 · ${issues.length} 项`} contentClassName="pt-2">
-        <ErrorDetails label="任务问题详情">
+      {issues.length ? <Disclosure summary={`Issue details · ${issues.length} items`} contentClassName="pt-2">
+        <ErrorDetails label="Task issue details">
         <ul className="flex min-w-0 flex-col gap-3" data-task-issues="">
           {issues.map((issue, index) => <li key={`${issue.source}-${index}`} className="flex min-w-0 flex-col gap-1 text-body-2-regular wrap-anywhere">
             <p className="text-body-regular text-text-primary">{[issue.label, issue.provider, issue.kind].filter(Boolean).join(' · ')}</p>
@@ -215,7 +215,7 @@ function SettledRun(
         </ul>
         </ErrorDetails>
       </Disclosure> : hasResultProblems(run) && ['follow-check', 'feed-check'].includes(run.task_key)
-        ? <p className="text-body-2-regular text-text-secondary">未取得本轮逐项详情，可到来源列表查看检查结果。</p> : null}
+        ? <p className="text-body-2-regular text-text-secondary">Per-item details for this round were not retrieved; see the check results in the source list.</p> : null}
       {destination
         ? <LinkButton href={destination.href} size="small" trailingIcon={RiArrowRightLine}
             className="self-start">
@@ -225,10 +225,10 @@ function SettledRun(
   );
 }
 
-/** 自己已经跑完、派出的后继还没做完的几轮，同一种任务合成一张卡。
+/** Several rounds of the same task that have finished themselves while the follow-ups they dispatched are not done yet, merged into one card.
  *
- * 父任务那一轮只是「安排」，几秒就结束；用户关心的是安排下去的那批做到哪了。所以徽章写进行中，
- * 进度条按全部后继的计数走，而不是按页面上列出的那几行。 */
+ * The parent task's round only "queues" work and ends in a few seconds; what the user cares about is how far the queued batch has got. So the badge reads In progress
+ * and the progress bar follows the counts of all follow-ups, not the few rows listed on the page. */
 function WorkingRun(
   { runs, followups, counts }:
   { runs: TaskRunPayload[]; followups: TaskRunPayload[]; counts: FollowupCounts | undefined },
@@ -241,15 +241,15 @@ function WorkingRun(
   const failed = tally.total ? tally.failed
     : followups.filter((row) => row.status === 'failed' || row.status === 'interrupted').length;
   const meta = [TRIGGER_LABELS[run.trigger] || run.trigger,
-    runs.length > 1 ? `${runs.length} 批` : '',
-    `${momentText(oldest.started_at || oldest.finished_at)} 开始`].filter(Boolean).join(' · ');
+    runs.length > 1 ? `${runs.length} batches` : '',
+    `${momentText(oldest.started_at || oldest.finished_at)} started`].filter(Boolean).join(' · ');
   return (
     <RunCard run={run} meta={meta} followups={followups} followupTotal={total}
-      badge={<Chip color="blue">进行中</Chip>}>
+      badge={<Chip color="blue">In progress</Chip>}>
       <div className="flex flex-col gap-1.5">
-        <Progress label={`${run.task_label}进度`} value={settled} max={total} />
+        <Progress label={`${run.task_label}progress`} value={settled} max={total} />
         <p className="text-caption-1-regular text-text-secondary">
-          已处理 {progressText(settled, total)} 项{failed ? ` · 其中 ${failed.toLocaleString()} 项失败` : ''}
+          Processed {progressText(settled, total)} items{failed ? ` · ${failed.toLocaleString()} failed` : ''}
         </p>
       </div>
     </RunCard>
@@ -322,7 +322,7 @@ export function ActivityPage() {
   const counts: FollowupCounts = { ...earlierCounts, ...data.followup_counts };
   const childrenOf = (runs: TaskRunPayload[]) => runs.flatMap((run) => byParent.get(run.id) || []);
   // 自己跑完、派出的后继还在跑的那一轮算「正在进行」：整件事还没完，放进「最近完成」
-  // 就是一张卡上一个已完成、一个进行中。页面上只列得到一部分后继，所以先看计数。
+  // That is, one card with one completed and one in progress. Only some of the follow-ups can be listed on the page, so look at the counts first.
   const working = [...settled, ...topLevel(parents)].filter((run) => followupTally(counts, [run]).active > 0
     || byParent.get(run.id)?.some(isActive)).sort((a, b) => b.id - a.id);
   const running = topLevel(data.running || []);
@@ -331,8 +331,8 @@ export function ActivityPage() {
   const finished = settled.filter((run) => !working.includes(run)
     && !skipped.some((row) => row.id === run.id));
   // 每小时一轮的定时检查什么也没发生时一条条摆出来，一页就被同一句「已检查 83」占满。
-  // 派了后继的那一轮，后继全部顺利做完才算例行，有一条失败就单独摆出来。只负责派发的那种
-  // （自动修复每分钟一批）例外：同一件事的几批照样并成一张，失败数写在卡上。
+  // A round that dispatched follow-ups counts as routine only if all its follow-ups finished without trouble; a single failure is shown on its own. The kind that only dispatches
+  // (auto-repair, one batch a minute) is the exception: several batches of the same thing are still merged into one card, with the failure count written on the card.
   const quietChildren = (run: TaskRunPayload) => {
     const children = byParent.get(run.id) || [];
     return children.every((row) => row.status === 'succeeded' && !hasResultProblems(row))
@@ -348,11 +348,11 @@ export function ActivityPage() {
       {data.available === false
         ? <Note tone="warning">{data.message || 'The database has no task records table yet'}</Note>
         : null}
-      {/* 后台服务此刻的问题排在最前：它们不会自己跑完，要人去处理。 */}
+      {/* The background service's current problems come first: they will not finish on their own and need someone to handle them. */}
       <BackgroundIssues />
       {quiet
-        ? <EmptyState icon={RiHistoryLine} title="还没有任务记录">
-            扫描、追更检查、批量操作和命令行批处理跑起来之后，这里会显示它们的进度与结果。
+        ? <EmptyState icon={RiHistoryLine} title="No task records yet">
+            Once scans, follow-up checks, batch operations and command-line batch jobs run, their progress and results will show here.
           </EmptyState>
         : <>
             <Section title="In progress">
@@ -368,7 +368,7 @@ export function ActivityPage() {
             {/* 「刚才那一轮为什么没跑」只有这一段答得出：定时触发撞上在跑的那一轮会
                 安静跳过，不留记录的话它在界面上和从没触发过一模一样。 */}
             {skipped.length
-              ? <Section title="本次未执行">
+              ? <Section title="Not run this time">
                   <RunList>{skipped.map((run) => (
                     <SettledRun key={run.id} run={run} latest={newest.has(run.id)} followups={byParent.get(run.id)} />))}</RunList>
                 </Section>

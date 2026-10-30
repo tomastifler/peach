@@ -126,9 +126,9 @@ class CertificateTests(unittest.TestCase):
         original_ca = (files.ca_cert.read_bytes(), files.ca_key.read_bytes())
         original_leaf = files.cert.read_bytes()
         self.assertEqual(reissue_reason(files, {"peach.local", "localhost"}, {"127.0.0.1"}),
-                         "证书缺少颁发者密钥标识")
+                         "Certificate lacks an issuer key identifier")
         self.assertEqual(ensure_certificate(files.cert.parent, "peach.local", set()),
-                         "证书缺少颁发者密钥标识")
+                         "Certificate lacks an issuer key identifier")
         self.assertEqual((files.ca_cert.read_bytes(), files.ca_key.read_bytes()), original_ca)
         self.assertNotEqual(files.cert.read_bytes(), original_leaf)
         self.assertEqual(next(files.cert.parent.glob("peach.crt.bak.*")).read_bytes(), original_leaf)

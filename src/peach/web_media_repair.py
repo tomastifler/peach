@@ -145,7 +145,7 @@ def _survey(contract, job, job_id: str, rows, cache: dict[str, str]) -> list[tup
         cache[key] = kind or CLEAN
         _save_cache(contract, cache)
         if not job.checkpoint(job_id, survey_checked=index, survey_cache=dict(cache), survey_cache_version=2):
-            raise InterruptedError('媒体检查已停止')
+            raise InterruptedError('Media check stopped')
         _advance(job, job_id, index, skipped=False)
     return found
 

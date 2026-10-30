@@ -51,7 +51,7 @@ describe('文件夹反馈与滚动边界', () => {
       const dialog = page.getByRole('dialog', { name: '文件夹目录', exact: true });
       await dialog.getByRole('alert').waitFor();
       assert.equal(await page.locator('#catalogFolderHeader [role="alert"]').count(), 0);
-      await dialog.getByRole('button', { name: '立即重试', exact: true }).click();
+      await dialog.getByRole('button', { name: 'Retry now', exact: true }).click();
       await dialog.getByRole('button', { name: '关闭文件夹目录', exact: true }).click();
       await page.locator('#catalogFolderHeader [role="alert"]').waitFor();
     } finally { await opened.close() }

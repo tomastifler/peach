@@ -32,7 +32,7 @@ describe('切换主题', () => {
       const expanded = await positions();
       assert.ok(expanded[0]!.x < expanded[1]!.x && expanded[1]!.x < expanded[2]!.x);
       const buttons = await page.locator('.board-sidebar-foot button').evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')));
-      assert.deepEqual(buttons, ['浅色主题', '深色主题', '光晕配色', '打开设置']);
+      assert.deepEqual(buttons, ['Light theme', 'Dark theme', 'Glow palette', 'Open settings']);
       await page.locator('#filterBtn').click();
       await page.waitForFunction(() => Math.round(document.querySelector('#drawer')!.getBoundingClientRect().width) === 60);
       await settle(page);
@@ -47,7 +47,7 @@ describe('切换主题', () => {
     try {
       const { page } = opened;
       await page.emulateMedia({ reducedMotion: 'no-preference' });
-      const section = page.locator('section[aria-label="媒体修复"]');
+      const section = page.locator('section[aria-label="Media repair"]');
       await section.waitFor({ state: 'visible', timeout: 15_000 });
       await section.locator('button[aria-haspopup="listbox"]:not(:disabled)').waitFor({ state: 'visible', timeout: 15_000 });
       // 侧栏收起时滑块不显示，也就没有位移可看；桌面视口默认展开。

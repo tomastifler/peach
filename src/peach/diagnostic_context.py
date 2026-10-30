@@ -1,4 +1,4 @@
-"""诊断快照的技术字段白名单；不采集账号、媒体名称和网络坐标。"""
+"""Allowlist of technical fields for the diagnostic snapshot; accounts, media names and network coordinates are not collected."""
 from __future__ import annotations
 
 import base64
@@ -31,7 +31,7 @@ def _fields(value, *, texts=(), booleans=(), numbers=()):
 
 
 def _brand(value):
-    """数字版本使用 v 前缀，诊断格式将版本与网络地址明确区分。"""
+    """Numeric versions use the v prefix, so the diagnostic format clearly separates versions from network addresses."""
     result = _fields(value, texts=('brand',))
     raw = value.get('version') if isinstance(value, dict) else None
     if isinstance(raw, str) and re.fullmatch(r'v?\d{1,6}(?:\.\d{1,6}){0,3}', raw):
@@ -146,7 +146,7 @@ def runtime(config):
 
 
 def archived_context(archive):
-    """从本次已脱敏、有界日志中提取近期上下文，托盘导出也保留浏览器证据。"""
+    """Extract recent context from this run's already-redacted, bounded logs, so tray exports also keep browser evidence."""
     browsers, media = [], []
     for name in archive.namelist():
         if '/errors-' not in name:

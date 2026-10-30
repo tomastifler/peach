@@ -61,15 +61,15 @@ POSTPROCESS_RUNNING = "running"
 POSTPROCESS_COMPLETE = "complete"
 POSTPROCESS_FAILED = "failed"
 POSTPROCESS_LABELS = {
-    POSTPROCESS_NOT_REQUESTED: "整理未开始", POSTPROCESS_PENDING: "等待整理",
-    POSTPROCESS_QUEUED: "整理已排队", POSTPROCESS_RUNNING: "整理中",
-    POSTPROCESS_COMPLETE: "整理完成", POSTPROCESS_FAILED: "整理失败",
+    POSTPROCESS_NOT_REQUESTED: "Organizing not started", POSTPROCESS_PENDING: "Waiting to organize",
+    POSTPROCESS_QUEUED: "Organizing queued", POSTPROCESS_RUNNING: "Organizing",
+    POSTPROCESS_COMPLETE: "Organizing complete", POSTPROCESS_FAILED: "Organizing failed",
 }
 
 STATE_LABELS = {
-    CANDIDATE: "待选择的资源", SELECTED: "已选定", SUBMITTED: "已提交", REMOTE_RUNNING: "网盘下载中",
-    REMOTE_DONE: "网盘下载完成", LANDED: "文件已可访问", INGESTED: "已入库",
-    FAILED: "失败", CANCELLED: "已取消", STALLED: "长时间未完成",
+    CANDIDATE: "Resource awaiting selection", SELECTED: "Selected", SUBMITTED: "Submitted", REMOTE_RUNNING: "Cloud download in progress",
+    REMOTE_DONE: "Cloud download complete", LANDED: "File accessible", INGESTED: "Imported to library",
+    FAILED: "Failed", CANCELLED: "Cancelled", STALLED: "Not completed for a long time",
 }
 #: 轮询要看的状态。远端完成与已落地还在等账本里出现那个文件。
 TRACKED_STATES = frozenset({SUBMITTED, REMOTE_RUNNING, REMOTE_DONE, LANDED})
@@ -85,22 +85,22 @@ class FailureKind:
 
 
 FAILURE_KINDS: dict[str, FailureKind] = {kind.key: kind for kind in (
-    FailureKind("config", "配置或登录有误"),
-    FailureKind("quota", "下载额度已用完"),
-    FailureKind("rejected", "网盘拒绝下载该资源"),
-    FailureKind("invalid_link", "链接无效"),
-    FailureKind("no_source", "没有可用下载源或进度长时间未更新"),
-    FailureKind("not_accepted", "网盘没有收下任务"),
-    FailureKind("removed", "网盘任务被删除"),
-    FailureKind("duplicate", "下载任务已存在"),
-    FailureKind("not_landed", "目标目录中未找到下载文件"),
-    FailureKind("mismatch", "下载内容与目标作品不符"),
-    FailureKind("network", "网络暂时不可用", retryable=True),
+    FailureKind("config", "Configuration or login error"),
+    FailureKind("quota", "Download quota used up"),
+    FailureKind("rejected", "The cloud drive refused to download this resource"),
+    FailureKind("invalid_link", "Invalid link"),
+    FailureKind("no_source", "No usable download source, or progress has not updated for a long time"),
+    FailureKind("not_accepted", "The cloud drive did not accept the task"),
+    FailureKind("removed", "The cloud drive task was deleted"),
+    FailureKind("duplicate", "Download task already exists"),
+    FailureKind("not_landed", "Downloaded file not found in the target directory"),
+    FailureKind("mismatch", "Downloaded content does not match the target work"),
+    FailureKind("network", "Network temporarily unavailable", retryable=True),
 )}
 
 
 def never_seen(task: "DownloadTask") -> bool:
-    """提交后从没在网盘离线列表里见过：没有远端编号，也没读到过进度。名字不算，提交时就取自磁力。"""
+    """Never seen in the cloud drive's offline list after submission: no remote ID and no progress ever read. The name does not count; at submission it is taken from the magnet."""
     return task.progress is None and not task.remote_id
 
 
@@ -175,12 +175,12 @@ _TRACKER = re.compile(r"^(?:udp|https?|wss?)://[A-Za-z0-9.\-]+(?::\d{1,5})?(?:/[
 
 
 def clean_magnet(text: str) -> str:
-    """去掉无法解析的 tracker 参数，其余原样保留。
+    """Remove tracker parameters that cannot be parsed and keep the rest as is.
 
-    有的来源给出的磁力里夹着一段打乱的 tracker（`exoduecnuonnaF2%9696A3%moc.cnysed.s`，
-    倒过来是 `exodus.desync.com`），115 开放平台把整条链接判为「错误的链接」（10004），
-    有时还不报错、只是不建任务。2026-10-28 对照实验：同一个 DASD-911 磁力原样提交被拒，
-    只去掉这一段后五秒内就出现在离线列表里。
+    Some sources give magnets with a scrambled tracker (`exoduecnuonnaF2%9696A3%moc.cnysed.s`,
+    reversed it is `exodus.desync.com`), 115 the Open Platform judges the whole link as "invalid link" (10004),
+    sometimes it does not even report an error and just creates no task. 2026-10-28 Controlled experiment: the same DASD-911 magnet submitted as is was rejected,
+    after removing only this part, it appeared in the offline list within five seconds.
     """
     split = urlsplit(text)
     kept = []
@@ -212,7 +212,7 @@ def parse_magnet(raw: str) -> Magnet:
             info_hash = normalise_info_hash(value[len("urn:btih:"):])
             name = (query.get("dn") or [""])[0].strip()
             return Magnet(info_hash, clean_magnet(text), name[:300])
-    raise ValueError("磁力链接里没有 urn:btih，Peach 只接受 BitTorrent 磁力")
+    raise ValueError("The magnet link has no urn:btih, Peach accepts only BitTorrent magnets")
 
 
 def magnet_info_hash(uri: str) -> str:
@@ -279,8 +279,8 @@ LANDING_GRACE = 60.0
 LANDING_TIMEOUT = 6 * 3600.0
 #: 远端列表里找不到任务时，提交后这么久之内当作列表还没刷新，不判失败。
 MISSING_GRACE = 180.0
-#: 提交后从没在离线列表里出现过的任务多等一会儿：批量提交时 CloudDrive2 与 115 登记慢，
-#: 2026-10-16 一批 83 个提交里 25 个三到十分钟内被判失败，期间同一接口超时 17 次。
+#: Tasks that have never appeared in the offline list after submission wait a little longer: with batch submissions CloudDrive2 and 115 register slowly,
+#: 2026-10-16 in a batch of 83 submissions, 25 were judged failed within three to ten minutes, during which the same endpoint timed out 17 times.
 UNSEEN_GRACE = 900.0
 DEFAULT_WAIT_HOURS = 168
 MAX_WAIT_HOURS = 24 * 60
@@ -328,7 +328,7 @@ class DownloadTask:
 
     @property
     def location(self) -> str:
-        """渠道关联的媒体来源。"""
+        """Media sources associated with the channel."""
         return self.provider.split(":", 2)[1] if self.provider.startswith("clouddrive:") else self.provider
 
     @classmethod
@@ -423,7 +423,7 @@ class DownloadStore:
         return [DownloadTask.from_row(row) for row in rows]
 
     def page(self, limit: int, before_id: int | None = None) -> list[DownloadTask]:
-        """按提交顺序读取一页；状态更新时间不影响分页位置。"""
+        """Read one page in submission order; the status update time does not affect the page position."""
         where = " WHERE id<?" if before_id is not None else ""
         args = (before_id, limit) if before_id is not None else (limit,)
         with self.database.read_connection() as connection:
@@ -432,7 +432,7 @@ class DownloadStore:
         return [DownloadTask.from_row(row) for row in rows]
 
     def display_assets(self, tasks: list[DownloadTask]) -> dict[int, dict]:
-        """一页任务已绑定作品的只读标题资料。"""
+        """Read-only title metadata of the works bound to one page of tasks."""
         ids = sorted({task.asset_id for task in tasks if task.asset_id is not None})
         if not ids:
             return {}
@@ -580,19 +580,19 @@ def clean_address(raw) -> str:
         return ""
     if "://" not in text:
         text = "http://" + text
-    message = "CloudDrive2 地址只写协议、主机和端口，例如 http://127.0.0.1:19798"
+    message = "CloudDrive2 address needs only the scheme, host and port, for example http://127.0.0.1:19798"
     if len(text) > 2048 or "\\" in text or any(char.isspace() or ord(char) < 32 for char in text):
         raise ValueError(message)
     try:
         parts = urlsplit(text)
         port = parts.port
     except ValueError:
-        raise ValueError("CloudDrive2 地址的端口必须是 1–65535 的整数，IPv6 地址须放在方括号内") from None
+        raise ValueError("CloudDrive2 address port must be an integer in 1–65535, IPv6 addresses must go inside square brackets") from None
     if parts.scheme not in {"http", "https"} or not parts.hostname or parts.path not in {"", "/"} \
             or parts.query or parts.fragment or parts.username is not None or parts.password is not None:
         raise ValueError(message)
     if port == 0 or parts.netloc.endswith(":"):
-        raise ValueError("CloudDrive2 地址的端口必须是 1–65535 的整数")
+        raise ValueError("CloudDrive2 address port must be an integer in 1–65535 ")
     return f"{parts.scheme}://{parts.netloc}"
 
 
@@ -608,15 +608,15 @@ class DownloadSettings:
         except FileNotFoundError:
             return DownloadConfig()
         except (OSError, ValueError):
-            LOGGER.warning("云下载设置读不出来，按默认值跑：%s", self.path)
-            return DownloadConfig(problems=("云下载设置无法读取，请检查设置文件或重新填写。",))
+            LOGGER.warning("Cloud download settings cannot be read; running with defaults: %s", self.path)
+            return DownloadConfig(problems=("Cloud download settings cannot be read; please check the settings file or re-enter them.",))
         if not isinstance(payload, dict):
-            return DownloadConfig(problems=("云下载设置格式不符，请检查设置文件或重新填写。",))
+            return DownloadConfig(problems=("Cloud download settings have the wrong format; please check the settings file or re-enter them.",))
         try:
             return self._parse(payload, declared_roots=None, saved=True)
         except ValueError:
-            LOGGER.warning("云下载设置有不合法的值，按默认值跑：%s", self.path)
-            return DownloadConfig(problems=("云下载设置含有无效值，请检查目标目录和等待上限。",))
+            LOGGER.warning("Cloud download settings contain an invalid value; running with defaults: %s", self.path)
+            return DownloadConfig(problems=("Cloud download settings contain an invalid value; please check the target directory and the wait limit.",))
 
     def _parse(self, body: dict, *, declared_roots, saved: bool = False) -> DownloadConfig:
         from .media_sources import SOURCE_REGISTRY
@@ -638,7 +638,7 @@ class DownloadSettings:
         except (TypeError, ValueError) as error:
             raise ValueError("The wait limit must be a number of hours") from error
         if not 1 <= hours <= MAX_WAIT_HOURS:
-            raise ValueError(f"等待上限在 1 到 {MAX_WAIT_HOURS} 小时之间")
+            raise ValueError(f"The wait limit must be between 1 and {MAX_WAIT_HOURS} hours")
         problems = ()
         try:
             address = clean_address(body.get("clouddrive_address"))
@@ -714,11 +714,11 @@ class DownloadService:
         channels = self.channel_snapshot()["providers"]
         channel = next((row for row in channels if row["key"] == provider), None)
         if channel is None or (self.channel_catalog is not None and not channel["configured"]):
-            raise ValueError("请选择媒体库中可用的云下载渠道")
+            raise ValueError("Please choose a cloud download channel available in the media library")
         folder = normalise_target(target or channel["target"])
         if provider.startswith("clouddrive:") and not (
                 folder == channel["target"] or folder.startswith(channel["target"].rstrip("/") + "/")):
-            raise ValueError("下载目标目录必须位于所选媒体库内")
+            raise ValueError("The download target directory must be inside the chosen media library")
         with self._submit_lock:
             now = self.clock()
             if dedupe_code and code and (existing := self.store.active_by_code(code)) is not None:
@@ -916,7 +916,7 @@ class DownloadService:
         return now - started > self.config.wait_hours * 3600.0
 
     def _reschedule(self, task: DownloadTask, now: float, detail: str | None = None) -> None:
-        """隔一段再查。`detail` 是这一次暂时性故障的原因；没带就是这一次查通了，旧原因作废。"""
+        """Check again after a while. `detail` is the reason for this transient failure; if absent, this check went through and the old reason is void."""
         task.checks += 1
         task.updated_at = iso(now)
         task.next_check_at = iso(now + poll_delay(task.checks))
@@ -939,15 +939,15 @@ class DownloadService:
         if status.state == MISSING:
             if not provider.landed(task):
                 started = parse_iso(task.submitted_at) or now
-                # 磁力本身失败时 115 会把任务留在列表里标为离线失败；从没出现过说明网盘没有收下，
-                # 出现过又不见了说明任务在网盘一侧被删除或清理，两种都不是换磁力能解决的。
+                # When the magnet itself fails, 115 leaves the task in the list marked as offline failed; never appearing means the cloud drive did not accept it,
+                # appearing and then vanishing means the task was deleted or cleaned up on the cloud drive side; neither can be solved by switching magnets.
                 unseen = never_seen(task)
                 if now - started < (UNSEEN_GRACE if unseen else MISSING_GRACE):
                     self._reschedule(task, now)
                     return
                 if unseen:
-                    raise DownloadError("not_accepted", "网盘没有收下这个任务：提交后离线列表里始终没有它，目标目录里也没有文件")
-                raise DownloadError("removed", "网盘里的这个任务不见了：离线列表里找不到它，目标目录里也没有文件")
+                    raise DownloadError("not_accepted", "The cloud drive did not accept this task: it never appeared in the offline list after submission, and there is no file in the target directory")
+                raise DownloadError("removed", "This task has disappeared from the cloud drive: it cannot be found in the offline list, and there is no file in the target directory")
         task.remote_name = status.name or task.remote_name
         task.remote_id = status.remote_id or task.remote_id
         task.state = REMOTE_DONE
@@ -964,7 +964,7 @@ class DownloadService:
         if mapped is None:
             raise DownloadError(
                 "not_landed",
-                "目标目录对应不到媒体目录，请检查媒体库挂载和云端路径前缀关联")
+                "The target directory does not map to a media directory; please check the library mounts and the cloud path prefix association")
         location, ledger_path = mapped
         task.ledger_path = ledger_path
         asset_id = self.store.asset_under(location, ledger_path, task.code)

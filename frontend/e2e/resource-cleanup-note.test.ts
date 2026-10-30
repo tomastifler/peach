@@ -22,7 +22,7 @@ describe('资源清理提示与操作', () => {
         await page.locator('#resource-sync').waitFor();
         await page.getByRole('button', { name: '清理失效条目', exact: true }).waitFor();
         await settle(page);
-        const note = page.locator('#resource-sync [role="note"]').filter({ hasText: '清理内容' });
+        const note = page.locator('#resource-sync [role="note"]').filter({ hasText: 'Cleanup' });
         assert.equal(await note.getByRole('button', { name: '清理失效条目', exact: true }).count(), 1);
         const boxes = await note.evaluate(node => {
           const box = (element: Element) => {

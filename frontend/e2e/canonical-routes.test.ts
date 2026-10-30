@@ -26,7 +26,7 @@ describe('规范路由与设置历史', () => {
       });
       const { page } = opened;
       try {
-        const add = page.getByRole('button', { name: '添加关注', exact: true });
+        const add = page.getByRole('button', { name: 'Add follow', exact: true });
         await add.waitFor();
         const timeOrigin = await page.evaluate(() => performance.timeOrigin);
         const documents: string[] = [];
@@ -37,13 +37,13 @@ describe('规范路由与设置历史', () => {
         assert.equal(new URL(page.url()).searchParams.get('tab'), 'add');
         assert.equal(await page.evaluate(() => (window as unknown as { followOverview: Element }).followOverview
           === document.querySelector('[aria-label="关注概览"]')), true, '页签切换保留页面宿主');
-        await page.getByRole('tab', { name: '关注列表', exact: true }).click();
+        await page.getByRole('tab', { name: 'Follow list', exact: true }).click();
         await add.waitFor();
         await page.getByRole('button', { name: '统计', exact: true }).click();
-        await page.getByRole('link', { name: '添加关注', exact: true }).click();
+        await page.getByRole('link', { name: 'Add follow', exact: true }).click();
         await page.getByRole('textbox', { name: '来源链接、名字或 id', exact: true }).waitFor();
         await page.goBack();
-        await page.getByRole('link', { name: '添加关注', exact: true }).waitFor();
+        await page.getByRole('link', { name: 'Add follow', exact: true }).waitFor();
         assert.equal(new URL(page.url()).pathname, '/stats');
         await page.goForward();
         await page.getByRole('textbox', { name: '来源链接、名字或 id', exact: true }).waitFor();

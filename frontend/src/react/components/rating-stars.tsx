@@ -5,7 +5,7 @@ import './rating-stars.css';
 
 const Star = spriteGlyph('star');
 
-/** 五星读数与评分按钮共用图形、颜色和命中区。 */
+/** The five-star readout and the rating buttons share the graphic, color and hit area. */
 export function RatingStars({ value, onRate, busyStar, busyAttrs }: {
   value: number;
   onRate?(star: number): void;
@@ -17,15 +17,15 @@ export function RatingStars({ value, onRate, busyStar, busyAttrs }: {
   return <span data-rating-stars="" aria-hidden={onRate ? undefined : true}>
     {[1, 2, 3, 4, 5].map(star => onRate
       ? <button key={star} type="button" data-rate={star} data-on={String(star <= current)}
-        title={star === current ? '再点一次取消评分' : `${star} 星`}
-        aria-label={star === current ? `取消评分（当前 ${star} 星）` : `评为 ${star} 星`}
+        title={star === current ? 'Click again to clear the rating' : `${star} stars`}
+        aria-label={star === current ? `Clear rating (currently ${star} stars)` : `Rate ${star} stars`}
         {...busyAttrs?.(star)} aria-disabled={busyStar ? true : undefined} aria-busy={busyStar === star || undefined}
         onClick={() => { if (!busyStar) onRate(star) }}>
-        {busyStar === star ? <span dangerouslySetInnerHTML={{ __html: spinnerHtml('正在保存评分') }} /> : <Star />}
+        {busyStar === star ? <span dangerouslySetInnerHTML={{ __html: spinnerHtml('Saving rating') }} /> : <Star />}
       </button>
       : <span key={star} data-rate={star} data-on={String(score >= star)}>
         <span data-rating-icon=""><Star />
-          {/* oxlint-disable-next-line shadcn/no-inline-styles -- 星形填充宽度表示评分的小数比例 */}
+          {/* oxlint-disable-next-line shadcn/no-inline-styles -- the star fill width represents the fractional part of the rating */}
           <span data-rating-fill="" style={{ width: `${Math.max(0, Math.min(1, score - star + 1)) * 100}%` }}><Star /></span>
         </span>
       </span>)}

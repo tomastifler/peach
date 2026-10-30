@@ -1,4 +1,4 @@
-/** 预览索引按开始时刻查找；未覆盖区间返回空值。 */
+/** The preview index is looked up by start time; uncovered ranges return an empty value. */
 export interface TimelineSheets {
   frames: number; interval: number; columns?: number; rows?: number;
   cues?: [number, number][];

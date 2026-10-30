@@ -6,10 +6,10 @@
 **一轮拉取一条后继。** 同一轮发现的番号在活动页上是一件事，拆成一部一条，一次订阅
 就是二十张一模一样的卡片；键里带着这一批的番号，重跑、去重都按这一批算。
 
-**补封面单独排队。** 资料已经齐、只缺本机封面的壳不进取资料那一批，而是另派一条
-`feed-cover`（补新作封面）：它只取图、不问资料来源、不写账本，走自己的通道。资料来源
-连不上时取资料每部要等一轮超时，补封面若跟在后面，旧壳会被源源不断的新番号挤到轮不上。
-排在队里或正在跑的番号（`in_flight`）不再进下一批，两种批次也互不重复。
+**Cover backfill is queued separately. ** Shells whose metadata is complete and only lack a local cover do not join the metadata batch, and are dispatched as a separate
+`feed-cover` (backfill new-release covers): it only fetches images, does not ask any metadata source, does not write the ledger, and uses its own channel. When the metadata source
+ is unreachable, fetching metadata waits one timeout per item, and if cover backfill follows behind it, old shells get squeezed out by a steady stream of new codes and never get a turn.
+ Codes already queued or running (`in_flight`) do not enter the next batch, and the two kinds of batch do not repeat each other.
 
 **不复用 `process_library`**：那条路以 `asset` 行为单位、要写候选 CSV、要按字段优先级链
 结算到真相字段，而壳没有真相字段可写。壳上的每个值都只是「某个来源这么说」，用户复核
@@ -39,21 +39,21 @@ from .followups import Followup, FollowupType, register
 from .metadata import extract_peach_fields
 
 TASK_KEY = "feed-scrape"
-TASK_LABEL = "取新作资料"
+TASK_LABEL = "Fetch new-release metadata"
 COVER_TASK_KEY = "feed-cover"
-COVER_TASK_LABEL = "补新作封面"
+COVER_TASK_LABEL = "Backfill new-release covers"
 LABELS = {TASK_KEY: TASK_LABEL, COVER_TASK_KEY: COVER_TASK_LABEL}
 
 #: 一条资料够用就停。四个标量都拿到就不再问下一家——Feed 是后台跑的，
 #: 多问一家换来的是配额，而壳上的值本来就不是真相字段。
 WANTED = ("title", "performers", "studio", "release_date")
 
-#: 一批最多带几部。取资料那一批新发现的先排，余下的名额给上次没取到资料、到了重试时间的
-#: 旧壳；补封面那一批按上次尝试由远到近排。
+#: How many titles a batch carries at most. In the metadata batch the newly discovered go first, and the remaining slots go to those that failed to get metadata last time and have reached their retry time
+#: old shells; the cover batch is ordered by last attempt from oldest to newest.
 MAX_BATCH = 24
 
-#: 取资料那一批至少留给重试旧壳的名额。订阅一轮能发现几十部新番号，不留就一部旧壳也
-#: 轮不到：没取到资料的那些会一直停在页面上没有标题。
+#: Slots the metadata batch reserves at minimum for retrying old shells. A feed round can discover dozens of new codes; without the reservation not even one old shell
+#: would get a turn: those that never got metadata would stay on the page without titles forever.
 RETRY_SHARE = 6
 
 #: 缺封面或上次没取到资料的壳，定时拉取隔多久再试一次。新片的封面常常晚于番号出现，
@@ -61,7 +61,7 @@ RETRY_SHARE = 6
 #: 点「检查」本身就是要现在取。
 RETRY_AFTER = timedelta(hours=12)
 
-#: 一部封面最多等多久。一部卡住不能拖住后面整批。
+#: How long a single cover may wait at most. One stuck item must not hold up the whole batch behind it.
 COVER_SECONDS = 30
 
 
@@ -73,15 +73,15 @@ def parse_key(key: str, task_key: str = TASK_KEY) -> list[str]:
     prefix, _, body = str(key).partition(":")
     codes = [code for code in body.split(",") if code]
     if prefix != task_key or not codes:
-        raise ValueError(f"认不出这条{LABELS.get(task_key, task_key)}后继：{key}")
+        raise ValueError(f"Unrecognized {LABELS.get(task_key, task_key)} successor: {key}")
     return codes
 
 
 def _label(codes: list[str], task_key: str = TASK_KEY) -> str:
     name = LABELS[task_key]
     if len(codes) == 1:
-        return f"{name}：{codes[0]}"
-    return f"{name}：{codes[0]} 等 {len(codes)} 部"
+        return f"{name}: {codes[0]}"
+    return f"{name}: {codes[0]} and others, {len(codes)} titles in all"
 
 
 def plan(codes, task_key: str = TASK_KEY) -> list[Followup]:
@@ -98,7 +98,7 @@ def plan_covers(codes) -> list[Followup]:
 
 
 def in_flight(task_runs) -> set[str]:
-    """排在队里或正在跑的取资料、补封面后继里的番号键。下一批不再带它们。"""
+    """Code keys in the queued or running metadata and cover-backfill successors. The next batch no longer includes them."""
     codes: set[str] = set()
     for task_key in (TASK_KEY, COVER_TASK_KEY):
         for run in task_runs.query(status="active", task_key=task_key, limit=500):
@@ -118,13 +118,13 @@ def has_local_cover(cover_root: Path, code: str) -> bool:
 def scrape_batch(connection, fresh=(), *, exclude=(), now: datetime | None = None,
                  retry_after: timedelta = RETRY_AFTER,
                  hidden: frozenset[str] = feeds.DEFAULT_HIDDEN_COMPILATIONS) -> list[str]:
-    """下一批取资料的番号：这一轮新发现的 `fresh` 与还没取过资料的壳在前，上次没取到、
-    已经过了 `retry_after` 的壳在后，并且至少留 `RETRY_SHARE` 个名额给后者。资料齐了只缺
-    封面的归 `cover_backlog`。
+    """Codes for the next metadata batch: this round's newly discovered `fresh` and shells without metadata so far go first; shells that failed to get metadata last time,
+    and whose `retry_after` has passed go after them, with at least `RETRY_SHARE` slots reserved for the latter. Shells whose metadata is complete and only lack
+    Covers belong to `cover_backlog`.
 
     已忽略的不算：人说了不想看，就不再替它花配额。已经入库的壳本来就不在表里
     （入库即从列表里消失，ADR-0042 第三条），这里同样用番号键排除掉。取回标题后认出是
-    设置里收起的那类合集（`hidden`）也不算：页面上不列它，替它补资料的配额是白花的；
+    Collections collapsed in settings (`hidden`) do not count either: the page does not list them, so quota spent backfilling their metadata is wasted;
     开关打开后下一轮就轮到它。
     """
     moment = now or datetime.now(timezone.utc)
@@ -151,10 +151,10 @@ def _first(rows, exclude, hidden, limit: int) -> list[str]:
 def cover_backlog(connection, cover_root: Path, *, exclude=(), now: datetime | None = None,
                   limit: int = MAX_BATCH, retry_after: timedelta = RETRY_AFTER,
                   hidden: frozenset[str] = feeds.DEFAULT_HIDDEN_COMPILATIONS) -> list[str]:
-    """资料已经齐、本机还没有封面、上次取图已经过了 `retry_after` 的壳。
+    """Shells whose metadata is complete, that have no local cover yet, and whose last image fetch is already past `retry_after`.
 
-    上次取图的时间读逐番号的取图记录（`record_cover_attempt`），没试过的排最前，其余由远到近；
-    同样远的新片在前。排除规则与 `scrape_batch` 相同。
+    The last image-fetch time is read from the per-code fetch records (`record_cover_attempt`), never-tried ones come first, the rest from oldest to newest;
+    Among equally old ones, newer releases go first. The exclusion rules are the same as `scrape_batch`.
     """
     from .catalog_rules import is_korean_mib_code
 
@@ -216,9 +216,9 @@ def collect(provider, code: str) -> tuple[dict, str | None]:
     所以只传番号本身。一家都没给就抛——调用方把原因写进壳的 `scrape_error`，
     页面上那一行因此能说清是「还没取」还是「取不到」。
 
-    一部最多问多久与媒体库资料处理同一份预算（`ACTION_BUDGETS['querying_metadata']`）：
-    来源连不上时每家要等满超时再退避重试，不设上限一部能耗掉几分钟，整批和排在后面的
-    后继都跟着等。
+    How long a single title may query at most shares one budget with library metadata processing (`ACTION_BUDGETS['querying_metadata']`):
+    When sources are unreachable each one waits out its timeout and then backs off and retries; without a cap a single title can burn several minutes, and the whole batch and the ones behind it
+    successors all wait along.
     """
     from .jav_cover_fetch import DeadlineExceeded
     from .library_processing import ACTION_BUDGETS
@@ -232,7 +232,7 @@ def collect(provider, code: str) -> tuple[dict, str | None]:
             route=metadata_routes.community_route(code))
     except DeadlineExceeded as error:
         raise DeadlineExceeded(
-            f"来源链 {'、'.join(chain)} 在 {budget:g} 秒内没有答复") from error
+            f"Source chain {', '.join(chain)} did not answer within {budget:g} seconds") from error
     fields: dict[str, object] = {}
     cover: str | None = None
     for _source, payload in found:
@@ -290,8 +290,8 @@ def cover_attempt_path(cover_root: Path, code: str) -> Path:
 
 
 def record_cover_attempt(contract, code: str, *, ok: bool, error=None):
-    """逐番号保存封面处理结果；不记录请求凭据或来源返回正文。文件时间就是 `cover_backlog`
-    判重试的上次取图时间。"""
+    """Save cover processing results per code; request credentials and source response bodies are not recorded. The file time is the last fetch time that `cover_backlog`
+    judges retries."""
     from .fsutil import atomic_write_text
     path = cover_attempt_path(contract.cover_root, code)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -377,9 +377,9 @@ def run(contract, key: str, handle) -> dict:
     封面断在连接上的几部另记 `cover_network`：这一类换条线路就能取到，新作页据此提示
     去配来源的连接方式，而不是让人以为官方没出图。
 
-    检查点记的是这一批里已经试过的番号，不论取没取到：服务重启后这一条重新领取时只接着
-    试余下的。没取到的那几部由 `scrape_batch`、`cover_backlog` 到了重试时间再排，不在
-    同一批的续跑里每次重启都重耗一遍。
+    The checkpoint records the codes already tried in this batch, whether or not they were fetched: when this item is claimed again after a service restart it only continues with
+    the remaining ones. Those not fetched are rescheduled by `scrape_batch`, `cover_backlog` once their retry time arrives, rather than being
+    burned through again on every restart in a resumed run of the same batch.
     """
     import httpx
 
@@ -421,7 +421,7 @@ def run(contract, key: str, handle) -> dict:
             unreachable += 1
         except Exception:  # noqa: BLE001 - 取不到封面这一部照样有资料，下一轮再试
             pass
-        # 记下这一次尝试，没取到资料的由 `scrape_batch` 按它隔 `RETRY_AFTER` 再试；封面的重试另看取图记录。
+        # Record this attempt; ones that did not get metadata are retried by `scrape_batch` according to it, waiting `RETRY_AFTER` before trying again; cover retries look at the fetch records instead.
         with contract.database.write_transaction() as connection:
             connection.execute("UPDATE feed_discovery SET scraped_at=? WHERE id=?",
                                (feeds.stamp(), int(row["id"])))
@@ -437,8 +437,8 @@ def run(contract, key: str, handle) -> dict:
 
 
 def run_covers(contract, key: str, handle) -> dict:
-    """跑一批补封面：只取图装进本机封面目录，不问资料来源、不写账本。摘要同取资料那一行，
-    连不上图片主机的几部同样另记 `cover_network`。"""
+    """Run one cover-backfill batch: only fetch images into the local cover directory, ask no metadata source and do not write the ledger. The summary is the same as the metadata row,
+    Those that could not reach the image host are likewise recorded separately in `cover_network`."""
     import httpx
 
     from .jav_cover_fetch import CoverConnectError
@@ -453,7 +453,7 @@ def run_covers(contract, key: str, handle) -> dict:
         if code in done:
             continue
         handle.progress(current=index, total=len(codes),
-                        label=f"{COVER_TASK_LABEL}：{code}", throttle=0)
+                        label=f"{COVER_TASK_LABEL}: {code}", throttle=0)
         with contract.database.read_connection() as connection:
             row = connection.execute(
                 "SELECT cover_url FROM feed_discovery WHERE code=? AND ignored_at IS NULL",
@@ -463,7 +463,7 @@ def run_covers(contract, key: str, handle) -> dict:
                 covers += ensure_cover(contract, code, row["cover_url"])
             except (CoverConnectError, httpx.TransportError):
                 unreachable += 1
-            except Exception:  # noqa: BLE001 - 取图记录里有原因，到了重试时间再排
+            except Exception:  # noqa: BLE001 - the reason is in the fetch record; it is rescheduled when the retry time arrives
                 pass
         done.add(code)
         handle.checkpoint(done_codes=sorted(done), covers=covers, cover_network=unreachable)
@@ -478,6 +478,6 @@ def run_covers(contract, key: str, handle) -> dict:
 #: 写账本：壳与实体关联都在 `ledger.db` 里，所以它走串行那条通道。
 TYPE = register(FollowupType(task_key=TASK_KEY, label=TASK_LABEL,
                              writes_ledger=True, run=run))
-#: 补封面只写封面目录与取图记录，走自己的通道，不排在写账本的后继后面。
+#: Cover backfill writes only the cover directory and the fetch records, uses its own channel, and is not queued behind successors that write the ledger.
 COVER_TYPE = register(FollowupType(task_key=COVER_TASK_KEY, label=COVER_TASK_LABEL,
                                    writes_ledger=False, run=run_covers))

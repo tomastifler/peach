@@ -72,7 +72,7 @@ class BackgroundIssueTests(unittest.TestCase):
         [row] = self.collect()
         self.assertEqual({key: row[key] for key in ("key", "href", "link_label", "retry", "retry_available")}, {
             "key": "follow-schedule", "href": "/settings/subscriptions#followScheduleSetting",
-            "link_label": "打开关注调度", "retry": "/api/follow/schedule/run", "retry_available": True})
+            "link_label": "Open follow schedule", "retry": "/api/follow/schedule/run", "retry_available": True})
         self.assertEqual(row["since"], scheduler.status()["failing_since"])
         self.assertNotIn("1 个来源检查失败", json.dumps(row, ensure_ascii=False))
 
@@ -85,7 +85,7 @@ class BackgroundIssueTests(unittest.TestCase):
         self.state.automatic_updates = SimpleNamespace(snapshot=lambda: {"error": "下载没有启动"})
         [network, updates] = self.collect()
         self.assertEqual((network["key"], network["href"], network["link_label"], network["retry"], network["since"]),
-                         ("network", "/settings/network#peachProxy", "打开 Peach 代理设置",
+                         ("network", "/settings/network#peachProxy", "Open Peach proxy settings",
                           "/api/network-status/check", None))
         noticed = network["noticed_at"]
         self.clock.now += 600
@@ -97,7 +97,7 @@ class BackgroundIssueTests(unittest.TestCase):
         self.state.network_reachability = SimpleNamespace(summary=lambda: {"state": "offline"})
         self.assertNotEqual(self.collect()[0]["noticed_at"], noticed)
         # 要改设置才修得好的只给链接，不给重试。
-        self.assertEqual((updates["retry"], updates["link_label"]), (None, "打开自动更新设置"))
+        self.assertEqual((updates["retry"], updates["link_label"]), (None, "Open automatic update settings"))
 
     def test_a_disabled_tunnel_with_a_leftover_error_is_not_a_problem(self):
         self.state.tunnel = SimpleNamespace(snapshot=lambda: TunnelSnapshot(state="stopped", error="上一次没有正常收尾"))
@@ -122,7 +122,7 @@ class BackgroundIssueTests(unittest.TestCase):
         self.contract.database = SimpleNamespace(read_connection=read_connection)
         [row] = self.collect()
         self.assertEqual((row["key"], row["title"], row["href"]),
-                         ("downloads", "2 个云下载任务对账暂时失败", "/tasks#cloudDownloads"))
+                         ("downloads", "2 cloud download tasks failed reconciliation for now", "/tasks#cloudDownloads"))
         self.contract.downloads.available = False
         self.assertEqual(self.collect(), [])
 
@@ -148,7 +148,7 @@ class BackgroundIssueTests(unittest.TestCase):
         self.contract.amane_bridge_job = SimpleNamespace(snapshot=lambda: job)
         [row] = self.collect()
         self.assertEqual((row["key"], row["href"], row["link_label"], row["retry"], row["retry_available"]),
-                         ("amane-bridge", "/sources#amane", "打开 amane 设置",
+                         ("amane-bridge", "/sources#amane", "Open amane settings",
                           "/api/scraping/amane-bridge/rebuild", True))
         job["status"] = "running"
         self.assertFalse(self.collect()[0]["retry_available"])
@@ -170,7 +170,7 @@ class BackgroundIssueTests(unittest.TestCase):
                                       finished_at="2026-10-22T08:00:00Z", error="连不上 GitHub"))
         [row] = self.collect()
         self.assertEqual({key: row[key] for key in ("key", "href", "link_label", "since", "retry", "retry_available")}, {
-            "key": "face-models", "href": "/tasks#run-42", "link_label": "查看失败记录",
+            "key": "face-models", "href": "/tasks#run-42", "link_label": "View failure record",
             "since": "2026-10-22T08:00:00Z", "retry": "/api/face-models", "retry_available": True})
         self.assertNotIn("连不上 GitHub", json.dumps(row, ensure_ascii=False))
         # 重新下载在跑时这一行先收起。
