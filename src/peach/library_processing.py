@@ -2274,7 +2274,7 @@ def _generate_preview(config, row, database, resolver, *, progress):
             return False
     choice = resolver.ffmpeg()
     if choice is None:
-        raise PreviewUnavailable('未找到 FFmpeg，无法生成预览图，请在诊断页检查工具状态')
+        raise PreviewUnavailable('FFmpeg not found; previews cannot be generated. Check the tool status on the diagnostics page.')
     video = translate_ledger_path(row['path'])
     import stat
     if not stat.S_ISREG(file_stat(video, timeout=remaining(20)).st_mode):
